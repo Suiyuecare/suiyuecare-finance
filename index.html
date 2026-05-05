@@ -102,12 +102,27 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .rtab.on{border-bottom-color:var(--br);color:var(--brtxt);font-weight:500}
 .tl-item{display:flex;gap:10px;margin-bottom:9px}
 .tl-dot{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0}
-.bar-row{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.bar-row{display:flex;align-items:center;gap:7px;margin-bottom:5px;cursor:default;border-radius:6px;transition:background .15s,padding .15s}
+.bar-row:hover{background:#fef6ec;padding-left:4px;margin-left:-4px}
+.bar-row:hover .bar-fill{filter:brightness(1.18);transform:scaleY(1.55)}
+.bar-row:hover .bar-val{color:var(--brtxt);font-weight:600}
+.bar-row:hover .bar-lbl{color:#1e293b;font-weight:500}
 .bar-lbl{font-size:11px;color:#a08060;width:60px;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar-track{flex:1;height:12px;background:var(--warm);border-radius:4px;overflow:hidden}
-.bar-fill{height:100%;border-radius:4px}
+.bar-fill{height:100%;border-radius:4px;transition:filter .18s,transform .18s;transform-origin:left center}
 .bar-val{font-size:11px;color:#475569;width:66px;text-align:right;flex-shrink:0;font-weight:500}
 .bar-pct{font-size:10px;font-weight:500;color:var(--brtxt);background:var(--brxxl);border-radius:4px;padding:1px 4px;min-width:34px;text-align:center;flex-shrink:0}
+/* 圓餅圖 legend hover */
+#pie-legend>div{cursor:default;border-radius:5px;padding:2px 4px;margin-bottom:4px;transition:background .15s,transform .15s}
+#pie-legend>div:hover{background:#fef6ec;transform:translateX(4px)}
+/* Canvas 圓餅 hover */
+#ldg-pie{border-radius:8px;transition:background .15s;cursor:default}
+#ldg-pie:hover{background:#fef6ec}
+#ldg-pie canvas{transition:transform .2s,filter .2s}
+#ldg-pie:hover canvas{transform:scale(1.06);filter:drop-shadow(0 3px 8px rgba(234,136,12,.22))}
+/* 統計數字卡 hover */
+.sc{transition:transform .15s,box-shadow .15s;cursor:default}
+.sc:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(234,136,12,.14)}
 .notif-row{display:flex;align-items:flex-start;gap:10px;padding:9px 14px;border-bottom:1px solid #f5ede0;cursor:pointer;transition:background .12s}
 .notif-row:hover,.notif-row.unread{background:var(--brxxl)}
 .user-row{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid #f5ede0;transition:background .12s}
@@ -177,17 +192,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
   <div class="pg on" id="pg-dashboard">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
       <div><div class="ph">集團財務儀表板</div><div class="ps" id="dash-sub">歲悅長照集團 · 全體法人 · 2026年5月</div></div>
-      <div style="display:flex;align-items:center;gap:7px">
-        <select id="dash-ent" onchange="buildDash()" style="font-size:12px;width:auto;background:#fff;border:1px solid #e0d0b8;border-radius:8px;padding:5px 10px;color:#334155">
-          <option value="all">全體法人</option>
-          <option value="E1">歲悅股份有限公司</option>
-          <option value="E2">樂齡歲悅股份有限公司</option>
-          <option value="E3">移站式股份有限公司</option>
-          <option value="E4">大齡好好投資有限公司</option>
-          <option value="E5">歲悅居家長照機構</option>
-          <option value="E6">歲悅萬華長照機構</option>
-        </select>
-      </div>
+      <button id="dash-back-btn" onclick="resetDashEnt()" class="btn-s" style="display:none;font-size:11px">&#8592; 返回集團總覽</button>
+      <input type="hidden" id="dash-ent" value="all">
     </div>
     <div style="background:var(--br);border-radius:12px;padding:14px;margin-bottom:12px;color:#fff">
       <div style="font-size:10px;opacity:.7;margin-bottom:8px;text-transform:uppercase;letter-spacing:.07em" id="d-banner-label">集團全體概況 · 統一環境管理</div>
@@ -344,7 +350,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
             <button class="btn-s" style="font-size:11px" onclick="dlInvTemplate('xlsx')">&#8595; 範本 Excel</button>
           </div>
         </div>
-        <div class="fr3" style="margin-bottom:10px"><div class="fg"><label class="fl">開立法人</label><select id="b-ent"><option value="E1">歲悅股份（AA）</option><option value="E2">樂齡歲悅（AB）</option><option value="E5">歲悅居家長照（AE）</option></select></div><div class="fg"><label class="fl">發票月份</label><input type="month" id="b-month" value="2026-05"></div><div class="fg"><label class="fl">稅率</label><select id="b-tax"><option value="0.05">5%</option><option value="0">0%</option></select></div></div>
+        <div class="fr3" style="margin-bottom:10px"><div class="fg"><label class="fl">開立法人</label><select id="b-ent"><option value="E1">歲悅股份有限公司（AA）</option><option value="E2">樂齡歲悅股份有限公司（AB）</option><option value="E3">移站式股份有限公司（AC）</option><option value="E4">大齡好好投資有限公司（AD）</option><option value="E5">歲悅股份有限公司附設臺北市私立歲悅居家長照機構（AE）</option><option value="E6">樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構（AF）</option></select></div><div class="fg"><label class="fl">發票月份</label><input type="month" id="b-month" value="2026-05"></div><div class="fg"><label class="fl">稅率</label><select id="b-tax"><option value="0.05">5%</option><option value="0">0%</option></select></div></div>
         <div class="upload-zone" id="batch-dz" onclick="document.getElementById('bfile').click()" ondragover="event.preventDefault();bDragOver()" ondragleave="bDragLeave()" ondrop="event.preventDefault();bDrop(event)"><div style="font-size:22px;margin-bottom:5px">&#128229;</div><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:2px">點擊或拖放 CSV / Excel 至此</div><div style="font-size:11px;color:#94a3b8">格式：買受人、統編、品項說明、未稅金額</div><input type="file" id="bfile" style="display:none" accept=".csv,.xlsx,.xls" onchange="bFileSelect(this)"></div>
         <div id="batch-pw" style="display:none;margin-top:7px;padding:7px 11px;background:var(--warm);border-radius:8px;border:1px solid var(--brxl)"><div style="display:flex;align-items:center;gap:7px;margin-bottom:3px"><span id="batch-fn" style="font-size:12px;font-weight:500;color:#334155"></span><span id="batch-pl" style="font-size:11px;color:var(--brtxt);margin-left:auto"></span></div><div class="prog-wrap"><div class="prog-fill" id="batch-prog" style="width:0%"></div></div></div>
         <div style="display:flex;align-items:center;gap:7px;margin:9px 0 7px"><div style="flex:1;height:1px;background:#f0e6d6"></div><span style="font-size:11px;color:#94a3b8;white-space:nowrap">或直接輸入</span><div style="flex:1;height:1px;background:#f0e6d6"></div></div>
@@ -359,31 +365,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
   <div class="pg" id="pg-bills">
     <div style="display:flex;justify-content:space-between;margin-bottom:12px">
       <div><div class="ph">繳費單管理</div><div class="ps">勞保、健保、勞退及其他費用繳費排程</div></div>
-      <div style="display:flex;gap:7px">
-        <button class="btn-s" style="font-size:11px" onclick="dlBillTemplate()">&#8595; 下載範本</button>
-        <button class="btn-s" style="font-size:11px" onclick="openModal('m-bill-batch')">&#128229; 批量匯入</button>
-        <button class="btn-p" onclick="openModal('m-add-bill')">+ 新增繳費單</button>
-      </div>
+      <button class="btn-p" onclick="openModal('m-add-bill')">+ 新增繳費單</button>
     </div>
     <div class="g4" id="bill-stats"></div>
     <div style="display:flex;gap:6px;margin-bottom:9px" id="bill-fbtns"><button class="btn-g on" onclick="filterBills('all',this)">全部</button><button class="btn-g" onclick="filterBills('unpaid',this)">未繳</button><button class="btn-g" onclick="filterBills('overdue',this)">逾期</button><button class="btn-g" onclick="filterBills('paid',this)">已繳</button></div>
     <div id="bill-list"></div>
   </div>
-  <!-- 繳費單批量匯入 Modal (FIX 10) -->
-  <div class="modal-bg" id="m-bill-batch" style="display:none"><div class="modal" style="width:560px"><div class="chd" style="background:var(--brxxl)"><span class="cht">批量匯入繳費單</span><button onclick="closeModal('m-bill-batch')" style="background:none;border:none;cursor:pointer;font-size:17px;color:#c0a080">&#215;</button></div>
-  <div style="padding:13px">
-    <div style="background:#eaf8d8;border:1px solid #b0e090;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:#1a5010">
-      &#128196; <strong>範本格式：</strong>法人代碼（E1-E6）, 費用項目（labor/health/pension/tax/rent/other）, 金額, 期限（YYYY/MM/DD）, 方式, 說明
-      <button onclick="dlBillTemplate()" style="margin-left:8px;padding:2px 8px;border-radius:5px;font-size:11px;background:#fff;border:1px solid #b0e090;color:#1a5010;cursor:pointer">&#8595; 下載範本 CSV</button>
-    </div>
-    <div class="upload-zone" id="bill-dz" onclick="document.getElementById('bbfile').click()" ondragover="event.preventDefault()" ondragleave="" ondrop="event.preventDefault();bbDrop(event)">
-      <div style="font-size:22px;margin-bottom:5px">&#128229;</div><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:2px">點擊或拖放 CSV 至此</div><div style="font-size:11px;color:#94a3b8">依範本格式</div>
-      <input type="file" id="bbfile" style="display:none" accept=".csv" onchange="bbFileSelect(this)">
-    </div>
-    <div id="bb-pw" style="display:none;margin-top:7px"><div class="prog-wrap"><div class="prog-fill" id="bb-prog" style="width:0%"></div></div><div style="font-size:11px;color:var(--brtxt)" id="bb-pl"></div></div>
-    <div style="overflow-x:auto;margin:10px 0"><table style="min-width:500px"><thead><tr style="background:var(--warm)"><th>#</th><th>法人</th><th>費用項目</th><th>金額</th><th>期限</th><th>方式</th><th>說明</th></tr></thead><tbody id="bb-tbody"></tbody></table></div>
-    <div style="display:flex;gap:7px;justify-content:flex-end"><button class="btn-s" onclick="closeModal('m-bill-batch')">取消</button><button class="btn-p" id="bb-submit" style="display:none" onclick="submitBillBatch()">批量建立</button></div>
-  </div></div></div>
 
   <!-- 收款情形（僅會計/執行長）-->
   <div class="pg" id="pg-recv">
@@ -401,9 +388,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div class="ph">三表總覽</div><div class="ps" id="rpt-sub">請選擇法人與月份</div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <select id="rpt-ent" onchange="buildReports()" style="width:auto;font-size:12px"><option value="E1">歲悅股份</option><option value="E2">樂齡歲悅</option><option value="E3">移站式</option><option value="E4">大齡好好</option><option value="E5">歲悅居家長照</option><option value="E6">歲悅萬華長照</option></select>
-        <select id="rpt-month" onchange="buildReports()" style="width:auto;font-size:12px"><option value="2026-05">2026年5月</option><option value="2026-04">2026年4月</option><option value="2026-03">2026年3月</option><option value="2026-Q2">2026年Q2</option><option value="2026-Q1">2026年Q1</option><option value="2026">2026年全年</option></select>
-        <select id="rpt-range" onchange="buildReports()" style="width:auto;font-size:12px"><option value="">單月</option><option value="3m">近3個月</option><option value="6m">近6個月</option><option value="12m">近12個月</option></select>
+        <select id="rpt-ent" onchange="window.buildReports()" style="width:auto;font-size:11px"><option value="E1">歲悅股份有限公司</option><option value="E2">樂齡歲悅股份有限公司</option><option value="E3">移站式股份有限公司</option><option value="E4">大齡好好投資有限公司</option><option value="E5">歲悅股份有限公司附設臺北市私立歲悅居家長照機構</option><option value="E6">樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構</option></select>
+        <select id="rpt-month" onchange="window.buildReports()" style="width:auto;font-size:12px"><option value="2026-05">2026年5月</option><option value="2026-04">2026年4月</option><option value="2026-03">2026年3月</option><option value="2026-Q2">2026年Q2</option><option value="2026-Q1">2026年Q1</option><option value="2026">2026年全年</option></select>
+        
         <button class="btn-s" style="font-size:11px" onclick="exportReports()">&#8595; 匯出 CSV</button>
       </div>
     </div>
@@ -412,14 +399,23 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
     <div id="rpt-bs"><div class="g4" id="bs-kpis"></div><div class="g2"><div class="card"><div class="chd"><span class="cht">資產</span></div><table><tbody id="bs-asset"></tbody></table></div><div class="card"><div class="chd"><span class="cht">負債及股東權益</span></div><table><tbody id="bs-liab"></tbody></table></div></div><div id="bs-chk" style="margin-top:9px;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:500;text-align:center"></div></div>
     <div id="rpt-pl" style="display:none"><div class="g4" id="pl-kpis"></div><div class="g2"><div class="card"><div class="chd"><span class="cht">損益明細</span></div><table><thead><tr><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">佔收入%</th><th style="width:80px">視覺</th></tr></thead><tbody id="pl-body"></tbody></table></div><div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:10px;color:#334155">費用結構（佔費用%）</div><div id="pl-chart"></div><div style="font-size:11px;color:#94a3b8;margin-top:7px;padding-top:7px;border-top:1px solid #f0e6d6" id="pl-summary"></div></div></div></div>
     <div id="rpt-cf" style="display:none"><div class="g3" id="cf-kpis" style="margin-bottom:12px"></div><div class="g2"><div class="card"><div id="cf-body"></div></div><div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:9px;color:#334155">現金流瀑布圖（含%）</div><div id="cf-chart"></div></div></div></div>
-    <!-- 近3個月趨勢圖：長條圖＋折線圖，始終顯示在下方 -->
+    <!-- 收支趨勢：長條圖＋折線圖，始終顯示在下方，含 3/6/12 個月 Tab -->
     <div class="card" style="padding:14px;margin-top:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div style="font-size:12px;font-weight:500;color:#334155" id="rpt-trend-title">近3個月收支趨勢</div>
-        <div style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:12px">
-          <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;background:var(--br);border-radius:2px"></span>收入</span>
-          <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;background:#b0d8f8;border-radius:2px"></span>費用</span>
-          <span style="display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:2px;background:#2a9040"></span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#2a9040;margin-left:-4px"></span>淨利折線</span>
+        <div style="font-size:12px;font-weight:500;color:#334155" id="rpt-trend-title">收支趨勢（長條圖＋折線圖）</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <!-- 期間 Tab -->
+          <div style="display:flex;border:1px solid #e0d0b8;border-radius:8px;overflow:hidden">
+            <button id="rtab-3m" onclick="setRptTrendTab('3m',this)" style="padding:4px 10px;font-size:11px;font-weight:500;background:var(--br);color:#fff;border:none;cursor:pointer">近3個月</button>
+            <button id="rtab-6m" onclick="setRptTrendTab('6m',this)" style="padding:4px 10px;font-size:11px;background:#fff;color:#94a3b8;border:none;cursor:pointer;border-left:1px solid #e0d0b8">近6個月</button>
+            <button id="rtab-12m" onclick="setRptTrendTab('12m',this)" style="padding:4px 10px;font-size:11px;background:#fff;color:#94a3b8;border:none;cursor:pointer;border-left:1px solid #e0d0b8">近12個月</button>
+          </div>
+          <!-- 圖例 -->
+          <div style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:10px">
+            <span style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:9px;height:9px;background:var(--br);border-radius:2px"></span>收入</span>
+            <span style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:9px;height:9px;background:#b0d8f8;border-radius:2px"></span>費用</span>
+            <span style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:16px;height:2px;background:#2a9040"></span>淨利</span>
+          </div>
         </div>
       </div>
       <div id="rpt-combo-chart" style="position:relative;overflow:hidden"></div>
@@ -436,7 +432,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
       <select id="l-dept" onchange="renderLedger()" style="width:auto"><option value="all">全部部門</option></select>
       <select id="l-acct" onchange="renderLedger()" style="width:auto"><option value="all">全部科目</option></select>
       <select id="l-month" onchange="renderLedger()" style="width:auto"><option value="all">全部月份</option><option value="2026/05">2026年5月</option><option value="2026/04">2026年4月</option><option value="2026/03">2026年3月</option></select>
-      <select id="l-range" onchange="renderLedger()" style="width:auto"><option value="">不顯示趨勢</option><option value="3m">近3個月趨勢</option><option value="6m">近6個月趨勢</option><option value="12m">近12個月趨勢</option></select>
+      
       <input type="text" id="l-q" placeholder="搜尋摘要…" oninput="renderLedger()" style="width:150px;flex:none">
     </div>
     <div class="g4" style="margin-bottom:12px" id="ldg-kpis"></div>
@@ -447,7 +443,27 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
         <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:9px">費用支出比例 — 長條圖</div><div id="ldg-bar"></div></div>
       </div>
     </div>
-    <div id="ldg-trend-wrap" style="display:none;margin-top:10px"><div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:9px" id="ldg-trend-title">月度費用趨勢</div><div id="ldg-trend-chart"></div></div></div>
+    <!-- 分類帳收支趨勢 -->
+    <div id="ldg-trend-wrap" style="display:none;margin-top:10px">
+      <div class="card" style="padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:500;color:#334155" id="ldg-trend-title">收支趨勢（長條圖＋折線圖）</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="display:flex;border:1px solid #e0d0b8;border-radius:8px;overflow:hidden">
+              <button id="ltab-3m" onclick="setLdgTrendTab('3m',this)" style="padding:4px 10px;font-size:11px;font-weight:500;background:var(--br);color:#fff;border:none;cursor:pointer">近3個月</button>
+              <button id="ltab-6m" onclick="setLdgTrendTab('6m',this)" style="padding:4px 10px;font-size:11px;background:#fff;color:#94a3b8;border:none;cursor:pointer;border-left:1px solid #e0d0b8">近6個月</button>
+              <button id="ltab-12m" onclick="setLdgTrendTab('12m',this)" style="padding:4px 10px;font-size:11px;background:#fff;color:#94a3b8;border:none;cursor:pointer;border-left:1px solid #e0d0b8">近12個月</button>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:10px">
+              <span style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:9px;height:9px;background:var(--br);border-radius:2px"></span>借方(費用)</span>
+              <span style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:9px;height:9px;background:#b0d8f8;border-radius:2px"></span>貸方(收入)</span>
+              <span style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:16px;height:2px;background:#2a9040"></span>淨額折線</span>
+            </div>
+          </div>
+        </div>
+        <div id="ldg-trend-chart"></div>
+      </div>
+    </div>
   </div>
 
   <!-- 科目 -->
@@ -470,7 +486,68 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
   <!-- Modals -->
   <div class="modal-bg" id="m-add-user" style="display:none"><div class="modal"><div class="chd" style="background:var(--brxxl)"><span class="cht">新增人員</span><button onclick="closeModal('m-add-user')" style="background:none;border:none;cursor:pointer;font-size:17px;color:#c0a080">&#215;</button></div><div style="padding:13px"><div class="fr2"><div class="fg"><label class="fl">姓名 *</label><input id="un"></div><div class="fg"><label class="fl">Email *</label><input id="ue" type="email"></div></div><div class="fr2"><div class="fg"><label class="fl">角色 *</label><select id="ur"><option value="employee">一般員工</option><option value="section_chief">課長</option><option value="admin_director">行政主任</option><option value="accountant">會計</option><option value="ceo">執行長</option></select></div><div class="fg"><label class="fl">部門代號 *</label><select id="ud" style="font-size:11px"></select></div></div><div id="add-err" style="color:#8a1010;font-size:12px;margin-bottom:7px;display:none"></div><div style="display:flex;gap:7px;justify-content:flex-end"><button class="btn-s" onclick="closeModal('m-add-user')">取消</button><button class="btn-p" onclick="submitAddUser()">建立帳號</button></div></div></div></div>
 
-  <div class="modal-bg" id="m-add-bill" style="display:none"><div class="modal"><div class="chd" style="background:var(--brxxl)"><span class="cht">新增繳費單</span><button onclick="closeModal('m-add-bill')" style="background:none;border:none;cursor:pointer;font-size:17px;color:#c0a080">&#215;</button></div><div style="padding:13px"><div class="fg"><label class="fl">法人</label><select id="b-ent2"><option value="E1">歲悅股份有限公司</option><option value="E2">樂齡歲悅股份有限公司</option><option value="E5">歲悅居家長照機構</option></select></div><div class="fg"><label class="fl">費用項目</label><select id="b-item" onchange="autoFillBill()"><option value="">請選擇…</option><option value="labor">勞保費</option><option value="health">健保費</option><option value="pension">勞退提撥</option><option value="tax">營業稅</option><option value="rent">租金</option><option value="other">其他</option></select></div><div class="fr2"><div class="fg"><label class="fl">金額</label><input type="number" id="b-amt" placeholder="0"></div><div class="fg"><label class="fl">期限</label><input type="date" id="b-due" value="2026-05-15"></div></div><div class="fr2"><div class="fg"><label class="fl">方式</label><select id="b-method"><option>銀行轉帳</option><option>自動扣款</option><option>ATM</option></select></div><div class="fg"><label class="fl">說明</label><input id="b-note" placeholder="5月勞保費"></div></div><div style="display:flex;gap:7px;justify-content:flex-end"><button class="btn-s" onclick="closeModal('m-add-bill')">取消</button><button class="btn-p" onclick="submitBill()">建立</button></div></div></div></div>
+  <div class="modal-bg" id="m-add-bill" style="display:none">
+    <div class="modal" style="width:580px;max-height:88vh;display:flex;flex-direction:column">
+      <div class="chd" style="background:var(--brxxl);flex-shrink:0">
+        <span class="cht">新增繳費單</span>
+        <button onclick="document.getElementById('m-add-bill').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:22px;color:#c0a080;line-height:1;padding:0 4px">&#215;</button>
+      </div>
+      <div style="flex:1;overflow-y:auto">
+        <!-- Tab：單筆 / 批量 -->
+        <div class="tb-bar" style="padding:0 4px;flex-shrink:0">
+          <button class="tb on" id="btab-single" onclick="switchBillTab('single',this)">單筆新增</button>
+          <button class="tb" id="btab-batch" onclick="switchBillTab('batch',this)">批量匯入</button>
+        </div>
+        <!-- 單筆 -->
+        <div id="bill-single-form" style="padding:13px">
+          <div class="fg"><label class="fl">法人（全名）</label>
+            <select id="b-ent2">
+              <option value="E1">歲悅股份有限公司</option>
+              <option value="E2">樂齡歲悅股份有限公司</option>
+              <option value="E3">移站式股份有限公司</option>
+              <option value="E4">大齡好好投資有限公司</option>
+              <option value="E5">歲悅股份有限公司附設臺北市私立歲悅居家長照機構</option>
+              <option value="E6">樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構</option>
+            </select>
+          </div>
+          <div class="fg"><label class="fl">費用項目</label><select id="b-item" onchange="autoFillBill()"><option value="">請選擇…</option><option value="labor">勞保費</option><option value="health">健保費</option><option value="pension">勞退提撥</option><option value="tax">營業稅</option><option value="rent">租金</option><option value="other">其他</option></select></div>
+          <div class="fr2"><div class="fg"><label class="fl">金額</label><input type="number" id="b-amt" placeholder="0"></div><div class="fg"><label class="fl">期限</label><input type="date" id="b-due" value="2026-05-15"></div></div>
+          <div class="fr2"><div class="fg"><label class="fl">方式</label><select id="b-method"><option>銀行轉帳</option><option>自動扣款</option><option>ATM</option></select></div><div class="fg"><label class="fl">說明</label><input id="b-note" placeholder="5月勞保費"></div></div>
+          <div style="display:flex;gap:7px;justify-content:flex-end;padding-top:4px">
+            <button class="btn-s" onclick="document.getElementById('m-add-bill').style.display='none'">取消</button>
+            <button class="btn-p" onclick="submitBill()">建立並送簽核</button>
+          </div>
+        </div>
+        <!-- 批量 -->
+        <div id="bill-batch-form" style="padding:13px;display:none">
+          <div style="background:#eaf8d8;border:1px solid #b0e090;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:11px;color:#1a5010">
+            &#128196; <strong>範本欄位：</strong>法人代碼（E1-E6）、費用項目（labor/health/pension/tax/rent/other）、金額、期限（YYYY/MM/DD）、方式、說明
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button onclick="dlBillTemplate('csv')" style="padding:3px 10px;border-radius:5px;font-size:11px;background:#fff;border:1px solid #b0e090;color:#1a5010;cursor:pointer">&#8595; 下載範本 CSV</button>
+              <button onclick="dlBillTemplate('xlsx')" style="padding:3px 10px;border-radius:5px;font-size:11px;background:#fff;border:1px solid #b0e090;color:#1a5010;cursor:pointer">&#8595; 下載範本 Excel</button>
+            </div>
+          </div>
+          <div class="upload-zone" id="bill-dz" onclick="document.getElementById('bbfile').click()" ondragover="event.preventDefault()" ondrop="event.preventDefault();bbDrop(event)">
+            <div style="font-size:22px;margin-bottom:5px">&#128229;</div>
+            <div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:2px">點擊或拖放 CSV / Excel 至此</div>
+            <div style="font-size:11px;color:#94a3b8">依範本格式，支援 .csv / .xlsx / .xls</div>
+            <input type="file" id="bbfile" style="display:none" accept=".csv,.xlsx,.xls" onchange="bbFileSelect(this)">
+          </div>
+          <div id="bb-pw" style="display:none;margin-top:7px"><div class="prog-wrap"><div class="prog-fill" id="bb-prog" style="width:0%"></div></div><div style="font-size:11px;color:var(--brtxt)" id="bb-pl"></div></div>
+          <div style="overflow-x:auto;margin:10px 0;max-height:200px">
+            <table style="min-width:480px"><thead><tr style="background:var(--warm)"><th>#</th><th>法人</th><th>費用項目</th><th>金額</th><th>期限</th><th>方式</th><th>說明</th></tr></thead><tbody id="bb-tbody"></tbody></table>
+          </div>
+          <div style="background:var(--brxxl);border:1px solid var(--brxl);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--brtxt);margin-bottom:10px">
+            &#9432; 批量建立後，每筆繳費單將依照六步驟簽核流程送出，系統自動通知課長審核。
+          </div>
+          <div style="display:flex;gap:7px;justify-content:flex-end">
+            <button class="btn-s" onclick="document.getElementById('m-add-bill').style.display='none'">取消</button>
+            <button class="btn-p" id="bb-submit" style="display:none" onclick="submitBillBatch()">批量建立並送簽核</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   </div><!-- content -->
 </div><!-- main-wrap -->
@@ -546,10 +623,10 @@ var DEPTS=[
 ];
 var ENTS=[
   {id:'E1',s:'歲悅股份',full:'歲悅股份有限公司',color:'#ea880c'},
-  {id:'E2',s:'樂齡歲悅',full:'樂齡歲悅股份有限公司',color:'#2a9040'},
-  {id:'E3',s:'移站式',full:'移站式股份有限公司',color:'#1a4080'},
-  {id:'E4',s:'大齡好好',full:'大齡好好投資有限公司',color:'#4a2890'},
-  {id:'E5',s:'歲悅居家長照',full:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',color:'#0a5040'},
+  {id:'E2',s:'樂齡歲悅股份有限公司',full:'樂齡歲悅股份有限公司',color:'#2a9040'},
+  {id:'E3',s:'移站式股份有限公司',full:'移站式股份有限公司',color:'#1a4080'},
+  {id:'E4',s:'大齡好好投資有限公司',full:'大齡好好投資有限公司',color:'#4a2890'},
+  {id:'E5',s:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',full:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',color:'#0a5040'},
   {id:'E6',s:'歲悅萬華長照',full:'樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構',color:'#8a1010'},
 ];
 var USERS=[
@@ -771,30 +848,30 @@ var REQS=[
 
 // FIX 1：傳票資料，格式 V2026-XXXX
 var VOUCHERS=[
-  {id:'V2026-0501',no:'V2026-0501',reqId:'r1',eid:'E5',entS:'歲悅居家長照',date:'2026/05/02',
+  {id:'V2026-0501',no:'V2026-0501',reqId:'r1',eid:'E5',entS:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',date:'2026/05/02',
    desc:'出差旅費 — 王建國 高雄出差（EXP-2026-0501）',
    entries:[{t:'dr',ac:'6040',an:'旅費-發票',dept:'B1303',amt:12340},{t:'cr',ac:'1112',an:'銀行存款',dept:'B1303',amt:12340}],
    total:12340,creator:'系統自動',posted:true},
-  {id:'V2026-0498',no:'V2026-0498',reqId:'r2',eid:'E1',entS:'歲悅股份',date:'2026/05/01',
+  {id:'V2026-0498',no:'V2026-0498',reqId:'r2',eid:'E1',entS:'歲悅股份有限公司',date:'2026/05/01',
    desc:'勞務費 — 外聘講師 劉芳如（EXP-2026-0498）',
    entries:[{t:'dr',ac:'6401',an:'勞務費-列單',dept:'A1201',amt:25000},{t:'cr',ac:'2135',an:'其他應付款',dept:'A1201',amt:25000}],
    total:25000,creator:'系統自動',posted:true},
-  {id:'V2026-0490',no:'V2026-0490',reqId:'r5',eid:'E1',entS:'歲悅股份',date:'2026/04/29',
+  {id:'V2026-0490',no:'V2026-0490',reqId:'r5',eid:'E1',entS:'歲悅股份有限公司',date:'2026/04/29',
    desc:'薪資發放 — 4月全員薪資（EXP-2026-0490）',
    entries:[{t:'dr',ac:'6000',an:'薪資支出',dept:'A1102',amt:480000},{t:'cr',ac:'2122',an:'應付薪資',dept:'A1102',amt:480000}],
    total:480000,creator:'系統自動',posted:true},
 ];
 
 var INVS=[
-  {id:'i1',no:'AA-00023450',eid:'E1',en:'歲悅股份',buyer:'新北市政府',amt:120000,tax:6000,total:126000,date:'2026/05/01',status:'paid',desc:'長照居家服務費'},
-  {id:'i2',no:'AE-00012210',eid:'E5',en:'歲悅居家長照',buyer:'臺灣勞工基金',amt:85000,tax:4250,total:89250,date:'2026/04/25',status:'unpaid',desc:'移工培訓服務費'},
-  {id:'i3',no:'AB-00008801',eid:'E2',en:'樂齡歲悅',buyer:'新北市衛生局',amt:50000,tax:2500,total:52500,date:'2026/04/18',status:'partial',desc:'日照服務費4月'},
+  {id:'i1',no:'AA-00023450',eid:'E1',en:'歲悅股份有限公司',buyer:'新北市政府',amt:120000,tax:6000,total:126000,date:'2026/05/01',status:'paid',desc:'長照居家服務費'},
+  {id:'i2',no:'AE-00012210',eid:'E5',en:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',buyer:'臺灣勞工基金',amt:85000,tax:4250,total:89250,date:'2026/04/25',status:'unpaid',desc:'移工培訓服務費'},
+  {id:'i3',no:'AB-00008801',eid:'E2',en:'樂齡歲悅股份有限公司',buyer:'新北市衛生局',amt:50000,tax:2500,total:52500,date:'2026/04/18',status:'partial',desc:'日照服務費4月'},
 ];
 var BILLS=[
   {id:'b1',item:'勞保費',ik:'labor',eid:'E1',entL:'歲悅股份有限公司',amt:28340,due:'2026/05/15',method:'銀行轉帳',note:'5月勞保費',status:'unpaid'},
   {id:'b2',item:'健保費',ik:'health',eid:'E1',entL:'歲悅股份有限公司',amt:14200,due:'2026/05/15',method:'銀行轉帳',note:'5月健保費',status:'unpaid'},
   {id:'b3',item:'勞退提撥',ik:'pension',eid:'E1',entL:'歲悅股份有限公司',amt:18900,due:'2026/05/10',method:'自動扣款',note:'5月勞退',status:'paid'},
-  {id:'b4',item:'健保費',ik:'health',eid:'E5',entL:'歲悅居家長照機構',amt:4800,due:'2026/04/30',method:'ATM',note:'補繳4月健保費',status:'overdue'},
+  {id:'b4',item:'健保費',ik:'health',eid:'E5',entL:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',amt:4800,due:'2026/04/30',method:'ATM',note:'補繳4月健保費',status:'overdue'},
 ];
 var PETTY=[
   {eid:'E5',c:'B1101',n:'居家照顧課',bal:16240,lim:20000,last:'2026/04/01'},
@@ -907,6 +984,9 @@ function buildDash(){
   var bl=el('d-banner-label');if(bl)bl.textContent=eObj?eObj.full+' · 個別概況':'集團全體概況 · 統一環境管理';
   var lbl=el('d-lbl-ent');if(lbl)lbl.textContent=eObj?'申請筆數':'管理法人';
   var ev=el('d-ent-val');if(ev)ev.textContent=eObj?(allReqs.length+' 筆'):'6 家';
+  // 返回按鈕（個別法人時顯示）
+  var backBtn=el('dash-back-btn');
+  if(backBtn)backBtn.style.display=eObj?'inline-flex':'none';
   el('d-spend').textContent=fmt(totalAmt);
   el('d-pend').textContent=pm.length+' 筆';
   el('d-done').textContent=fmt(doneAmt);
@@ -922,10 +1002,10 @@ function buildDash(){
       var rs=REQS.filter(function(r){return r.eid===e.id;});
       var t=rs.filter(function(r){return r.status==='completed';}).reduce(function(s,r){return s+r.amt;},0);
       var p=rs.filter(function(r){return r.status!=='completed'&&r.status!=='rejected';}).length;
-      return'<div style="background:#fff;border:1px solid #eedfc8;border-radius:9px;padding:10px;border-left:3px solid '+e.color+';cursor:pointer;transition:box-shadow .15s" onclick="var de=el(\'dash-ent\');if(de)de.value=\''+e.id+'\';buildDash()" onmouseover="this.style.boxShadow=\'0 2px 10px rgba(234,136,12,.15)\'" onmouseout="this.style.boxShadow=\'none\'">'
-        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:11px;font-weight:500;color:#334155">'+e.s+'</span>'+(p?'<span class="badge b-wait" style="font-size:9px">'+p+'待</span>':'<span class="badge b-ok" style="font-size:9px">正常</span>')+'</div>'
+      return'<div style="background:#fff;border:1px solid #eedfc8;border-radius:9px;padding:10px;border-left:3px solid '+e.color+';cursor:pointer;transition:box-shadow .15s" onclick="selectDashEnt(\''+e.id+'\')" onmouseover="this.style.boxShadow=\'0 2px 10px rgba(234,136,12,.15)\'" onmouseout="this.style.boxShadow=\'none\'">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px"><span style="font-size:10px;font-weight:500;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">'+e.full+'</span>'+(p?'<span class="badge b-wait" style="font-size:9px;flex-shrink:0">'+p+'待</span>':'<span class="badge b-ok" style="font-size:9px;flex-shrink:0">正常</span>')+'</div>'
         +'<div style="font-size:15px;font-weight:500;color:#1e293b">'+fmt(t)+'</div>'
-        +'<div style="font-size:10px;color:#94a3b8;margin-top:2px">'+rs.length+' 筆 · 點擊篩選</div>'
+        +'<div style="font-size:10px;color:#94a3b8;margin-top:2px">'+rs.length+' 筆 · 點擊查看個別儀表板</div>'
         +'</div>';
     }).join('');
   }else{
@@ -952,7 +1032,17 @@ function buildDash(){
   el('dash-notif').innerHTML=NOTIFS.filter(function(n){return!n.read;}).slice(0,3).map(function(n){return'<div style="display:flex;gap:7px;padding:5px 0;border-bottom:1px solid #f5ede0;cursor:pointer" onclick="markNotifRead(\''+n.id+'\')'+(n.reqId?';openDetail(\''+n.reqId+'\')':'')+'"><div style="width:6px;height:6px;border-radius:50%;background:var(--br);margin-top:4px;flex-shrink:0"></div><div><div style="font-size:12px;font-weight:500;color:#334155">'+n.title+'</div><div style="font-size:10px;color:#94a3b8">'+n.time+'</div></div></div>';}).join('')||'<div style="font-size:12px;color:#94a3b8">無未讀通知 ✓</div>';
 }
 
-// ══ 新增申請（FIX 3+4：匯款帳號欄位、六步驟無部長）══
+// ── 全域：選擇法人 ──
+window.selectDashEnt=function(eid){
+  var de=document.getElementById('dash-ent');
+  if(de)de.value=eid;
+  buildDash();
+};
+window.resetDashEnt=function(){
+  var de=document.getElementById('dash-ent');
+  if(de)de.value='all';
+  buildDash();
+};
 function buildNR(){S.nrStep=1;S.nrType=null;S.nrRec=null;S.nrPay=null;S.nrFiles=[];renderNR();}
 function renderNR(){
   var c=el('nr-content');if(!c)return;
@@ -1303,7 +1393,7 @@ window.showVoucherById=function(vid){
 // exportVoucherCSV 已在下方統一定義
 
 // ══ 開立發票 ══
-function buildInvoices(){
+window.buildInvoices=function buildInvoices(){
   el('inv-stats').innerHTML=[{l:'本月已開立',v:INVS.length+' 張',s:fmt(INVS.reduce(function(s,i){return s+i.total;},0))},{l:'已收款',v:INVS.filter(function(i){return i.status==='paid';}).length+' 張'},{l:'未收款',v:INVS.filter(function(i){return i.status!=='paid';}).length+' 張'},{l:'批量功能',v:'已啟用'}].map(function(s){return'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:#1e293b">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');
   renderInvTable();updInvPrev();renderBatchInvTable();renderBatchTable();el('inv-cnt').textContent='共 '+INVS.length+' 張';
 }
@@ -1327,7 +1417,7 @@ window.issueBatch=function(){var v=(S.bRows||[]).filter(function(r){return r.buy
 function renderBatchInvTable(){var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue'};var RECVL={paid:'已收款',unpaid:'未收款',partial:'部分收款'};el('bitbody').innerHTML=INVS.slice(0,20).map(function(i){return'<tr><td style="font-size:11px;color:var(--brtxt)">'+i.no+'</td><td><span class="ep" style="font-size:9px">'+i.en+'</span></td><td>'+i.buyer+'</td><td style="font-weight:500">'+fmt(i.total)+'</td><td><span class="badge '+(RECV[i.status]||'b-gray')+'">'+(RECVL[i.status]||i.status)+'</span></td></tr>';}).join('');}
 
 // ══ 繳費單 ══
-function buildBills(){var up=BILLS.filter(function(b){return b.status==='unpaid';});var ov=BILLS.filter(function(b){return b.status==='overdue';});var pd=BILLS.filter(function(b){return b.status==='paid';});el('bill-stats').innerHTML=[{l:'本月待繳',v:fmt(up.reduce(function(s,b){return s+b.amt;},0)),s:up.length+' 筆'},{l:'逾期未繳',v:ov.length+' 筆',c:ov.length},{l:'本月已繳',v:fmt(pd.reduce(function(s,b){return s+b.amt;},0))},{l:'合計項目',v:BILLS.length+' 筆'}].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:'+(s.c?'#b03010':'#94a3b8')+';margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');renderBillList();}
+window.buildBills=function buildBills(){var up=BILLS.filter(function(b){return b.status==='unpaid';});var ov=BILLS.filter(function(b){return b.status==='overdue';});var pd=BILLS.filter(function(b){return b.status==='paid';});el('bill-stats').innerHTML=[{l:'本月待繳',v:fmt(up.reduce(function(s,b){return s+b.amt;},0)),s:up.length+' 筆'},{l:'逾期未繳',v:ov.length+' 筆',c:ov.length},{l:'本月已繳',v:fmt(pd.reduce(function(s,b){return s+b.amt;},0))},{l:'合計項目',v:BILLS.length+' 筆'}].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:'+(s.c?'#b03010':'#94a3b8')+';margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');renderBillList();}
 // FIX 10：繳費單批量匯入
 var BB_ROWS=[];
 window.bbDrop=function(e){var f=e.dataTransfer&&e.dataTransfer.files[0];if(f)simulateBBUpload(f);};
@@ -1338,7 +1428,7 @@ function simulateBBUpload(file){
   var demo=[
     {eid:'E1',entL:'歲悅股份有限公司',item:'勞保費',ik:'labor',amt:28340,due:'2026/05/15',method:'銀行轉帳',note:'5月勞保費'},
     {eid:'E1',entL:'歲悅股份有限公司',item:'健保費',ik:'health',amt:14200,due:'2026/05/15',method:'銀行轉帳',note:'5月健保費'},
-    {eid:'E5',entL:'歲悅居家長照機構',item:'勞退提撥',ik:'pension',amt:9800,due:'2026/05/10',method:'自動扣款',note:'5月勞退'},
+    {eid:'E5',entL:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',item:'勞退提撥',ik:'pension',amt:9800,due:'2026/05/10',method:'自動扣款',note:'5月勞退'},
   ];
   var pct=0;var timer=setInterval(function(){pct+=30;if(pct>=100){clearInterval(timer);prog.style.width='100%';pl.textContent='✓ 已匯入 '+demo.length+' 筆';BB_ROWS=demo;renderBBTable();el('bb-submit').style.display='block';}else prog.style.width=pct+'%';},200);
 }
@@ -1348,16 +1438,22 @@ function renderBBTable(){
 }
 window.submitBillBatch=function(){
   BB_ROWS.forEach(function(r){BILLS.unshift({id:'b_'+Date.now()+'_'+Math.random().toString(36).slice(2),item:r.item,ik:r.ik,eid:r.eid,entL:r.entL,amt:r.amt,due:r.due,method:r.method,note:r.note,status:'unpaid'});});
-  closeModal('m-bill-batch');BB_ROWS=[];buildBills();
+  document.getElementById('m-add-bill').style.display='none';BB_ROWS=[];buildBills();
 };
 window.filterBills=function(f,btn){S.bF=f;document.querySelectorAll('#bill-fbtns .btn-g').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');renderBillList();};
 function renderBillList(){var data=S.bF==='all'?BILLS:BILLS.filter(function(b){return b.status===S.bF;});var iK={labor:'b-purp',health:'b-blue',pension:'b-teal',tax:'b-rej',rent:'b-gray',other:'b-gray'};el('bill-list').innerHTML=data.map(function(b){var sc={unpaid:'border-left:3px solid var(--br)',overdue:'border-left:3px solid #c02020',paid:'border-left:3px solid #2a9040'}[b.status]||'';var bs={unpaid:'b-wait',overdue:'b-rej',paid:'b-ok'}[b.status];var bl={unpaid:'未繳',overdue:'逾期',paid:'已繳'}[b.status];return'<div class="bill-card" style="'+sc+'"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><div style="display:flex;align-items:center;gap:6px"><span class="badge '+(iK[b.ik]||'b-gray')+'">'+b.item+'</span><span style="font-size:11px;color:#94a3b8">'+b.entL+'</span></div><span class="badge '+bs+'">'+bl+'</span></div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font-size:17px;font-weight:500;color:#1e293b">'+fmt(b.amt)+'</span><span style="font-size:11px;color:'+(b.status==='overdue'?'#8a1010':b.status==='paid'?'#1a5010':'#94a3b8')+'">期限：'+b.due+'</span></div><div style="font-size:11px;color:#94a3b8;margin-bottom:5px">'+b.method+' · '+b.note+'</div>'+(b.status!=='paid'?'<button onclick="markBPaid(\''+b.id+'\')" style="padding:3px 8px;border-radius:5px;font-size:11px;font-weight:500;background:#e6f4d8;border:1px solid #b0e090;color:#1a5010;cursor:pointer">標記已繳</button>':'')+'</div>';}).join('')||'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px;border:1.5px dashed #e0d0b8;border-radius:9px">沒有符合的繳費單</div>';}
 window.markBPaid=function(id){BILLS.forEach(function(b){if(b.id===id)b.status='paid';});buildBills();};
 window.autoFillBill=function(){var amts={labor:28340,health:14200,pension:18900};var k=(el('b-item')||{}).value;if(amts[k]){var a=el('b-amt');if(a)a.value=amts[k];}};
-window.submitBill=function(){var item=(el('b-item')||{}).value;var amt=parseFloat((el('b-amt')||{}).value||'0');if(!item||!amt){alert('請選擇費用項目並填寫金額');return;}var iL={labor:'勞保費',health:'健保費',pension:'勞退提撥',tax:'營業稅',rent:'租金',other:'其他'};var eid=(el('b-ent2')||{}).value||'E1';BILLS.unshift({id:'b_'+Date.now(),item:iL[item]||item,ik:item,eid:eid,entL:gE(eid).s+' '+gE(eid).full,amt:amt,due:(el('b-due')||{}).value?(el('b-due').value.replace(/-/g,'/')):'2026/05/15',method:(el('b-method')||{}).value||'銀行轉帳',note:(el('b-note')||{}).value||'',status:'unpaid'});closeModal('m-add-bill');buildBills();};
+window.switchBillTab=function(tab,btn){
+  document.querySelectorAll('#m-add-bill .tb').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+  el('bill-single-form').style.display=tab==='single'?'block':'none';
+  el('bill-batch-form').style.display=tab==='batch'?'block':'none';
+};
+window.submitBill=function(){var item=(el('b-item')||{}).value;var amt=parseFloat((el('b-amt')||{}).value||'0');if(!item||!amt){alert('請選擇費用項目並填寫金額');return;}var iL={labor:'勞保費',health:'健保費',pension:'勞退提撥',tax:'營業稅',rent:'租金',other:'其他'};var eid=(el('b-ent2')||{}).value||'E1';BILLS.unshift({id:'b_'+Date.now(),item:iL[item]||item,ik:item,eid:eid,entL:gE(eid).full,amt:amt,due:(el('b-due')||{}).value?(el('b-due').value.replace(/-/g,'/')):'2026/05/15',method:(el('b-method')||{}).value||'銀行轉帳',note:(el('b-note')||{}).value||'',status:'unpaid'});document.getElementById('m-add-bill').style.display='none';buildBills();};
 
 // ══ 收款情形（僅會計/執行長）══
-function buildRecv(){
+window.buildRecv=function buildRecv(){
   if(!isFinance()){el('recv-kpis').innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:#94a3b8"><div style="font-size:36px;margin-bottom:10px">🔒</div><div>此功能僅開放給會計與執行長</div></div>';return;}
   var tA=INVS.reduce(function(s,i){return s+i.total;},0);var tP=INVS.filter(function(i){return i.status==='paid';}).reduce(function(s,i){return s+i.total;},0);var rate=tA?Math.round(tP/tA*100):0;
   el('recv-kpis').innerHTML=[{l:'應收帳款',v:fmt(tA),s:INVS.length+' 張'},{l:'實收金額',v:fmt(tP),s:'收款率 '+rate+'%'},{l:'未收帳款',v:fmt(tA-tP),c:INVS.filter(function(i){return i.status!=='paid';}).length}].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');
@@ -1376,19 +1472,33 @@ window.markIPaid=function(id){INVS.forEach(function(i){if(i.id===id)i.status='pa
 
 // ══ 三表 ══
 window.rptTab=function(t,btn){S.rptTab=t;document.querySelectorAll('#pg-reports .rtab').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');['bs','pl','cf'].forEach(function(id){el('rpt-'+id).style.display=id===t?'block':'none';});};
-function buildReports(){
+window.buildReports=function buildReports(){
   var eid=(el('rpt-ent')||{}).value||'E1';var month=(el('rpt-month')||{}).value||'2026-05';
-  var range=(el('rpt-range')||{}).value||'3m';
   var e=ENTS.find(function(x){return x.id===eid;})||ENTS[0];
-  el('rpt-sub').textContent=e.s+' · '+month.replace(/-/,'年').replace(/(\d{2})$/,'$1月');
+  el('rpt-sub').textContent=e.full+' · '+month.replace(/-/,'年').replace(/(\d{2})$/,'$1月');
   var fac={E1:1,E2:.4,E3:.2,E4:.15,E5:.6,E6:.3}[eid]||1;var mf={'2026-05':1,'2026-04':.92,'2026-03':.85,'2026-Q2':2.8,'2026-Q1':2.6,'2026':11}[month]||1;var f=fac*mf;
   buildBS(f,eid);buildPL(f,eid);buildCF(f,eid);
   var oldTrend=el('rpt-trend');if(oldTrend)oldTrend.style.display='none';
-  buildComboChart(fac,e,range||'3m');
+  if(!S.rptTrendRange)S.rptTrendRange='3m';
+  buildComboChart(fac,e,S.rptTrendRange);
 }
+// 三表趨勢 Tab 切換
+window.setRptTrendTab=function(range,btn){
+  S.rptTrendRange=range;
+  var tabs=['rtab-3m','rtab-6m','rtab-12m'];
+  tabs.forEach(function(id){
+    var b=el(id);if(!b)return;
+    if(id==='rtab-'+range){b.style.background='var(--br)';b.style.color='#fff';b.style.fontWeight='500';}
+    else{b.style.background='#fff';b.style.color='#94a3b8';b.style.fontWeight='400';}
+  });
+  var eid=(el('rpt-ent')||{}).value||'E1';
+  var fac={E1:1,E2:.4,E3:.2,E4:.15,E5:.6,E6:.3}[eid]||1;
+  var e=ENTS.find(function(x){return x.id===eid;})||ENTS[0];
+  buildComboChart(fac,e,range);
+};
 function buildComboChart(fac,e,range){
   var mCount={'3m':3,'6m':6,'12m':12}[range]||3;
-  var tl=el('rpt-trend-title');if(tl)tl.textContent='近'+mCount+'個月收支趨勢（長條圖＋折線圖）— '+e.s;
+  var tl=el('rpt-trend-title');if(tl)tl.textContent='近'+mCount+'個月收支趨勢（長條圖＋折線圖）— '+e.full;
   var base=[{m:'25/06',f:.73},{m:'25/07',f:.75},{m:'25/08',f:.77},{m:'25/09',f:.80},{m:'25/10',f:.83},{m:'25/11',f:.85},{m:'25/12',f:.88},{m:'26/01',f:.78},{m:'26/02',f:.80},{m:'26/03',f:.85},{m:'26/04',f:.92},{m:'26/05',f:1}];
   var data=base.slice(-mCount);
   var revArr=data.map(function(d){return Math.round(897000*fac*d.f);});
@@ -1436,11 +1546,10 @@ function buildPL(f,eid){var rev=eid==='E5'?[['居家照顧服務收入',Math.rou
 function buildCF(f,eid){var op=[['本期淨利',Math.round((eid==='E1'?237000:85000)*f)],['折舊及攤提',Math.round(5500*f)],['應收帳款變動',Math.round(-45000*f)],['應付帳款變動',Math.round(32000*f)]];var inv=[['購置辦公設備',Math.round(-85000*f)]];var fin=[['股東增資',Math.round(eid==='E4'?300000:500000*f)]];var oS=op.reduce(function(s,x){return s+x[1];},0);var iS=inv.reduce(function(s,x){return s+x[1];},0);var fS=fin.reduce(function(s,x){return s+x[1];},0);var net=oS+iS+fS;var absT=Math.abs(oS)+Math.abs(iS)+Math.abs(fS)||1;el('cf-kpis').innerHTML=[{l:'營業現金流',v:fmt(oS),s:Math.round(Math.abs(oS)/absT*100)+'%',c:oS<0},{l:'投資現金流',v:fmt(iS),s:Math.round(Math.abs(iS)/absT*100)+'%',c:iS<0},{l:'籌資現金流',v:fmt(fS),s:Math.round(Math.abs(fS)/absT*100)+'%'}].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">佔 '+s.s+'</div>':'')+'</div>';}).join('');var cb=el('cf-body');if(!cb)return;cb.innerHTML='';[['一、營業活動',op,oS],['二、投資活動',inv,iS],['三、籌資活動',fin,fS]].forEach(function(grp){cb.innerHTML+='<div style="padding:5px 12px;background:var(--warm);font-size:11px;font-weight:500;color:#a08060">'+grp[0]+'</div>';grp[1].forEach(function(x){var pct=Math.round(Math.abs(x[1])/absT*100);cb.innerHTML+='<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 12px;border-bottom:1px solid #f5ede0;font-size:12px"><span>'+x[0]+'</span><div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:#94a3b8">'+pct+'%</span><span style="font-weight:500;color:'+(x[1]>=0?'#1a5010':'#8a1010')+'">'+(x[1]>=0?'+':'')+' '+fmt(Math.abs(x[1]))+'</span></div></div>';});cb.innerHTML+='<div style="display:flex;justify-content:space-between;padding:5px 12px;background:var(--warm);font-size:11px;font-weight:500"><span>小計</span><span style="color:'+(grp[2]>=0?'#1a5010':'#8a1010')+'">'+(grp[2]>=0?'+':'')+' '+fmt(Math.abs(grp[2]))+'</span></div>';});cb.innerHTML+='<div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--brxxl);font-size:12px;font-weight:500"><span style="color:var(--brtxt)">本期現金淨增減</span><span style="color:'+(net>=0?'#1a5010':'#8a1010')+'">'+(net>=0?'+':'')+' '+fmt(Math.abs(net))+'</span></div>';var bars=[{l:'營業',v:oS,c:'var(--br)'},{l:'投資',v:iS,c:'#1a4080'},{l:'籌資',v:fS,c:'#1a7040'},{l:'淨增減',v:net,c:net>=0?'#1a5010':'#c02020'}];var maxV=Math.max.apply(null,bars.map(function(b){return Math.abs(b.v);}));if(!maxV)maxV=1;var H=100;var cc=el('cf-chart');if(!cc)return;cc.innerHTML='<svg width="100%" viewBox="0 0 240 '+(H+36)+'" preserveAspectRatio="xMidYMid meet"><line x1="10" y1="'+H/2+'" x2="230" y2="'+H/2+'" stroke="#e0d0b8" stroke-width="0.5"/>'+bars.map(function(b,i){var bH=Math.round(Math.abs(b.v)/maxV*(H/2-8));var pos=b.v>=0;var y=pos?H/2-bH:H/2;var x=20+i*54;var pct=Math.round(Math.abs(b.v)/absT*100);return'<rect x="'+x+'" y="'+y+'" width="36" height="'+bH+'" fill="'+b.c+'" rx="3"/><text x="'+(x+18)+'" y="'+(pos?y-4:y+bH+10)+'" text-anchor="middle" font-size="9" fill="'+(b.v>=0?'#1a5010':'#8a1010')+'">'+(b.v>=0?'+':'')+Math.round(b.v/1000)+'K</text><text x="'+(x+18)+'" y="'+(H+13)+'" text-anchor="middle" font-size="9" fill="#94a3b8">'+b.l+'</text><text x="'+(x+18)+'" y="'+(H+24)+'" text-anchor="middle" font-size="8" font-weight="500" fill="var(--brtxt)">'+pct+'%</text>';}).join('')+'</svg>';}
 
 // FIX 12+14：分類帳（月份篩選、圓餅圖、長條圖、趨勢、匯出）
-function renderLedger(){
+window.renderLedger=function renderLedger(){
   var dept=(el('l-dept')||{}).value||'all';
   var acct=(el('l-acct')||{}).value||'all';
   var month=(el('l-month')||{}).value||'all';
-  var range=(el('l-range')||{}).value||'';
   var q=el('l-q')?el('l-q').value.toLowerCase():'';
   var data=LEDGER.filter(function(e){
     return(dept==='all'||e.dc===dept)&&(acct==='all'||e.ac===acct)
@@ -1469,19 +1578,71 @@ function renderLedger(){
   // 長條圖
   var maxE=expItems.length?Math.max.apply(null,expItems.map(function(k){return expMap[k];})):1;
   el('ldg-bar').innerHTML=expItems.slice(0,7).map(function(k,i){var pct=totalExp?Math.round(expMap[k]/totalExp*100):0;return'<div class="bar-row"><div class="bar-lbl">'+(k.length>5?k.slice(0,4)+'…':k)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(expMap[k]/maxE*100)+'%;background:'+pieColors[i%pieColors.length]+'"></div></div><div class="bar-val">'+fmt(expMap[k])+'</div><div class="bar-pct">'+pct+'%</div></div>';}).join('')||'<div style="font-size:12px;color:#94a3b8;text-align:center;padding:16px">無費用分錄</div>';
-  // FIX 14：趨勢圖
+  // 分類帳收支趨勢（固定顯示，預設近3個月）
+  if(!S.ldgTrendRange)S.ldgTrendRange='3m';
   var tw=el('ldg-trend-wrap');
-  if(range&&tw){
-    tw.style.display='block';
-    var mCount={'3m':3,'6m':6,'12m':12}[range]||3;
-    var months=['2026/03','2026/04','2026/05'];if(mCount===6)months=['2025/12','2026/01','2026/02','2026/03','2026/04','2026/05'];if(mCount===12)months=['2025/06','2025/07','2025/08','2025/09','2025/10','2025/11','2025/12','2026/01','2026/02','2026/03','2026/04','2026/05'];
-    var mExpArr=months.map(function(m){var d2=LEDGER.filter(function(e){return e.dr>0&&e.date.indexOf(m)===0;});var t=d2.reduce(function(s,e){return s+e.dr;},0);return{m:m.slice(2),v:t||Math.round(tDr*0.8)};});
-    var maxT=Math.max.apply(null,mExpArr.map(function(x){return x.v;}))||1;
-    el('ldg-trend-title').textContent='近'+mCount+'個月費用趨勢';
-    el('ldg-trend-chart').innerHTML='<div style="display:flex;align-items:flex-end;gap:4px;height:80px">'
-      +mExpArr.map(function(m){var h=Math.round(m.v/maxT*72);return'<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="width:100%;background:var(--br);border-radius:2px 2px 0 0;height:'+h+'px;min-height:2px" title="'+fmt(m.v)+'"></div><div style="font-size:9px;color:#94a3b8">'+m.m+'</div></div>';}).join('')
-      +'</div>';
-  }else if(tw){tw.style.display='none';}
+  if(tw){tw.style.display='block';}
+  buildLdgComboChart(tDr,tCr,S.ldgTrendRange);
+}
+// 分類帳趨勢 Tab 切換
+window.setLdgTrendTab=function(range,btn){
+  S.ldgTrendRange=range;
+  var tabs=['ltab-3m','ltab-6m','ltab-12m'];
+  tabs.forEach(function(id){
+    var b=el(id);if(!b)return;
+    if(id==='ltab-'+range){b.style.background='var(--br)';b.style.color='#fff';b.style.fontWeight='500';}
+    else{b.style.background='#fff';b.style.color='#94a3b8';b.style.fontWeight='400';}
+  });
+  var tDr=LEDGER.reduce(function(s,e){return s+e.dr;},0);
+  var tCr=LEDGER.reduce(function(s,e){return s+e.cr;},0);
+  buildLdgComboChart(tDr,tCr,range);
+};
+// 分類帳複合圖（長條借方/貸方 + 淨額折線）
+function buildLdgComboChart(tDr,tCr,range){
+  var mCount={'3m':3,'6m':6,'12m':12}[range]||3;
+  var tl=el('ldg-trend-title');if(tl)tl.textContent='收支趨勢（長條圖＋折線圖）';
+  // 月份資料
+  var base=[{m:'25/06',fd:.73,fc:.68},{m:'25/07',fd:.75,fc:.71},{m:'25/08',fd:.77,fc:.74},{m:'25/09',fd:.80,fc:.76},{m:'25/10',fd:.83,fc:.79},{m:'25/11',fd:.85,fc:.82},{m:'25/12',fd:.88,fc:.85},{m:'26/01',fd:.78,fc:.80},{m:'26/02',fd:.80,fc:.82},{m:'26/03',fd:.85,fc:.84},{m:'26/04',fd:.92,fc:.90},{m:'26/05',fd:1,fc:1}];
+  var data=base.slice(-mCount);
+  var drBase=tDr||517340; var crBase=tCr||517340;
+  var drArr=data.map(function(d){return Math.round(drBase*d.fd);});
+  var crArr=data.map(function(d){return Math.round(crBase*d.fc);});
+  var netArr=crArr.map(function(c,i){return c-drArr[i];});
+  var labels=data.map(function(d){return d.m;});
+  var maxVal=Math.max.apply(null,drArr.concat(crArr))||1;
+  var minNet=Math.min.apply(null,netArr);var maxNet=Math.max.apply(null,netArr)||1;
+  // SVG
+  var W=700,H=150,PL=52,PR=46,PT=12,PB=28;var iW=W-PL-PR;var iH=H-PT-PB;
+  var barW=Math.max(6,Math.min(20,Math.floor(iW/mCount*0.36)));var gap=iW/mCount;
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:180px">';
+  // 格線 + 左Y軸
+  for(var gi=0;gi<=4;gi++){var gy=PT+iH*(1-gi/4);svg+='<line x1="'+PL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+gy.toFixed(1)+'" stroke="#f0e6d6" stroke-width="0.8"/>';svg+='<text x="'+(PL-5)+'" y="'+(gy+4).toFixed(1)+'" text-anchor="end" font-size="9" fill="#a08060">'+Math.round(maxVal*gi/4/1000)+'K</text>';}
+  svg+='<text x="'+(PL-5)+'" y="'+(PT-2)+'" text-anchor="end" font-size="9" fill="#a08060">千元</text>';
+  // 右Y軸（淨額）
+  svg+='<text x="'+(W-PR+5)+'" y="'+(PT+4)+'" font-size="9" fill="#2a9040">'+Math.round(maxNet/1000)+'K</text>';
+  svg+='<text x="'+(W-PR+5)+'" y="'+(PT+iH+4)+'" font-size="9" fill="#2a9040">'+Math.round(minNet/1000)+'K</text>';
+  // 長條（借方=費用橘色 + 貸方=收入藍色，並排）
+  labels.forEach(function(lb,i){
+    var cx=PL+(i+0.5)*gap;
+    var dH=Math.round(drArr[i]/maxVal*iH);var cH=Math.round(crArr[i]/maxVal*iH);
+    var dx=cx-barW-1;var cx2=cx+1;
+    svg+='<rect x="'+dx.toFixed(1)+'" y="'+(PT+iH-dH).toFixed(1)+'" width="'+barW+'" height="'+dH+'" fill="#ea880c" rx="2" opacity="0.85"><title>借方(費用) '+fmt(drArr[i])+'</title></rect>';
+    svg+='<rect x="'+cx2.toFixed(1)+'" y="'+(PT+iH-cH).toFixed(1)+'" width="'+barW+'" height="'+cH+'" fill="#b0d8f8" rx="2" opacity="0.85"><title>貸方(收入) '+fmt(crArr[i])+'</title></rect>';
+    svg+='<text x="'+cx.toFixed(1)+'" y="'+(H-PB+14)+'" text-anchor="middle" font-size="9" fill="#94a3b8">'+lb+'</text>';
+  });
+  // 折線（淨額）
+  var netRange=(maxNet-minNet)||1;
+  var getNetY=function(v){return PT+iH*(1-(v-minNet)/netRange);};
+  var lineD=labels.map(function(lb,i){var cx=PL+(i+0.5)*gap;return(i===0?'M':'L')+cx.toFixed(1)+' '+getNetY(netArr[i]).toFixed(1);}).join(' ');
+  svg+='<path d="'+lineD+'" fill="none" stroke="#2a9040" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+  labels.forEach(function(lb,i){
+    var cx=PL+(i+0.5)*gap;var cy=getNetY(netArr[i]);
+    svg+='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="3.5" fill="#fff" stroke="#2a9040" stroke-width="2"/>';
+    var valK=Math.round(netArr[i]/1000);var above=cy>PT+16;
+    svg+='<text x="'+cx.toFixed(1)+'" y="'+(cy+(above?-7:12)).toFixed(1)+'" text-anchor="middle" font-size="8" fill="'+(netArr[i]>=0?'#2a9040':'#c02020')+'" font-weight="500">'+valK+'K</text>';
+  });
+  svg+='</svg>';
+  var cc=el('ldg-trend-chart');if(cc)cc.innerHTML=svg;
 }
 // FIX 12：匯出分類帳 CSV
 window.exportLedger=function(){
@@ -1507,9 +1668,26 @@ window.exportReports=function(){
   dlCSV(csv,e.s+'_三表_'+month+'.csv');
 };
 // FIX 10：繳費單範本
-window.dlBillTemplate=function(){
-  var csv='法人代碼,費用項目代碼,金額,期限日期,方式,說明\n說明：法人代碼=E1~E6，費用項目代碼=labor/health/pension/tax/rent/other,,,,\nE1,labor,28340,2026/05/15,銀行轉帳,5月勞保費\nE1,health,14200,2026/05/15,銀行轉帳,5月健保費\nE5,pension,9800,2026/05/10,自動扣款,5月勞退提撥\nE2,rent,45000,2026/05/20,銀行轉帳,5月辦公室租金\n';
-  dlCSV(csv,'bill_import_template.csv');
+window.dlBillTemplate=function(fmt){
+  var header=['法人代碼(E1-E6)','費用項目(labor/health/pension/tax/rent/other)','金額','期限日期(YYYY/MM/DD)','方式(銀行轉帳/自動扣款/ATM)','說明'];
+  var rows=[
+    ['E1','labor','28340','2026/05/15','銀行轉帳','5月勞保費'],
+    ['E1','health','14200','2026/05/15','銀行轉帳','5月健保費'],
+    ['E5','pension','9800','2026/05/10','自動扣款','5月勞退提撥'],
+    ['E2','rent','45000','2026/05/20','銀行轉帳','5月辦公室租金'],
+  ];
+  if(!fmt||fmt==='csv'){
+    var csv=header.join(',')+'\n'+rows.map(function(r){return r.join(',');}).join('\n')+'\n';
+    dlCSV(csv,'bill_import_template.csv');
+  }else{
+    var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><table border="1">';
+    html+='<tr>'+header.map(function(h){return'<th style="background:#ea880c;color:white;font-weight:bold;padding:4px 8px">'+h+'</th>';}).join('')+'</tr>';
+    rows.forEach(function(r){html+='<tr>'+r.map(function(c){return'<td style="padding:4px 8px">'+c+'</td>';}).join('')+'</tr>';});
+    html+='</table></body></html>';
+    var blob=new Blob(['\uFEFF'+html],{type:'application/vnd.ms-excel;charset=UTF-8'});
+    var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='bill_import_template.xls';a.style.display='none';
+    document.body.appendChild(a);a.click();setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},300);
+  }
 };
 // 覆寫 dlInvTemplate xlsx 邏輯為 Data URI HTML（Excel 可直接開啟）
 window.dlInvTemplate=function(fmt){
@@ -1553,19 +1731,19 @@ window.exportVoucherCSV=function(){
 
 // ══ 科目 ══
 var accSide='';
-function renderAccounts(){var series=[['A系 — 歲悅股份',DEPTS.filter(function(d){return d.c.charAt(0)==='A';})],['B系 — 歲悅居家長照',DEPTS.filter(function(d){return d.c.charAt(0)==='B';})],['C / D / E 系',DEPTS.filter(function(d){return'CDE'.indexOf(d.c.charAt(0))>-1;})]];el('dept-arch').innerHTML=series.map(function(s){return'<div style="background:var(--warm);border-radius:8px;padding:9px;border:1px solid #f0dfc8"><div style="font-size:11px;font-weight:500;color:var(--brtxt);margin-bottom:6px">'+s[0]+'</div>'+s[1].map(function(d){return'<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;padding-left:'+(d.lv*11)+'px"><span class="dt" style="flex-shrink:0">'+d.c+'</span><span style="font-size:11px;color:#334155">'+d.n+'</span></div>';}).join('')+'</div>';}).join('');filterAccs();}
+window.renderAccounts=function renderAccounts(){var series=[['A系 — 歲悅股份',DEPTS.filter(function(d){return d.c.charAt(0)==='A';})],['B系 — 歲悅居家長照',DEPTS.filter(function(d){return d.c.charAt(0)==='B';})],['C / D / E 系',DEPTS.filter(function(d){return'CDE'.indexOf(d.c.charAt(0))>-1;})]];el('dept-arch').innerHTML=series.map(function(s){return'<div style="background:var(--warm);border-radius:8px;padding:9px;border:1px solid #f0dfc8"><div style="font-size:11px;font-weight:500;color:var(--brtxt);margin-bottom:6px">'+s[0]+'</div>'+s[1].map(function(d){return'<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;padding-left:'+(d.lv*11)+'px"><span class="dt" style="flex-shrink:0">'+d.c+'</span><span style="font-size:11px;color:#334155">'+d.n+'</span></div>';}).join('')+'</div>';}).join('');filterAccs();}
 window.filterAccs=function(){var q=el('acc-q')?el('acc-q').value.toLowerCase():'';var data=ACCTS.filter(function(a){return(!q||a.c.indexOf(q)>-1||a.n.toLowerCase().indexOf(q)>-1)&&(!accSide||a.s===accSide);});el('acc-count').textContent='共 '+data.length+' 筆';var dC={'all':{bg:'#f0ece6',c:'#6a5840',l:'全部'},'A系':{bg:'#e0eeff',c:'#1a4080',l:'A系'},'B系':{bg:'#e6f4d8',c:'#1a5010',l:'B系'},'C系':{bg:'#ede8ff',c:'#4a2890',l:'C系'}};el('acc-tbody').innerHTML=data.map(function(a){var dc=dC[a.d]||dC['all'];return'<tr><td><span style="font-size:12px;font-weight:500;color:var(--brtxt)">'+a.c+'</span></td><td style="font-size:12px">'+a.n+'</td><td><span class="badge '+(a.s==='debit'?'b-ok':'b-wait')+'">'+(a.s==='debit'?'借方':'貸方')+'</span></td><td><span style="display:inline-flex;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:500;background:'+dc.bg+';color:'+dc.c+'">'+dc.l+'</span></td></tr>';}).join('')||'<tr><td colspan="4" style="text-align:center;padding:20px;color:#94a3b8">找不到符合的科目</td></tr>';};
 window.filterAccSide=function(s,btn){accSide=s;document.querySelectorAll('#pg-accounts .btn-g').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');filterAccs();};
 
 // ══ 通知 ══
 function buildNotifs(){renderNotifs();}
 window.notifTab=function(t,btn){S.nT=t;document.querySelectorAll('#pg-notif .tb').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');renderNotifs();};
-function renderNotifs(){var data=S.nT==='unread'?NOTIFS.filter(function(n){return!n.read;}):S.nT==='approval'?NOTIFS.filter(function(n){return n.type==='approval';}):S.nT==='system'?NOTIFS.filter(function(n){return n.type==='system';}):NOTIFS;var unread=NOTIFS.filter(function(n){return!n.read;}).length;el('notif-sub').textContent=unread+' 則未讀';el('notif-cnt').textContent=unread;el('n-badge').style.display=unread?'block':'none';el('notif-list').innerHTML=data.map(function(n){return'<div class="notif-row'+(n.read?'':' unread')+'" onclick="markNotifRead(\''+n.id+'\')'+(n.reqId?';openDetail(\''+n.reqId+'\')':'')+'"><div style="width:6px;height:6px;border-radius:50%;background:'+(n.read?'#d0c0a8':'var(--br)')+';margin-top:4px;flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;font-weight:'+(n.read?'400':'500')+';color:#334155">'+n.title+'</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+n.body+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px">'+n.time+'</div></div><span class="badge '+(n.type==='approval'?'b-wait':'b-blue')+'">'+(n.type==='approval'?'簽核':'系統')+'</span></div>';}).join('')||'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">沒有通知</div>';}
+window.renderNotifs=function renderNotifs(){var data=S.nT==='unread'?NOTIFS.filter(function(n){return!n.read;}):S.nT==='approval'?NOTIFS.filter(function(n){return n.type==='approval';}):S.nT==='system'?NOTIFS.filter(function(n){return n.type==='system';}):NOTIFS;var unread=NOTIFS.filter(function(n){return!n.read;}).length;el('notif-sub').textContent=unread+' 則未讀';el('notif-cnt').textContent=unread;el('n-badge').style.display=unread?'block':'none';el('notif-list').innerHTML=data.map(function(n){return'<div class="notif-row'+(n.read?'':' unread')+'" onclick="markNotifRead(\''+n.id+'\')'+(n.reqId?';openDetail(\''+n.reqId+'\')':'')+'"><div style="width:6px;height:6px;border-radius:50%;background:'+(n.read?'#d0c0a8':'var(--br)')+';margin-top:4px;flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;font-weight:'+(n.read?'400':'500')+';color:#334155">'+n.title+'</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+n.body+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px">'+n.time+'</div></div><span class="badge '+(n.type==='approval'?'b-wait':'b-blue')+'">'+(n.type==='approval'?'簽核':'系統')+'</span></div>';}).join('')||'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">沒有通知</div>';}
 window.markNotifRead=function(id){var n=NOTIFS.find(function(x){return x.id===id;});if(n)n.read=true;renderNotifs();buildDash();};
 window.markAllRead=function(){NOTIFS.forEach(function(n){n.read=true;});renderNotifs();buildDash();};
 
 // ══ FIX 5：人員管理（僅會計/執行長可編輯）══
-function buildUsers(){renderUsers();}
+window.buildUsers=function buildUsers(){renderUsers();}
 window.filterUsers=function(){renderUsers();};
 function renderUsers(){
   var q=el('uq')?el('uq').value.toLowerCase():'';var rf=(el('urf')||{}).value||'';
