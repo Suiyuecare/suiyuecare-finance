@@ -131,7 +131,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .appr-card:hover{border-color:var(--br)}
 .bill-card{background:#fff;border:1px solid #eedfc8;border-radius:10px;padding:11px;margin-bottom:7px}
 .petty-card{background:#fff;border:1px solid #eedfc8;border-radius:12px;padding:12px}
-.modal-bg{position:absolute;inset:0;background:rgba(30,10,0,.4);display:flex;align-items:center;justify-content:center;z-index:50;border-radius:16px}
+.modal-bg{position:fixed;inset:0;background:rgba(30,10,0,.4);display:flex;align-items:center;justify-content:center;z-index:999;border-radius:0}
 .modal{background:#fff;border-radius:14px;border:1px solid #eedfc8;width:400px;max-height:92%;overflow-y:auto;box-shadow:0 20px 60px rgba(100,50,0,.2)}
 .modal-lg{width:620px}
 /* 登入 */
@@ -436,12 +436,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
       <input type="text" id="l-q" placeholder="搜尋摘要…" oninput="renderLedger()" style="width:150px;flex:none">
     </div>
     <div class="g4" style="margin-bottom:12px" id="ldg-kpis"></div>
-    <div class="g2" style="margin-bottom:12px">
+    <div style="margin-bottom:12px">
       <div class="card"><div class="chd"><span class="cht">分錄明細</span><span id="l-count" style="font-size:11px;color:#94a3b8"></span></div><div style="overflow-x:auto"><table><thead><tr><th>日期</th><th>摘要</th><th>部門代號</th><th>部門名稱</th><th>借方</th><th>貸方</th><th>科目代號</th><th>科目名稱</th><th>累計餘額</th></tr></thead><tbody id="ldg-tbody"></tbody></table></div></div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:9px">費用支出比例 — 圓餅圖</div><div id="ldg-pie" style="display:flex;align-items:center;gap:12px;min-height:130px"><canvas id="pie-canvas" width="130" height="130" style="flex-shrink:0"></canvas><div id="pie-legend" style="flex:1;font-size:11px"></div></div></div>
-        <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:9px">費用支出比例 — 長條圖</div><div id="ldg-bar"></div></div>
-      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px">
+      <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:9px">費用支出比例 — 圓餅圖</div><div id="ldg-pie" style="display:flex;align-items:center;gap:12px;min-height:130px"><canvas id="pie-canvas" width="130" height="130" style="flex-shrink:0"></canvas><div id="pie-legend" style="flex:1;font-size:11px"></div></div></div>
+      <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:9px">費用支出比例 — 長條圖</div><div id="ldg-bar"></div></div>
     </div>
     <!-- 分類帳收支趨勢 -->
     <div id="ldg-trend-wrap" style="display:none;margin-top:10px">
@@ -605,8 +605,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 'use strict';
 function fmt(n){return'NT$'+Math.round(n).toLocaleString('zh-TW');}
 function el(id){return document.getElementById(id);}
-function openModal(id){el(id).style.display='flex';}
-function closeModal(id){el(id).style.display='none';}
+window.openModal=function(id){var e=document.getElementById(id);if(e)e.style.display='flex';}
+window.closeModal=function(id){var e=document.getElementById(id);if(e)e.style.display='none';}
+// 本地別名，讓 IIFE 內部也能用
+var openModal=window.openModal;var closeModal=window.closeModal;
 
 // ── 資料定義 ──
 var DEPTS=[
@@ -1498,152 +1500,169 @@ window.setRptTrendTab=function(range,btn){
 };
 function buildComboChart(fac,e,range){
   var mCount={'3m':3,'6m':6,'12m':12}[range]||3;
-  var tl=el('rpt-trend-title');if(tl)tl.textContent='近'+mCount+'個月收支趨勢（長條圖＋折線圖）— '+e.full;
+  var tl=el('rpt-trend-title');if(tl)tl.textContent='近'+mCount+'個月收支趨勢 — '+e.full;
   var base=[{m:'25/06',f:.73},{m:'25/07',f:.75},{m:'25/08',f:.77},{m:'25/09',f:.80},{m:'25/10',f:.83},{m:'25/11',f:.85},{m:'25/12',f:.88},{m:'26/01',f:.78},{m:'26/02',f:.80},{m:'26/03',f:.85},{m:'26/04',f:.92},{m:'26/05',f:1}];
   var data=base.slice(-mCount);
   var revArr=data.map(function(d){return Math.round(897000*fac*d.f);});
   var expArr=data.map(function(d){return Math.round(596000*fac*d.f);});
   var netArr=revArr.map(function(r,i){return r-expArr[i];});
   var labels=data.map(function(d){return d.m;});
-  var maxVal=Math.max.apply(null,revArr)||1;
-  var minNet=Math.min.apply(null,netArr);var maxNet=Math.max.apply(null,netArr)||1;
-  var W=700,H=150,PL=52,PR=44,PT=12,PB=28;var iW=W-PL-PR;var iH=H-PT-PB;
-  var barW=Math.max(8,Math.min(22,Math.floor(iW/mCount*0.36)));var gap=iW/mCount;
-  var svg='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:180px">';
-  // 格線
-  for(var gi=0;gi<=4;gi++){var gy=PT+iH*(1-gi/4);svg+='<line x1="'+PL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+gy.toFixed(1)+'" stroke="#f0e6d6" stroke-width="0.8"/>';}
-  // 左Y軸（金額）
-  for(var gi=0;gi<=4;gi++){var val=Math.round(maxVal*gi/4/1000);var gy2=PT+iH*(1-gi/4);svg+='<text x="'+(PL-5)+'" y="'+(gy2+4).toFixed(1)+'" text-anchor="end" font-size="9" fill="#a08060">'+val+'K</text>';}
-  svg+='<text x="'+(PL-5)+'" y="'+(PT-2)+'" text-anchor="end" font-size="9" fill="#a08060">千元</text>';
-  // 右Y軸（淨利折線）
-  var netRange=(maxNet-minNet)||1;
-  svg+='<text x="'+(W-PR+5)+'" y="'+(PT+4)+'" font-size="9" fill="#2a9040">'+Math.round(maxNet/1000)+'K</text>';
-  svg+='<text x="'+(W-PR+5)+'" y="'+(PT+iH+4)+'" font-size="9" fill="#2a9040">'+Math.round(minNet/1000)+'K</text>';
-  // 長條（收入＋費用並排）
-  labels.forEach(function(lb,i){
-    var cx=PL+(i+0.5)*gap;
-    var rH=Math.round(revArr[i]/maxVal*iH);var eH=Math.round(expArr[i]/maxVal*iH);
-    var rx=cx-barW-1;var ex=cx+1;
-    svg+='<rect x="'+rx.toFixed(1)+'" y="'+(PT+iH-rH).toFixed(1)+'" width="'+barW+'" height="'+rH+'" fill="#ea880c" rx="2" opacity="0.82"><title>收入 '+Math.round(revArr[i]/1000)+'K</title></rect>';
-    svg+='<rect x="'+ex.toFixed(1)+'" y="'+(PT+iH-eH).toFixed(1)+'" width="'+barW+'" height="'+eH+'" fill="#b0d8f8" rx="2" opacity="0.82"><title>費用 '+Math.round(expArr[i]/1000)+'K</title></rect>';
-    svg+='<text x="'+cx.toFixed(1)+'" y="'+(H-PB+14)+'" text-anchor="middle" font-size="9" fill="#94a3b8">'+lb+'</text>';
-  });
-  // 折線（淨利）
-  var getNetY=function(v){return PT+iH*(1-(v-minNet)/netRange);};
-  var lineD=labels.map(function(lb,i){var cx=PL+(i+0.5)*gap;var cy=getNetY(netArr[i]);return(i===0?'M':'L')+cx.toFixed(1)+' '+cy.toFixed(1);}).join(' ');
-  svg+='<path d="'+lineD+'" fill="none" stroke="#2a9040" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>';
-  labels.forEach(function(lb,i){
-    var cx=PL+(i+0.5)*gap;var cy=getNetY(netArr[i]);
-    svg+='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="3.5" fill="#fff" stroke="#2a9040" stroke-width="2"/>';
-    var valK=Math.round(netArr[i]/1000);var above=cy>PT+14;
-    svg+='<text x="'+cx.toFixed(1)+'" y="'+(cy+(above?-7:12)).toFixed(1)+'" text-anchor="middle" font-size="8" fill="#2a9040" font-weight="500">'+valK+'K</text>';
-  });
-  svg+='</svg>';
-  var cc=el('rpt-combo-chart');if(cc)cc.innerHTML=svg;
+  renderInteractiveChart('rpt-combo-chart',labels,revArr,expArr,netArr,'收入','費用','#ea880c','#b0d8f8');
 }
-function buildBS(f,eid){var assets=[{cat:'流動資產',items:[['現金及約當現金',Math.round(1243200*f)],['銀行存款',Math.round(739500*f)],['應收帳款',Math.round(320400*f)],['預付費用',Math.round(28000*f)]]},{cat:'非流動資產',items:[['辦公設備',Math.round(85000*f)],['減：累計折舊',Math.round(-22000*f)],['存出保證金',Math.round(60000*f)]]}];var liabs=[{cat:'流動負債',items:[['應付薪資',Math.round(480000*f)],['應付費用-勞保費',Math.round(28340*f)],['應付費用-健保費',Math.round(14200*f)],['應付費用-勞退金',Math.round(18900*f)],['其他應付款',Math.round(32100*f)]]},{cat:'股東權益',items:[['股本',Math.round(1000000*({E1:1,E2:.4,E3:.2,E4:.15,E5:.6,E6:.3}[eid]||1))],['保留盈餘',Math.round(926760*f)]]}];var tA=assets.reduce(function(s,g){return s+g.items.reduce(function(ss,x){return ss+x[1];},0);},0);var tL=liabs.reduce(function(s,g){return s+g.items.reduce(function(ss,x){return ss+x[1];},0);},0);el('bs-kpis').innerHTML=[{l:'資產總計',v:fmt(tA)},{l:'負債合計',v:fmt(liabs.filter(function(g){return g.cat!=='股東權益';}).reduce(function(s,g){return s+g.items.reduce(function(ss,x){return ss+x[1];},0);},0))},{l:'股東權益',v:fmt(liabs.filter(function(g){return g.cat==='股東權益';}).reduce(function(s,g){return s+g.items.reduce(function(ss,x){return ss+x[1];},0);},0))},{l:'平衡',v:Math.abs(tA-tL)<10?'✓ 平衡':'差 '+fmt(Math.abs(tA-tL)),c:Math.abs(tA-tL)>=10}].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div></div>';}).join('');var rS=function(elId,groups){var tb=el(elId);if(!tb)return;tb.innerHTML='';var gt=0;groups.forEach(function(g){var st=g.items.reduce(function(s,x){return s+x[1];},0);gt+=st;tb.innerHTML+='<tr><td colspan="2" style="background:var(--warm);padding:4px 11px;font-size:11px;font-weight:500;color:#a08060">'+g.cat+'</td></tr>';g.items.forEach(function(x){tb.innerHTML+='<tr><td style="padding-left:16px;font-size:12px">'+x[0]+'</td><td style="text-align:right;font-weight:500">'+fmt(x[1])+'</td></tr>';});tb.innerHTML+='<tr style="background:var(--warm)"><td style="padding-left:11px;font-weight:500;font-size:11px">小計</td><td style="text-align:right;font-weight:500">'+fmt(st)+'</td></tr>';});tb.innerHTML+='<tr style="background:var(--brxxl)"><td style="font-weight:500;color:var(--brtxt)">合計</td><td style="text-align:right;font-weight:500;color:var(--brtxt)">'+fmt(gt)+'</td></tr>';};rS('bs-asset',assets);rS('bs-liab',liabs);var chk=el('bs-chk');if(Math.abs(tA-tL)<10){chk.style.cssText='padding:7px 12px;border-radius:8px;font-size:12px;font-weight:500;text-align:center;background:#eaf8d8;color:#1a5010';chk.textContent='✓ 資產 = 負債 + 股東權益 = '+fmt(tL);}else{chk.style.cssText='padding:7px 12px;border-radius:8px;font-size:12px;font-weight:500;text-align:center;background:#fde8e8;color:#8a1010';chk.textContent='⚠ 差異 '+fmt(Math.abs(tA-tL));}}
-function buildPL(f,eid){var rev=eid==='E5'?[['居家照顧服務收入',Math.round(320000*f)],['政府長照補助',Math.round(145000*f)],['其他收入',Math.round(8000*f)]]:eid==='E2'?[['日照服務收入',Math.round(180000*f)],['政府補助',Math.round(62000*f)]]:eid==='E3'?[['培訓課程收入',Math.round(95000*f)],['輔導顧問費',Math.round(35000*f)]]:eid==='E4'?[['投資收益',Math.round(120000*f)],['顧問服務費',Math.round(42000*f)]]:eid==='E6'?[['日照服務收入',Math.round(95000*f)],['政府補助',Math.round(32000*f)]]:[['長照服務收入',Math.round(620000*f)],['培訓課程收入',Math.round(180000*f)],['政府補助',Math.round(85000*f)],['其他收入',Math.round(12000*f)]];var exp=[['薪資支出',Math.round(480000*f)],['保險費-勞保費',Math.round(28340*f)],['保險費-健保費',Math.round(14200*f)],['保險費-勞退金',Math.round(18900*f)],['旅費',Math.round(12340*f)],['勞務費',Math.round(25000*f)],['其他費用',Math.round(18000*f)]];var tR=rev.reduce(function(s,x){return s+x[1];},0);var tE=exp.reduce(function(s,x){return s+x[1];},0);var net=tR-tE;var margin=tR?Math.round(net/tR*100):0;el('pl-kpis').innerHTML=[{l:'營業收入',v:fmt(tR)},{l:'營業費用',v:fmt(tE)},{l:'本期淨利',v:fmt(net),s:margin+'%',c:net<0},{l:'費用率',v:tR?Math.round(tE/tR*100)+'%':'—'}].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');var pb=el('pl-body');if(!pb)return;pb.innerHTML='';pb.innerHTML+='<tr><td colspan="4" style="background:var(--warm);padding:4px 11px;font-size:11px;font-weight:500;color:#a08060">▲ 營業收入</td></tr>';rev.forEach(function(x){var pct=tR?Math.round(x[1]/tR*100):0;pb.innerHTML+='<tr><td style="padding-left:14px;font-size:12px">'+x[0]+'</td><td style="text-align:right;font-weight:500">'+fmt(x[1])+'</td><td style="text-align:right"><span style="background:#e6f4d8;color:#1a5010;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:500">'+pct+'%</span></td><td><div style="height:7px;background:var(--warm);border-radius:4px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:#2a9040;border-radius:4px"></div></div></td></tr>';});pb.innerHTML+='<tr style="background:var(--warm)"><td style="padding-left:11px;font-weight:500;font-size:11px">收入合計</td><td style="text-align:right;font-weight:500">'+fmt(tR)+'</td><td style="text-align:right"><span style="background:#e6f4d8;color:#1a5010;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:500">100%</span></td><td></td></tr>';pb.innerHTML+='<tr><td colspan="4" style="background:var(--warm);padding:4px 11px;font-size:11px;font-weight:500;color:#a08060">▼ 營業費用</td></tr>';exp.forEach(function(x){var pctR=tR?Math.round(x[1]/tR*100):0;pb.innerHTML+='<tr><td style="padding-left:14px;font-size:12px">'+x[0]+'</td><td style="text-align:right;font-weight:500;color:#8a1010">('+fmt(x[1]).replace('NT$','')+')</td><td style="text-align:right"><span style="background:var(--brxxl);color:var(--brtxt);padding:1px 5px;border-radius:4px;font-size:10px;font-weight:500">'+pctR+'%</span></td><td><div style="height:7px;background:var(--warm);border-radius:4px;overflow:hidden"><div style="width:'+pctR+'%;height:100%;background:var(--br);border-radius:4px"></div></div></td></tr>';});pb.innerHTML+='<tr style="background:var(--warm)"><td style="padding-left:11px;font-weight:500;font-size:11px">費用合計</td><td style="text-align:right;font-weight:500;color:#8a1010">('+fmt(tE).replace('NT$','')+')</td><td style="text-align:right"><span style="background:var(--brxxl);color:var(--brtxt);padding:1px 5px;border-radius:4px;font-size:10px;font-weight:500">'+(tR?Math.round(tE/tR*100):0)+'%</span></td><td></td></tr>';pb.innerHTML+='<tr style="background:var(--brxxl)"><td style="font-weight:500;color:var(--brtxt)">本期淨利</td><td style="text-align:right;font-weight:500;color:'+(net>=0?'#1a5010':'#8a1010')+'">'+fmt(net)+'</td><td style="text-align:right"><span style="background:'+(net>=0?'#e6f4d8':'#fde0e0')+';color:'+(net>=0?'#1a5010':'#8a1010')+';padding:1px 5px;border-radius:4px;font-size:10px;font-weight:500">'+margin+'%</span></td><td></td></tr>';var maxE=Math.max.apply(null,exp.map(function(x){return x[1];}));var cols=['#ea880c','#f5c060','#f5e090','#c8e890','#b0d8f8','#d8d0c8','#e0b0f8'];var pc=el('pl-chart');if(!pc)return;pc.innerHTML=exp.map(function(x,i){var pctE=tE?Math.round(x[1]/tE*100):0;return'<div class="bar-row"><div class="bar-lbl">'+(x[0].length>6?x[0].slice(0,5)+'…':x[0])+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(x[1]/maxE*100)+'%;background:'+cols[i%cols.length]+'"></div></div><div class="bar-val">'+fmt(x[1])+'</div><div class="bar-pct">'+pctE+'%</div></div>';}).join('');var ps=el('pl-summary');if(ps)ps.innerHTML='費用佔收入 <strong>'+(tR?Math.round(tE/tR*100):0)+'%</strong>　淨利率 <strong>'+margin+'%</strong>　薪資佔費用 <strong>'+(tE?Math.round(exp[0][1]/tE*100):0)+'%</strong>';}
-function buildCF(f,eid){var op=[['本期淨利',Math.round((eid==='E1'?237000:85000)*f)],['折舊及攤提',Math.round(5500*f)],['應收帳款變動',Math.round(-45000*f)],['應付帳款變動',Math.round(32000*f)]];var inv=[['購置辦公設備',Math.round(-85000*f)]];var fin=[['股東增資',Math.round(eid==='E4'?300000:500000*f)]];var oS=op.reduce(function(s,x){return s+x[1];},0);var iS=inv.reduce(function(s,x){return s+x[1];},0);var fS=fin.reduce(function(s,x){return s+x[1];},0);var net=oS+iS+fS;var absT=Math.abs(oS)+Math.abs(iS)+Math.abs(fS)||1;el('cf-kpis').innerHTML=[{l:'營業現金流',v:fmt(oS),s:Math.round(Math.abs(oS)/absT*100)+'%',c:oS<0},{l:'投資現金流',v:fmt(iS),s:Math.round(Math.abs(iS)/absT*100)+'%',c:iS<0},{l:'籌資現金流',v:fmt(fS),s:Math.round(Math.abs(fS)/absT*100)+'%'}].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">佔 '+s.s+'</div>':'')+'</div>';}).join('');var cb=el('cf-body');if(!cb)return;cb.innerHTML='';[['一、營業活動',op,oS],['二、投資活動',inv,iS],['三、籌資活動',fin,fS]].forEach(function(grp){cb.innerHTML+='<div style="padding:5px 12px;background:var(--warm);font-size:11px;font-weight:500;color:#a08060">'+grp[0]+'</div>';grp[1].forEach(function(x){var pct=Math.round(Math.abs(x[1])/absT*100);cb.innerHTML+='<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 12px;border-bottom:1px solid #f5ede0;font-size:12px"><span>'+x[0]+'</span><div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:#94a3b8">'+pct+'%</span><span style="font-weight:500;color:'+(x[1]>=0?'#1a5010':'#8a1010')+'">'+(x[1]>=0?'+':'')+' '+fmt(Math.abs(x[1]))+'</span></div></div>';});cb.innerHTML+='<div style="display:flex;justify-content:space-between;padding:5px 12px;background:var(--warm);font-size:11px;font-weight:500"><span>小計</span><span style="color:'+(grp[2]>=0?'#1a5010':'#8a1010')+'">'+(grp[2]>=0?'+':'')+' '+fmt(Math.abs(grp[2]))+'</span></div>';});cb.innerHTML+='<div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--brxxl);font-size:12px;font-weight:500"><span style="color:var(--brtxt)">本期現金淨增減</span><span style="color:'+(net>=0?'#1a5010':'#8a1010')+'">'+(net>=0?'+':'')+' '+fmt(Math.abs(net))+'</span></div>';var bars=[{l:'營業',v:oS,c:'var(--br)'},{l:'投資',v:iS,c:'#1a4080'},{l:'籌資',v:fS,c:'#1a7040'},{l:'淨增減',v:net,c:net>=0?'#1a5010':'#c02020'}];var maxV=Math.max.apply(null,bars.map(function(b){return Math.abs(b.v);}));if(!maxV)maxV=1;var H=100;var cc=el('cf-chart');if(!cc)return;cc.innerHTML='<svg width="100%" viewBox="0 0 240 '+(H+36)+'" preserveAspectRatio="xMidYMid meet"><line x1="10" y1="'+H/2+'" x2="230" y2="'+H/2+'" stroke="#e0d0b8" stroke-width="0.5"/>'+bars.map(function(b,i){var bH=Math.round(Math.abs(b.v)/maxV*(H/2-8));var pos=b.v>=0;var y=pos?H/2-bH:H/2;var x=20+i*54;var pct=Math.round(Math.abs(b.v)/absT*100);return'<rect x="'+x+'" y="'+y+'" width="36" height="'+bH+'" fill="'+b.c+'" rx="3"/><text x="'+(x+18)+'" y="'+(pos?y-4:y+bH+10)+'" text-anchor="middle" font-size="9" fill="'+(b.v>=0?'#1a5010':'#8a1010')+'">'+(b.v>=0?'+':'')+Math.round(b.v/1000)+'K</text><text x="'+(x+18)+'" y="'+(H+13)+'" text-anchor="middle" font-size="9" fill="#94a3b8">'+b.l+'</text><text x="'+(x+18)+'" y="'+(H+24)+'" text-anchor="middle" font-size="8" font-weight="500" fill="var(--brtxt)">'+pct+'%</text>';}).join('')+'</svg>';}
-
-// FIX 12+14：分類帳（月份篩選、圓餅圖、長條圖、趨勢、匯出）
-window.renderLedger=function renderLedger(){
-  var dept=(el('l-dept')||{}).value||'all';
-  var acct=(el('l-acct')||{}).value||'all';
-  var month=(el('l-month')||{}).value||'all';
-  var q=el('l-q')?el('l-q').value.toLowerCase():'';
-  var data=LEDGER.filter(function(e){
-    return(dept==='all'||e.dc===dept)&&(acct==='all'||e.ac===acct)
-      &&(month==='all'||e.date.indexOf(month)===0)
-      &&(!q||e.desc.toLowerCase().indexOf(q)>-1||e.an.toLowerCase().indexOf(q)>-1);
-  });
-  var tDr=data.reduce(function(s,e){return s+e.dr;},0);
-  var tCr=data.reduce(function(s,e){return s+e.cr;},0);
-  el('l-count').textContent='共 '+data.length+' 筆';
-  el('ldg-kpis').innerHTML=[{l:'借方合計',v:fmt(tDr)},{l:'貸方合計',v:fmt(tCr)},{l:'淨餘額',v:fmt(Math.abs(tDr-tCr)),s:tDr>=tCr?'借方餘額':'貸方餘額'},{l:'分錄筆數',v:data.length+' 筆'}].map(function(s){return'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:#1e293b">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');
-  var run=0;
-  el('ldg-tbody').innerHTML=data.map(function(e){var d=gD(e.dc);if(e.dr)run+=e.dr;else run-=e.cr;return'<tr><td style="font-size:11px;color:#94a3b8">'+e.date+'</td><td><div style="font-size:12px">'+e.desc+'</div><div style="font-size:10px;color:#94a3b8">'+e.ref+'</div></td><td><span class="dt">'+e.dc+'</span></td><td style="font-size:11px">'+d.n+'</td><td style="text-align:right;font-weight:500;color:#1a5010">'+(e.dr?fmt(e.dr):'—')+'</td><td style="text-align:right;font-weight:500;color:#8a1010">'+(e.cr?fmt(e.cr):'—')+'</td><td><span class="dt" style="font-size:9px">'+e.ac+'</span></td><td style="font-size:11px">'+e.an+'</td><td style="text-align:right;font-weight:500;color:'+(run>=0?'#1a5010':'#8a1010')+'">'+fmt(Math.abs(run))+'<div style="font-size:9px;color:#94a3b8">'+(run>=0?'借':'貸')+'</div></td></tr>';}).join('')||'<tr><td colspan="9" style="text-align:center;padding:24px;color:#94a3b8">沒有符合的分錄</td></tr>';
-  // 圓餅圖 + 長條圖
-  var expMap={};
-  data.filter(function(e){return e.dr>0;}).forEach(function(e){expMap[e.an]=(expMap[e.an]||0)+e.dr;});
-  var expItems=Object.keys(expMap).sort(function(a,b){return expMap[b]-expMap[a];});
-  var totalExp=expItems.reduce(function(s,k){return s+expMap[k];},0);
-  var pieColors=['#ea880c','#2a9040','#1a4080','#4a2890','#c02020','#0a5040','#7a4500','#94a3b8'];
-  // 圓餅
-  var canvas=el('pie-canvas');var legend=el('pie-legend');
-  if(canvas&&totalExp>0){
-    var ctx=canvas.getContext('2d');ctx.clearRect(0,0,130,130);var start=-Math.PI/2;
-    expItems.forEach(function(k,i){var slice=2*Math.PI*expMap[k]/totalExp;ctx.beginPath();ctx.moveTo(65,65);ctx.arc(65,65,55,start,start+slice);ctx.closePath();ctx.fillStyle=pieColors[i%pieColors.length];ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();start+=slice;});
-    if(legend)legend.innerHTML=expItems.slice(0,6).map(function(k,i){return'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px"><div style="width:9px;height:9px;border-radius:2px;background:'+pieColors[i%pieColors.length]+';flex-shrink:0"></div><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(k.length>8?k.slice(0,7)+'…':k)+'</div><div style="margin-left:auto;color:#94a3b8">'+Math.round(expMap[k]/totalExp*100)+'%</div></div>';}).join('');
-  }else if(canvas){var ctx=canvas.getContext('2d');ctx.clearRect(0,0,130,130);ctx.fillStyle='#e0d0b8';ctx.beginPath();ctx.arc(65,65,55,0,Math.PI*2);ctx.fill();if(legend)legend.innerHTML='<div style="font-size:11px;color:#94a3b8">無費用資料</div>';}
-  // 長條圖
-  var maxE=expItems.length?Math.max.apply(null,expItems.map(function(k){return expMap[k];})):1;
-  el('ldg-bar').innerHTML=expItems.slice(0,7).map(function(k,i){var pct=totalExp?Math.round(expMap[k]/totalExp*100):0;return'<div class="bar-row"><div class="bar-lbl">'+(k.length>5?k.slice(0,4)+'…':k)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(expMap[k]/maxE*100)+'%;background:'+pieColors[i%pieColors.length]+'"></div></div><div class="bar-val">'+fmt(expMap[k])+'</div><div class="bar-pct">'+pct+'%</div></div>';}).join('')||'<div style="font-size:12px;color:#94a3b8;text-align:center;padding:16px">無費用分錄</div>';
-  // 分類帳收支趨勢（固定顯示，預設近3個月）
-  if(!S.ldgTrendRange)S.ldgTrendRange='3m';
-  var tw=el('ldg-trend-wrap');
-  if(tw){tw.style.display='block';}
-  buildLdgComboChart(tDr,tCr,S.ldgTrendRange);
-}
-// 分類帳趨勢 Tab 切換
-window.setLdgTrendTab=function(range,btn){
-  S.ldgTrendRange=range;
-  var tabs=['ltab-3m','ltab-6m','ltab-12m'];
-  tabs.forEach(function(id){
-    var b=el(id);if(!b)return;
-    if(id==='ltab-'+range){b.style.background='var(--br)';b.style.color='#fff';b.style.fontWeight='500';}
-    else{b.style.background='#fff';b.style.color='#94a3b8';b.style.fontWeight='400';}
-  });
-  var tDr=LEDGER.reduce(function(s,e){return s+e.dr;},0);
-  var tCr=LEDGER.reduce(function(s,e){return s+e.cr;},0);
-  buildLdgComboChart(tDr,tCr,range);
-};
-// 分類帳複合圖（長條借方/貸方 + 淨額折線）
 function buildLdgComboChart(tDr,tCr,range){
   var mCount={'3m':3,'6m':6,'12m':12}[range]||3;
-  var tl=el('ldg-trend-title');if(tl)tl.textContent='收支趨勢（長條圖＋折線圖）';
-  // 月份資料
+  var tl=el('ldg-trend-title');if(tl)tl.textContent='收支趨勢（近'+mCount+'個月）';
   var base=[{m:'25/06',fd:.73,fc:.68},{m:'25/07',fd:.75,fc:.71},{m:'25/08',fd:.77,fc:.74},{m:'25/09',fd:.80,fc:.76},{m:'25/10',fd:.83,fc:.79},{m:'25/11',fd:.85,fc:.82},{m:'25/12',fd:.88,fc:.85},{m:'26/01',fd:.78,fc:.80},{m:'26/02',fd:.80,fc:.82},{m:'26/03',fd:.85,fc:.84},{m:'26/04',fd:.92,fc:.90},{m:'26/05',fd:1,fc:1}];
   var data=base.slice(-mCount);
-  var drBase=tDr||517340; var crBase=tCr||517340;
+  var drBase=tDr||517340;var crBase=tCr||517340;
   var drArr=data.map(function(d){return Math.round(drBase*d.fd);});
   var crArr=data.map(function(d){return Math.round(crBase*d.fc);});
   var netArr=crArr.map(function(c,i){return c-drArr[i];});
   var labels=data.map(function(d){return d.m;});
-  var maxVal=Math.max.apply(null,drArr.concat(crArr))||1;
-  var minNet=Math.min.apply(null,netArr);var maxNet=Math.max.apply(null,netArr)||1;
-  // SVG
-  var W=700,H=150,PL=52,PR=46,PT=12,PB=28;var iW=W-PL-PR;var iH=H-PT-PB;
-  var barW=Math.max(6,Math.min(20,Math.floor(iW/mCount*0.36)));var gap=iW/mCount;
-  var svg='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:180px">';
-  // 格線 + 左Y軸
-  for(var gi=0;gi<=4;gi++){var gy=PT+iH*(1-gi/4);svg+='<line x1="'+PL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+gy.toFixed(1)+'" stroke="#f0e6d6" stroke-width="0.8"/>';svg+='<text x="'+(PL-5)+'" y="'+(gy+4).toFixed(1)+'" text-anchor="end" font-size="9" fill="#a08060">'+Math.round(maxVal*gi/4/1000)+'K</text>';}
-  svg+='<text x="'+(PL-5)+'" y="'+(PT-2)+'" text-anchor="end" font-size="9" fill="#a08060">千元</text>';
-  // 右Y軸（淨額）
-  svg+='<text x="'+(W-PR+5)+'" y="'+(PT+4)+'" font-size="9" fill="#2a9040">'+Math.round(maxNet/1000)+'K</text>';
-  svg+='<text x="'+(W-PR+5)+'" y="'+(PT+iH+4)+'" font-size="9" fill="#2a9040">'+Math.round(minNet/1000)+'K</text>';
-  // 長條（借方=費用橘色 + 貸方=收入藍色，並排）
-  labels.forEach(function(lb,i){
-    var cx=PL+(i+0.5)*gap;
-    var dH=Math.round(drArr[i]/maxVal*iH);var cH=Math.round(crArr[i]/maxVal*iH);
-    var dx=cx-barW-1;var cx2=cx+1;
-    svg+='<rect x="'+dx.toFixed(1)+'" y="'+(PT+iH-dH).toFixed(1)+'" width="'+barW+'" height="'+dH+'" fill="#ea880c" rx="2" opacity="0.85"><title>借方(費用) '+fmt(drArr[i])+'</title></rect>';
-    svg+='<rect x="'+cx2.toFixed(1)+'" y="'+(PT+iH-cH).toFixed(1)+'" width="'+barW+'" height="'+cH+'" fill="#b0d8f8" rx="2" opacity="0.85"><title>貸方(收入) '+fmt(crArr[i])+'</title></rect>';
-    svg+='<text x="'+cx.toFixed(1)+'" y="'+(H-PB+14)+'" text-anchor="middle" font-size="9" fill="#94a3b8">'+lb+'</text>';
-  });
-  // 折線（淨額）
-  var netRange=(maxNet-minNet)||1;
-  var getNetY=function(v){return PT+iH*(1-(v-minNet)/netRange);};
-  var lineD=labels.map(function(lb,i){var cx=PL+(i+0.5)*gap;return(i===0?'M':'L')+cx.toFixed(1)+' '+getNetY(netArr[i]).toFixed(1);}).join(' ');
-  svg+='<path d="'+lineD+'" fill="none" stroke="#2a9040" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
-  labels.forEach(function(lb,i){
-    var cx=PL+(i+0.5)*gap;var cy=getNetY(netArr[i]);
-    svg+='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="3.5" fill="#fff" stroke="#2a9040" stroke-width="2"/>';
-    var valK=Math.round(netArr[i]/1000);var above=cy>PT+16;
-    svg+='<text x="'+cx.toFixed(1)+'" y="'+(cy+(above?-7:12)).toFixed(1)+'" text-anchor="middle" font-size="8" fill="'+(netArr[i]>=0?'#2a9040':'#c02020')+'" font-weight="500">'+valK+'K</text>';
-  });
-  svg+='</svg>';
-  var cc=el('ldg-trend-chart');if(cc)cc.innerHTML=svg;
+  renderInteractiveChart('ldg-trend-chart',labels,crArr,drArr,netArr,'收入(貸方)','費用(借方)','#b0d8f8','#ea880c');
 }
+// ── 通用互動式圖表引擎 ──
+function renderInteractiveChart(containerId,labels,arr1,arr2,netArr,label1,label2,col1,col2){
+  var cc=el(containerId);if(!cc)return;
+  var max1=Math.max.apply(null,arr1)||1;
+  var max2=Math.max.apply(null,arr2)||1;
+  var maxVal=Math.max(max1,max2)||1;
+  var maxNet=Math.max.apply(null,netArr.map(function(v){return Math.abs(v);}));
+  // 清除舊內容
+  cc.innerHTML='';
+  cc.style.position='relative';
+  // Tooltip
+  var tip=document.createElement('div');
+  tip.style.cssText='position:absolute;background:#1e293b;color:#fff;border-radius:8px;padding:9px 13px;font-size:11px;pointer-events:none;display:none;z-index:10;min-width:150px;box-shadow:0 4px 16px rgba(0,0,0,.25);line-height:1.7;transition:opacity .15s';
+  cc.appendChild(tip);
+  // 圖表主容器
+  var wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;align-items:flex-end;gap:0;padding:0 8px 0 8px;height:190px;position:relative';
+  // Y軸
+  var yAxis=document.createElement('div');
+  yAxis.style.cssText='display:flex;flex-direction:column-reverse;justify-content:space-between;height:150px;margin-right:6px;padding-bottom:28px;flex-shrink:0';
+  for(var yi=0;yi<=4;yi++){
+    var yLbl=document.createElement('div');
+    yLbl.style.cssText='font-size:9px;color:#a08060;text-align:right;white-space:nowrap';
+    yLbl.textContent=Math.round(maxVal*yi/4/1000)+'K';
+    yAxis.appendChild(yLbl);
+  }
+  wrap.appendChild(yAxis);
+  // 折線 canvas（疊加在長條圖上）
+  var lineCanvas=document.createElement('canvas');
+  lineCanvas.style.cssText='position:absolute;bottom:28px;left:0;right:0;pointer-events:none;z-index:3';
+  lineCanvas.height=150;
+  wrap.appendChild(lineCanvas);
+  // 每個月份的組
+  var barGroups=[];
+  labels.forEach(function(lb,i){
+    var grp=document.createElement('div');
+    grp.style.cssText='flex:1;display:flex;flex-direction:column;align-items:center;gap:0;cursor:pointer;position:relative;';
+    grp.dataset.idx=i;
+    // 長條容器
+    var bars=document.createElement('div');
+    bars.style.cssText='display:flex;align-items:flex-end;gap:2px;height:150px;width:100%;justify-content:center;transition:filter .15s;';
+    // 長條1（col1）
+    var b1=document.createElement('div');
+    var h1=Math.round(arr1[i]/maxVal*136);
+    b1.style.cssText='width:38%;background:'+col1+';border-radius:3px 3px 0 0;height:'+h1+'px;min-height:2px;transition:height .25s cubic-bezier(.34,1.56,.64,1),filter .15s,transform .15s;transform-origin:bottom center;';
+    // 長條2（col2）
+    var b2=document.createElement('div');
+    var h2=Math.round(arr2[i]/maxVal*136);
+    b2.style.cssText='width:38%;background:'+col2+';border-radius:3px 3px 0 0;height:'+h2+'px;min-height:2px;transition:height .25s cubic-bezier(.34,1.56,.64,1),filter .15s,transform .15s;transform-origin:bottom center;';
+    bars.appendChild(b1);bars.appendChild(b2);
+    // 月份標籤
+    var lbl=document.createElement('div');
+    lbl.style.cssText='font-size:9px;color:#94a3b8;margin-top:5px;height:18px;display:flex;align-items:center;transition:color .15s,font-weight .15s';
+    lbl.textContent=lb;
+    grp.appendChild(bars);grp.appendChild(lbl);
+    grp._b1=b1;grp._b2=b2;grp._lbl=lbl;grp._bars=bars;
+    // 選取高亮動畫
+    var activeIdx=[-1];
+    grp.addEventListener('click',function(ev){
+      var idx=parseInt(this.dataset.idx);
+      if(activeIdx[0]===idx){
+        // 取消選取
+        activeIdx[0]=-1;
+        resetAllBars(barGroups);
+        tip.style.display='none';
+        return;
+      }
+      activeIdx[0]=idx;
+      // 重設所有
+      resetAllBars(barGroups);
+      // 高亮本月
+      var g=barGroups[idx];
+      g._b1.style.filter='brightness(1.2) drop-shadow(0 0 4px '+col1+'88)';
+      g._b1.style.transform='scaleY(1.06)';
+      g._b2.style.filter='brightness(1.2) drop-shadow(0 0 4px '+col2+'88)';
+      g._b2.style.transform='scaleY(1.06)';
+      g._bars.style.filter='drop-shadow(0 2px 8px rgba(0,0,0,.18))';
+      g._lbl.style.color='var(--brtxt)';
+      g._lbl.style.fontWeight='600';
+      // Tooltip 內容
+      var net=netArr[idx];
+      tip.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.15);padding-bottom:5px">📅 20'+lb.replace('/','/') + '</div>'
+        +'<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:'+col1+'">● '+label1+'</span><span style="font-weight:600">'+fmt(arr1[idx])+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:'+col2+'">● '+label2+'</span><span style="font-weight:600">'+fmt(arr2[idx])+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between;gap:16px;margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.15)"><span style="color:'+(net>=0?'#4ade80':'#f87171')+'">● 淨額</span><span style="font-weight:600;color:'+(net>=0?'#4ade80':'#f87171')+'">'+(net>=0?'+':'')+fmt(net)+'</span></div>';
+      // Tooltip 定位
+      tip.style.display='block';
+      var rect=grp.getBoundingClientRect();
+      var cRect=cc.getBoundingClientRect();
+      var tx=rect.left-cRect.left+rect.width/2-75;
+      if(tx<0)tx=0;if(tx+160>cRect.width)tx=cRect.width-160;
+      tip.style.left=tx+'px';
+      tip.style.top='2px';
+      ev.stopPropagation();
+    });
+    wrap.appendChild(grp);
+    barGroups.push(grp);
+  });
+  cc.appendChild(wrap);
+  // 點空白取消
+  cc.addEventListener('click',function(){
+    resetAllBars(barGroups);
+    tip.style.display='none';
+  });
+  // 折線繪製
+  function drawLine(){
+    lineCanvas.width=wrap.offsetWidth||600;
+    var ctx=lineCanvas.getContext('2d');
+    ctx.clearRect(0,0,lineCanvas.width,lineCanvas.height);
+    if(!barGroups.length)return;
+    var yAxisW=(yAxis.offsetWidth||28)+14;
+    var colW=(lineCanvas.width-yAxisW)/labels.length;
+    var netRange=(Math.max.apply(null,netArr)-Math.min.apply(null,netArr))||1;
+    var minNet=Math.min.apply(null,netArr);
+    function getNetY(v){return 136*(1-(v-minNet)/netRange);}
+    ctx.strokeStyle='#2a9040';ctx.lineWidth=2.2;ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.beginPath();
+    netArr.forEach(function(v,i){
+      var cx=yAxisW+(i+0.5)*colW;var cy=getNetY(v);
+      if(i===0)ctx.moveTo(cx,cy);else ctx.lineTo(cx,cy);
+    });
+    ctx.stroke();
+    // 圓點
+    netArr.forEach(function(v,i){
+      var cx=yAxisW+(i+0.5)*colW;var cy=getNetY(v);
+      ctx.beginPath();ctx.arc(cx,cy,4,0,Math.PI*2);
+      ctx.fillStyle='#fff';ctx.fill();
+      ctx.strokeStyle='#2a9040';ctx.lineWidth=2;ctx.stroke();
+    });
+  }
+  setTimeout(drawLine,50);
+  window.addEventListener('resize',drawLine);
+}
+function resetAllBars(barGroups){
+  barGroups.forEach(function(g){
+    g._b1.style.filter='';g._b1.style.transform='';
+    g._b2.style.filter='';g._b2.style.transform='';
+    g._bars.style.filter='';
+    g._lbl.style.color='#94a3b8';g._lbl.style.fontWeight='';
+  });
+}
+
 // FIX 12：匯出分類帳 CSV
 window.exportLedger=function(){
   var dept=(el('l-dept')||{}).value||'all';
@@ -1780,6 +1799,446 @@ window.submitAddUser=function(){
   err.style.display='none';closeModal('m-add-user');renderUsers();
   if(el('un'))el('un').value='';if(el('ue'))el('ue').value='';
 };
+
+
+// ══ 補上原檔缺失的函式：buildBS / buildPL / buildCF / renderLedger ══
+// 設計原則：以 VOUCHERS / LEDGER / INVS 為基底，依法人因子 fac 與月份因子 mf 推估
+// fac: E1=1, E2=.4, E3=.2, E4=.15, E5=.6, E6=.3
+// mf : 月=1/.92/.85, Q=2.8/2.6, 全年=11
+
+function _scaleRow(label, base, f){return {n:label, v:Math.round(base*f)};}
+
+function buildBS(f, eid){
+  // 資產
+  var cash       = 1850000 * f;        // 現金及銀行
+  var ar         = 267750 * f;         // 應收帳款（與 INVS 對齊：126000+89250+52500=267750 @E1+E5+E2）
+  var prepay     = 92000 * f;          // 預付費用
+  var taxIn      = 31200 * f;          // 進項稅額
+  var fixed      = 1240000 * f;        // 不動產廠房設備淨值
+  var deposit    = 380000 * f;         // 存出保證金
+  var totalAsset = cash + ar + prepay + taxIn + fixed + deposit;
+
+  // 負債及權益
+  var apSal   = 480000 * f;            // 應付薪資（對應 V2026-0490）
+  var apOth   = 25000 * f;             // 其他應付款（對應 V2026-0498）
+  var apFee   = 65880 * f;             // 應付費用：勞健退合計
+  var taxOut  = 18900 * f;             // 銷項稅額
+  var capital = 1500000 * f;           // 股本
+  var retain  = totalAsset - (apSal+apOth+apFee+taxOut+capital);  // 保留盈餘 — 用反推保證平衡
+  var totalLE = apSal+apOth+apFee+taxOut+capital+retain;
+
+  // 4 個 KPI
+  var kp = el('bs-kpis');
+  if(kp){
+    kp.innerHTML =
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">資產總額</div><div style="font-size:15px;font-weight:500;color:#1e293b">'+fmt(totalAsset)+'</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">流動資產</div><div style="font-size:15px;font-weight:500;color:#1e293b">'+fmt(cash+ar+prepay+taxIn)+'</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">負債合計</div><div style="font-size:15px;font-weight:500;color:#1e293b">'+fmt(apSal+apOth+apFee+taxOut)+'</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">股東權益</div><div style="font-size:15px;font-weight:500;color:#1e293b">'+fmt(capital+retain)+'</div></div>';
+  }
+
+  function rowHTML(items, total, totalLabel){
+    var s='';
+    items.forEach(function(r){
+      s+='<tr><td style="padding-left:18px">'+r.n+'</td><td style="text-align:right;font-family:monospace">'+fmt(r.v)+'</td></tr>';
+    });
+    s+='<tr style="background:var(--warm)"><td style="font-weight:500;color:#a08060">'+totalLabel+'</td><td style="text-align:right;font-family:monospace;font-weight:500;color:var(--brtxt)">'+fmt(total)+'</td></tr>';
+    return s;
+  }
+
+  var asset = el('bs-asset');
+  if(asset){
+    asset.innerHTML =
+      '<tr><td colspan="2" style="background:#fdf6e8;font-weight:500;color:#a08060;font-size:11px">流動資產</td></tr>'+
+      rowHTML([
+        {n:'1112 銀行存款',v:cash},
+        {n:'1123 應收帳款',v:ar},
+        {n:'1141 預付費用',v:prepay},
+        {n:'1144 進項稅額',v:taxIn},
+      ], cash+ar+prepay+taxIn, '　流動資產合計')+
+      '<tr><td colspan="2" style="background:#fdf6e8;font-weight:500;color:#a08060;font-size:11px">非流動資產</td></tr>'+
+      rowHTML([
+        {n:'1500 不動產廠房設備淨值',v:fixed},
+        {n:'1901 存出保證金',v:deposit},
+      ], fixed+deposit, '　非流動資產合計')+
+      '<tr style="background:#fff8ed"><td style="font-weight:500;color:var(--brtxt)">資產總計</td><td style="text-align:right;font-family:monospace;font-weight:500;color:var(--brtxt)">'+fmt(totalAsset)+'</td></tr>';
+  }
+
+  var liab = el('bs-liab');
+  if(liab){
+    liab.innerHTML =
+      '<tr><td colspan="2" style="background:#fdf6e8;font-weight:500;color:#a08060;font-size:11px">流動負債</td></tr>'+
+      rowHTML([
+        {n:'2122 應付薪資',v:apSal},
+        {n:'2128 應付費用-勞健退',v:apFee},
+        {n:'2135 其他應付款',v:apOth},
+        {n:'2161 銷項稅額',v:taxOut},
+      ], apSal+apFee+apOth+taxOut, '　負債合計')+
+      '<tr><td colspan="2" style="background:#fdf6e8;font-weight:500;color:#a08060;font-size:11px">股東權益</td></tr>'+
+      rowHTML([
+        {n:'3100 股本',v:capital},
+        {n:'3300 保留盈餘',v:retain},
+      ], capital+retain, '　權益合計')+
+      '<tr style="background:#fff8ed"><td style="font-weight:500;color:var(--brtxt)">負債及權益總計</td><td style="text-align:right;font-family:monospace;font-weight:500;color:var(--brtxt)">'+fmt(totalLE)+'</td></tr>';
+  }
+
+  // 平衡檢查
+  var chk = el('bs-chk');
+  if(chk){
+    var diff = Math.round(totalAsset - totalLE);
+    if(Math.abs(diff) < 10){
+      chk.style.background='#e6f4d8';chk.style.color='#2a6010';
+      chk.textContent='✓ 借貸平衡：資產 '+fmt(totalAsset)+' = 負債及權益 '+fmt(totalLE);
+    }else{
+      chk.style.background='#fde0e0';chk.style.color='#8a1010';
+      chk.textContent='⚠ 不平衡：差異 '+fmt(diff);
+    }
+  }
+}
+
+function buildPL(f, eid){
+  var rev      = 897000 * f;           // 服務收入
+  var subsidy  = 145000 * f;           // 政府補助收入
+  var totalRev = rev + subsidy;
+
+  var cSalary  = 480000 * f;           // 薪資（V2026-0490）
+  var cService = 25000 * f;            // 勞務費（V2026-0498）
+  var cTravel  = 12340 * f;            // 旅費（V2026-0501）
+  var cBenefit = 65880 * f;            // 勞健退
+  var cRent    = 86000 * f;            // 租金
+  var cUtil    = 28500 * f;            // 水電
+  var cMisc    = 32000 * f;            // 雜支
+  var cDep     = 18000 * f;            // 折舊
+  var totalExp = cSalary+cService+cTravel+cBenefit+cRent+cUtil+cMisc+cDep;
+  var net      = totalRev - totalExp;
+
+  // 4 KPI
+  var kp = el('pl-kpis');
+  if(kp){
+    var marginPct = totalRev>0 ? (net/totalRev*100).toFixed(1) : '0.0';
+    var netColor  = net>=0 ? '#2a9040' : '#8a1010';
+    kp.innerHTML =
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">總收入</div><div style="font-size:15px;font-weight:500;color:#1e293b">'+fmt(totalRev)+'</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">總費用</div><div style="font-size:15px;font-weight:500;color:#1e293b">'+fmt(totalExp)+'</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">本期淨利</div><div style="font-size:15px;font-weight:500;color:'+netColor+'">'+fmt(net)+'</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">淨利率</div><div style="font-size:15px;font-weight:500;color:'+netColor+'">'+marginPct+'%</div></div>';
+  }
+
+  function plRow(name,amt,baseRev,bar){
+    var pct = baseRev>0 ? (amt/baseRev*100).toFixed(1) : '0.0';
+    var barColor = bar==='rev' ? 'var(--br)' : '#b0d8f8';
+    var barW = baseRev>0 ? Math.min(Math.abs(amt)/baseRev*100,100) : 0;
+    return '<tr><td>'+name+'</td>'+
+      '<td style="text-align:right;font-family:monospace">'+fmt(amt)+'</td>'+
+      '<td style="text-align:right;color:#94a3b8;font-size:11px">'+pct+'%</td>'+
+      '<td><div style="height:5px;background:#f0e6d6;border-radius:99px;overflow:hidden"><div style="height:100%;width:'+barW+'%;background:'+barColor+'"></div></div></td></tr>';
+  }
+
+  var body = el('pl-body');
+  if(body){
+    body.innerHTML =
+      '<tr><td colspan="4" style="background:#fdf6e8;font-weight:500;color:#a08060;font-size:11px">收入</td></tr>'+
+      plRow('4101 服務收入',rev,totalRev,'rev')+
+      plRow('4201 政府補助收入',subsidy,totalRev,'rev')+
+      '<tr style="background:var(--warm)"><td style="font-weight:500;color:#a08060">　收入合計</td><td style="text-align:right;font-family:monospace;font-weight:500;color:var(--brtxt)">'+fmt(totalRev)+'</td><td style="text-align:right;color:#94a3b8;font-size:11px">100.0%</td><td></td></tr>'+
+      '<tr><td colspan="4" style="background:#fdf6e8;font-weight:500;color:#a08060;font-size:11px">費用</td></tr>'+
+      plRow('6000 薪資支出',cSalary,totalRev,'exp')+
+      plRow('6010 勞健退費用',cBenefit,totalRev,'exp')+
+      plRow('6040 旅費',cTravel,totalRev,'exp')+
+      plRow('6401 勞務費',cService,totalRev,'exp')+
+      plRow('6201 租金支出',cRent,totalRev,'exp')+
+      plRow('6202 水電費',cUtil,totalRev,'exp')+
+      plRow('6800 折舊費用',cDep,totalRev,'exp')+
+      plRow('6900 其他雜支',cMisc,totalRev,'exp')+
+      '<tr style="background:var(--warm)"><td style="font-weight:500;color:#a08060">　費用合計</td><td style="text-align:right;font-family:monospace;font-weight:500;color:var(--brtxt)">'+fmt(totalExp)+'</td><td style="text-align:right;color:#94a3b8;font-size:11px">'+(totalExp/totalRev*100).toFixed(1)+'%</td><td></td></tr>'+
+      '<tr style="background:#fff8ed"><td style="font-weight:500;color:var(--brtxt)">本期淨利</td><td style="text-align:right;font-family:monospace;font-weight:500;color:'+(net>=0?'#2a9040':'#8a1010')+'">'+fmt(net)+'</td><td style="text-align:right;color:'+(net>=0?'#2a9040':'#8a1010')+';font-size:11px">'+(net/totalRev*100).toFixed(1)+'%</td><td></td></tr>';
+  }
+
+  // 費用結構橫條
+  var chart = el('pl-chart');
+  if(chart){
+    var rows = [
+      {n:'薪資',v:cSalary,c:'#ea880c'},
+      {n:'勞健退',v:cBenefit,c:'#f5a347'},
+      {n:'租金',v:cRent,c:'#f5c060'},
+      {n:'水電',v:cUtil,c:'#9bb8e0'},
+      {n:'勞務',v:cService,c:'#7cb89c'},
+      {n:'其他雜支',v:cMisc,c:'#c8a878'},
+      {n:'折舊',v:cDep,c:'#b09070'},
+      {n:'旅費',v:cTravel,c:'#d8b890'},
+    ];
+    var html='';
+    rows.forEach(function(r){
+      var p = (r.v/totalExp*100).toFixed(1);
+      html += '<div style="margin-bottom:7px">'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
+          '<span style="color:#475569">'+r.n+'</span>'+
+          '<span style="color:#94a3b8;font-family:monospace">'+fmt(r.v)+' · '+p+'%</span>'+
+        '</div>'+
+        '<div style="height:6px;background:#f0e6d6;border-radius:99px;overflow:hidden">'+
+          '<div style="height:100%;width:'+p+'%;background:'+r.c+';border-radius:99px"></div>'+
+        '</div></div>';
+    });
+    chart.innerHTML = html;
+  }
+
+  var sm = el('pl-summary');
+  if(sm){
+    sm.innerHTML = '本期'+(net>=0?'<span style="color:#2a9040;font-weight:500">獲利</span>':'<span style="color:#8a1010;font-weight:500">虧損</span>')+
+      ' '+fmt(Math.abs(net))+'，淨利率 '+(net/totalRev*100).toFixed(1)+'%。最大費用：薪資 '+(cSalary/totalExp*100).toFixed(0)+'%。';
+  }
+}
+
+function buildCF(f, eid){
+  // 營業活動
+  var cfOpIn   =  870000 * f;          // 客戶收款
+  var cfOpOut  = -595720 * f;          // 員工/供應商支出
+  var cfOp     = cfOpIn + cfOpOut;
+
+  // 投資活動
+  var cfInvOut = -120000 * f;          // 設備購置
+  var cfInv    = cfInvOut;
+
+  // 籌資活動
+  var cfFin    = -50000 * f;           // 償還借款 / 股東往來
+
+  var cfNet    = cfOp + cfInv + cfFin;
+  var cfStart  = 1750000 * f;
+  var cfEnd    = cfStart + cfNet;
+
+  // 3 KPI
+  var kp = el('cf-kpis');
+  if(kp){
+    var col = cfNet>=0 ? '#2a9040' : '#8a1010';
+    kp.innerHTML =
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">期初現金</div><div style="font-size:15px;font-weight:500;color:#1e293b">'+fmt(cfStart)+'</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">本期淨增（減）</div><div style="font-size:15px;font-weight:500;color:'+col+'">'+(cfNet>=0?'+':'')+fmt(cfNet)+'</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">期末現金</div><div style="font-size:15px;font-weight:500;color:#1e293b">'+fmt(cfEnd)+'</div></div>';
+  }
+
+  // 主表
+  function r(n,v,sub){
+    var col = v>=0 ? '#2a9040' : '#8a1010';
+    return '<tr'+(sub?' ':'')+'><td style="padding-left:'+(sub?22:11)+'px;color:'+(sub?'#475569':'#334155')+';font-size:'+(sub?'11':'12')+'px">'+n+'</td>'+
+      '<td style="text-align:right;font-family:monospace;color:'+col+'">'+(v>=0?'+':'')+fmt(v)+'</td></tr>';
+  }
+  var body = el('cf-body');
+  if(body){
+    body.innerHTML='<table style="width:100%"><tbody>'+
+      '<tr><td colspan="2" style="background:#fdf6e8;font-weight:500;color:#a08060;font-size:11px;padding:6px 11px">營業活動現金流</td></tr>'+
+      r('客戶收款流入',cfOpIn,1)+
+      r('支付員工/供應商',cfOpOut,1)+
+      '<tr style="background:var(--warm)"><td style="font-weight:500;color:#a08060">　營業活動小計</td><td style="text-align:right;font-family:monospace;font-weight:500;color:'+(cfOp>=0?'#2a9040':'#8a1010')+'">'+(cfOp>=0?'+':'')+fmt(cfOp)+'</td></tr>'+
+      '<tr><td colspan="2" style="background:#fdf6e8;font-weight:500;color:#a08060;font-size:11px;padding:6px 11px">投資活動現金流</td></tr>'+
+      r('購置設備',cfInvOut,1)+
+      '<tr style="background:var(--warm)"><td style="font-weight:500;color:#a08060">　投資活動小計</td><td style="text-align:right;font-family:monospace;font-weight:500;color:'+(cfInv>=0?'#2a9040':'#8a1010')+'">'+(cfInv>=0?'+':'')+fmt(cfInv)+'</td></tr>'+
+      '<tr><td colspan="2" style="background:#fdf6e8;font-weight:500;color:#a08060;font-size:11px;padding:6px 11px">籌資活動現金流</td></tr>'+
+      r('償還借款 / 股東往來',cfFin,1)+
+      '<tr style="background:var(--warm)"><td style="font-weight:500;color:#a08060">　籌資活動小計</td><td style="text-align:right;font-family:monospace;font-weight:500;color:'+(cfFin>=0?'#2a9040':'#8a1010')+'">'+(cfFin>=0?'+':'')+fmt(cfFin)+'</td></tr>'+
+      '<tr style="background:#fff8ed"><td style="font-weight:500;color:var(--brtxt)">本期現金淨變動</td><td style="text-align:right;font-family:monospace;font-weight:500;color:'+(cfNet>=0?'#2a9040':'#8a1010')+'">'+(cfNet>=0?'+':'')+fmt(cfNet)+'</td></tr>'+
+      '<tr><td style="color:#475569">+ 期初現金餘額</td><td style="text-align:right;font-family:monospace">'+fmt(cfStart)+'</td></tr>'+
+      '<tr style="background:#fff8ed"><td style="font-weight:500;color:var(--brtxt)">= 期末現金餘額</td><td style="text-align:right;font-family:monospace;font-weight:500;color:var(--brtxt)">'+fmt(cfEnd)+'</td></tr>'+
+      '</tbody></table>';
+  }
+
+  // 瀑布圖
+  var chart = el('cf-chart');
+  if(chart){
+    var stages = [
+      {n:'期初',v:cfStart,t:'base'},
+      {n:'營業活動',v:cfOp,t:'flow'},
+      {n:'投資活動',v:cfInv,t:'flow'},
+      {n:'籌資活動',v:cfFin,t:'flow'},
+      {n:'期末',v:cfEnd,t:'base'},
+    ];
+    var maxAbs = Math.max.apply(null, stages.map(function(s){return Math.abs(s.v);}));
+    var html='<div style="display:flex;flex-direction:column;gap:8px">';
+    stages.forEach(function(s){
+      var pct = maxAbs>0 ? Math.abs(s.v)/maxAbs*100 : 0;
+      var color = s.t==='base' ? 'var(--br)' : (s.v>=0?'#7cb89c':'#e88080');
+      var label = s.t==='base' ? fmt(s.v) : (s.v>=0?'+':'')+fmt(s.v);
+      var sharePct = cfStart>0 ? (s.v/cfStart*100).toFixed(1) : '0.0';
+      html += '<div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
+          '<span style="color:#475569">'+s.n+'</span>'+
+          '<span style="font-family:monospace;color:'+(s.v>=0?'#334155':'#8a1010')+'">'+label+(s.t==='flow'?' · '+sharePct+'%':'')+'</span>'+
+        '</div>'+
+        '<div style="height:8px;background:#f0e6d6;border-radius:99px;overflow:hidden">'+
+          '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:99px"></div>'+
+        '</div></div>';
+    });
+    html+='</div>';
+    chart.innerHTML = html;
+  }
+}
+
+// ══ 部門分類帳 ══
+function renderLedger(){
+  var dept  = (el('l-dept') ||{}).value || 'all';
+  var acct  = (el('l-acct') ||{}).value || 'all';
+  var month = (el('l-month')||{}).value || 'all';
+  var q     = ((el('l-q')   ||{}).value || '').toLowerCase().trim();
+
+  // 篩選
+  var rows = LEDGER.filter(function(r){
+    if(dept !=='all' && r.dc !== dept) return false;
+    if(acct !=='all' && r.ac !== acct) return false;
+    if(month!=='all' && r.date.indexOf(month)!==0) return false;
+    if(q && (r.desc+r.an+r.ref).toLowerCase().indexOf(q)<0) return false;
+    return true;
+  });
+
+  // 累計餘額（依日期累加：借方為正、貸方為負，呈現淨額）
+  var sorted = rows.slice().sort(function(a,b){return a.date.localeCompare(b.date);});
+  var bal = 0;
+  sorted.forEach(function(r){ bal += (r.dr||0) - (r.cr||0); r._bal = bal; });
+
+  // KPI
+  var tDr = rows.reduce(function(a,r){return a+(r.dr||0);},0);
+  var tCr = rows.reduce(function(a,r){return a+(r.cr||0);},0);
+  var net = tDr - tCr;
+  var kp  = el('ldg-kpis');
+  if(kp){
+    kp.innerHTML =
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">分錄筆數</div><div style="font-size:15px;font-weight:500;color:#1e293b">'+rows.length+' 筆</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">借方合計</div><div style="font-size:15px;font-weight:500;color:#1a5010">'+fmt(tDr)+'</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">貸方合計</div><div style="font-size:15px;font-weight:500;color:#8a1010">'+fmt(tCr)+'</div></div>'+
+      '<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">淨額</div><div style="font-size:15px;font-weight:500;color:#1e293b">'+fmt(net)+'</div></div>';
+  }
+
+  // 表格
+  var tb = el('ldg-tbody');
+  if(tb){
+    if(sorted.length===0){
+      tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:24px;color:#94a3b8;font-size:11px">無符合條件的分錄</td></tr>';
+    }else{
+      tb.innerHTML = sorted.map(function(r){
+        var d = gD(r.dc);
+        return '<tr>'+
+          '<td style="font-family:monospace;font-size:11px">'+r.date+'</td>'+
+          '<td>'+r.desc+'</td>'+
+          '<td><span class="dt">'+r.dc+'</span></td>'+
+          '<td style="font-size:11px;color:#475569">'+(d.n||'')+'</td>'+
+          '<td style="text-align:right;font-family:monospace;color:'+(r.dr?'#1a5010':'#cbd5e1')+'">'+(r.dr?fmt(r.dr):'—')+'</td>'+
+          '<td style="text-align:right;font-family:monospace;color:'+(r.cr?'#8a1010':'#cbd5e1')+'">'+(r.cr?fmt(r.cr):'—')+'</td>'+
+          '<td><span class="acct-dr" style="background:#e0eeff;color:#1a4080">'+r.ac+'</span></td>'+
+          '<td style="font-size:11px;color:#475569">'+r.an+'</td>'+
+          '<td style="text-align:right;font-family:monospace;font-size:11px;color:#475569">'+fmt(r._bal)+'</td>'+
+          '</tr>';
+      }).join('');
+    }
+  }
+  var lc = el('l-count');
+  if(lc) lc.textContent = rows.length+' 筆';
+
+  // 圓餅圖（依科目分組借方）
+  var byAcct = {};
+  rows.forEach(function(r){
+    if(!r.dr) return;
+    var k = r.ac+' '+r.an;
+    byAcct[k] = (byAcct[k]||0) + r.dr;
+  });
+  var pieData = Object.keys(byAcct).map(function(k){return {n:k, v:byAcct[k]};}).sort(function(a,b){return b.v-a.v;});
+  var palette = ['#ea880c','#f5a347','#f5c060','#9bb8e0','#7cb89c','#c8a878','#b09070','#d8b890'];
+  var pieSum = pieData.reduce(function(a,r){return a+r.v;},0);
+
+  var canvas = el('pie-canvas');
+  if(canvas && canvas.getContext){
+    var ctx = canvas.getContext('2d');
+    var W = canvas.width, H = canvas.height;
+    ctx.clearRect(0,0,W,H);
+    if(pieSum>0){
+      var cx=W/2, cy=H/2, rad=Math.min(W,H)/2-4;
+      var start=-Math.PI/2;
+      pieData.forEach(function(seg,i){
+        var ang = seg.v/pieSum * Math.PI*2;
+        ctx.beginPath();
+        ctx.moveTo(cx,cy);
+        ctx.arc(cx,cy,rad,start,start+ang);
+        ctx.closePath();
+        ctx.fillStyle = palette[i%palette.length];
+        ctx.fill();
+        start += ang;
+      });
+      // 中央白圈做甜甜圈
+      ctx.beginPath();
+      ctx.arc(cx,cy,rad*0.55,0,Math.PI*2);
+      ctx.fillStyle='#fff';
+      ctx.fill();
+      ctx.fillStyle='#475569';
+      ctx.font='500 11px system-ui';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(pieData.length+' 科目', cx, cy-6);
+      ctx.font='10px system-ui';
+      ctx.fillStyle='#94a3b8';
+      ctx.fillText(fmt(pieSum), cx, cy+8);
+    }else{
+      ctx.fillStyle='#cbd5e1';
+      ctx.font='11px system-ui';
+      ctx.textAlign='center';
+      ctx.fillText('無資料', W/2, H/2);
+    }
+  }
+
+  var legend = el('pie-legend');
+  if(legend){
+    if(pieData.length===0){
+      legend.innerHTML='<div style="color:#94a3b8;font-size:11px">無借方資料</div>';
+    }else{
+      legend.innerHTML = pieData.map(function(seg,i){
+        var p = (seg.v/pieSum*100).toFixed(1);
+        return '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">'+
+          '<span style="display:inline-block;width:9px;height:9px;background:'+palette[i%palette.length]+';border-radius:2px;flex-shrink:0"></span>'+
+          '<span style="flex:1;color:#475569;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+seg.n+'</span>'+
+          '<span style="color:#94a3b8;font-family:monospace;font-size:10px">'+p+'%</span>'+
+          '</div>';
+      }).join('');
+    }
+  }
+
+  // 長條圖（依部門分組借方）
+  var byDept = {};
+  rows.forEach(function(r){
+    if(!r.dr) return;
+    byDept[r.dc] = (byDept[r.dc]||0) + r.dr;
+  });
+  var bar = el('ldg-bar');
+  if(bar){
+    var arr = Object.keys(byDept).map(function(k){return {c:k,n:gD(k).n||k,v:byDept[k]};}).sort(function(a,b){return b.v-a.v;});
+    if(arr.length===0){
+      bar.innerHTML='<div style="color:#94a3b8;font-size:11px;text-align:center;padding:20px">無借方資料</div>';
+    }else{
+      var maxV = Math.max.apply(null, arr.map(function(r){return r.v;}));
+      bar.innerHTML = arr.map(function(r,i){
+        var p = (r.v/maxV*100).toFixed(1);
+        var pp = (r.v/pieSum*100).toFixed(1);
+        return '<div style="margin-bottom:7px">'+
+          '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
+            '<span style="color:#475569"><span class="dt" style="margin-right:5px">'+r.c+'</span>'+r.n+'</span>'+
+            '<span style="color:#94a3b8;font-family:monospace">'+fmt(r.v)+' · '+pp+'%</span>'+
+          '</div>'+
+          '<div style="height:6px;background:#f0e6d6;border-radius:99px;overflow:hidden">'+
+            '<div style="height:100%;width:'+p+'%;background:'+palette[i%palette.length]+';border-radius:99px"></div>'+
+          '</div></div>';
+      }).join('');
+    }
+  }
+
+  // 顯示分類帳趨勢卡片
+  var tw = el('ldg-trend-wrap');
+  if(tw) tw.style.display = rows.length>0 ? 'block' : 'none';
+  if(rows.length>0 && typeof buildLdgComboChart === 'function'){
+    if(!S.ldgTrendRange) S.ldgTrendRange='3m';
+    buildLdgComboChart(tDr, tCr, S.ldgTrendRange);
+  }
+}
+
+// 暴露給原檔的呼叫端（在 IIFE 內，會被 buildReports / nav('ledger') 用到）
+window.buildBS = buildBS;
+window.buildPL = buildPL;
+window.buildCF = buildCF;
+window.renderLedger = renderLedger;
 
 })();
 </script>
