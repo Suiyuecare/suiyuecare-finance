@@ -267,6 +267,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
         <div class="tb-bar" style="margin-bottom:7px">
           <button class="tb on" onclick="apprTab('p',this)">待我簽核<span id="ac2" style="font-size:9px;background:var(--br);color:#fff;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
           <button class="tb" onclick="apprTab('h',this)">歷史記錄</button>
+          <button class="tb" onclick="apprTab('mine',this)">我的簽核<span id="my-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
         </div>
         <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column" id="appr-list"></div>
       </div>
@@ -1328,13 +1329,16 @@ function buildApprovals(){
   if(!S.user)return;
   var ms=STEP_FOR[S.user.role]||'_none_';
   var pm=REQS.filter(function(r){return r.status===ms;});
+  var mine=REQS.filter(function(r){return r.app===S.user.n;});
   // FIX 2：歷史記錄 = 此角色的 step 欄位有 action（a 非空）的申請
   var his=REQS.filter(function(r){
     return r.steps.some(function(s){return s.rk===S.user.role&&s.a&&s.a.length>0;});
   });
-  el('appr-sub').textContent=RL[S.user.role]+(S.user.role==='admin_director'?' — 行政主任':'')+' · 待簽核 '+pm.length+' 筆（全集團）';
+  var sub={p:'待簽核 '+pm.length+' 筆（全集團）',h:'已處理 '+his.length+' 筆',mine:'我送出的放款申請 '+mine.length+' 筆'}[S.aT]||'待簽核 '+pm.length+' 筆（全集團）';
+  el('appr-sub').textContent=RL[S.user.role]+(S.user.role==='admin_director'?' — 行政主任':'')+' · '+sub;
   el('appr-cnt').textContent=pm.length;el('ac2').textContent=pm.length;
-  renderApprList(S.aT==='p'?pm:his);
+  var mc=el('my-appr-cnt');if(mc)mc.textContent=mine.length;
+  renderApprList(S.aT==='p'?pm:(S.aT==='mine'?mine:his));
 }
 window.apprTab=function(t,btn){
   S.aT=t;
@@ -1345,12 +1349,13 @@ window.apprTab=function(t,btn){
 };
 function renderApprList(data){
   var l=el('appr-list');l.innerHTML='';
-  if(!data.length){l.innerHTML='<div style="text-align:center;padding:28px;color:#c0a880;font-size:12px">目前沒有記錄</div>';return;}
+  if(!data.length){l.innerHTML='<div style="text-align:center;padding:28px;color:#c0a880;font-size:12px">'+(S.aT==='mine'?'目前沒有你送出的放款申請':'目前沒有記錄')+'</div>';return;}
   data.forEach(function(r){
     var e=gE(r.eid);var div=document.createElement('div');div.className='appr-card';
     var myStep=r.steps.find(function(s){return s.rk===S.user.role;});
     // FIX 2：歷史顯示「已核准」或「已退件」badge
     var histBadge=myStep&&myStep.a?('<span class="badge '+(myStep.a==='approved'?'b-ok':'b-rej')+'" style="font-size:9px;margin-left:4px">'+(myStep.a==='approved'?'已核准':'已退件')+'</span>'):'';
+    if(S.aT==='mine')histBadge='<span class="badge '+SCSS[r.status]+'" style="font-size:9px;margin-left:4px">'+SL[r.status]+'</span>';
     div.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-family:monospace;font-size:10px;color:#94a3b8">'+r.no+'</span><span class="ep" style="font-size:9px">'+e.s+'</span></div>'
       +'<div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:2px">'+r.app+histBadge+'</div>'
       +'<div style="font-size:10px;color:#94a3b8;margin-bottom:4px">'+r.dc+' · '+r.date+'</div>'
