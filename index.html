@@ -663,6 +663,33 @@ var STEP_FOR={
   admin_director:'pending_admin_director',
 };
 var AMAP={
+  'expense_reimbursement_invoice_bank':{dr:'6231',drN:'費用報銷-發票',cr:'1112',crN:'銀行存款'},
+  'expense_reimbursement_receipt_bank':{dr:'6231',drN:'費用報銷-收據',cr:'1112',crN:'銀行存款'},
+  'expense_reimbursement_invoice_payable':{dr:'6231',drN:'費用報銷-發票',cr:'2135',crN:'其他應付款'},
+  'expense_reimbursement_receipt_payable':{dr:'6231',drN:'費用報銷-收據',cr:'2135',crN:'其他應付款'},
+  'payment_request_invoice_bank':{dr:'6230',drN:'付款申請-發票',cr:'1112',crN:'銀行存款'},
+  'payment_request_contract_bank':{dr:'6232',drN:'付款申請-合約',cr:'1112',crN:'銀行存款'},
+  'payment_request_form_payable':{dr:'6232',drN:'付款申請-列單',cr:'2135',crN:'其他應付款'},
+  'advance_request_form_bank':{dr:'1191',drN:'暫付款',cr:'1112',crN:'銀行存款'},
+  'advance_request_none_bank':{dr:'1191',drN:'暫付款',cr:'1112',crN:'銀行存款'},
+  'petty_cash_request_receipt_petty':{dr:'6031',drN:'零用金支出-收據',cr:'1111',crN:'零用金'},
+  'petty_cash_request_invoice_petty':{dr:'6030',drN:'零用金支出-發票',cr:'1111',crN:'零用金'},
+  'petty_cash_request_form_bank':{dr:'1111',drN:'零用金',cr:'1112',crN:'銀行存款'},
+  'travel_request_invoice_bank':{dr:'6040',drN:'差旅費-發票',cr:'1112',crN:'銀行存款'},
+  'travel_request_receipt_bank':{dr:'6041',drN:'差旅費-收據',cr:'1112',crN:'銀行存款'},
+  'travel_request_none_bank':{dr:'6041',drN:'差旅費-待補憑證',cr:'1112',crN:'銀行存款'},
+  'welfare_request_form_bank':{dr:'6190',drN:'職工福利',cr:'1112',crN:'銀行存款'},
+  'welfare_request_receipt_bank':{dr:'6190',drN:'職工福利',cr:'1112',crN:'銀行存款'},
+  'welfare_request_none_bank':{dr:'6190',drN:'職工福利',cr:'1112',crN:'銀行存款'},
+  'purchase_request_invoice_bank':{dr:'6270',drN:'採購支出-發票',cr:'1112',crN:'銀行存款'},
+  'purchase_request_quotation_payable':{dr:'6270',drN:'採購支出-報價',cr:'2135',crN:'其他應付款'},
+  'purchase_request_form_payable':{dr:'6270',drN:'採購支出-申請單',cr:'2135',crN:'其他應付款'},
+  'refund_request_none_bank':{dr:'2135',drN:'其他應付款',cr:'1112',crN:'銀行存款'},
+  'refund_request_form_bank':{dr:'2135',drN:'其他應付款',cr:'1112',crN:'銀行存款'},
+  'refund_request_allowance_bank':{dr:'4101',drN:'銷貨退回及折讓',cr:'1112',crN:'銀行存款'},
+  'hr_expense_request_form_bank':{dr:'6000',drN:'人事費用',cr:'2122',crN:'應付薪資'},
+  'hr_expense_request_form2_payable':{dr:'6401',drN:'勞務費-列單',cr:'2135',crN:'其他應付款'},
+  'hr_expense_request_invoice_bank':{dr:'6400',drN:'勞務費-發票',cr:'1112',crN:'銀行存款'},
   'travel_invoice_bank':{dr:'6040',drN:'旅費-發票',cr:'1112',crN:'銀行存款'},
   'travel_receipt_bank':{dr:'6041',drN:'旅費-收據',cr:'1112',crN:'銀行存款'},
   'non_monthly_invoice_bank':{dr:'6230',drN:'其他費用-發票',cr:'1112',crN:'銀行存款'},
@@ -676,27 +703,33 @@ var AMAP={
   'refund_none_bank':{dr:'2135',drN:'其他應付款',cr:'1112',crN:'銀行存款'},
 };
 var NR_TYPES=[
-  {id:'travel',ic:'✈',n:'出差旅費',d:'交通、住宿、餐費'},
-  {id:'non_monthly',ic:'🛒',n:'採購/雜支',d:'辦公用品、設備'},
-  {id:'personnel',ic:'👤',n:'人事費用',d:'薪資、講師費'},
-  {id:'reimbursement',ic:'💼',n:'員工代墊',d:'先墊付後報銷'},
-  {id:'petty_cash',ic:'💰',n:'零用金',d:'日常小額現金'},
-  {id:'refund',ic:'↩',n:'退費申請',d:'退還費用'},
+  {id:'expense_reimbursement',ic:'💼',n:'費用報銷',d:'員工代墊費用後申請報銷'},
+  {id:'payment_request',ic:'🏦',n:'付款申請',d:'公司直接付款給廠商或外部單位'},
+  {id:'advance_request',ic:'💳',n:'預支申請',d:'先預支款項，後續核銷'},
+  {id:'petty_cash_request',ic:'💰',n:'零用金申請',d:'新申請、補足、結清、調整額度'},
+  {id:'travel_request',ic:'✈',n:'差旅申請',d:'國內外出差、跨縣市或當日往返'},
+  {id:'welfare_request',ic:'🎁',n:'福利申請',d:'福利、津貼、補助或非薪資給付'},
+  {id:'purchase_request',ic:'🛒',n:'採購申請',d:'物品、設備、服務、軟體或工程'},
+  {id:'refund_request',ic:'↩',n:'退費申請',d:'退還款項給客戶、學員或案家'},
+  {id:'hr_expense_request',ic:'👤',n:'人事費用申請',d:'薪資、獎金、津貼、講師費等'},
 ];
 var NR_REC={
-  travel:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據（無發票）'},{id:'none',l:'無憑證（待補）'}],
-  non_monthly:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據'},{id:'form',l:'請款單/列單'}],
-  personnel:[{id:'form',l:'薪資條/報表'},{id:'form2',l:'勞務報酬單（外聘）'},{id:'invoice',l:'統一發票（廠商）'}],
-  reimbursement:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據（無發票）'},{id:'none',l:'無憑證（緊急代墊）'}],
-  petty_cash:[{id:'receipt',l:'收據'},{id:'invoice',l:'統一發票'},{id:'none',l:'無憑證（備查）'}],
-  refund:[{id:'none',l:'無（退費無需憑證）'},{id:'form',l:'退費申請書'}],
+  expense_reimbursement:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據（無發票）'},{id:'none',l:'無憑證（待補）'}],
+  payment_request:[{id:'invoice',l:'統一發票'},{id:'contract',l:'合約/請款文件'},{id:'form',l:'請款單/列單'}],
+  advance_request:[{id:'form',l:'預支申請書'},{id:'none',l:'無憑證（事前申請）'}],
+  petty_cash_request:[{id:'receipt',l:'收據'},{id:'invoice',l:'統一發票'},{id:'form',l:'零用金明細表'}],
+  travel_request:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據（無發票）'},{id:'none',l:'無憑證（待補）'}],
+  welfare_request:[{id:'form',l:'福利申請證明'},{id:'receipt',l:'收據'},{id:'none',l:'無憑證'}],
+  purchase_request:[{id:'invoice',l:'統一發票'},{id:'quotation',l:'報價單/比價資料'},{id:'form',l:'採購申請單'}],
+  refund_request:[{id:'none',l:'無（退費無需憑證）'},{id:'form',l:'退費申請書'},{id:'allowance',l:'折讓單'}],
+  hr_expense_request:[{id:'form',l:'薪資條/報表'},{id:'form2',l:'勞務報酬單'},{id:'invoice',l:'統一發票（廠商）'}],
 };
 var NR_PAY=[
   {id:'bank',l:'銀行轉帳（公司帳戶）',s:'玉山金/兆豐金'},
   {id:'petty',l:'零用金（現金）',s:'從部門零用金扣除'},
   {id:'payable',l:'掛應付帳款（月結）',s:'下月統一結算'},
 ];
-var TCSS={travel:'b-ok',personnel:'b-purp',reimbursement:'b-wait',refund:'b-rej',petty_cash:'b-blue',non_monthly:'b-gray'};
+var TCSS={expense_reimbursement:'b-wait',payment_request:'b-blue',advance_request:'b-purp',petty_cash_request:'b-teal',travel_request:'b-ok',welfare_request:'b-gray',purchase_request:'b-gray',refund_request:'b-rej',hr_expense_request:'b-purp'};
 var SCSS={completed:'b-ok',rejected:'b-rej',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal'};
 var SL={completed:'已完成',rejected:'已退件',pending_section_chief:'待上一層主管',pending_dept_manager:'待部門主管',pending_admin_director:'待行政部門主任',pending_accountant:'待會計',pending_ceo:'待執行長',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳'};
 var RL={employee:'一般組員',section_chief:'課長',dept_manager:'部門主管',admin_director:'行政部門主任',accountant:'會計',ceo:'執行長'};
@@ -1168,7 +1201,7 @@ function renderNR(){
   var dOpts=DEPTS.filter(function(d){return d.lv>0;}).map(function(d){return'<option value="'+d.c+'">'+'　'.repeat(d.lv-1)+d.c+' '+d.n+'</option>';}).join('');
   var entOpts=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.full+'</option>';}).join('');
   if(S.nrStep===1){
-    c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 1 — 費用性質</span></div><div style="padding:11px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+NR_TYPES.map(function(t){return'<button class="step-type'+(S.nrType===t.id?' on':'')+'" onclick="nrT(\''+t.id+'\')" style="text-align:left"><div style="font-size:18px;margin-bottom:3px">'+t.ic+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+t.n+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px">'+t.d+'</div></button>';}).join('')+'</div></div>';
+    c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 1 — 申請類型</span></div><div style="padding:11px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px">'+NR_TYPES.map(function(t){return'<button class="step-type'+(S.nrType===t.id?' on':'')+'" onclick="nrT(\''+t.id+'\')" style="text-align:left"><div style="font-size:18px;margin-bottom:3px">'+t.ic+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+t.n+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px">'+t.d+'</div></button>';}).join('')+'</div></div>';
   }else if(S.nrStep===2){
     c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 2 — 憑證類型</span><button class="btn-g" onclick="nrBack(1)">← 返回</button></div><div style="padding:11px">'+(NR_REC[S.nrType]||[]).map(function(r){return'<button class="step-opt'+(S.nrRec===r.id?' on':'')+'" onclick="nrR(\''+r.id+'\')">'+r.l+'</button>';}).join('')+'</div></div>';
   }else if(S.nrStep===3){
@@ -1246,7 +1279,8 @@ window.submitNR=async function(){
   if(desc.length<5){alert('請填寫申請說明（至少5字）');return;}
   if(!bank){alert('請填寫匯款帳號（收款人帳號）');return;}
   var a=AMAP[S.nrType+'_'+S.nrRec+'_'+S.nrPay]||{dr:'—',drN:'待指定',cr:'—',crN:'待指定'};
-  var tL={travel:'出差旅費',non_monthly:'採購/雜支',personnel:'人事費用',reimbursement:'員工代墊',petty_cash:'零用金',refund:'退費申請'}[S.nrType];
+  var tObj=NR_TYPES.find(function(t){return t.id===S.nrType;});
+  var tL=tObj?tObj.n:S.nrType;
   var no='EXP-2026-'+(REQS.length+502).toString().padStart(4,'0');
   var eid=(el('nr-ent')||{}).value||'E1';var dc=(el('nr-dept')||{}).value||S.user.dc||'A1101';
   var appUser=S.user||USERS.find(function(u){return u.n===appName;})||USERS[0];
