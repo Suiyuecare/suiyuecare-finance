@@ -70,7 +70,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .step-type:hover,.step-type.on{border-color:var(--br);background:var(--brxxl)}
 .step-opt{padding:8px 12px;border-radius:9px;border:1px solid #e0d0b8;cursor:pointer;background:#fff;text-align:left;width:100%;margin-bottom:5px;transition:all .15s}
 .step-opt:hover,.step-opt.on{border-color:var(--br);background:var(--brxxl)}
-/* 六步驟流程（無部長）*/
+/* 八階段簽核流程 */
 .flow-wrap{padding:2px 0}
 .flow-step{display:flex;align-items:flex-start;gap:10px;position:relative}
 .flow-step:not(:last-child)::after{content:'';position:absolute;left:9px;top:22px;width:1px;bottom:-7px;background:#e0d0b8}
@@ -237,7 +237,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
     <div class="g2"><div id="nr-content"></div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:7px">&#128295; 自動對應科目</div><div id="nr-acct"><div style="text-align:center;padding:14px;color:#94a3b8;font-size:12px">完成前三步後自動顯示</div></div></div>
-        <div class="card"><div class="chd"><span class="cht">六步驟簽核（已移除部長）</span><span style="font-size:10px;background:var(--brxxl);color:var(--brtxt);padding:2px 7px;border-radius:99px;border:1px solid var(--brxl)">所有法人共用</span></div><div style="padding:11px 13px"><div class="flow-wrap" id="nr-flow"></div></div></div>
+        <div class="card"><div class="chd"><span class="cht">八階段簽核流程</span><span style="font-size:10px;background:var(--brxxl);color:var(--brtxt);padding:2px 7px;border-radius:99px;border:1px solid var(--brxl)">依申請人層級自動跳關</span></div><div style="padding:11px 13px"><div class="flow-wrap" id="nr-flow"></div></div></div>
       </div>
     </div>
   </div>
@@ -248,7 +248,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
     <div style="display:flex;gap:7px;margin-bottom:10px;flex-wrap:wrap">
       <input type="text" id="exp-q" placeholder="搜尋單號、申請人…" oninput="filterExp()" style="width:180px;flex:none">
       <select id="exp-ef" onchange="filterExp()" style="width:auto"><option value="">全部法人</option></select>
-      <select id="exp-sf" onchange="filterExp()" style="width:auto"><option value="">全部狀態</option><option value="completed">已完成</option><option value="pending_section_chief">待課長</option><option value="pending_accountant">待會計</option><option value="rejected">已退件</option></select>
+      <select id="exp-sf" onchange="filterExp()" style="width:auto"><option value="">全部狀態</option><option value="completed">已完成</option><option value="pending_section_chief">待上一層主管</option><option value="pending_dept_manager">待部門主管</option><option value="pending_admin_director">待行政部門主任</option><option value="pending_accountant">待會計</option><option value="pending_ceo">待執行長</option><option value="pending_applicant_confirm">待申請人確認</option><option value="pending_voucher">待會計入帳</option><option value="rejected">已退件</option></select>
     </div>
     <div class="card"><div style="overflow-x:auto"><table><thead><tr><th>申請單號</th><th>法人</th><th>部門</th><th>類型</th><th>申請人</th><th>金額</th><th>匯款帳號</th><th>狀態</th><th>日期</th></tr></thead><tbody id="exp-tbody"></tbody></table></div></div>
   </div>
@@ -268,6 +268,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
         <div class="tb-bar" style="margin-bottom:7px">
           <button class="tb on" onclick="apprTab('p',this)">待我簽核<span id="ac2" style="font-size:9px;background:var(--br);color:#fff;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
           <button class="tb" onclick="apprTab('h',this)">歷史記錄</button>
+          <button class="tb" onclick="apprTab('mine',this)">我的簽核<span id="my-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
         </div>
         <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column" id="appr-list"></div>
       </div>
@@ -539,7 +540,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
             <table style="min-width:480px"><thead><tr style="background:var(--warm)"><th>#</th><th>法人</th><th>費用項目</th><th>金額</th><th>期限</th><th>方式</th><th>說明</th></tr></thead><tbody id="bb-tbody"></tbody></table>
           </div>
           <div style="background:var(--brxxl);border:1px solid var(--brxl);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--brtxt);margin-bottom:10px">
-            &#9432; 批量建立後，每筆繳費單將依照六步驟簽核流程送出，系統自動通知課長審核。
+            &#9432; 批量建立後，每筆繳費單將依照八階段簽核流程送出，系統自動通知下一位簽核人。
           </div>
           <div style="display:flex;gap:7px;justify-content:flex-end">
             <button class="btn-s" onclick="document.getElementById('m-add-bill').style.display='none'">取消</button>
@@ -568,7 +569,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
       <div style="color:#fff;font-size:22px;font-weight:500;line-height:1.35;margin-bottom:10px">財務管理系統 v2</div>
       <div style="color:rgba(255,255,255,.7);font-size:12px;line-height:1.9">
         ✓ 自動切傳票（簽核完成即生成）<br>
-        ✓ 六步驟簽核（已移除部長）<br>
+        ✓ 八階段簽核（含上一層主管、部門主管與跳關規則）<br>
         ✓ 匯款帳號欄位<br>
         ✓ 簽核歷史記錄修復<br>
         ✓ 人員管理權限控制
@@ -620,8 +621,7 @@ var DEPTS=[
   {c:'A1100',n:'行政部',eid:'E1',lv:1},{c:'A1101',n:'會計課',eid:'E1',lv:2},{c:'A1102',n:'人資課',eid:'E1',lv:2},{c:'A1103',n:'行政總務課',eid:'E1',lv:2},
   {c:'A1200',n:'教學品管部',eid:'E1',lv:1},{c:'A1201',n:'教學課',eid:'E1',lv:2},{c:'A1202',n:'品管課',eid:'E1',lv:2},
   {c:'B1000',n:'歲悅居家長照機構',eid:'E5',lv:0},
-  {c:'B1100',n:'長照部',eid:'E5',lv:1},{c:'B1101',n:'居家照顧課',eid:'E5',lv:2},{c:'B1102',n:'士林失智據點課',eid:'E5',lv:2},{c:'B1103',n:'大同失智據點課',eid:'E5',lv:2},
-  {c:'B1200',n:'標案課',eid:'E5',lv:1},
+  {c:'B1100',n:'長照部',eid:'E5',lv:1},{c:'B1101',n:'居家照顧課',eid:'E5',lv:2},{c:'B1102',n:'士林失智據點課',eid:'E5',lv:2},{c:'B1103',n:'大同失智據點課',eid:'E5',lv:2},{c:'B1104',n:'信義失智據點課',eid:'E5',lv:2},
   {c:'B1300',n:'移工培訓部',eid:'E5',lv:1},{c:'B1301',n:'數位學習課',eid:'E5',lv:2},{c:'B1302',n:'高雄到宅訓練課',eid:'E5',lv:2},{c:'B1303',n:'台北到宅訓練課',eid:'E5',lv:2},{c:'B1304',n:'台北集中訓練課',eid:'E5',lv:2},
   {c:'C1000',n:'樂齡歲悅股份有限公司',eid:'E2',lv:0},{c:'C1100',n:'萬華日照中心',eid:'E2',lv:1},
   {c:'D1000',n:'移站式股份有限公司',eid:'E3',lv:0},
@@ -644,34 +644,52 @@ var USERS=[
   {id:'u6',n:'王會計師',email:'6@suiyuecare.com',pw:'',role:'accountant',rL:'會計',dc:'A1101',init:'王',active:true},
 ];
 
-// FIX 4：六步驟（已移除部長 dept_manager）
-// 流程：申請人 → 課長 → 行政主任 → 會計 → 執行長 → 申請人確認 → 會計確認入帳（自動傳票）
+// 八階段流程：申請人 → 上一層主管 → 部門主管（若相同則跳過）→ 行政部門主任 → 會計 → 執行長 → 申請人確認 → 會計入帳
 var FLOW_STEPS=[
-  {role:'applicant',  label:'申請人送件',       sub:'填寫費用、匯款帳號、上傳憑據'},
-  {role:'section_chief', label:'課長審核',      sub:'確認費用合理性'},
-  {role:'admin_director',label:'行政主任審核',  sub:'第二層管控'},
-  {role:'accountant',    label:'會計審核並撥款',sub:'確認匯款帳號，執行網銀轉帳'},
-  {role:'ceo',           label:'執行長確認出納',sub:'最終授權'},
-  {role:'applicant2',    label:'申請人確認收款',sub:'確認款項並上傳憑據照片'},
-  {role:'accountant2',   label:'會計確認憑據，自動入帳＋傳票',sub:'系統自動生成傳票，寫入帳冊'},
+  {role:'applicant',label:'申請人送件',sub:'填寫費用、匯款帳號、上傳憑據'},
+  {role:'direct_supervisor',label:'申請人上一層級主管',sub:'確認費用合理性與必要性'},
+  {role:'dept_manager',label:'申請人部門主管',sub:'若與上一層主管為同一人則自動跳過'},
+  {role:'admin_director',label:'行政部門主任',sub:'行政流程與預算控管'},
+  {role:'accountant',label:'會計',sub:'確認匯款帳號，執行網銀轉帳'},
+  {role:'ceo',label:'執行長',sub:'最終授權'},
+  {role:'applicant_confirm',label:'申請人確認收款',sub:'確認款項並上傳憑據照片'},
+  {role:'accountant_final',label:'會計確認入帳',sub:'系統自動生成傳票，寫入帳冊'},
 ];
-// FIX 4：NEXT 對應不含 dept_manager
-var NEXT={
-  pending_section_chief:'pending_admin_director',
-  pending_admin_director:'pending_accountant',
-  pending_accountant:'pending_ceo',
-  pending_ceo:'pending_applicant_confirm',
-  pending_applicant_confirm:'pending_voucher',
-  pending_voucher:'completed',
-};
 var STEP_FOR={
   accountant:'pending_accountant',
   ceo:'pending_ceo',
   section_chief:'pending_section_chief',
-  dept_manager:'pending_admin_director',
+  dept_manager:'pending_dept_manager',
   admin_director:'pending_admin_director',
 };
 var AMAP={
+  'expense_reimbursement_invoice_bank':{dr:'6231',drN:'費用報銷-發票',cr:'1112',crN:'銀行存款'},
+  'expense_reimbursement_receipt_bank':{dr:'6231',drN:'費用報銷-收據',cr:'1112',crN:'銀行存款'},
+  'expense_reimbursement_invoice_payable':{dr:'6231',drN:'費用報銷-發票',cr:'2135',crN:'其他應付款'},
+  'expense_reimbursement_receipt_payable':{dr:'6231',drN:'費用報銷-收據',cr:'2135',crN:'其他應付款'},
+  'payment_request_invoice_bank':{dr:'6230',drN:'付款申請-發票',cr:'1112',crN:'銀行存款'},
+  'payment_request_contract_bank':{dr:'6232',drN:'付款申請-合約',cr:'1112',crN:'銀行存款'},
+  'payment_request_form_payable':{dr:'6232',drN:'付款申請-列單',cr:'2135',crN:'其他應付款'},
+  'advance_request_form_bank':{dr:'1191',drN:'暫付款',cr:'1112',crN:'銀行存款'},
+  'advance_request_none_bank':{dr:'1191',drN:'暫付款',cr:'1112',crN:'銀行存款'},
+  'petty_cash_request_receipt_petty':{dr:'6031',drN:'零用金支出-收據',cr:'1111',crN:'零用金'},
+  'petty_cash_request_invoice_petty':{dr:'6030',drN:'零用金支出-發票',cr:'1111',crN:'零用金'},
+  'petty_cash_request_form_bank':{dr:'1111',drN:'零用金',cr:'1112',crN:'銀行存款'},
+  'travel_request_invoice_bank':{dr:'6040',drN:'差旅費-發票',cr:'1112',crN:'銀行存款'},
+  'travel_request_receipt_bank':{dr:'6041',drN:'差旅費-收據',cr:'1112',crN:'銀行存款'},
+  'travel_request_none_bank':{dr:'6041',drN:'差旅費-待補憑證',cr:'1112',crN:'銀行存款'},
+  'welfare_request_form_bank':{dr:'6190',drN:'職工福利',cr:'1112',crN:'銀行存款'},
+  'welfare_request_receipt_bank':{dr:'6190',drN:'職工福利',cr:'1112',crN:'銀行存款'},
+  'welfare_request_none_bank':{dr:'6190',drN:'職工福利',cr:'1112',crN:'銀行存款'},
+  'purchase_request_invoice_bank':{dr:'6270',drN:'採購支出-發票',cr:'1112',crN:'銀行存款'},
+  'purchase_request_quotation_payable':{dr:'6270',drN:'採購支出-報價',cr:'2135',crN:'其他應付款'},
+  'purchase_request_form_payable':{dr:'6270',drN:'採購支出-申請單',cr:'2135',crN:'其他應付款'},
+  'refund_request_none_bank':{dr:'2135',drN:'其他應付款',cr:'1112',crN:'銀行存款'},
+  'refund_request_form_bank':{dr:'2135',drN:'其他應付款',cr:'1112',crN:'銀行存款'},
+  'refund_request_allowance_bank':{dr:'4101',drN:'銷貨退回及折讓',cr:'1112',crN:'銀行存款'},
+  'hr_expense_request_form_bank':{dr:'6000',drN:'人事費用',cr:'2122',crN:'應付薪資'},
+  'hr_expense_request_form2_payable':{dr:'6401',drN:'勞務費-列單',cr:'2135',crN:'其他應付款'},
+  'hr_expense_request_invoice_bank':{dr:'6400',drN:'勞務費-發票',cr:'1112',crN:'銀行存款'},
   'travel_invoice_bank':{dr:'6040',drN:'旅費-發票',cr:'1112',crN:'銀行存款'},
   'travel_receipt_bank':{dr:'6041',drN:'旅費-收據',cr:'1112',crN:'銀行存款'},
   'non_monthly_invoice_bank':{dr:'6230',drN:'其他費用-發票',cr:'1112',crN:'銀行存款'},
@@ -685,29 +703,35 @@ var AMAP={
   'refund_none_bank':{dr:'2135',drN:'其他應付款',cr:'1112',crN:'銀行存款'},
 };
 var NR_TYPES=[
-  {id:'travel',ic:'✈',n:'出差旅費',d:'交通、住宿、餐費'},
-  {id:'non_monthly',ic:'🛒',n:'採購/雜支',d:'辦公用品、設備'},
-  {id:'personnel',ic:'👤',n:'人事費用',d:'薪資、講師費'},
-  {id:'reimbursement',ic:'💼',n:'員工代墊',d:'先墊付後報銷'},
-  {id:'petty_cash',ic:'💰',n:'零用金',d:'日常小額現金'},
-  {id:'refund',ic:'↩',n:'退費申請',d:'退還費用'},
+  {id:'expense_reimbursement',ic:'💼',n:'費用報銷',d:'員工代墊費用後申請報銷'},
+  {id:'payment_request',ic:'🏦',n:'付款申請',d:'公司直接付款給廠商或外部單位'},
+  {id:'advance_request',ic:'💳',n:'預支申請',d:'先預支款項，後續核銷'},
+  {id:'petty_cash_request',ic:'💰',n:'零用金申請',d:'新申請、補足、結清、調整額度'},
+  {id:'travel_request',ic:'✈',n:'差旅申請',d:'國內外出差、跨縣市或當日往返'},
+  {id:'welfare_request',ic:'🎁',n:'福利申請',d:'福利、津貼、補助或非薪資給付'},
+  {id:'purchase_request',ic:'🛒',n:'採購申請',d:'物品、設備、服務、軟體或工程'},
+  {id:'refund_request',ic:'↩',n:'退費申請',d:'退還款項給客戶、學員或案家'},
+  {id:'hr_expense_request',ic:'👤',n:'人事費用申請',d:'薪資、獎金、津貼、講師費等'},
 ];
 var NR_REC={
-  travel:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據（無發票）'},{id:'none',l:'無憑證（待補）'}],
-  non_monthly:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據'},{id:'form',l:'請款單/列單'}],
-  personnel:[{id:'form',l:'薪資條/報表'},{id:'form2',l:'勞務報酬單（外聘）'},{id:'invoice',l:'統一發票（廠商）'}],
-  reimbursement:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據（無發票）'},{id:'none',l:'無憑證（緊急代墊）'}],
-  petty_cash:[{id:'receipt',l:'收據'},{id:'invoice',l:'統一發票'},{id:'none',l:'無憑證（備查）'}],
-  refund:[{id:'none',l:'無（退費無需憑證）'},{id:'form',l:'退費申請書'}],
+  expense_reimbursement:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據（無發票）'},{id:'none',l:'無憑證（待補）'}],
+  payment_request:[{id:'invoice',l:'統一發票'},{id:'contract',l:'合約/請款文件'},{id:'form',l:'請款單/列單'}],
+  advance_request:[{id:'form',l:'預支申請書'},{id:'none',l:'無憑證（事前申請）'}],
+  petty_cash_request:[{id:'receipt',l:'收據'},{id:'invoice',l:'統一發票'},{id:'form',l:'零用金明細表'}],
+  travel_request:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據（無發票）'},{id:'none',l:'無憑證（待補）'}],
+  welfare_request:[{id:'form',l:'福利申請證明'},{id:'receipt',l:'收據'},{id:'none',l:'無憑證'}],
+  purchase_request:[{id:'invoice',l:'統一發票'},{id:'quotation',l:'報價單/比價資料'},{id:'form',l:'採購申請單'}],
+  refund_request:[{id:'none',l:'無（退費無需憑證）'},{id:'form',l:'退費申請書'},{id:'allowance',l:'折讓單'}],
+  hr_expense_request:[{id:'form',l:'薪資條/報表'},{id:'form2',l:'勞務報酬單'},{id:'invoice',l:'統一發票（廠商）'}],
 };
 var NR_PAY=[
   {id:'bank',l:'銀行轉帳（公司帳戶）',s:'玉山金/兆豐金'},
   {id:'petty',l:'零用金（現金）',s:'從部門零用金扣除'},
   {id:'payable',l:'掛應付帳款（月結）',s:'下月統一結算'},
 ];
-var TCSS={travel:'b-ok',personnel:'b-purp',reimbursement:'b-wait',refund:'b-rej',petty_cash:'b-blue',non_monthly:'b-gray'};
-var SCSS={completed:'b-ok',rejected:'b-rej',pending_section_chief:'b-wait',pending_admin_director:'b-wait',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal'};
-var SL={completed:'已完成',rejected:'已退件',pending_section_chief:'待課長',pending_admin_director:'待行政主任',pending_accountant:'待會計',pending_ceo:'待執行長',pending_applicant_confirm:'待申請人確認',pending_voucher:'待憑證收件'};
+var TCSS={expense_reimbursement:'b-wait',payment_request:'b-blue',advance_request:'b-purp',petty_cash_request:'b-teal',travel_request:'b-ok',welfare_request:'b-gray',purchase_request:'b-gray',refund_request:'b-rej',hr_expense_request:'b-purp'};
+var SCSS={completed:'b-ok',rejected:'b-rej',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal'};
+var SL={completed:'已完成',rejected:'已退件',pending_section_chief:'待上一層主管',pending_dept_manager:'待部門主管',pending_admin_director:'待行政部門主任',pending_accountant:'待會計',pending_ceo:'待執行長',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳'};
 var RL={employee:'一般組員',section_chief:'課長',dept_manager:'部門主管',admin_director:'行政部門主任',accountant:'會計',ceo:'執行長'};
 var ACCTS=[
   // 流動資產
@@ -953,6 +977,63 @@ function applyRolePermissions(){
     if(node)node.style.display=canAccessPage(page)?'':'none';
   });
 }
+function firstUserByRole(role){
+  return USERS.find(function(u){return u.role===role&&u.active;})||null;
+}
+function directSupervisorRole(role){
+  return {employee:'section_chief',section_chief:'dept_manager',dept_manager:'admin_director',accountant:'admin_director',admin_director:'ceo'}[role]||null;
+}
+function buildApprovalSteps(appUser){
+  var steps=[];
+  function add(role,label,status){
+    if(!role||role===appUser.role)return;
+    if(steps.some(function(s){return s.rk===role;}))return;
+    var u=firstUserByRole(role);
+    steps.push({r:label||RL[role]||role,rk:role,uid:u?u.id:'',n:'',a:'',t:'',c:'',status:status});
+  }
+  var direct=directSupervisorRole(appUser.role);
+  add(direct,'上一層級主管：'+(RL[direct]||direct),STEP_FOR[direct]||'pending_section_chief');
+  add('dept_manager','部門主管','pending_dept_manager');
+  add('admin_director','行政部門主任','pending_admin_director');
+  add('accountant','會計','pending_accountant');
+  add('ceo','執行長','pending_ceo');
+  steps.push({r:'申請人確認收款',rk:'applicant_confirm',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_applicant_confirm'});
+  steps.push({r:'會計確認入帳',rk:'accountant_final',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_voucher'});
+  return steps;
+}
+function activeStep(r){
+  return (r.steps||[]).find(function(s){return !s.a;})||null;
+}
+function canActStep(r,s){
+  if(!S.user||!s)return false;
+  if(s.rk==='applicant_confirm')return S.user.n===r.app;
+  if(s.rk==='accountant_final')return S.user.role==='accountant';
+  return S.user.role===s.rk;
+}
+function canActRequest(r){
+  return canActStep(r,activeStep(r));
+}
+function stepBelongsToUser(s){
+  if(!S.user||!s)return false;
+  if(s.rk==='applicant_confirm')return false;
+  if(s.rk==='accountant_final')return S.user.role==='accountant';
+  return s.rk===S.user.role;
+}
+function syncRequestStatus(r){
+  var s=activeStep(r);
+  r.status=s?s.status:'completed';
+  r.step=(r.steps||[]).filter(function(x){return x.a;}).length+1;
+  if(r.status==='completed')r.step=8;
+}
+function approveActiveStep(r, action, comment){
+  var s=activeStep(r);if(!s)return null;
+  s.a=action||'approved';
+  s.n=S.user?S.user.n:'';
+  s.t='05/03';
+  if(comment)s.c=comment;
+  syncRequestStatus(r);
+  return s;
+}
 
 // ══ 登入 ══
 window.doLogin=async function(){
@@ -1044,9 +1125,8 @@ function buildAll(){buildDash();buildExp();buildApprovals();buildNotifs();buildP
 function buildDash(){
   if(!S.user)return;
   var eid=(el('dash-ent')||{}).value||'all';
-  var ms=STEP_FOR[S.user.role]||'_none_';
   var allReqs=eid==='all'?REQS:REQS.filter(function(r){return r.eid===eid;});
-  var pm=REQS.filter(function(r){return r.status===ms;});
+  var pm=REQS.filter(function(r){return canActRequest(r);});
   var unread=NOTIFS.filter(function(n){return!n.read;}).length;
   var totalAmt=allReqs.reduce(function(s,r){return s+r.amt;},0);
   var doneAmt=allReqs.filter(function(r){return r.status==='completed';}).reduce(function(s,r){return s+r.amt;},0);
@@ -1121,7 +1201,7 @@ function renderNR(){
   var dOpts=DEPTS.filter(function(d){return d.lv>0;}).map(function(d){return'<option value="'+d.c+'">'+'　'.repeat(d.lv-1)+d.c+' '+d.n+'</option>';}).join('');
   var entOpts=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.full+'</option>';}).join('');
   if(S.nrStep===1){
-    c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 1 — 費用性質</span></div><div style="padding:11px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+NR_TYPES.map(function(t){return'<button class="step-type'+(S.nrType===t.id?' on':'')+'" onclick="nrT(\''+t.id+'\')" style="text-align:left"><div style="font-size:18px;margin-bottom:3px">'+t.ic+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+t.n+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px">'+t.d+'</div></button>';}).join('')+'</div></div>';
+    c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 1 — 申請類型</span></div><div style="padding:11px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px">'+NR_TYPES.map(function(t){return'<button class="step-type'+(S.nrType===t.id?' on':'')+'" onclick="nrT(\''+t.id+'\')" style="text-align:left"><div style="font-size:18px;margin-bottom:3px">'+t.ic+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+t.n+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px">'+t.d+'</div></button>';}).join('')+'</div></div>';
   }else if(S.nrStep===2){
     c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 2 — 憑證類型</span><button class="btn-g" onclick="nrBack(1)">← 返回</button></div><div style="padding:11px">'+(NR_REC[S.nrType]||[]).map(function(r){return'<button class="step-opt'+(S.nrRec===r.id?' on':'')+'" onclick="nrR(\''+r.id+'\')">'+r.l+'</button>';}).join('')+'</div></div>';
   }else if(S.nrStep===3){
@@ -1183,7 +1263,6 @@ function updNRAcct(){
 }
 function renderFlow(){
   var f=el('nr-flow');if(!f)return;
-  // FIX 4：僅顯示六步驟（無部長）
   f.innerHTML=FLOW_STEPS.map(function(step,i){
     var isMe=i===0;
     return'<div class="flow-step"><div class="flow-dot'+(isMe?' me':'')+'">'+(isMe?'我':(i+1))+'</div><div class="flow-body"><div class="flow-label">'+step.label+(isMe?' <span class="flow-badge">您在此</span>':'')+'</div><div class="flow-sub">'+step.sub+'</div></div></div>';
@@ -1200,20 +1279,19 @@ window.submitNR=async function(){
   if(desc.length<5){alert('請填寫申請說明（至少5字）');return;}
   if(!bank){alert('請填寫匯款帳號（收款人帳號）');return;}
   var a=AMAP[S.nrType+'_'+S.nrRec+'_'+S.nrPay]||{dr:'—',drN:'待指定',cr:'—',crN:'待指定'};
-  var tL={travel:'出差旅費',non_monthly:'採購/雜支',personnel:'人事費用',reimbursement:'員工代墊',petty_cash:'零用金',refund:'退費申請'}[S.nrType];
+  var tObj=NR_TYPES.find(function(t){return t.id===S.nrType;});
+  var tL=tObj?tObj.n:S.nrType;
   var no='EXP-2026-'+(REQS.length+502).toString().padStart(4,'0');
   var eid=(el('nr-ent')||{}).value||'E1';var dc=(el('nr-dept')||{}).value||S.user.dc||'A1101';
+  var appUser=S.user||USERS.find(function(u){return u.n===appName;})||USERS[0];
+  var steps=buildApprovalSteps(appUser);
   var newReq={id:'r_'+Date.now(),no:no,eid:eid,dc:dc,app:appName,type:S.nrType,tL:tL,amt:amt,desc:desc,
-    bankAcc:bank,status:'pending_section_chief',step:1,ver:1,date:'2026/05/03',
+    bankAcc:bank,status:steps[0]?steps[0].status:'completed',step:2,ver:1,date:'2026/05/03',
     dr:a.dr,drN:a.drN,cr:a.cr,crN:a.crN,
     files:S.nrFiles.map(function(f){return{n:f.name,t:f.name.split('.').pop()};}),
-    steps:[
-      {r:'課長',rk:'section_chief',n:'',a:'',t:'',c:''},
-      {r:'行政主任',rk:'admin_director',n:'',a:'',t:'',c:''},
-      {r:'會計',rk:'accountant',n:'',a:'',t:'',c:''},
-      {r:'執行長',rk:'ceo',n:'',a:'',t:'',c:''},
-    ],voucherId:''};
-  var newNotif={id:'n_'+Date.now(),type:'approval',title:'新申請待課長審核',body:S.user.n+'的'+tL+'（'+fmt(amt)+'），附'+S.nrFiles.length+'個憑據',time:'剛才',read:false,reqId:newReq.id};
+    steps:steps,voucherId:''};
+  var firstStep=steps[0]||{};
+  var newNotif={id:'n_'+Date.now(),type:'approval',title:'新申請待'+(firstStep.r||'簽核'),body:S.user.n+'的'+tL+'（'+fmt(amt)+'），附'+S.nrFiles.length+'個憑據',time:'剛才',read:false,reqId:newReq.id};
   REQS.unshift(newReq);
   NOTIFS.unshift(newNotif);
   await dbInsert('expense_requests',reqDbRow(newReq));
@@ -1246,22 +1324,19 @@ window.openDetail=function(rid){
   nav('detail',null);
   var d=gD(r.dc);var e=gE(r.eid);
   el('detail-hd').innerHTML='<div style="font-size:15px;font-weight:500;color:#1e293b">'+r.no+' <span class="badge '+SCSS[r.status]+'">'+SL[r.status]+'</span></div><div style="font-size:12px;color:#94a3b8;margin-top:2px">'+r.app+' · '+r.dc+' '+d.n+'</div>';
-  var ms=STEP_FOR[S.user.role]||'_none_';var acts=[];
-  if(r.status===ms)acts.push('<button class="btn-p" onclick="doApprove(\''+r.id+'\')">✓ 核准</button><button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">退件</button>');
-  if(r.status==='pending_applicant_confirm')acts.push('<button class="btn-p" style="background:#1a7040" onclick="doConfirmPay(\''+r.id+'\')">✓ 確認已收款</button>');
+  var curStep=activeStep(r);var acts=[];
+  if(canActRequest(r)&&r.status!=='pending_applicant_confirm'&&r.status!=='pending_voucher')acts.push('<button class="btn-p" onclick="doApprove(\''+r.id+'\')">✓ 核准</button><button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">退件</button>');
+  if(r.status==='pending_applicant_confirm'&&canActRequest(r))acts.push('<button class="btn-p" style="background:#1a7040" onclick="doConfirmPay(\''+r.id+'\')">✓ 確認已收款</button>');
   // FIX 1：會計確認後自動生成傳票
-  if(r.status==='pending_voucher'&&S.user.role==='accountant')acts.push('<button class="btn-p" style="background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\')">✓ 確認憑據 · 自動切傳票</button>');
+  if(r.status==='pending_voucher'&&canActRequest(r))acts.push('<button class="btn-p" style="background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\')">✓ 確認憑據 · 自動切傳票</button>');
   if(r.voucherId)acts.push('<button class="btn-g" onclick="showVoucherById(\''+r.voucherId+'\')">📄 查看傳票 '+r.voucherId+'</button>');
   el('detail-act').innerHTML=acts.join('');
   // FIX 3：顯示匯款帳號欄位
   var cells=[['法人','<span class="ep">'+e.s+'</span>'],['部門','<span class="dt">'+r.dc+'</span>'],['類型','<span class="badge '+TCSS[r.type]+'">'+r.tL+'</span>'],['金額','<strong style="font-size:15px">'+fmt(r.amt)+'</strong>'],['申請人',r.app],['日期',r.date],['匯款帳號','<span style="font-family:monospace;font-size:11px;color:var(--brtxt)">'+(r.bankAcc||'—')+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:8px;padding:7px;border:1px solid #f0e0c8"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+x[0]+'</div><div style="font-size:12px">'+x[1]+'</div></div>';}).join('');
   var filesHtml='';
   if(r.files&&r.files.length)filesHtml='<div style="margin-top:8px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">📎 已上傳憑據（'+r.files.length+'個）</div><div>'+r.files.map(function(f){return'<div class="file-chip" style="display:inline-flex;margin:2px"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+f.t.toUpperCase()+'</span><span>'+f.n+'</span></div>';}).join('')+'</div></div>';
-  // FIX 4：時間軸不含部長
   var tl=[{label:'申請人送件',done:true,n:r.app,t:r.date}]
-    .concat(r.steps.map(function(s,i){return{label:s.r,done:s.a==='approved',rej:s.a&&s.a!=='approved',cur:!s.a&&r.steps.slice(0,i).every(function(x){return x.a;}),n:s.n,c:s.c,t:s.t};}))
-    .concat([{label:'申請人確認收款',done:r.step>=6||r.status==='completed',cur:r.status==='pending_applicant_confirm'},
-             {label:'會計確認憑據（自動入帳＋傳票）',done:r.status==='completed',cur:r.status==='pending_voucher'}])
+    .concat((r.steps||[]).map(function(s,i){return{label:s.r,done:s.a==='approved',rej:s.a&&s.a!=='approved',cur:curStep===s,n:s.n,c:s.c,t:s.t};}))
     .map(function(s,i){
       var bg=s.done?'#eaf8d8':s.rej?'#fde8e8':s.cur?'var(--brxxl)':'var(--warm)';
       var dc=s.done?'#1a5010':s.rej?'#8a1010':s.cur?'var(--brtxt)':'#94a3b8';
@@ -1273,35 +1348,38 @@ window.openDetail=function(rid){
     +'<div class="card"><div class="chd"><span class="cht">申請資訊</span></div><div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+cells+'</div><div style="padding:0 12px 12px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;border:1px solid #f0e0c8">'+r.desc+'</div>'+filesHtml+'</div></div>'
     +'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById(\''+r.voucherId+'\')">📄 '+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+r.dr+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+r.drN+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+r.cr+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+r.crN+'</div></div></div><div style="font-size:11px;color:#94a3b8;margin-top:6px">⚠ 數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
     +'</div>'
-    +'<div class="card"><div class="chd"><span class="cht">六步驟簽核進度（已移除部長）</span><span style="font-size:11px;color:#94a3b8">步驟 '+r.step+'/7</span></div><div style="padding:12px">'+tl+'</div></div>';
+    +'<div class="card"><div class="chd"><span class="cht">八階段簽核進度</span><span style="font-size:11px;color:#94a3b8">步驟 '+(r.step||2)+'/8</span></div><div style="padding:12px">'+tl+'</div></div>';
 };
 
 window.doApprove=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
-  var si=r.steps.findIndex(function(s){return s.rk===S.user.role;});
-  if(si>=0){r.steps[si].a='approved';r.steps[si].n=S.user.n;r.steps[si].t='05/03';}
-  r.status=NEXT[r.status]||r.status;r.step++;
+  if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
+  approveActiveStep(r,'approved');
   await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps});
   buildAll();openDetail(rid);
 };
 window.doRejectQ=async function(rid){
   var reason=prompt('退件原因：');if(!reason)return;
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
-  var si=r.steps.findIndex(function(s){return s.rk===S.user.role;});
-  if(si>=0){r.steps[si].a='rejected_all';r.steps[si].c=reason;r.steps[si].t='05/03';}
+  if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
+  approveActiveStep(r,'rejected_all',reason);
   r.status='rejected';await dbUpdate('expense_requests',rid,{status:r.status,steps:r.steps});buildAll();openDetail(rid);
 };
 window.doConfirmPay=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
-  r.status='pending_voucher';r.step=6;await dbUpdate('expense_requests',rid,{status:r.status,step:r.step});buildAll();openDetail(rid);
+  if(!canActRequest(r)){alert('目前不是您的確認步驟');return;}
+  approveActiveStep(r,'approved');
+  await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps});buildAll();openDetail(rid);
 };
 // FIX 1：自動切傳票
 window.doConfirmVoucher=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
+  if(!canActRequest(r)){alert('目前不是您的入帳步驟');return;}
   // 生成傳票號 V2026-XXXX
   var seqNum=r.no.replace('EXP-2026-','');
   var vid='V2026-'+seqNum;
-  r.voucherId=vid;r.status='completed';r.step=7;
+  approveActiveStep(r,'approved');
+  r.voucherId=vid;r.status='completed';r.step=8;
   // 自動寫入 VOUCHERS
   var newVoucher={
     id:vid,no:vid,reqId:rid,eid:r.eid,entS:gE(r.eid).s,date:'2026/05/03',
@@ -1327,15 +1405,17 @@ window.doConfirmVoucher=async function(rid){
 // ══ FIX 2：簽核管理歷史記錄（查有 action 的 steps）══
 function buildApprovals(){
   if(!S.user)return;
-  var ms=STEP_FOR[S.user.role]||'_none_';
-  var pm=REQS.filter(function(r){return r.status===ms;});
+  var pm=REQS.filter(function(r){return canActRequest(r);});
+  var mine=REQS.filter(function(r){return r.app===S.user.n;});
   // FIX 2：歷史記錄 = 此角色的 step 欄位有 action（a 非空）的申請
   var his=REQS.filter(function(r){
-    return r.steps.some(function(s){return s.rk===S.user.role&&s.a&&s.a.length>0;});
+    return r.steps.some(function(s){return stepBelongsToUser(s)&&s.a&&s.a.length>0;});
   });
-  el('appr-sub').textContent=RL[S.user.role]+(S.user.role==='admin_director'?' — 行政主任':'')+' · 待簽核 '+pm.length+' 筆（全集團）';
+  var sub={p:'待簽核 '+pm.length+' 筆（全集團）',h:'已處理 '+his.length+' 筆',mine:'我送出的放款申請 '+mine.length+' 筆'}[S.aT]||'待簽核 '+pm.length+' 筆（全集團）';
+  el('appr-sub').textContent=RL[S.user.role]+(S.user.role==='admin_director'?' — 行政主任':'')+' · '+sub;
   el('appr-cnt').textContent=pm.length;el('ac2').textContent=pm.length;
-  renderApprList(S.aT==='p'?pm:his);
+  var mc=el('my-appr-cnt');if(mc)mc.textContent=mine.length;
+  renderApprList(S.aT==='p'?pm:(S.aT==='mine'?mine:his));
 }
 window.apprTab=function(t,btn){
   S.aT=t;
@@ -1346,12 +1426,13 @@ window.apprTab=function(t,btn){
 };
 function renderApprList(data){
   var l=el('appr-list');l.innerHTML='';
-  if(!data.length){l.innerHTML='<div style="text-align:center;padding:28px;color:#c0a880;font-size:12px">目前沒有記錄</div>';return;}
+  if(!data.length){l.innerHTML='<div style="text-align:center;padding:28px;color:#c0a880;font-size:12px">'+(S.aT==='mine'?'目前沒有你送出的放款申請':'目前沒有記錄')+'</div>';return;}
   data.forEach(function(r){
     var e=gE(r.eid);var div=document.createElement('div');div.className='appr-card';
-    var myStep=r.steps.find(function(s){return s.rk===S.user.role;});
+    var myStep=r.steps.find(function(s){return stepBelongsToUser(s);});
     // FIX 2：歷史顯示「已核准」或「已退件」badge
     var histBadge=myStep&&myStep.a?('<span class="badge '+(myStep.a==='approved'?'b-ok':'b-rej')+'" style="font-size:9px;margin-left:4px">'+(myStep.a==='approved'?'已核准':'已退件')+'</span>'):'';
+    if(S.aT==='mine')histBadge='<span class="badge '+SCSS[r.status]+'" style="font-size:9px;margin-left:4px">'+SL[r.status]+'</span>';
     div.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-family:monospace;font-size:10px;color:#94a3b8">'+r.no+'</span><span class="ep" style="font-size:9px">'+e.s+'</span></div>'
       +'<div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:2px">'+r.app+histBadge+'</div>'
       +'<div style="font-size:10px;color:#94a3b8;margin-bottom:4px">'+r.dc+' · '+r.date+'</div>'
@@ -1361,7 +1442,7 @@ function renderApprList(data){
 }
 function showApprD(r){
   el('appr-empty').style.display='none';el('appr-panel').style.display='block';
-  var ms=STEP_FOR[S.user.role]||'_none_';var canAct=r.status===ms;
+  var canAct=canActRequest(r);
   var d=gD(r.dc);var e=gE(r.eid);
   var sh=r.steps.map(function(s,i){
     var done=s.a==='approved';var rej=s.a&&!done;
@@ -1369,7 +1450,10 @@ function showApprD(r){
     var db=done?'#2a9040':rej?'#c02020':i===r.steps.filter(function(x){return x.a;}).length?'var(--br)':'#e0d0b8';
     return'<div style="display:flex;gap:7px;padding:5px;border-radius:6px;background:'+bg+';margin-bottom:3px"><div style="width:16px;height:16px;border-radius:50%;background:'+db+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0">'+(done?'✓':rej?'✗':i+1)+'</div><div style="font-size:11px;font-weight:500;color:#334155">'+s.r+(s.n?' — '+s.n:'')+(s.t?' <span style="font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+(s.c?'<br><span style="font-size:10px;color:#94a3b8">'+s.c+'</span>':'')+'</div></div>';
   }).join('');
-  var actH=canAct?'<div style="border-top:1px solid #f0e6d6;padding:11px"><textarea id="appr-c" rows="2" placeholder="備註（選填）…" style="margin-bottom:7px;font-size:12px"></textarea><button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">✓ 核准此申請</button><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">整批退件</button></div>':"";
+  var actH='';
+  if(canAct&&r.status==='pending_applicant_confirm')actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-p" style="width:100%;justify-content:center;background:#1a7040" onclick="doConfirmPay(\''+r.id+'\')">✓ 確認已收款</button></div>';
+  else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-p" style="width:100%;justify-content:center;background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\')">✓ 確認憑據 · 自動切傳票</button></div>';
+  else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><textarea id="appr-c" rows="2" placeholder="備註（選填）…" style="margin-bottom:7px;font-size:12px"></textarea><button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">✓ 核准此申請</button><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">整批退件</button></div>';
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:monospace;font-size:10px;color:#c0a080">'+r.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+r.app+' · '+e.s+'</div></div></div>'
     +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+e.s+'</span>'],['部門',r.dc+' '+d.n],['類型','<span class="badge '+TCSS[r.type]+'">'+r.tL+'</span>'],['金額','<strong>'+fmt(r.amt)+'</strong>'],['匯款帳號','<span style="font-family:monospace;font-size:10px">'+(r.bankAcc||'—')+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
@@ -1381,9 +1465,8 @@ function showApprD(r){
 window.closeAppr=function(){el('appr-panel').style.display='none';el('appr-empty').style.display='flex';};
 window.apprApprove=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
-  var si=r.steps.findIndex(function(s){return s.rk===S.user.role;});
-  if(si>=0){r.steps[si].a='approved';r.steps[si].n=S.user.n;r.steps[si].t='05/03';}
-  r.status=NEXT[r.status]||r.status;r.step++;
+  if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
+  approveActiveStep(r,'approved');
   await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps});
   buildAll();closeAppr();
 };
@@ -1391,8 +1474,8 @@ window.apprReject=async function(rid){
   var c=(el('appr-c')||{}).value||'';
   if(!c.trim()){alert('請填寫退件原因');return;}
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
-  var si=r.steps.findIndex(function(s){return s.rk===S.user.role;});
-  if(si>=0){r.steps[si].a='rejected_all';r.steps[si].c=c;r.steps[si].t='05/03';}
+  if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
+  approveActiveStep(r,'rejected_all',c);
   r.status='rejected';await dbUpdate('expense_requests',rid,{status:r.status,steps:r.steps});buildAll();closeAppr();
 };
 
