@@ -270,6 +270,12 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
         <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">最新通知</div><div id="dash-notif"></div></div>
       </div>
     </div>
+    <div style="margin-top:12px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+      <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:9px;color:#334155">部門收入分布（含%）</div><div id="dept-rev-chart"></div></div>
+      <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:9px;color:#334155">部門淨利分布（含%）</div><div id="dept-net-chart"></div></div>
+      <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:9px;color:#334155">公司收入分布（含%）</div><div id="ent-rev-chart"></div></div>
+      <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:9px;color:#334155">公司支出分布（含%）</div><div id="ent-exp-chart"></div></div>
+    </div>
   </div>
 
   <!-- 新增申請 -->
@@ -985,7 +991,7 @@ function mapBill(b){
   return {id:b.id,item:b.item,ik:b.ik||b.item_key,eid:b.eid||b.entity_id,entL:b.entL||b.entity_name,amt:num(b.amt||b.amount),due:b.due||fromIsoDate(b.due_date),method:b.method||'',note:b.note||'',status:b.status||'unpaid'};
 }
 function mapInv(i){
-  return {id:i.id,no:i.no,eid:i.eid||i.entity_id,en:i.en||i.entity_name,buyer:i.buyer,amt:num(i.amt||i.amount),tax:num(i.tax),total:num(i.total),date:i.date||fromIsoDate(i.invoice_date),status:i.status||'unpaid',desc:i.desc||i.description||''};
+  return {id:i.id,no:i.no,eid:i.eid||i.entity_id,en:i.en||i.entity_name,dc:i.dc||i.department_code||'',buyer:i.buyer,applicant:i.applicant||i.app||'',amt:num(i.amt||i.amount),tax:num(i.tax),total:num(i.total),date:i.date||fromIsoDate(i.invoice_date),status:i.status||'unpaid',approvalStatus:i.approvalStatus||i.approval_status||'completed',approvalStep:num(i.approvalStep||i.approval_step||8),steps:i.steps||[],desc:i.desc||i.description||'',receiptFiles:normalizeFiles(i.receiptFiles||i.receipt_files||[])};
 }
 function mapNotif(n){
   return {id:n.id,type:n.type||'system',title:n.title,body:n.body,time:n.time||'剛才',read:!!n.read,reqId:n.reqId||n.request_id||''};
@@ -1090,13 +1096,21 @@ function buildApprovalSteps(appUser){
   steps.push({r:'會計確認入帳',rk:'accountant_final',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_voucher'});
   return steps;
 }
+function buildInvoiceApprovalSteps(appUser){
+  var steps=buildApprovalSteps(appUser).slice(0,6);
+  steps.push({r:'會計開立發票',rk:'accountant_invoice',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_invoice_accountant'});
+  steps.push({r:'申請人確認交付發票',rk:'applicant_invoice_delivery',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_invoice_delivery'});
+  return steps;
+}
 function activeStep(r){
   return (r.steps||[]).find(function(s){return !s.a;})||null;
 }
 function canActStep(r,s){
   if(!S.user||!s)return false;
   if(s.rk==='applicant_confirm')return S.user.n===r.app;
+  if(s.rk==='applicant_invoice_delivery')return S.user.n===r.applicant||S.user.n===r.app;
   if(s.rk==='accountant_final')return S.user.role==='accountant';
+  if(s.rk==='accountant_invoice')return S.user.role==='accountant';
   return S.user.role===s.rk;
 }
 function canActRequest(r){
@@ -1123,6 +1137,18 @@ function approveActiveStep(r, action, comment){
   syncRequestStatus(r);
   return s;
 }
+function syncInvoiceStatus(i){
+  var s=activeStep(i);
+  i.approvalStatus=s?s.status:'completed';
+  i.approvalStep=(i.steps||[]).filter(function(x){return x.a;}).length+1;
+  if(i.approvalStatus==='completed')i.approvalStep=8;
+}
+function approveInvoiceStep(i,comment){
+  var s=activeStep(i);if(!s)return;
+  s.a='approved';s.n=S.user?S.user.n:'';s.t='05/03';if(comment)s.c=comment;
+  syncInvoiceStatus(i);
+}
+function canActInvoice(i){return canActStep(i,activeStep(i));}
 
 // ══ 登入 ══
 window.doLogin=async function(){
@@ -1132,23 +1158,58 @@ window.doLogin=async function(){
   if(client){
     var auth=await client.auth.signInWithPassword({email:email,password:pw});
     if(auth.error){el('login-err').style.display='block';el('login-err').textContent='Supabase 登入失敗：'+auth.error.message;return;}
-    var prof=await client.from('finance_users').select('*').eq('email',email).single();
-    if(prof.error||!prof.data){el('login-err').style.display='block';el('login-err').textContent='此帳號尚未列入 finance_users 或未啟用';return;}
-    doEnter(mapUser(prof.data));
+    await enterByEmail(email);
     return;
   }
   var u=USERS.find(function(u){return u.email===email&&u.pw===pw&&u.active;});
   if(!u){el('login-err').style.display='block';el('login-err').textContent='帳號或密碼錯誤';return;}
   doEnter(u);
 };
+async function enterByEmail(email){
+  var client=getSb();
+  if(!client)return false;
+  var prof=await client.from('finance_users').select('*').eq('email',email).single();
+  if(prof.error||!prof.data){
+    var err=el('login-err');
+    if(err){err.style.display='block';err.textContent='此 Google 帳號尚未列入 finance_users 或未啟用：'+email;}
+    return false;
+  }
+  doEnter(mapUser(prof.data));
+  return true;
+}
+function oauthRedirectUrl(){
+  if(location.protocol==='file:')return 'https://module-finance.vercel.app/';
+  return location.origin+location.pathname;
+}
 window.quickLogin=function(role){
   if(getSb()){alert('Supabase 已啟用，請用正式帳號密碼登入。');return;}
   var map={employee:USERS[0],section_chief:USERS[1],dept_manager:USERS[2],ceo:USERS[3],admin_director:USERS[4],accountant:USERS[5]};
   doEnter(map[role]);
 };
-window.googleLogin=function(){
-  alert('Google OAuth 串接後，員工可用公司 Gmail 直接登入，無需另記密碼。\n\n（目前 Prototype 模式請點下方快速登入）');
+window.googleLogin=async function(){
+  var client=getSb();
+  if(!client){
+    alert('Google 登入前，請先填入 Supabase anon public key，並在 Supabase 後台啟用 Google Provider。Google client secret 不可以放在 HTML。');
+    return;
+  }
+  var err=el('login-err');if(err){err.style.display='none';err.textContent='';}
+  var res=await client.auth.signInWithOAuth({
+    provider:'google',
+    options:{
+      redirectTo:oauthRedirectUrl(),
+      queryParams:{access_type:'offline',prompt:'select_account'}
+    }
+  });
+  if(res.error&&err){err.style.display='block';err.textContent='Google 登入啟動失敗：'+res.error.message;}
 };
+async function handleOAuthReturn(){
+  var client=getSb();
+  if(!client)return;
+  var sess=await client.auth.getSession();
+  if(sess.error||!sess.data||!sess.data.session)return;
+  var email=(sess.data.session.user||{}).email;
+  if(email)await enterByEmail(email);
+}
 function doEnter(u){
   S.user=u;
   el('sb-av').textContent=u.init;el('sb-name').textContent=u.n;
@@ -1266,7 +1327,7 @@ function revenueRows(eid,period){
   if(useLedger){
     ledgerRows(eid,period).forEach(function(r){if(isRevAcct(r.ac))addGroup(m,r.ac,acctLabel(r.ac,r.an),(r.cr||0)-(r.dr||0));});
   }else{
-    invsFor(eid,period,false).forEach(function(i){addGroup(m,'4100','4100 已開立發票收入',i.total||i.amt||0);});
+    invsFor(eid,period,false).filter(invoiceIsReceivable).forEach(function(i){addGroup(m,'4100','4100 已開立發票收入',i.total||i.amt||0);});
   }
   return rowsFromMap(m);
 }
@@ -1288,6 +1349,21 @@ function deptExpenseRows(eid,period){
     reqsFor(eid,period,true).forEach(function(r){addGroup(m,r.dc,gD(r.dc).n,r.amt,r.dc);});
     billsFor(eid,period,true).forEach(function(b){addGroup(m,b.eid||'bill',gE(b.eid).s,b.amt);});
   }
+  return rowsFromMap(m);
+}
+function deptRevenueRows(eid,period){
+  var useLedger=hasLedger(eid,period),m={};
+  if(useLedger){
+    ledgerRows(eid,period).forEach(function(r){if(isRevAcct(r.ac))addGroup(m,r.dc,gD(r.dc).n,(r.cr||0)-(r.dr||0),r.dc);});
+  }else{
+    invsFor(eid,period,false).filter(function(i){return invoiceIsReceivable(i);}).forEach(function(i){var dc=i.dc||((USERS.find(function(u){return u.n===i.applicant;})||{}).dc)||'';if(dc)addGroup(m,dc,gD(dc).n,i.total||i.amt||0,dc);});
+  }
+  return rowsFromMap(m);
+}
+function deptNetRows(eid,period){
+  var m={};
+  deptRevenueRows(eid,period).forEach(function(r){addGroup(m,r.key,r.n,r.v,r.dc);});
+  deptExpenseRows(eid,period).forEach(function(r){addGroup(m,r.key,r.n,-r.v,r.dc);});
   return rowsFromMap(m);
 }
 function financeSummary(eid,period){
@@ -1340,6 +1416,21 @@ function cashFlow(eid,period){
   return {start:0,opIn:opIn,opOut:opOut,op:opIn+opOut,inv:invOut,fin:fin,net:net,end:net,source:useLedger?'ledger':'operational'};
 }
 function sourceText(s){return s==='ledger'?'已入帳分錄':'前台申請/發票/付款資料';}
+function invoiceIsReceivable(i){return !i.approvalStatus||i.approvalStatus==='completed'||i.approvalStatus==='delivered';}
+function renderDistChart(id,rows,opts){
+  var box=el(id);if(!box)return;
+  opts=opts||{};
+  rows=(rows||[]).filter(function(r){return Math.abs(r.v)>0.4;}).sort(function(a,b){return Math.abs(b.v)-Math.abs(a.v);});
+  if(!rows.length){box.innerHTML='<div style="font-size:12px;color:#94a3b8;padding:12px 2px">目前沒有可計算的真實資料</div>';return;}
+  var denom=opts.abs?rows.reduce(function(s,r){return s+Math.abs(r.v);},0):rows.reduce(function(s,r){return s+Math.max(r.v,0);},0);
+  if(!denom)denom=rows.reduce(function(s,r){return s+Math.abs(r.v);},0)||1;
+  var maxV=Math.max.apply(null,rows.map(function(r){return Math.abs(r.v);}))||1;
+  var cols=['#d97706','#f2a93b','#f6c66f','#7cb89c','#9bb8e0','#b09070','#8a6f54'];
+  box.innerHTML=rows.map(function(r,i){
+    var pct=Math.round(Math.abs(r.v)/denom*100),val=r.v<0?'-'+fmt(Math.abs(r.v)):fmt(r.v);
+    return'<div class="bar-row"><div class="bar-lbl">'+(r.n.length>7?r.n.slice(0,7)+'…':r.n)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(Math.abs(r.v)/maxV*100)+'%;background:'+cols[i%cols.length]+'"></div></div><div class="bar-val">'+val+'</div><div class="bar-pct">'+pct+'%</div></div>';
+  }).join('');
+}
 
 // ══ 儀表板 ══
 function buildDash(){
@@ -1402,6 +1493,10 @@ function buildDash(){
   var maxA=Math.max.apply(null,baseSP.map(function(d){return d.a;}))||1;
   var cols=['#ea880c','#f5c060','#f5e090','#c8e890','#b0d8f8','#d8d0c8'];
   el('dept-chart').innerHTML=baseSP.length?baseSP.map(function(d,i){var pct=total?Math.round(d.a/total*100):0;return'<div class="bar-row"><div class="bar-lbl">'+(d.n.length>5?d.n.slice(0,5)+'…':d.n)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.round(d.a/maxA*100)+'%;background:'+cols[i%cols.length]+'"></div></div><div class="bar-val">'+fmt(d.a)+'</div><div class="bar-pct">'+pct+'%</div></div>';}).join(''):'<div style="font-size:12px;color:#94a3b8;padding:12px 2px">目前沒有可計算的真實支出資料</div>';
+  renderDistChart('dept-rev-chart',deptRevenueRows(eid,dashPeriod));
+  renderDistChart('dept-net-chart',deptNetRows(eid,dashPeriod),{abs:true});
+  renderDistChart('ent-rev-chart',ENTS.map(function(e){return{key:e.id,n:e.s,v:financeSummary(e.id,dashPeriod).revenue};}));
+  renderDistChart('ent-exp-chart',ENTS.map(function(e){return{key:e.id,n:e.s,v:financeSummary(e.id,dashPeriod).expense};}));
   // 最新通知
   el('dash-notif').innerHTML=NOTIFS.filter(function(n){return!n.read;}).slice(0,3).map(function(n){return'<div style="display:flex;gap:7px;padding:5px 0;border-bottom:1px solid #f5ede0;cursor:pointer" onclick="markNotifRead(\''+n.id+'\')'+(n.reqId?';openDetail(\''+n.reqId+'\')':'')+'"><div style="width:6px;height:6px;border-radius:50%;background:var(--br);margin-top:4px;flex-shrink:0"></div><div><div style="font-size:12px;font-weight:500;color:#334155">'+n.title+'</div><div style="font-size:10px;color:#94a3b8">'+n.time+'</div></div></div>';}).join('')||'<div style="font-size:12px;color:#94a3b8">無未讀通知</div>';
 }
@@ -1793,7 +1888,8 @@ window.showVoucherById=function(vid){
 
 // ══ 開立發票 ══
 window.buildInvoices=function buildInvoices(){
-  el('inv-stats').innerHTML=[{l:'本月已開立',v:INVS.length+' 張',s:fmt(INVS.reduce(function(s,i){return s+i.total;},0))},{l:'已收款',v:INVS.filter(function(i){return i.status==='paid';}).length+' 張'},{l:'未收款',v:INVS.filter(function(i){return i.status!=='paid';}).length+' 張'},{l:'批量功能',v:'已啟用'}].map(function(s){return'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:#1e293b">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');
+  var ready=INVS.filter(invoiceIsReceivable),pending=INVS.filter(function(i){return !invoiceIsReceivable(i);});
+  el('inv-stats').innerHTML=[{l:'發票簽核中',v:pending.length+' 張'},{l:'已交付待收款',v:ready.filter(function(i){return i.status!=='paid';}).length+' 張',s:fmt(ready.filter(function(i){return i.status!=='paid';}).reduce(function(s,i){return s+i.total;},0))},{l:'已收款',v:ready.filter(function(i){return i.status==='paid';}).length+' 張'},{l:'全部發票',v:INVS.length+' 張'}].map(function(s){return'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:#1e293b">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');
   renderInvTable();updInvPrev();renderBatchInvTable();renderBatchTable();el('inv-cnt').textContent='共 '+INVS.length+' 張';
 }
 window.switchInv=function(mode){S.invMode=mode;el('inv-s').style.display=mode==='single'?'block':'none';el('inv-b').style.display=mode==='batch'?'block':'none';el('btn-single').style.cssText=mode==='single'?'background:var(--br);color:#fff;border:none':'';el('btn-batch').style.cssText=mode==='batch'?'background:var(--br);color:#fff;border:none':'';};
@@ -1801,8 +1897,33 @@ window.updInvTrack=function(){var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:
 window.calcInvTax=function(){var amt=parseFloat((el('inv-amt')||{}).value||'0');var rate=parseFloat((el('inv-tax')||{}).value||'0.05');var tax=Math.round(amt*rate);var t=el('inv-total');if(t)t.value=amt+tax?fmt(amt+tax):'';updInvPrev();};
 window.updInvPrev=function(){var buyer=(el('inv-buyer')||{}).value||'—';var desc=(el('inv-desc')||{}).value||'';var amt=parseFloat((el('inv-amt')||{}).value||'0');var rate=parseFloat((el('inv-tax')||{}).value||'0.05');var tax=Math.round(amt*rate);var no=(el('inv-no')||{}).value||'AA-XXXXXXXX';var p=el('inv-prev');if(!p)return;p.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid #e0d0b8"><div><div style="font-size:11px;font-weight:500;color:var(--brtxt)">'+no+'</div><div style="font-size:10px;color:#94a3b8">2026-05-03</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:500;color:#334155">'+buyer+'</div></div></div><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px"><span style="color:'+(desc?'#334155':'#94a3b8')+'">'+(desc||'請填寫品項說明')+'</span><span style="font-weight:500">'+(amt?fmt(amt):'—')+'</span></div><div style="text-align:right;padding-top:5px;border-top:1px solid #e0d0b8"><div style="font-size:10px;color:#94a3b8">未稅 '+fmt(amt)+' · 稅 '+fmt(tax)+'</div><div style="font-size:13px;font-weight:500;color:#1e293b">含稅 '+fmt(amt+tax)+'</div></div>';};
 window.saveInvDraft=function(){var t=el('inv-ft');if(t){t.textContent='草稿已儲存';setTimeout(function(){t.textContent='開立新發票';},2000);}};
-window.issueInv=function(){var buyer=(el('inv-buyer')||{}).value||'';var amt=parseFloat((el('inv-amt')||{}).value||'0');if(!buyer||!amt){alert('請填寫買受人與金額');return;}var eid=(el('inv-ent')||{}).value||'E1';var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:'AF'};var no=(T[eid]||'AA')+'-'+Math.floor(Math.random()*900000+100000);var rate=parseFloat((el('inv-tax')||{}).value||'0.05');var tax=Math.round(amt*rate);INVS.unshift({id:'i_'+Date.now(),no:no,eid:eid,en:gE(eid).s,buyer:buyer,amt:amt,tax:tax,total:amt+tax,date:'2026/05/03',status:(el('inv-rs')||{}).value||'unpaid',desc:(el('inv-desc')||{}).value||''});renderInvTable();['inv-buyer','inv-amt','inv-desc','inv-total'].forEach(function(id){var e=el(id);if(e)e.value='';});var t=el('inv-ft');if(t){t.textContent='發票已開立';setTimeout(function(){t.textContent='開立新發票';},2500);}el('inv-cnt').textContent='共 '+INVS.length+' 張';};
-function renderInvTable(){var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue'};var RECVL={paid:'已收款',unpaid:'未收款',partial:'部分收款'};el('inv-tbody').innerHTML=INVS.slice(0,8).map(function(i){return'<tr><td style="font-size:11px;color:var(--brtxt)">'+i.no+'</td><td>'+i.buyer+'</td><td style="font-weight:500">'+fmt(i.total)+'</td><td><span class="badge '+(RECV[i.status]||'b-gray')+'">'+(RECVL[i.status]||i.status)+'</span></td></tr>';}).join('');}
+window.issueInv=function(){
+  var buyer=(el('inv-buyer')||{}).value||'';var amt=parseFloat((el('inv-amt')||{}).value||'0');
+  if(!buyer||!amt){alert('請填寫買受人與金額');return;}
+  var eid=(el('inv-ent')||{}).value||'E1';var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:'AF'};
+  var no=(T[eid]||'AA')+'-'+Math.floor(Math.random()*900000+100000);
+  var rate=parseFloat((el('inv-tax')||{}).value||'0.05');var tax=Math.round(amt*rate);
+  var appUser=S.user||USERS[0],steps=buildInvoiceApprovalSteps(appUser);
+  INVS.unshift({id:'i_'+Date.now(),no:no,eid:eid,en:gE(eid).s,dc:appUser.dc,buyer:buyer,applicant:appUser.n,amt:amt,tax:tax,total:amt+tax,date:'2026/05/03',status:'unpaid',approvalStatus:steps[0]?steps[0].status:'completed',approvalStep:2,steps:steps,desc:(el('inv-desc')||{}).value||'',receiptFiles:[]});
+  renderInvTable();['inv-buyer','inv-amt','inv-desc','inv-total'].forEach(function(id){var e=el(id);if(e)e.value='';});
+  var t=el('inv-ft');if(t){t.textContent='發票簽核已送出';setTimeout(function(){t.textContent='開立新發票';},2500);}
+  el('inv-cnt').textContent='共 '+INVS.length+' 張';
+};
+function invApprovalLabel(i){if(invoiceIsReceivable(i))return'已交付待收款';var s=activeStep(i);return s?SL[s.status]||s.r||i.approvalStatus:'待簽核';}
+function renderInvTable(){
+  var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue'};var RECVL={paid:'已收款',unpaid:'未收款',partial:'部分收款'};
+  el('inv-tbody').innerHTML=INVS.slice(0,10).map(function(i){
+    var can=canActInvoice(i);
+    return'<tr><td style="font-size:11px;color:var(--brtxt)">'+i.no+'</td><td>'+i.buyer+'<div style="font-size:10px;color:#94a3b8">申請人：'+(i.applicant||'—')+'</div></td><td style="font-weight:500">'+fmt(i.total)+'</td><td><span class="badge '+(invoiceIsReceivable(i)?(RECV[i.status]||'b-gray'):'b-wait')+'">'+(invoiceIsReceivable(i)?(RECVL[i.status]||i.status):invApprovalLabel(i))+'</span>'+(can?'<button class="btn-g" style="margin-left:5px;font-size:10px" onclick="approveInv(\''+i.id+'\')">核准</button>':'')+'</td></tr>';
+  }).join('');
+}
+window.approveInv=function(id){
+  var i=INVS.find(function(x){return x.id===id;});if(!i)return;
+  if(!canActInvoice(i)){alert('目前不是您的發票簽核步驟');return;}
+  approveInvoiceStep(i);
+  if(i.approvalStatus==='completed')i.approvalStatus='delivered';
+  buildInvoices();buildRecv();buildDash();
+};
 window.bDragOver=function(){el('batch-dz').classList.add('drag');};window.bDragLeave=function(){el('batch-dz').classList.remove('drag');};
 window.bDrop=function(e){el('batch-dz').classList.remove('drag');var files=e.dataTransfer?e.dataTransfer.files:null;if(files&&files[0])simulateBatchUpload(files[0]);};
 window.bFileSelect=function(inp){if(inp.files&&inp.files[0])simulateBatchUpload(inp.files[0]);inp.value='';};
@@ -1812,8 +1933,8 @@ window.addBRow=function(){S.bRows.push({buyer:'',taxid:'',desc:'',amt:''});rende
 window.clearBRows=function(){S.bRows=[{buyer:'',taxid:'',desc:'',amt:''}];renderBatchTable();el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled','drag');};
 window.removeBRow=function(i){S.bRows.splice(i,1);if(!S.bRows.length)S.bRows=[{buyer:'',taxid:'',desc:'',amt:''}];renderBatchTable();};
 window.updBSum=function(){var v=(S.bRows||[]).filter(function(r){return r.buyer&&r.amt;});var total=v.reduce(function(s,r){return s+parseFloat(r.amt||0);},0);el('bsum').textContent='共 '+S.bRows.length+' 列，'+v.length+' 列有效，合計 '+fmt(total);};
-window.issueBatch=function(){var v=(S.bRows||[]).filter(function(r){return r.buyer&&r.amt;});if(!v.length){alert('請至少填寫一列');return;}var eid=(el('b-ent')||{}).value||'E1';var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:'AF'};var rate=parseFloat((el('b-tax')||{}).value||'0.05');var en=gE(eid).s;v.forEach(function(r){var no=(T[eid]||'AA')+'-'+Math.floor(Math.random()*900000+100000);var amt=parseFloat(r.amt);var tax=Math.round(amt*rate);INVS.unshift({id:'i_'+Date.now()+'_'+Math.random().toString(36).slice(2),no:no,eid:eid,en:en,buyer:r.buyer,taxid:r.taxid,amt:amt,tax:tax,total:amt+tax,date:'2026/05/03',status:'unpaid',desc:r.desc});});el('brt').textContent='批量開立記錄（本次 '+v.length+' 張）';renderBatchInvTable();S.bRows=[{buyer:'',taxid:'',desc:'',amt:''}];renderBatchTable();el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled');buildInvoices();};
-function renderBatchInvTable(){var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue'};var RECVL={paid:'已收款',unpaid:'未收款',partial:'部分收款'};el('bitbody').innerHTML=INVS.slice(0,20).map(function(i){return'<tr><td style="font-size:11px;color:var(--brtxt)">'+i.no+'</td><td><span class="ep" style="font-size:9px">'+i.en+'</span></td><td>'+i.buyer+'</td><td style="font-weight:500">'+fmt(i.total)+'</td><td><span class="badge '+(RECV[i.status]||'b-gray')+'">'+(RECVL[i.status]||i.status)+'</span></td></tr>';}).join('');}
+window.issueBatch=function(){var v=(S.bRows||[]).filter(function(r){return r.buyer&&r.amt;});if(!v.length){alert('請至少填寫一列');return;}var eid=(el('b-ent')||{}).value||'E1';var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:'AF'};var rate=parseFloat((el('b-tax')||{}).value||'0.05');var en=gE(eid).s;var appUser=S.user||USERS[0];v.forEach(function(r){var no=(T[eid]||'AA')+'-'+Math.floor(Math.random()*900000+100000);var amt=parseFloat(r.amt);var tax=Math.round(amt*rate);var steps=buildInvoiceApprovalSteps(appUser);INVS.unshift({id:'i_'+Date.now()+'_'+Math.random().toString(36).slice(2),no:no,eid:eid,en:en,dc:appUser.dc,buyer:r.buyer,applicant:appUser.n,taxid:r.taxid,amt:amt,tax:tax,total:amt+tax,date:'2026/05/03',status:'unpaid',approvalStatus:steps[0]?steps[0].status:'completed',approvalStep:2,steps:steps,desc:r.desc,receiptFiles:[]});});el('brt').textContent='批量開立記錄（本次 '+v.length+' 張，已送簽核）';renderBatchInvTable();S.bRows=[{buyer:'',taxid:'',desc:'',amt:''}];renderBatchTable();el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled');buildInvoices();};
+function renderBatchInvTable(){var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue'};var RECVL={paid:'已收款',unpaid:'未收款',partial:'部分收款'};el('bitbody').innerHTML=INVS.slice(0,20).map(function(i){var approved=invoiceIsReceivable(i);return'<tr><td style="font-size:11px;color:var(--brtxt)">'+i.no+'</td><td><span class="ep" style="font-size:9px">'+i.en+'</span></td><td>'+i.buyer+'</td><td style="font-weight:500">'+fmt(i.total)+'</td><td><span class="badge '+(approved?(RECV[i.status]||'b-gray'):'b-wait')+'">'+(approved?(RECVL[i.status]||i.status):invApprovalLabel(i))+'</span></td></tr>';}).join('');}
 
 // ══ 繳費單 ══
 window.buildBills=function buildBills(){var up=BILLS.filter(function(b){return b.status==='unpaid';});var ov=BILLS.filter(function(b){return b.status==='overdue';});var pd=BILLS.filter(function(b){return b.status==='paid';});el('bill-stats').innerHTML=[{l:'本月待繳',v:fmt(up.reduce(function(s,b){return s+b.amt;},0)),s:up.length+' 筆'},{l:'逾期未繳',v:ov.length+' 筆',c:ov.length},{l:'本月已繳',v:fmt(pd.reduce(function(s,b){return s+b.amt;},0))},{l:'合計項目',v:BILLS.length+' 筆'}].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:'+(s.c?'#b03010':'#94a3b8')+';margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');renderBillList();}
@@ -1854,9 +1975,10 @@ window.submitBill=async function(){var item=(el('b-item')||{}).value;var amt=par
 // ══ 收款情形（僅會計/執行長）══
 window.buildRecv=function buildRecv(){
   if(!isFinance()){el('recv-kpis').innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:#94a3b8"><div style="font-size:12px;font-weight:650;letter-spacing:.08em;color:#7c3f00;margin-bottom:10px">RESTRICTED</div><div>此功能僅開放給會計、行政部門主任與執行長</div></div>';return;}
-  var tA=INVS.reduce(function(s,i){return s+i.total;},0);var tP=INVS.filter(function(i){return i.status==='paid';}).reduce(function(s,i){return s+i.total;},0);var rate=tA?Math.round(tP/tA*100):0;
-  el('recv-kpis').innerHTML=[{l:'應收帳款',v:fmt(tA),s:INVS.length+' 張'},{l:'實收金額',v:fmt(tP),s:'收款率 '+rate+'%'},{l:'未收帳款',v:fmt(tA-tP),c:INVS.filter(function(i){return i.status!=='paid';}).length}].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');
-  var em={};INVS.forEach(function(i){if(!em[i.eid])em[i.eid]={en:i.en,cnt:0,total:0,paid:0};em[i.eid].cnt++;em[i.eid].total+=i.total;if(i.status==='paid')em[i.eid].paid+=i.total;});
+  var recvInvs=INVS.filter(invoiceIsReceivable);
+  var tA=recvInvs.reduce(function(s,i){return s+i.total;},0);var tP=recvInvs.filter(function(i){return i.status==='paid';}).reduce(function(s,i){return s+i.total;},0);var rate=tA?Math.round(tP/tA*100):0;
+  el('recv-kpis').innerHTML=[{l:'應收帳款',v:fmt(tA),s:recvInvs.length+' 張'},{l:'實收金額',v:fmt(tP),s:'收款率 '+rate+'%'},{l:'未收帳款',v:fmt(tA-tP),c:recvInvs.filter(function(i){return i.status!=='paid';}).length}].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');
+  var em={};recvInvs.forEach(function(i){if(!em[i.eid])em[i.eid]={en:i.en,cnt:0,total:0,paid:0};em[i.eid].cnt++;em[i.eid].total+=i.total;if(i.status==='paid')em[i.eid].paid+=i.total;});
   el('recv-etbl').innerHTML=Object.values(em).map(function(e){var r=e.total?Math.round(e.paid/e.total*100):0;return'<tr><td><span class="ep" style="font-size:9px">'+e.en+'</span></td><td style="text-align:right">'+e.cnt+'</td><td style="text-align:right;font-weight:500">'+fmt(e.total)+'</td><td style="text-align:right;color:#1a5010;font-weight:500">'+fmt(e.paid)+'</td><td><div style="display:flex;align-items:center;gap:5px"><div style="flex:1;height:5px;background:var(--warm);border-radius:99px;overflow:hidden"><div style="width:'+r+'%;height:100%;background:'+(r>80?'#2a9040':'var(--br)')+';border-radius:99px"></div></div><span style="font-size:11px;font-weight:500;min-width:28px;text-align:right">'+r+'%</span></div></td></tr>';}).join('');
   filterRecv('all',null);
   el('recv-trend').innerHTML=[{m:'3月',total:215000,paid:195000},{m:'4月',total:267750,paid:178500},{m:'5月',total:267750,paid:126000}].map(function(m,i){var r2=m.total?Math.round(m.paid/m.total*100):0;return'<div class="sc"><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:4px">2026年'+m.m+'</div><div style="font-size:15px;font-weight:500;color:#1e293b;margin-bottom:2px">'+fmt(m.total)+'</div><div style="font-size:11px;color:#94a3b8;margin-bottom:5px">實收 <span style="color:'+(r2>80?'#1a5010':'var(--brtxt)')+';font-weight:500">'+r2+'%</span></div><div style="height:4px;background:var(--warm);border-radius:99px;overflow:hidden"><div style="width:'+r2+'%;height:100%;background:'+(i===2?'var(--br)':'#2a9040')+';border-radius:99px"></div></div></div>';}).join('');
@@ -1864,10 +1986,11 @@ window.buildRecv=function buildRecv(){
 window.filterRecv=function(f,btn){
   if(btn){['rf-all','rf-unpaid','rf-paid'].forEach(function(id){var b=el(id);if(b)b.classList.remove('on');});btn.classList.add('on');}
   var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue'};var RECVL={paid:'已收款',unpaid:'未收款',partial:'部分收款'};
-  var data=f==='all'?INVS:INVS.filter(function(i){return i.status===f;});
-  el('recv-detail').innerHTML=data.map(function(i){return'<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid #f5ede0"><div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--brtxt)">'+i.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+i.buyer+'</div></div><div style="text-align:right;margin-left:7px;flex-shrink:0"><div style="font-size:12px;font-weight:500">'+fmt(i.total)+'</div><span class="badge '+(RECV[i.status]||'b-gray')+'">'+(RECVL[i.status]||i.status)+'</span></div>'+(i.status!=='paid'?'<button onclick="markIPaid(\''+i.id+'\')" style="margin-left:7px;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:500;background:#e6f4d8;border:1px solid #b0e090;color:#1a5010;cursor:pointer;flex-shrink:0">標記收款</button>':'')+'</div>';}).join('')||'<div style="text-align:center;padding:20px;color:#94a3b8;font-size:12px">無符合資料</div>';
+  var base=INVS.filter(invoiceIsReceivable);
+  var data=f==='all'?base:base.filter(function(i){return i.status===f;});
+  el('recv-detail').innerHTML=data.map(function(i){var proof=i.receiptFiles&&i.receiptFiles.length;return'<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid #f5ede0"><div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--brtxt)">'+i.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+i.buyer+'</div><div style="font-size:10px;color:#94a3b8">'+(proof?'收款證明 '+proof+' 份':'尚無收款證明')+'</div></div><div style="text-align:right;margin-left:7px;flex-shrink:0"><div style="font-size:12px;font-weight:500">'+fmt(i.total)+'</div><span class="badge '+(RECV[i.status]||'b-gray')+'">'+(RECVL[i.status]||i.status)+'</span></div>'+(i.status!=='paid'?'<label style="margin-left:7px;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:500;background:#e6f4d8;border:1px solid #b0e090;color:#1a5010;cursor:pointer;flex-shrink:0">上傳證明並收款<input type="file" accept="image/*,.pdf" style="display:none" onchange="markIPaid(\''+i.id+'\',this)"></label>':'')+'</div>';}).join('')||'<div style="text-align:center;padding:20px;color:#94a3b8;font-size:12px">無符合資料</div>';
 };
-window.markIPaid=async function(id){INVS.forEach(function(i){if(i.id===id)i.status='paid';});await dbUpdate('invoices',id,{status:'paid'});buildRecv();};
+window.markIPaid=async function(id,inp){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;var files=[];if(inp&&inp.files&&inp.files.length){files=await Promise.all(Array.from(inp.files).map(fileToAttachment));}inv.status='paid';inv.paidAt=new Date().toISOString();inv.receiptFiles=(inv.receiptFiles||[]).concat(files);await dbUpdate('invoices',id,{status:'paid',receipt_files:inv.receiptFiles,paid_at:inv.paidAt});buildRecv();buildDash();};
 
 // ══ 三表 ══
 window.rptTab=function(t,btn){S.rptTab=t;document.querySelectorAll('#pg-reports .rtab').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');['bs','pl','cf'].forEach(function(id){el('rpt-'+id).style.display=id===t?'block':'none';});};
@@ -2755,6 +2878,7 @@ window.buildBS = buildBS;
 window.buildPL = buildPL;
 window.buildCF = buildCF;
 window.renderLedger = renderLedger;
+handleOAuthReturn();
 
 })();
 </script>
