@@ -791,8 +791,8 @@ var NR_PAY=[
   {id:'payable',l:'掛應付帳款（月結）',s:'下月統一結算'},
 ];
 var TCSS={expense_reimbursement:'b-wait',payment_request:'b-blue',advance_request:'b-purp',petty_cash_request:'b-teal',travel_request:'b-ok',welfare_request:'b-gray',purchase_request:'b-gray',refund_request:'b-rej',hr_expense_request:'b-purp'};
-var SCSS={completed:'b-ok',rejected:'b-rej',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal'};
-var SL={completed:'已完成',rejected:'已退件',pending_section_chief:'待上一層主管',pending_dept_manager:'待部門主管',pending_admin_director:'待行政部門主任',pending_accountant:'待會計',pending_ceo:'待執行長',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳'};
+var SCSS={completed:'b-ok',rejected:'b-rej',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal',pending_countersign:'b-purp'};
+var SL={completed:'已完成',rejected:'已退件',pending_section_chief:'待上一層主管',pending_dept_manager:'待部門主管',pending_admin_director:'待行政部門主任',pending_accountant:'待會計',pending_ceo:'待執行長',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳',pending_countersign:'待指定員工加簽'};
 var RL={employee:'一般組員',section_chief:'課長',dept_manager:'部門主管',admin_director:'行政部門主任',accountant:'會計',ceo:'執行長'};
 var ACCTS=[
   // 流動資產
@@ -979,12 +979,29 @@ function fileChipDownloadHtml(f,reqId,idx){
     +(can?'<button onclick="event.stopPropagation();downloadAttachment(\''+reqId+'\','+idx+')" style="border:1px solid #d8c2a8;background:#fff8ed;color:var(--brtxt);border-radius:5px;font-size:10px;padding:1px 6px;cursor:pointer">下載</button>':'<span style="font-size:10px;color:#c09060">僅檔名</span>')
     +'</div>';
 }
+var STEP_DOWNLOADS=[];
+function downloadFileMeta(f){
+  f=normalizeFileMeta(f);
+  if(!f||!f.url){alert('這個附件只有檔名，沒有保存到檔案內容；請重新上傳一次，之後就可以下載。');return;}
+  var a=document.createElement('a');
+  a.href=f.url;
+  a.download=f.n||('attachment.'+(f.t||'file'));
+  a.target='_blank';
+  a.rel='noopener';
+  a.style.display='none';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);},200);
+}
+window.downloadStepAttachment=function(idx){
+  downloadFileMeta(STEP_DOWNLOADS[idx]);
+};
 function stepAttachmentHtml(files){
   files=normalizeFiles(files||[]);
   if(!files.length)return'<div style="font-size:10px;color:#b8a58f;margin-top:3px">此關未上傳附件</div>';
   return'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">'+files.map(function(f){
+    var key=STEP_DOWNLOADS.push(f)-1;
     var ext=(f.t||fileExt(f.n)).toUpperCase();
-    return'<a href="'+(f.url||'#')+'" download="'+(f.n||'attachment')+'" onclick="'+(f.url?'':'event.preventDefault();alert(&quot;此附件只有檔名，沒有檔案內容&quot;)')+'" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#fff;border:1px solid #e0d0b8;border-radius:5px;padding:2px 6px;font-size:10px;color:#334155"><span style="color:var(--brtxt);font-weight:650">'+ext+'</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(f.n||'附件')+'</span></a>';
+    return'<button type="button" onclick="event.stopPropagation();downloadStepAttachment('+key+')" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#fff;border:1px solid #e0d0b8;border-radius:5px;padding:2px 6px;font-size:10px;color:#334155;cursor:pointer"><span style="color:var(--brtxt);font-weight:650">'+ext+'</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(f.n||'附件')+'</span><span style="color:#7c3f00;font-weight:650">下載</span></button>';
   }).join('')+'</div>';
 }
 async function readStepFiles(inputId){
@@ -992,14 +1009,24 @@ async function readStepFiles(inputId){
   if(!inp||!inp.files||!inp.files.length)return [];
   return Promise.all(Array.from(inp.files).map(fileToAttachment));
 }
+function approverSelectHtml(id){
+  var opts='<option value="">不加簽</option>'+USERS.filter(function(u){return u.active!==false;}).map(function(u){
+    return'<option value="'+u.id+'">'+u.n+'（'+(u.rL||RL[u.role]||u.role)+'）</option>';
+  }).join('');
+  return'<label class="fl">加簽給指定員工（選填）</label><select id="'+id+'" style="margin-bottom:7px;font-size:12px">'+opts+'</select><div style="font-size:10px;color:#94a3b8;margin:-3px 0 7px">選擇後會先送該員工加簽，完成後回到原本關卡。</div>';
+}
+function approvalActionFields(noteId,fileId,assignId){
+  return'<textarea id="'+noteId+'" rows="2" placeholder="備註（選填）…" style="margin-bottom:7px;font-size:12px"></textarea>'
+    +'<label class="fl">本關附件（選填，後續簽核人可下載查看）</label><input type="file" id="'+fileId+'" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" style="margin-bottom:7px;font-size:11px;width:100%">'
+    +approverSelectHtml(assignId);
+}
+async function approvalActionPayload(noteId,fileId,assignId){
+  return {comment:((el(noteId)||{}).value||''),files:await readStepFiles(fileId),addUid:((el(assignId)||{}).value||'')};
+}
 window.downloadAttachment=function(reqId,idx){
   var r=REQS.find(function(x){return x.id===reqId;});
   var f=r&&r.files?normalizeFileMeta(r.files[idx]):null;
-  if(!f||!f.url){alert('這個附件只有檔名，沒有保存到檔案內容；請重新上傳一次，之後就可以下載。');return;}
-  var a=document.createElement('a');
-  a.href=f.url;a.download=f.n||('attachment.'+(f.t||'file'));a.target='_blank';a.rel='noopener';a.style.display='none';
-  document.body.appendChild(a);a.click();
-  setTimeout(function(){document.body.removeChild(a);},200);
+  downloadFileMeta(f);
 };
 function mapUser(u){
   return {id:u.id,n:u.n||u.name,email:u.email,pw:u.pw||u.demo_password||'',role:u.role,rL:u.rL||u.role_label||RL[u.role]||u.role,dc:u.dc||u.department_code,init:u.init||String(u.name||u.n||'?').slice(0,1),active:u.active!==false};
@@ -1014,7 +1041,7 @@ function mapBill(b){
   return {id:b.id,item:b.item,ik:b.ik||b.item_key,eid:b.eid||b.entity_id,entL:b.entL||b.entity_name,amt:num(b.amt||b.amount),due:b.due||fromIsoDate(b.due_date),method:b.method||'',note:b.note||'',status:b.status||'unpaid'};
 }
 function mapInv(i){
-  return {id:i.id,no:i.no,eid:i.eid||i.entity_id,en:i.en||i.entity_name,dc:i.dc||i.department_code||'',buyer:i.buyer,applicant:i.applicant||i.app||'',amt:num(i.amt||i.amount),tax:num(i.tax),total:num(i.total),date:i.date||fromIsoDate(i.invoice_date),paidAt:i.paidAt||i.paid_at||'',status:i.status||'unpaid',approvalStatus:i.approvalStatus||i.approval_status||'completed',approvalStep:num(i.approvalStep||i.approval_step||8),steps:i.steps||[],desc:i.desc||i.description||'',receiptFiles:normalizeFiles(i.receiptFiles||i.receipt_files||[])};
+  return {id:i.id,no:i.no,eid:i.eid||i.entity_id,en:i.en||i.entity_name,dc:i.dc||i.department_code||'',buyer:i.buyer,applicant:i.applicant||i.app||'',applicantId:i.applicantId||i.applicant_id||'',amt:num(i.amt||i.amount),tax:num(i.tax),total:num(i.total),date:i.date||fromIsoDate(i.invoice_date),paidAt:i.paidAt||i.paid_at||'',status:i.status||'unpaid',approvalStatus:i.approvalStatus||i.approval_status||'completed',approvalStep:num(i.approvalStep||i.approval_step||8),steps:i.steps||[],desc:i.desc||i.description||'',receiptFiles:normalizeFiles(i.receiptFiles||i.receipt_files||[]),revenuePosted:!!(i.revenuePosted||i.revenue_posted)};
 }
 function mapNotif(n){
   return {id:n.id,type:n.type||'system',title:n.title,body:n.body,time:n.time||'剛才',read:!!n.read,reqId:n.reqId||n.request_id||''};
@@ -1120,9 +1147,11 @@ function buildApprovalSteps(appUser){
   return steps;
 }
 function buildInvoiceApprovalSteps(appUser){
-  var steps=buildApprovalSteps(appUser).slice(0,6);
-  steps.push({r:'會計開立發票',rk:'accountant_invoice',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_invoice_accountant'});
-  steps.push({r:'發票專用關卡：申請人確認交付發票或憑據',rk:'applicant_invoice_delivery',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_invoice_delivery'});
+  var steps=buildApprovalSteps(appUser).filter(function(s){
+    return ['applicant_confirm','accountant_final'].indexOf(s.rk)<0;
+  });
+  steps.push({r:'會計部門開立發票並上傳檔案',rk:'accountant_invoice',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_invoice_accountant'});
+  steps.push({r:'申請人取得會計部門發票並確認交付',rk:'applicant_invoice_delivery',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_invoice_delivery'});
   return steps;
 }
 function stepPurpose(s){
@@ -1134,24 +1163,44 @@ function stepPurpose(s){
     ceo:'最終授權，確認重大金額、公司風險與整體資金配置。',
     applicant_confirm:'申請人確認公司已完成撥款，並補齊必要收款或核銷憑據。',
     accountant_final:'會計確認憑據與金流後正式入帳，系統產生傳票並寫入分類帳。',
-    accountant_invoice:'會計依核准資料開立發票，確認字軌、稅額、買受人與品項內容。',
-    applicant_invoice_delivery:'申請人確認發票或相關憑據已交付給客戶或對方單位，發票才進入收款情形。',
+    accountant_invoice:'會計部門依核准資料開立發票，並在本關上傳發票檔案或相關憑據，供申請人下載取得。',
+    applicant_invoice_delivery:'最後一關回到原申請人。申請人下載或取得會計部門開立的發票後，確認已交付給客戶或對方單位，發票才進入收款情形。',
+    assigned_user:'指定員工補充審查、確認資料或提供意見；完成後流程回到原簽核關卡。',
   };
   return map[s&&s.rk]||'依角色權限審核此關資料，確認無誤後才進入下一關。';
 }
 function stepTitle(s){
   if(!s)return'';
+  if(s.rk==='assigned_user')return s.r||'指定員工加簽';
   if(s.rk==='applicant_confirm')return'申請人確認：確認已撥款';
-  if(s.rk==='applicant_invoice_delivery')return'發票專用關卡：申請人確認交付發票或憑據';
+  if(s.rk==='applicant_invoice_delivery')return'申請人取得會計部門發票並確認交付';
   return s.r||'';
 }
 function activeStep(r){
   return (r.steps||[]).find(function(s){return !s.a;})||null;
 }
+function activeStepIndex(r){
+  return (r.steps||[]).findIndex(function(s){return !s.a;});
+}
+function userById(uid){
+  return USERS.find(function(u){return u.id===uid;})||null;
+}
+function countersignStep(uid,comment,files){
+  var u=userById(uid);if(!u)return null;
+  return {r:'加簽：'+u.n,rk:'assigned_user',uid:u.id,n:'',a:'',t:'',c:comment?('加簽原因：'+comment):'',files:normalizeFiles(files||[]),status:'pending_countersign',requestedBy:S.user?S.user.n:''};
+}
+function addCountersignBeforeActive(flow,uid,comment,files){
+  var st=countersignStep(uid,comment,files);if(!st)return false;
+  var idx=activeStepIndex(flow);
+  if(idx<0)idx=(flow.steps||[]).length;
+  flow.steps.splice(idx,0,st);
+  return true;
+}
 function canActStep(r,s){
   if(!S.user||!s)return false;
+  if(s.rk==='assigned_user')return S.user.id===s.uid||S.user.email===s.email;
   if(s.rk==='applicant_confirm')return S.user.n===r.app;
-  if(s.rk==='applicant_invoice_delivery')return S.user.n===r.applicant||S.user.n===r.app;
+  if(s.rk==='applicant_invoice_delivery')return S.user.id===s.uid||S.user.id===r.applicantId||S.user.n===r.applicant||S.user.n===r.app;
   if(s.rk==='accountant_final')return S.user.role==='accountant';
   if(s.rk==='accountant_invoice')return S.user.role==='accountant';
   return S.user.role===s.rk;
@@ -1161,6 +1210,7 @@ function canActRequest(r){
 }
 function stepBelongsToUser(s){
   if(!S.user||!s)return false;
+  if(s.rk==='assigned_user')return S.user.id===s.uid||S.user.email===s.email;
   if(s.rk==='applicant_confirm')return false;
   if(s.rk==='accountant_final')return S.user.role==='accountant';
   return s.rk===S.user.role;
@@ -1171,8 +1221,11 @@ function syncRequestStatus(r){
   r.step=(r.steps||[]).filter(function(x){return x.a;}).length+1;
   if(r.status==='completed')r.step=8;
 }
-function approveActiveStep(r, action, comment, files){
+function approveActiveStep(r, action, comment, files, addUid){
   var s=activeStep(r);if(!s)return null;
+  if(addUid&&action==='approved'){
+    if(addCountersignBeforeActive(r,addUid,comment,files)){syncRequestStatus(r);return activeStep(r);}
+  }
   s.a=action||'approved';
   s.n=S.user?S.user.n:'';
   s.t='05/03';
@@ -1187,8 +1240,11 @@ function syncInvoiceStatus(i){
   i.approvalStep=(i.steps||[]).filter(function(x){return x.a;}).length+1;
   if(i.approvalStatus==='completed')i.approvalStep=8;
 }
-function approveInvoiceStep(i,comment,files){
+function approveInvoiceStep(i,comment,files,addUid){
   var s=activeStep(i);if(!s)return;
+  if(addUid){
+    if(addCountersignBeforeActive(i,addUid,comment,files)){syncInvoiceStatus(i);return;}
+  }
   s.a='approved';s.n=S.user?S.user.n:'';s.t='05/03';if(comment)s.c=comment;
   if(files&&files.length)s.files=normalizeFiles(s.files||[]).concat(files);
   syncInvoiceStatus(i);
@@ -1375,6 +1431,43 @@ function reqsFor(eid,period,doneOnly){
 function invsFor(eid,period,paidOnly){
   return INVS.filter(function(i){return inEntity(eid,i,'inv')&&inPeriod(i.date,period)&&(!paidOnly||i.status==='paid');});
 }
+function invDept(i){
+  return i.dc||((USERS.find(function(u){return u.id===i.applicantId||u.n===i.applicant;})||{}).dc)||'A1101';
+}
+function hasInvoiceRevenueLedger(i){
+  return LEDGER.some(function(r){return r.ref===i.no&&(String(r.ac)==='4100'||String(r.ac)==='1123');});
+}
+function invoiceStepApproved(i,rk){
+  return (i.steps||[]).some(function(s){return s.rk===rk&&s.a==='approved';});
+}
+function invoiceRevenueRecognized(i){
+  return !!(i&&invoiceIsReceivable(i)||i&&i.revenuePosted||i&&hasInvoiceRevenueLedger(i)||i&&invoiceStepApproved(i,'accountant_invoice'));
+}
+async function postInvoiceRevenue(i){
+  if(!i||hasInvoiceRevenueLedger(i)||!invoiceStepApproved(i,'accountant_invoice'))return false;
+  var dc=invDept(i),amt=i.total||i.amt||0,date=i.date||new Date().toISOString().slice(0,10).replace(/-/g,'/');
+  var ar={date:date,desc:'發票開立應收 — '+(i.buyer||''),dc:dc,dr:amt,cr:0,ac:'1123',an:'應收帳款',ref:i.no};
+  var rev={date:date,desc:'發票收入 — '+(i.buyer||''),dc:dc,dr:0,cr:amt,ac:'4100',an:'已開立發票收入',ref:i.no};
+  LEDGER.unshift(rev);LEDGER.unshift(ar);
+  i.revenuePosted=true;
+  await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:ar.desc,department_code:dc,debit:amt,credit:0,account_code:'1123',account_name:'應收帳款',reference_no:i.no});
+  await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:rev.desc,department_code:dc,debit:0,credit:amt,account_code:'4100',account_name:'已開立發票收入',reference_no:i.no});
+  await dbUpdate('invoices',i.id,{revenue_posted:true});
+  return true;
+}
+function hasInvoiceCashLedger(i){
+  return LEDGER.some(function(r){return r.ref===i.no&&isCashAcct(r.ac);});
+}
+async function postInvoiceCashReceipt(i){
+  if(!i||i.status!=='paid'||hasInvoiceCashLedger(i))return false;
+  var dc=invDept(i),amt=i.total||i.amt||0,date=fromIsoDate(i.paidAt)||new Date().toISOString().slice(0,10).replace(/-/g,'/');
+  var bank={date:date,desc:'發票收款入帳 — '+(i.buyer||''),dc:dc,dr:amt,cr:0,ac:'1112',an:'銀行存款',ref:i.no};
+  var ar={date:date,desc:'沖轉應收帳款 — '+(i.buyer||''),dc:dc,dr:0,cr:amt,ac:'1123',an:'應收帳款',ref:i.no};
+  LEDGER.unshift(ar);LEDGER.unshift(bank);
+  await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:bank.desc,department_code:dc,debit:amt,credit:0,account_code:'1112',account_name:'銀行存款',reference_no:i.no});
+  await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:ar.desc,department_code:dc,debit:0,credit:amt,account_code:'1123',account_name:'應收帳款',reference_no:i.no});
+  return true;
+}
 function billsFor(eid,period,paidOnly){
   return BILLS.filter(function(b){return inEntity(eid,b,'bill')&&inPeriod(b.due,period)&&(!paidOnly||b.status==='paid');});
 }
@@ -1382,8 +1475,9 @@ function revenueRows(eid,period){
   var useLedger=hasLedger(eid,period),m={};
   if(useLedger){
     ledgerRows(eid,period).forEach(function(r){if(isRevAcct(r.ac))addGroup(m,r.ac,acctLabel(r.ac,r.an),(r.cr||0)-(r.dr||0));});
+    invsFor(eid,period,false).filter(function(i){return invoiceRevenueRecognized(i)&&!hasInvoiceRevenueLedger(i);}).forEach(function(i){addGroup(m,'4100','4100 已開立發票收入',i.total||i.amt||0);});
   }else{
-    invsFor(eid,period,false).filter(invoiceIsReceivable).forEach(function(i){addGroup(m,'4100','4100 已開立發票收入',i.total||i.amt||0);});
+    invsFor(eid,period,false).filter(invoiceRevenueRecognized).forEach(function(i){addGroup(m,'4100','4100 已開立發票收入',i.total||i.amt||0);});
   }
   return rowsFromMap(m);
 }
@@ -1411,8 +1505,9 @@ function deptRevenueRows(eid,period){
   var useLedger=hasLedger(eid,period),m={};
   if(useLedger){
     ledgerRows(eid,period).forEach(function(r){if(isRevAcct(r.ac))addGroup(m,r.dc,gD(r.dc).n,(r.cr||0)-(r.dr||0),r.dc);});
+    invsFor(eid,period,false).filter(function(i){return invoiceRevenueRecognized(i)&&!hasInvoiceRevenueLedger(i);}).forEach(function(i){var dc=invDept(i);if(dc)addGroup(m,dc,gD(dc).n,i.total||i.amt||0,dc);});
   }else{
-    invsFor(eid,period,false).filter(function(i){return invoiceIsReceivable(i);}).forEach(function(i){var dc=i.dc||((USERS.find(function(u){return u.n===i.applicant;})||{}).dc)||'';if(dc)addGroup(m,dc,gD(dc).n,i.total||i.amt||0,dc);});
+    invsFor(eid,period,false).filter(function(i){return invoiceRevenueRecognized(i);}).forEach(function(i){var dc=invDept(i);if(dc)addGroup(m,dc,gD(dc).n,i.total||i.amt||0,dc);});
   }
   return rowsFromMap(m);
 }
@@ -1438,7 +1533,7 @@ function balanceRows(eid,period){
     });
   }else{
     cash=invsFor(eid,period,true).reduce(function(s,i){return s+(i.total||i.amt||0);},0)-reqsFor(eid,period,true).reduce(function(s,r){return s+r.amt;},0)-billsFor(eid,period,true).reduce(function(s,b){return s+b.amt;},0);
-    ar=invsFor(eid,period,false).filter(function(i){return i.status!=='paid';}).reduce(function(s,i){return s+(i.total||i.amt||0);},0);
+    ar=invsFor(eid,period,false).filter(function(i){return invoiceRevenueRecognized(i)&&i.status!=='paid';}).reduce(function(s,i){return s+(i.total||i.amt||0);},0);
     ap=REQS.filter(function(r){return inEntity(eid,r,'req')&&inPeriod(r.date,period)&&isReqOpen(r);}).reduce(function(s,r){return s+r.amt;},0)+BILLS.filter(function(b){return inEntity(eid,b,'bill')&&inPeriod(b.due,period)&&b.status!=='paid';}).reduce(function(s,b){return s+b.amt;},0);
     addGroup(assets,'1112','1112 銀行存款（已收付推算）',cash);
     addGroup(assets,'1123','1123 應收帳款',ar);
@@ -1737,8 +1832,8 @@ window.openDetail=function(rid){
 window.doApprove=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
   if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
-  var files=await readStepFiles('appr-files');
-  approveActiveStep(r,'approved','',files);
+  var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
+  approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
   await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps});
   buildAll();openDetail(rid);
 };
@@ -1746,15 +1841,15 @@ window.doRejectQ=async function(rid){
   var reason=prompt('退件原因：');if(!reason)return;
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
   if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
-  var files=await readStepFiles('appr-files');
-  approveActiveStep(r,'rejected_all',reason,files);
+  var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
+  approveActiveStep(r,'rejected_all',reason,p.files,'');
   r.status='rejected';await dbUpdate('expense_requests',rid,{status:r.status,steps:r.steps});buildAll();openDetail(rid);
 };
 window.doConfirmPay=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
   if(!canActRequest(r)){alert('目前不是您的確認步驟');return;}
-  var files=await readStepFiles('appr-files');
-  approveActiveStep(r,'approved','',files);
+  var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
+  approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
   await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps});buildAll();openDetail(rid);
 };
 // FIX 1：自動切傳票
@@ -1764,8 +1859,12 @@ window.doConfirmVoucher=async function(rid){
   // 生成傳票號 V2026-XXXX
   var seqNum=r.no.replace('EXP-2026-','');
   var vid='V2026-'+seqNum;
-  var files=await readStepFiles('appr-files');
-  approveActiveStep(r,'approved','',files);
+  var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
+  approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
+  if(p.addUid){
+    await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps});
+    buildAll();openDetail(rid);return;
+  }
   r.voucherId=vid;r.status='completed';r.step=8;
   // 自動寫入 VOUCHERS
   var newVoucher={
@@ -1844,10 +1943,10 @@ function showApprD(r){
     return'<div style="display:flex;gap:7px;padding:6px;border-radius:6px;background:'+bg+';margin-bottom:4px"><div style="width:18px;height:18px;border-radius:50%;background:'+db+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0">'+(done?'OK':rej?'NO':i+1)+'</div><div style="font-size:11px;font-weight:500;color:#334155;flex:1">'+stepTitle(s)+(s.n?' — '+s.n:'')+(s.t?' <span style="font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+'<div style="font-size:10px;font-weight:400;color:#94a3b8;margin-top:1px;line-height:1.45">'+stepPurpose(s)+'</div>'+stepAttachmentHtml(s.files)+(s.c?'<span style="font-size:10px;color:#94a3b8">'+s.c+'</span>':'')+'</div></div>';
   }).join('');
   var actH='';
-  var uploadH='<label class="fl">本關附件（選填，後續簽核人可下載查看）</label><input type="file" id="appr-files" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" style="margin-bottom:7px;font-size:11px;width:100%">';
-  if(canAct&&r.status==='pending_applicant_confirm')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+uploadH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a7040" onclick="doConfirmPay(\''+r.id+'\')">確認已撥款</button></div>';
-  else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+uploadH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\')">確認憑據 · 自動切傳票</button></div>';
-  else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><textarea id="appr-c" rows="2" placeholder="備註（選填）…" style="margin-bottom:7px;font-size:12px"></textarea>'+uploadH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">核准此申請</button><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">整批退件</button></div>';
+  var fieldsH=approvalActionFields('appr-c','appr-files','appr-add-user');
+  if(canAct&&r.status==='pending_applicant_confirm')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a7040" onclick="doConfirmPay(\''+r.id+'\')">確認已撥款</button></div>';
+  else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\')">確認憑據 · 自動切傳票</button></div>';
+  else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">核准此申請</button><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">整批退件</button></div>';
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:monospace;font-size:10px;color:#c0a080">'+r.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+r.app+' · '+e.s+'</div></div></div>'
     +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+e.s+'</span>'],['部門',r.dc+' '+d.n],['類型','<span class="badge '+TCSS[r.type]+'">'+r.tL+'</span>'],['金額','<strong>'+fmt(r.amt)+'</strong>'],['匯款帳號','<span style="font-family:monospace;font-size:10px">'+(r.bankAcc||'—')+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
@@ -1865,8 +1964,10 @@ function showInvApprD(i){
     var db=done?'#2a9040':rej?'#c02020':idx===(i.steps||[]).filter(function(x){return x.a;}).length?'var(--br)':'#e0d0b8';
     return'<div style="display:flex;gap:7px;padding:6px;border-radius:6px;background:'+bg+';margin-bottom:4px"><div style="width:18px;height:18px;border-radius:50%;background:'+db+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0">'+(done?'OK':rej?'NO':idx+1)+'</div><div style="font-size:11px;font-weight:500;color:#334155;flex:1">'+stepTitle(s)+(s.n?' — '+s.n:'')+(s.t?' <span style="font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+'<div style="font-size:10px;font-weight:400;color:#94a3b8;margin-top:1px;line-height:1.45">'+stepPurpose(s)+'</div>'+stepAttachmentHtml(s.files)+(s.c?'<span style="font-size:10px;color:#94a3b8">'+s.c+'</span>':'')+'</div></div>';
   }).join('');
-  var invUploadH='<label class="fl">本關附件（選填，後續簽核人可下載查看）</label><input type="file" id="inv-appr-files" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" style="margin-bottom:7px;font-size:11px;width:100%">';
-  var actH=canAct?'<div style="border-top:1px solid #f0e6d6;padding:11px">'+invUploadH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApproveInv(\''+i.id+'\')">核准此發票</button><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprRejectInv(\''+i.id+'\')">退回發票</button></div>':'';
+  var invFieldsH=approvalActionFields('inv-appr-c','inv-appr-files','inv-appr-add-user');
+  var cur=activeStep(i);
+  var invBtn=(cur&&cur.rk==='applicant_invoice_delivery')?'我已取得並交付發票或憑據':(cur&&cur.rk==='accountant_invoice'?'開立完成並送申請人確認':'核准此發票');
+  var actH=canAct?'<div style="border-top:1px solid #f0e6d6;padding:11px">'+invFieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApproveInv(\''+i.id+'\')">'+invBtn+'</button><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprRejectInv(\''+i.id+'\')">退回發票</button></div>':'';
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:monospace;font-size:10px;color:#c0a080">'+i.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">發票簽核 · '+e.s+'</div></div></div>'
     +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+e.s+'</span>'],['申請人',i.applicant||'—'],['買受人',i.buyer||'—'],['金額','<strong>'+fmt(i.total)+'</strong>'],['狀態','<span class="badge b-wait">'+invApprovalLabel(i)+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
@@ -1878,8 +1979,8 @@ window.closeAppr=function(){el('appr-panel').style.display='none';el('appr-empty
 window.apprApprove=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
   if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
-  var files=await readStepFiles('appr-files');
-  approveActiveStep(r,'approved','',files);
+  var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
+  approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
   await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps});
   buildAll();closeAppr();
 };
@@ -1888,21 +1989,24 @@ window.apprReject=async function(rid){
   if(!c.trim()){alert('請填寫退件原因');return;}
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
   if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
-  var files=await readStepFiles('appr-files');
-  approveActiveStep(r,'rejected_all',c,files);
+  var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
+  approveActiveStep(r,'rejected_all',c,p.files,'');
   r.status='rejected';await dbUpdate('expense_requests',rid,{status:r.status,steps:r.steps});buildAll();closeAppr();
 };
 window.apprApproveInv=async function(id){
   var i=INVS.find(function(x){return x.id===id;});if(!i)return;
   if(!canActInvoice(i)){alert('目前不是您的發票簽核步驟');return;}
-  var files=await readStepFiles('inv-appr-files');
-  approveInvoiceStep(i,'',files);
-  if(i.approvalStatus==='completed')i.approvalStatus='delivered';
-  await dbUpdate('invoices',id,{approval_status:i.approvalStatus,approval_step:i.approvalStep,steps:i.steps});
+  var p=await approvalActionPayload('inv-appr-c','inv-appr-files','inv-appr-add-user');
+  var before=activeStep(i);
+  approveInvoiceStep(i,p.comment,p.files,p.addUid);
+  if(before&&before.rk==='accountant_invoice'&&invoiceStepApproved(i,'accountant_invoice'))await postInvoiceRevenue(i);
+  var delivered=false;
+  if(i.approvalStatus==='completed'){i.approvalStatus='delivered';delivered=true;}
+  await dbUpdate('invoices',id,{approval_status:i.approvalStatus,approval_step:i.approvalStep,steps:i.steps,revenue_posted:!!i.revenuePosted});
   buildInvoices();buildRecv();buildDash();buildApprovals();closeAppr();
 };
 window.apprRejectInv=async function(id){
-  var c=prompt('退回原因：');if(!c)return;
+  var c=(el('inv-appr-c')||{}).value||'';if(!c.trim()){alert('請填寫退回原因');return;}
   var i=INVS.find(function(x){return x.id===id;});if(!i)return;
   var s=activeStep(i);if(!s||!canActInvoice(i)){alert('目前不是您的發票簽核步驟');return;}
   var files=await readStepFiles('inv-appr-files');
@@ -2049,7 +2153,7 @@ window.issueInv=function(){
   var no=(T[eid]||'AA')+'-'+Math.floor(Math.random()*900000+100000);
   var rate=parseFloat((el('inv-tax')||{}).value||'0.05');var tax=Math.round(amt*rate);
   var appUser=S.user||USERS[0],steps=buildInvoiceApprovalSteps(appUser);
-  INVS.unshift({id:'i_'+Date.now(),no:no,eid:eid,en:gE(eid).s,dc:appUser.dc,buyer:buyer,applicant:appUser.n,amt:amt,tax:tax,total:amt+tax,date:'2026/05/03',status:'unpaid',approvalStatus:steps[0]?steps[0].status:'completed',approvalStep:2,steps:steps,desc:(el('inv-desc')||{}).value||'',receiptFiles:[]});
+  INVS.unshift({id:'i_'+Date.now(),no:no,eid:eid,en:gE(eid).s,dc:appUser.dc,buyer:buyer,applicant:appUser.n,applicantId:appUser.id,amt:amt,tax:tax,total:amt+tax,date:'2026/05/03',status:'unpaid',approvalStatus:steps[0]?steps[0].status:'completed',approvalStep:2,steps:steps,desc:(el('inv-desc')||{}).value||'',receiptFiles:[]});
   renderInvTable();['inv-buyer','inv-amt','inv-desc','inv-total'].forEach(function(id){var e=el(id);if(e)e.value='';});
   var t=el('inv-ft');if(t){t.textContent='發票簽核已送出';setTimeout(function(){t.textContent='開立新發票';},2500);}
   el('inv-cnt').textContent='共 '+INVS.length+' 張';
@@ -2062,11 +2166,14 @@ function renderInvTable(){
     return'<tr><td style="font-size:11px;color:var(--brtxt)">'+i.no+'</td><td>'+i.buyer+'<div style="font-size:10px;color:#94a3b8">申請人：'+(i.applicant||'—')+'</div></td><td style="font-weight:500">'+fmt(i.total)+'</td><td><span class="badge '+(invoiceIsReceivable(i)?(RECV[i.status]||'b-gray'):'b-wait')+'">'+(invoiceIsReceivable(i)?(RECVL[i.status]||i.status):invApprovalLabel(i))+'</span>'+(can?'<button class="btn-g" style="margin-left:5px;font-size:10px" onclick="approveInv(\''+i.id+'\')">核准</button>':'')+'</td></tr>';
   }).join('');
 }
-window.approveInv=function(id){
+window.approveInv=async function(id){
   var i=INVS.find(function(x){return x.id===id;});if(!i)return;
   if(!canActInvoice(i)){alert('目前不是您的發票簽核步驟');return;}
+  var before=activeStep(i);
   approveInvoiceStep(i);
+  if(before&&before.rk==='accountant_invoice'&&invoiceStepApproved(i,'accountant_invoice'))await postInvoiceRevenue(i);
   if(i.approvalStatus==='completed')i.approvalStatus='delivered';
+  await dbUpdate('invoices',id,{approval_status:i.approvalStatus,approval_step:i.approvalStep,steps:i.steps,revenue_posted:!!i.revenuePosted});
   buildInvoices();buildRecv();buildDash();
 };
 window.bDragOver=function(){el('batch-dz').classList.add('drag');};window.bDragLeave=function(){el('batch-dz').classList.remove('drag');};
@@ -2078,7 +2185,7 @@ window.addBRow=function(){S.bRows.push({buyer:'',taxid:'',desc:'',amt:''});rende
 window.clearBRows=function(){S.bRows=[{buyer:'',taxid:'',desc:'',amt:''}];renderBatchTable();el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled','drag');};
 window.removeBRow=function(i){S.bRows.splice(i,1);if(!S.bRows.length)S.bRows=[{buyer:'',taxid:'',desc:'',amt:''}];renderBatchTable();};
 window.updBSum=function(){var v=(S.bRows||[]).filter(function(r){return r.buyer&&r.amt;});var total=v.reduce(function(s,r){return s+parseFloat(r.amt||0);},0);el('bsum').textContent='共 '+S.bRows.length+' 列，'+v.length+' 列有效，合計 '+fmt(total);};
-window.issueBatch=function(){var v=(S.bRows||[]).filter(function(r){return r.buyer&&r.amt;});if(!v.length){alert('請至少填寫一列');return;}var eid=(el('b-ent')||{}).value||'E1';var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:'AF'};var rate=parseFloat((el('b-tax')||{}).value||'0.05');var en=gE(eid).s;var appUser=S.user||USERS[0];v.forEach(function(r){var no=(T[eid]||'AA')+'-'+Math.floor(Math.random()*900000+100000);var amt=parseFloat(r.amt);var tax=Math.round(amt*rate);var steps=buildInvoiceApprovalSteps(appUser);INVS.unshift({id:'i_'+Date.now()+'_'+Math.random().toString(36).slice(2),no:no,eid:eid,en:en,dc:appUser.dc,buyer:r.buyer,applicant:appUser.n,taxid:r.taxid,amt:amt,tax:tax,total:amt+tax,date:'2026/05/03',status:'unpaid',approvalStatus:steps[0]?steps[0].status:'completed',approvalStep:2,steps:steps,desc:r.desc,receiptFiles:[]});});el('brt').textContent='批量開立記錄（本次 '+v.length+' 張，已送簽核）';renderBatchInvTable();S.bRows=[{buyer:'',taxid:'',desc:'',amt:''}];renderBatchTable();el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled');buildInvoices();};
+window.issueBatch=function(){var v=(S.bRows||[]).filter(function(r){return r.buyer&&r.amt;});if(!v.length){alert('請至少填寫一列');return;}var eid=(el('b-ent')||{}).value||'E1';var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:'AF'};var rate=parseFloat((el('b-tax')||{}).value||'0.05');var en=gE(eid).s;var appUser=S.user||USERS[0];v.forEach(function(r){var no=(T[eid]||'AA')+'-'+Math.floor(Math.random()*900000+100000);var amt=parseFloat(r.amt);var tax=Math.round(amt*rate);var steps=buildInvoiceApprovalSteps(appUser);INVS.unshift({id:'i_'+Date.now()+'_'+Math.random().toString(36).slice(2),no:no,eid:eid,en:en,dc:appUser.dc,buyer:r.buyer,applicant:appUser.n,applicantId:appUser.id,taxid:r.taxid,amt:amt,tax:tax,total:amt+tax,date:'2026/05/03',status:'unpaid',approvalStatus:steps[0]?steps[0].status:'completed',approvalStep:2,steps:steps,desc:r.desc,receiptFiles:[]});});el('brt').textContent='批量開立記錄（本次 '+v.length+' 張，已送簽核）';renderBatchInvTable();S.bRows=[{buyer:'',taxid:'',desc:'',amt:''}];renderBatchTable();el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled');buildInvoices();};
 function renderBatchInvTable(){var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue'};var RECVL={paid:'已收款',unpaid:'未收款',partial:'部分收款'};el('bitbody').innerHTML=INVS.slice(0,20).map(function(i){var approved=invoiceIsReceivable(i);return'<tr><td style="font-size:11px;color:var(--brtxt)">'+i.no+'</td><td><span class="ep" style="font-size:9px">'+i.en+'</span></td><td>'+i.buyer+'</td><td style="font-weight:500">'+fmt(i.total)+'</td><td><span class="badge '+(approved?(RECV[i.status]||'b-gray'):'b-wait')+'">'+(approved?(RECVL[i.status]||i.status):invApprovalLabel(i))+'</span></td></tr>';}).join('');}
 
 // ══ 繳費單 ══
@@ -2148,7 +2255,7 @@ window.filterRecv=function(f,btn){
   var data=f==='all'?base:base.filter(function(i){return i.status===f;});
   el('recv-detail').innerHTML=data.map(function(i){var proof=i.receiptFiles&&i.receiptFiles.length;return'<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid #f5ede0"><div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--brtxt)">'+i.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+i.buyer+'</div><div style="font-size:10px;color:#94a3b8">'+(proof?'收款證明 '+proof+' 份':'尚無收款證明')+'</div></div><div style="text-align:right;margin-left:7px;flex-shrink:0"><div style="font-size:12px;font-weight:500">'+fmt(i.total)+'</div><span class="badge '+(RECV[i.status]||'b-gray')+'">'+(RECVL[i.status]||i.status)+'</span></div>'+(i.status!=='paid'?'<label style="margin-left:7px;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:500;background:#e6f4d8;border:1px solid #b0e090;color:#1a5010;cursor:pointer;flex-shrink:0">上傳證明並收款<input type="file" accept="image/*,.pdf" style="display:none" onchange="markIPaid(\''+i.id+'\',this)"></label>':'')+'</div>';}).join('')||'<div style="text-align:center;padding:20px;color:#94a3b8;font-size:12px">無符合資料</div>';
 };
-window.markIPaid=async function(id,inp){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;var files=[];if(inp&&inp.files&&inp.files.length){files=await Promise.all(Array.from(inp.files).map(fileToAttachment));}inv.status='paid';inv.paidAt=new Date().toISOString();inv.receiptFiles=(inv.receiptFiles||[]).concat(files);await dbUpdate('invoices',id,{status:'paid',receipt_files:inv.receiptFiles,paid_at:inv.paidAt});buildRecv();buildDash();};
+window.markIPaid=async function(id,inp){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;var files=[];if(inp&&inp.files&&inp.files.length){files=await Promise.all(Array.from(inp.files).map(fileToAttachment));}inv.status='paid';inv.paidAt=new Date().toISOString();inv.receiptFiles=(inv.receiptFiles||[]).concat(files);await postInvoiceCashReceipt(inv);await dbUpdate('invoices',id,{status:'paid',receipt_files:inv.receiptFiles,paid_at:inv.paidAt});buildRecv();buildDash();};
 
 // ══ 三表 ══
 window.rptTab=function(t,btn){S.rptTab=t;document.querySelectorAll('#pg-reports .rtab').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');['bs','pl','cf'].forEach(function(id){el('rpt-'+id).style.display=id===t?'block':'none';});};
