@@ -2701,16 +2701,10 @@ function renderLazyExpensePage(){
     :'';
   var fList=S.nrFiles.length?S.nrFiles.map(function(f,i){var nm=f.name||f.n||'附件',ext=nm.split('.').pop().toUpperCase();return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+ext+'</span><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(nm)+'</span><button onclick="nrRemoveFile('+i+')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0;line-height:1">×</button></div>';}).join(''):'<div style="font-size:11px;color:#94a3b8;padding:3px 0">尚未上傳任何憑據</div>';
   c.innerHTML=
-    '<div class="card" style="margin-bottom:10px;padding:12px;border-left:4px solid var(--br)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="ph" style="font-size:17px">申請內容</div><div class="ps">步驟 1 選擇類型　→　步驟 2 上傳憑據、整理 Excel、填基本資料　→　送出後直接進簽核</div></div><button class="btn-g" onclick="buildNR()">切回申請類型</button></div></div>'
+    '<div class="card" style="margin-bottom:10px;padding:12px;border-left:4px solid var(--br)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="ph" style="font-size:17px">申請內容</div><div class="ps">步驟 1 選擇類型　→　步驟 2 填匯款資訊、上傳憑據、整理 Excel　→　送出後直接進簽核</div></div><button class="btn-g" onclick="buildNR()">切回申請類型</button></div></div>'
     +'<div style="display:flex;flex-direction:column;gap:10px">'
       +'<div style="display:flex;flex-direction:column;gap:10px">'
-        +'<div class="card"><div class="chd"><span class="cht">2-1. 上傳憑據</span><button class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button></div><div style="padding:12px">'
-          +'<div class="fg" style="margin-bottom:8px"><label class="fl">憑證類型</label><select id="nr-rec-lazy" onchange="S.nrRec=this.value;updNRAcct()">'+recOpts+'</select></div>'
-          +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">UPLOAD RECEIPTS</div><div style="font-size:14px;font-weight:650;color:#334155;margin-bottom:3px">點擊或拖放發票 / 收據 / PDF</div><div style="font-size:11px;color:#94a3b8">可一次上傳多張 JPG、PNG、PDF、Word、Excel</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" onchange="nrFileChange(this)"></div>'
-          +'<div id="nr-flist" style="margin-top:7px">'+fList+'</div>'
-          +'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OpenAI 解析憑據」，右側會產生可編輯表格。</div>'+lazyProgressHtml()
-        +'</div></div>'
-        +'<div class="card"><div class="chd"><span class="cht">2-2. 匯款資訊</span></div><div style="padding:12px">'
+        +'<div class="card"><div class="chd"><span class="cht">2-1. 匯款資訊</span></div><div style="padding:12px">'
           +advanceTemplateHtml
           +pettyModeHtml
           +'<div class="fr2"><div class="fg"><label class="fl">支出人 / 申請人 *</label><select id="nr-app-sel" onchange="applicantSelectChanged()"><option value="">選擇員工</option>'+userOpts+'</select></div><div class="fg" id="nr-app-custom-wrap" style="display:none"><label class="fl">自行填寫申請人</label><input id="nr-app" value="'+(S.user?escAttr(S.user.n):'')+'" placeholder="申請人姓名"></div></div>'
@@ -2719,6 +2713,12 @@ function renderLazyExpensePage(){
           +paymentFieldsHtml()
           +'<div class="fg"><label class="fl">目的 *</label><input id="nr-desc-purpose" placeholder="例：活動採買、交通差旅、辦公用品"></div>'
           +'<div class="fg"><label class="fl">備註內容</label><textarea id="nr-desc" rows="3" placeholder="補充說明，可由 Excel 明細自動帶入"></textarea></div>'
+        +'</div></div>'
+        +'<div class="card"><div class="chd"><span class="cht">2-2. 上傳憑據</span><button class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button></div><div style="padding:12px">'
+          +'<div class="fg" style="margin-bottom:8px"><label class="fl">憑證類型</label><select id="nr-rec-lazy" onchange="S.nrRec=this.value;updNRAcct()">'+recOpts+'</select></div>'
+          +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">UPLOAD RECEIPTS</div><div style="font-size:14px;font-weight:650;color:#334155;margin-bottom:3px">點擊或拖放發票 / 收據 / PDF</div><div style="font-size:11px;color:#94a3b8">可一次上傳多張 JPG、PNG、PDF、Word、Excel</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" onchange="nrFileChange(this)"></div>'
+          +'<div id="nr-flist" style="margin-top:7px">'+fList+'</div>'
+          +'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OpenAI 解析憑據」，右側會產生可編輯表格。</div>'+lazyProgressHtml()
         +'</div></div>'
       +'</div>'
       +'<div style="display:flex;flex-direction:column;gap:10px">'
