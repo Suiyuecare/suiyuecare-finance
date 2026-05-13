@@ -221,20 +221,26 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
 .module-action svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
 .hub-note{min-height:18px;margin-top:18px;font-size:12px;color:#8a4b06}
 .hidden{display:none!important}
-.entry-loader{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#170d07;color:#fff;pointer-events:none}
-.entry-loader.play{animation:entry-out .8s ease 2.1s forwards}
-.entry-line{position:absolute;width:0;height:2px;background:var(--br)}
-.entry-loader.play .entry-line{animation:entry-line 1.2s cubic-bezier(.76,0,.24,1) forwards}
-.entry-brand{display:grid;gap:10px;justify-items:center;opacity:0;transform:translateY(18px)}
-.entry-loader.play .entry-brand{animation:entry-brand .9s ease .45s forwards}
-.entry-logo{width:92px;height:92px;object-fit:contain;filter:drop-shadow(0 20px 34px rgba(0,0,0,.32))}
-.entry-brand span{font-size:clamp(42px,7vw,92px);font-weight:900;letter-spacing:.08em}
-.entry-brand strong{color:#f6b35d;font-size:13px;letter-spacing:.5em}
-.entry-brand em{font-style:normal;color:rgba(255,255,255,.78);font-size:15px;font-weight:750;letter-spacing:.18em}
+.entry-loader{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#080604;color:#fff;pointer-events:none;overflow:hidden}
+.entry-loader::before{content:'';position:absolute;inset:-20%;background:radial-gradient(circle at 50% 28%,rgba(245,158,11,.22),transparent 28%),radial-gradient(circle at 18% 70%,rgba(255,255,255,.08),transparent 24%),linear-gradient(135deg,rgba(255,255,255,.08),rgba(255,255,255,0) 42%);opacity:0;transform:scale(1.08)}
+.entry-loader::after{content:'';position:absolute;inset:0;background:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:54px 54px;mask-image:radial-gradient(circle at center,#000 0%,transparent 72%);opacity:.42}
+.entry-loader.play::before{animation:entry-glow 2.4s ease forwards}
+.entry-loader.play{animation:entry-out .75s ease 2.45s forwards}
+.entry-line{position:absolute;left:50%;top:50%;width:0;height:1px;background:linear-gradient(90deg,transparent,#f59e0b,#fff7ed,#f59e0b,transparent);transform:translate(-50%,-50%);box-shadow:0 0 28px rgba(245,158,11,.55)}
+.entry-loader.play .entry-line{animation:entry-line 1.1s cubic-bezier(.76,0,.24,1) forwards}
+.entry-brand{position:relative;z-index:1;display:grid;gap:11px;justify-items:center;text-align:center;opacity:0;transform:translateY(22px) scale(.98)}
+.entry-loader.play .entry-brand{animation:entry-brand 1s cubic-bezier(.2,.8,.2,1) .35s forwards}
+.entry-logo-frame{width:104px;height:104px;border-radius:28px;background:rgba(255,255,255,.92);border:1px solid rgba(255,255,255,.5);display:grid;place-items:center;box-shadow:0 26px 72px rgba(0,0,0,.36),0 0 0 10px rgba(245,158,11,.08);margin-bottom:8px}
+.entry-logo{width:88px;height:88px;object-fit:contain;filter:drop-shadow(0 14px 22px rgba(0,0,0,.18))}
+.entry-brand span{font-size:clamp(44px,7vw,88px);font-weight:900;letter-spacing:.06em;line-height:1;text-shadow:0 22px 58px rgba(0,0,0,.34)}
+.entry-brand strong{color:#f6b35d;font-size:13px;letter-spacing:.42em;text-transform:uppercase}
+.entry-brand em{font-style:normal;color:rgba(255,255,255,.72);font-size:15px;font-weight:750;letter-spacing:.2em}
+.entry-copy{margin:0;color:rgba(255,255,255,.84);font-size:16px;font-weight:700;letter-spacing:.05em}
 .app-enter-ready .sb{animation:app-slide-in .45s cubic-bezier(.34,1.12,.64,1) both}
 .app-enter-ready .main{animation:app-fade-in .42s ease .08s both}
 @keyframes entry-line{to{width:min(72vw,920px)}}
-@keyframes entry-brand{to{opacity:1;transform:translateY(0)}}
+@keyframes entry-glow{0%{opacity:0;transform:scale(1.08)}35%,100%{opacity:1;transform:scale(1)}}
+@keyframes entry-brand{to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes entry-out{to{opacity:0;visibility:hidden}}
 @keyframes app-slide-in{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:translateX(0)}}
 @keyframes app-fade-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
@@ -851,9 +857,10 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
 <div class="entry-loader hidden" id="entry-loader" aria-hidden="true">
   <div class="entry-line"></div>
   <div class="entry-brand">
-    <img class="entry-logo" src="assets/suiyue-logo-transparent.png" alt="">
+    <div class="entry-logo-frame"><img class="entry-logo" src="assets/suiyue-logo-transparent.png" alt=""></div>
+    <strong>Suiyuecare Corps.</strong>
     <span id="entry-title">會計系統</span>
-    <strong id="entry-subtitle">ACCOUNTING MODULE</strong>
+    <p class="entry-copy">照顧就像去超商，買牛奶一樣簡單。</p>
     <em id="entry-label">會計系統</em>
   </div>
 </div>
@@ -2102,7 +2109,7 @@ window.enterFinanceModule=function(){
   playModuleIntro({
     title:'會計系統',
     subtitle:'ACCOUNTING MODULE',
-    label:'會計系統',
+    label:'FINANCE OS · ACCOUNTING MODULE',
     onEnter:openFinanceWorkspace
   });
 };
