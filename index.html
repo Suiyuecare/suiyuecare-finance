@@ -61,6 +61,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .fg{margin-bottom:9px}
 .fr2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+#pg-newreq .fr2,#pg-newreq .fr3{grid-template-columns:1fr!important}
+#pg-newreq #nr-main-grid{grid-template-columns:1fr!important}
+#pg-newreq .sheet-full-scroll{max-height:68vh!important}
 .si-dot{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;flex-shrink:0;transition:all .2s}
 .si-wait{background:var(--warm);color:#b09070;border:1px solid #e0d0b8}
 .si-cur{background:var(--br);color:#fff}
@@ -793,7 +796,7 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
         <button onclick="quickLogin('dept_manager')" class="btn-g" style="font-size:11px;padding:6px">陳怡霖（部門主管）</button>
         <button onclick="quickLogin('admin_director')" class="btn-g" style="font-size:11px;padding:6px">劉巧涵（行政主任）</button>
         <button onclick="quickLogin('hr')" class="btn-g" style="font-size:11px;padding:6px">陳羽俊（人資）</button>
-        <button onclick="quickLogin('general_affairs')" class="btn-g" style="font-size:11px;padding:6px">朱雪欣（總務）</button>
+        <button onclick="quickLogin('general_affairs')" class="btn-g" style="font-size:11px;padding:6px">朱夏欣（總務）</button>
       </div>
     </div>
   </div>
@@ -906,7 +909,7 @@ var USERS=[
   {id:'u5',n:'劉巧涵',email:'5@suiyuecare.com',pw:DEMO_PASSWORD,role:'admin_director',rL:'行政部門主任',dc:'A1100',init:'劉',active:true},
   {id:'u6',n:'王會計師',email:'6@suiyuecare.com',pw:DEMO_PASSWORD,role:'accountant',rL:'會計',dc:'A1101',init:'王',active:true},
   {id:'u7',n:'陳羽俊',email:'7@suiyuecare.com',pw:DEMO_PASSWORD,role:'hr',rL:'人資',dc:'A1102',init:'陳',active:true},
-  {id:'u8',n:'朱雪欣',email:'8@suiyuecare.com',pw:DEMO_PASSWORD,role:'general_affairs',rL:'總務',dc:'A1102',init:'朱',active:true},
+  {id:'u8',n:'朱夏欣',email:'8@suiyuecare.com',pw:DEMO_PASSWORD,role:'general_affairs',rL:'總務',dc:'A1102',init:'朱',active:true},
 ];
 
 // 八階段流程：申請人 → 上一層主管 → 部門主管（若相同則跳過）→ 行政部門主任 → 會計 → 執行長 → 申請人確認 → 會計入帳
@@ -1025,8 +1028,8 @@ function nrTypeIcon(type){
   return '<svg viewBox="0 0 24 24">'+(icons[type]||'<path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h4"/>')+'</svg>';
 }
 var TCSS={expense_reimbursement:'b-wait',payment_request:'b-blue',advance_request:'b-purp',petty_cash_request:'b-teal',travel_request:'b-ok',welfare_request:'b-gray',purchase_request:'b-gray',refund_request:'b-rej',hr_expense_request:'b-purp'};
-var SCSS={completed:'b-ok',rejected:'b-rej',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_procurement:'b-teal',pending_hr:'b-blue',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal',pending_countersign:'b-purp'};
-var SL={completed:'已完成',rejected:'已退件',pending_section_chief:'待上一層主管',pending_dept_manager:'待部門主管',pending_admin_director:'待行政部門主任',pending_procurement:'待總務採購審核',pending_hr:'待人資',pending_accountant:'待會計',pending_ceo:'待執行長',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳',pending_countersign:'待指定員工加簽'};
+var SCSS={completed:'b-ok',rejected:'b-rej',cancelled:'b-gray',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_procurement:'b-teal',pending_hr:'b-blue',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal',pending_countersign:'b-purp'};
+var SL={completed:'已完成',rejected:'已退件',cancelled:'已抽單取消',pending_section_chief:'待上一層主管',pending_dept_manager:'待部門主管',pending_admin_director:'待行政部門主任',pending_procurement:'待總務採購審核',pending_hr:'待人資',pending_accountant:'待會計',pending_ceo:'待執行長',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳',pending_countersign:'待指定員工加簽'};
 var RL={employee:'一般組員',section_chief:'課長',dept_manager:'部門主管',admin_director:'行政部門主任',general_affairs:'總務',hr:'人資',accountant:'會計',ceo:'執行長'};
 var ACCTS=[
   // 流動資產
@@ -1427,7 +1430,9 @@ window.downloadAttachment=function(reqId,idx){
 };
 function mapUser(u){
   var dc=u.dc||u.department_code;
-  return {id:u.id,n:u.n||u.name,email:u.email,pw:u.pw||u.demo_password||'',role:u.role,rL:u.rL||u.role_label||RL[u.role]||u.role,eid:u.eid||u.entity_id||entityOfDept(dc)||'E1',dc:dc,init:u.init||String(u.name||u.n||'?').slice(0,1),active:u.active!==false};
+  var name=u.n||u.name;
+  if((u.email==='8@suiyuecare.com'||u.id==='u8'||u.role==='general_affairs')&&name==='朱雪欣')name='朱夏欣';
+  return {id:u.id,n:name,email:u.email,pw:u.pw||u.demo_password||'',role:u.role,rL:u.rL||u.role_label||RL[u.role]||u.role,eid:u.eid||u.entity_id||entityOfDept(dc)||'E1',dc:dc,init:u.init||String(name||'?').slice(0,1),active:u.active!==false};
 }
 function requestFeeBearer(r){
   var raw=r&&r.feeBearer||r&&r.fee_bearer||'';
@@ -1831,6 +1836,16 @@ function requestIsMine(r){
   var fp=r.formPayload||{};
   var profile=fp.applicantProfile||{};
   return S.user.id===r.applicantId||currentUserIsNamed(r.app)||currentUserIsNamed(r.applicant)||currentUserIsNamed(profile.name)||S.user.email===r.applicantEmail;
+}
+function requestReachedCeoFunding(r){
+  if(!r)return false;
+  if(['pending_ceo','pending_applicant_confirm','pending_voucher','completed','paid','settled','closed'].indexOf(r.status)>-1)return true;
+  var ceoIdx=(r.steps||[]).findIndex(function(s){return s.rk==='ceo'||s.role==='ceo'||s.r==='執行長';});
+  var curIdx=activeStepIndex(r);
+  return ceoIdx>-1&&curIdx>-1&&curIdx>=ceoIdx;
+}
+function canWithdrawRequest(r){
+  return requestIsMine(r)&&isReqOpen(r)&&r.status!=='cancelled'&&!requestReachedCeoFunding(r);
 }
 function invoiceIsMine(i){
   if(!S.user||!i)return false;
@@ -2687,7 +2702,7 @@ function renderLazyExpensePage(){
   var fList=S.nrFiles.length?S.nrFiles.map(function(f,i){var nm=f.name||f.n||'附件',ext=nm.split('.').pop().toUpperCase();return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+ext+'</span><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(nm)+'</span><button onclick="nrRemoveFile('+i+')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0;line-height:1">×</button></div>';}).join(''):'<div style="font-size:11px;color:#94a3b8;padding:3px 0">尚未上傳任何憑據</div>';
   c.innerHTML=
     '<div class="card" style="margin-bottom:10px;padding:12px;border-left:4px solid var(--br)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="ph" style="font-size:17px">申請內容</div><div class="ps">步驟 1 選擇類型　→　步驟 2 上傳憑據、整理 Excel、填基本資料　→　送出後直接進簽核</div></div><button class="btn-g" onclick="buildNR()">切回申請類型</button></div></div>'
-    +'<div style="display:grid;grid-template-columns:minmax(360px,.95fr) minmax(420px,1.05fr);gap:10px;align-items:start">'
+    +'<div style="display:flex;flex-direction:column;gap:10px">'
       +'<div style="display:flex;flex-direction:column;gap:10px">'
         +'<div class="card"><div class="chd"><span class="cht">2-1. 上傳憑據</span><button class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button></div><div style="padding:12px">'
           +'<div class="fg" style="margin-bottom:8px"><label class="fl">憑證類型</label><select id="nr-rec-lazy" onchange="S.nrRec=this.value;updNRAcct()">'+recOpts+'</select></div>'
@@ -2754,8 +2769,8 @@ function renderNR(){
     var fList=S.nrFiles.length?S.nrFiles.map(function(f,i){var nm=f.name||f.n||'附件',ext=nm.split('.').pop().toUpperCase();return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+ext+'</span><span style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+nm+'</span><button onclick="nrRemoveFile('+i+')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0;line-height:1">×</button></div>';}).join(''):'<div style="font-size:11px;color:#94a3b8;padding:2px 0">尚未上傳任何憑據</div>';
     var userOpts=USERS.filter(function(u){return u.active;}).map(function(u){return'<option value="'+u.n+'" data-init="'+u.init+'">'+u.n+' （'+u.rL+'·'+u.dc+'）</option>';}).join('')+'<option value="__custom">自行輸入</option>';
     var defApp=S.user?S.user.n:'';
-    var lazyHtml=(S.nrType==='expense_reimbursement'||S.nrType==='travel_request')?'<div class="card" style="height:100%"><div class="chd"><span class="cht">'+(S.nrType==='travel_request'?'差旅費即時 Excel 明細':'懶人費用明細')+'</span>'+(S.nrType==='expense_reimbursement'?'<button class="btn-g" onclick="lazyAnalyze()">OpenAI 解析憑據</button>':'')+'</div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">'+(S.nrType==='travel_request'?'依左側差旅項目自動產生明細，可直接修改金額與品項。住宿、交通、停車、其他請上傳憑據；膳什費依辦法免附憑證。':'先在左側上傳一張或多張發票/憑據，再按解析。右側表格可直接修改，送出後會自動產生 CSV 電子檔，連同照片一起簽核。')+'</div><div id="lazy-status" style="font-size:11px;color:#94a3b8;margin-bottom:8px">'+(S.lazyBusy?'辨識中…':'等待上傳憑據')+'</div>'+lazyProgressHtml()+'<div id="lazy-sheet"></div></div></div>':'';
-    var purchaseSideHtml=S.nrType==='purchase_request'?'<div class="card" style="height:100%"><div class="chd"><span class="cht">採購明細與預估金額</span><span style="font-size:11px;color:#8b7358">預估合計：'+fmt(purchaseSum())+'</span></div><div style="padding:11px"><div id="purchase-sheet"></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:8px;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px">送出時只保存預估金額；總務採購完成後需上傳發票並填寫「實際支出」，會計最後以實際支出入帳。</div></div></div>':'';
+    var lazyHtml=(S.nrType==='expense_reimbursement'||S.nrType==='travel_request')?'<div class="card" style="height:100%"><div class="chd"><span class="cht">2-3. 即時 Excel 明細表</span>'+(S.nrType==='expense_reimbursement'?'<button class="btn-g" onclick="lazyAnalyze()">OpenAI 解析憑據</button>':'')+'</div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">'+(S.nrType==='travel_request'?'依差旅項目自動產生明細，可直接修改金額與品項。住宿、交通、停車、其他請上傳憑據；膳什費依辦法免附憑證。':'先上傳一張或多張發票/憑據，再按解析。表格可直接修改，送出後會自動產生 CSV 電子檔，連同照片一起簽核。')+'</div><div id="lazy-status" style="font-size:11px;color:#94a3b8;margin-bottom:8px">'+(S.lazyBusy?'辨識中…':'等待上傳憑據')+'</div>'+lazyProgressHtml()+'<div id="lazy-sheet"></div></div></div>':'';
+    var purchaseSideHtml=S.nrType==='purchase_request'?'<div class="card" style="height:100%"><div class="chd"><span class="cht">2-3. 即時 Excel 明細表</span><span style="font-size:11px;color:#8b7358">預估合計：'+fmt(purchaseSum())+'</span></div><div style="padding:11px"><div id="purchase-sheet"></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:8px;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px">送出時只保存預估金額；總務採購完成後需上傳發票並填寫「實際支出」，會計最後以實際支出入帳。</div></div></div>'+lazyApprovalFlowHtml():'';
     var hrSideHtml=S.nrType==='hr_expense_request'?hrExpenseSideHtml():'';
     var travelHtml=S.nrType==='travel_request'?travelFieldsHtml():'';
     var welfareHtml=S.nrType==='welfare_request'?welfareFieldsHtml():'';
@@ -2773,7 +2788,7 @@ function renderNR(){
         +'<div class="fg"><label class="fl">申請人 * <span style="font-size:10px;color:#94a3b8">（可選擇員工或自行輸入）</span></label>'
           +'<div style="display:flex;gap:6px"><select id="nr-app-sel" onchange="applicantSelectChanged()" style="flex:1"><option value="">— 選擇員工 —</option>'+userOpts+'</select>'
           +'<div id="nr-app-custom-wrap" style="display:none;flex:1"><label class="fl">自行填寫申請人</label><input type="text" id="nr-app" placeholder="申請人姓名" value="'+defApp+'"></div></div></div>';
-    var step3Cols=(S.nrType==='expense_reimbursement'||S.nrType==='travel_request'||S.nrType==='purchase_request')?'minmax(0,1fr) minmax(420px,.95fr)':'1fr';
+    var step3Cols='1fr';
     var step3WrapStyle='display:grid;grid-template-columns:'+step3Cols+';gap:10px;align-items:start';
     if(S.nrType==='hr_expense_request')step3WrapStyle+=';max-width:1180px;margin:0 auto;width:100%';
     c.innerHTML='<div style="'+step3WrapStyle+'"><div class="card"><div class="chd"><span class="cht">步驟 3 — 填寫送出</span><button class="btn-g" onclick="'+((S.nrType==='travel_request'||S.nrType==='purchase_request'||S.nrType==='hr_expense_request')?'nrBack(1)':'nrBack(2)')+'">← 返回</button></div><div style="padding:11px">'
@@ -2975,8 +2990,11 @@ function sanitizeDraftFile(f){
   f=f||{};
   var name=f.name||f.n||'附件';
   var url=f.url||'';
-  var keepUrl=url&&String(url).indexOf('data:')!==0?url:'';
-  return {name:name,type:f.type||f.mime||'',size:num(f.size),url:keepUrl,uploadedAt:f.uploadedAt||f.uploaded_at||'',draftOnly:!keepUrl};
+  var size=num(f.size);
+  var isData=/^data:/i.test(String(url||''));
+  var keepUrl=url&&(!isData||size<=800000)?url:'';
+  var path=f.path||f.storagePath||f.storage_path||'';
+  return {name:name,type:f.type||f.mime||'',size:size,url:keepUrl,bucket:f.bucket||f.storage_bucket||SUPABASE_ATTACHMENT_BUCKET,path:path,storagePath:path,uploadedAt:f.uploadedAt||f.uploaded_at||'',kind:f.kind||f.category||'',draftOnly:!keepUrl&&!path};
 }
 function sanitizeTravelDraftFiles(map){
   var out={};
@@ -2995,12 +3013,27 @@ function updateDraftCounters(){
   var cnt=el('draft-count');if(cnt)cnt.textContent=DRAFTS.length+' 筆';
   var ac=el('draft-appr-cnt');if(ac)ac.textContent=DRAFTS.length;
 }
-async function serializeDraftFiles(){
+async function serializeDraftFiles(recordNo){
   var out=[];
   for(var i=0;i<S.nrFiles.length;i++){
     var f=S.nrFiles[i];
-    if(f&&f.url){out.push({name:f.name||f.n,type:f.type||f.mime||'',size:num(f.size),url:f.url,uploadedAt:f.uploadedAt||new Date().toISOString()});continue;}
-    out.push({name:f.name||f.n||'附件',type:f.type||f.mime||'',size:num(f.size),uploadedAt:new Date().toISOString(),draftOnly:true});
+    if(f&&(f.url||f.path||f.storagePath)){
+      out.push(sanitizeDraftFile({name:f.name||f.n,type:f.type||f.mime||'',size:num(f.size),url:f.url||'',path:f.path||f.storagePath||'',bucket:f.bucket,uploadedAt:f.uploadedAt||new Date().toISOString(),kind:f.kind||'draft_file'}));
+      continue;
+    }
+    try{
+      var att=await fileToAttachment(f);
+      att.kind='draft_file';
+      if(hasSupabase()&&!S.demoLogin){
+        var uploaded=await uploadAttachmentsToSupabase([att],{recordType:'draft_requests',recordNo:recordNo||'draft',kind:'draft_file',date:todayIso()});
+        out.push(sanitizeDraftFile(uploaded[0]));
+      }else{
+        out.push(sanitizeDraftFile(att));
+      }
+    }catch(err){
+      console.warn('draft file serialize failed',err);
+      out.push({name:f.name||f.n||'附件',type:f.type||f.mime||'',size:num(f.size),uploadedAt:new Date().toISOString(),draftOnly:true});
+    }
   }
   return out;
 }
@@ -3038,7 +3071,7 @@ window.nrSaveDraft=async function(){
     var state=collectNRFormState();
     var id=S.nrDraftId||('draft_'+Date.now());
     var existing=DRAFTS.findIndex(function(d){return d.id===id;});
-    var draft=stampDraftOwner({id:id,type:S.nrType,rec:S.nrRec,pay:S.nrPay,lazyMode:!!S.lazyMode,step:S.nrStep,title:tL+' - '+((state.fields['nr-app']||state.fields['nr-desc-purpose']||state.fields['nr-desc']||'未命名草稿')),amount:state.fields['nr-amt']||'',applicant:state.fields['nr-app']||'',updatedAt:new Date().toISOString(),state:state,files:await serializeDraftFiles()});
+    var draft=stampDraftOwner({id:id,type:S.nrType,rec:S.nrRec,pay:S.nrPay,lazyMode:!!S.lazyMode,step:S.nrStep,title:tL+' - '+((state.fields['nr-app']||state.fields['nr-desc-purpose']||state.fields['nr-desc']||'未命名草稿')),amount:state.fields['nr-amt']||'',applicant:state.fields['nr-app']||'',updatedAt:new Date().toISOString(),state:state,files:await serializeDraftFiles(id)});
     if(existing>-1)DRAFTS[existing]=draft;else DRAFTS.unshift(draft);
     S.nrDraftId=id;
     var localSaved=false,remoteSaved=false,localErr=null,remoteErr=null;
@@ -3185,7 +3218,7 @@ function renderLazySheet(){
       +'</tr>';
   }).join('');
   box.innerHTML='<style>#lazy-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0}#lazy-sheet td,#lazy-sheet th{border:1px solid #e8dcc8;padding:0}#lazy-sheet th{background:#f7ead6;color:#7c3f00;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
-    +'<div class="lazy-sheet-scroll" style="overflow:auto;max-height:360px;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:1040px"><thead><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="lazy-sheet-scroll sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:1040px;width:100%"><thead><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="lazyAdd()">新增一列</button><button class="btn-g" onclick="applyLazySummary()">回填金額與說明</button><button class="btn-g" onclick="nrSaveDraft()">暫存</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">明細合計（含稅，含手續費）</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(lazyDisplaySum())+'</div></div></div>';
   var nextScroll=box.querySelector('.lazy-sheet-scroll');
   if(nextScroll){nextScroll.scrollLeft=oldLeft;nextScroll.scrollTop=oldTop;}
@@ -3724,7 +3757,7 @@ function renderRefundSheet(){
       +'</tr>';
   }).join('');
   box.innerHTML='<style>#refund-sheet table input,#refund-sheet table select{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0;min-width:92px}#refund-sheet td,#refund-sheet th{border:1px solid #e8dcc8;padding:0}#refund-sheet th{background:#d9eaf7;color:#253044;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
-    +'<div style="overflow:auto;max-height:320px;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:1260px"><thead><tr><th>原繳費金額</th><th>退費原因</th><th>其他退費原因</th><th>退費說明</th><th>應收金額</th><th>實收金額</th><th>應退金額</th><th>計算說明</th><th>退款方式</th><th>銀行名稱</th><th>分行名稱 *</th><th>戶名</th><th>帳號</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:1260px;width:100%"><thead><tr><th>原繳費金額</th><th>退費原因</th><th>其他退費原因</th><th>退費說明</th><th>應收金額</th><th>實收金額</th><th>應退金額</th><th>計算說明</th><th>退款方式</th><th>銀行名稱</th><th>分行名稱 *</th><th>戶名</th><th>帳號</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="refundAdd()">新增一列</button><button class="btn-g" onclick="refundApplySummary()">回填金額與說明</button><button class="btn-g" onclick="nrSaveDraft()">暫存</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">應退合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(refundSum())+'</div></div></div>';
   var total=el('rf-total');if(total)total.value=fmt(refundSum());
 }
@@ -3825,7 +3858,7 @@ function renderPurchaseSheet(){
       +'</tr>';
   }).join('');
   box.innerHTML='<style>#purchase-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0;min-width:92px}#purchase-sheet td,#purchase-sheet th{border:1px solid #e8dcc8;padding:0}#purchase-sheet th{background:#d9eaf7;color:#253044;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
-    +'<div style="overflow:auto;max-height:320px;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:980px"><thead><tr><th>項次</th><th>品項名稱</th><th>數量</th><th>單價</th><th>金額</th><th>用途說明</th><th>商品連結</th><th>備註</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:980px;width:100%"><thead><tr><th>項次</th><th>品項名稱</th><th>數量</th><th>單價</th><th>金額</th><th>用途說明</th><th>商品連結</th><th>備註</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="purchaseAdd()">新增一列</button><button class="btn-g" onclick="purchaseApplySummary()">回填金額與說明</button><button class="btn-g" onclick="nrSaveDraft()">暫存</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">採購合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(purchaseSum())+'</div></div></div>';
   var total=el('po-total');if(total)total.value=fmt(purchaseSum());
 }
@@ -3944,7 +3977,7 @@ function hrExpenseFieldsHtml(){
 }
 function hrExpenseSideHtml(){
   return'<div style="margin-top:10px">'+
-    '<div class="card" style="width:100%"><div class="chd"><span class="cht">即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="hrAdd()">新增列</button><button class="btn-g" onclick="hrApplySummary()">回填金額</button></div></div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">此表獨立滿版顯示，會隨申請單自動產生 Excel 附件，整批交給主管、會計與後續簽核關卡檢核。</div><div id="hr-expense-sheet"></div></div></div>'
+    '<div class="card" style="width:100%"><div class="chd"><span class="cht">2-3. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="hrAdd()">新增列</button><button class="btn-g" onclick="hrApplySummary()">回填金額</button></div></div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">此表獨立滿版顯示，會隨申請單自動產生 Excel 附件，整批交給主管、會計與後續簽核關卡檢核。</div><div id="hr-expense-sheet"></div></div></div>'
     +'<div style="display:flex;gap:8px;margin:10px 0"><button class="btn-s" style="flex:1;justify-content:center" onclick="nrSaveDraft()">儲存草稿</button><button class="btn-p" style="flex:2;justify-content:center" onclick="submitNR()">送出申請 →</button></div>'
     +lazyApprovalFlowHtml()
   +'</div>';
@@ -3970,8 +4003,8 @@ function renderHrExpenseSheet(){
       return'<td><input data-hr-row="'+i+'" data-hr-col="'+c+'" type="'+type+'" '+(type==='number'?'min="0" step="1"':'')+readonly+' value="'+escAttr(r[c]||'')+'" onchange="hrEdit('+i+',\''+c+'\',this.value)" onkeydown="hrSheetKey(event,'+i+',\''+c+'\')"></td>';
     }).join('')+'<td style="width:30px;text-align:center"><button onclick="hrDel('+i+')" style="border:none;background:transparent;color:#94a3b8;cursor:pointer">×</button></td></tr>';
   }).join('');
-  box.innerHTML='<style>#hr-expense-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0;min-width:90px}#hr-expense-sheet td,#hr-expense-sheet th{border:1px solid #e8dcc8;padding:0}#hr-expense-sheet th{background:#d9eaf7;color:#253044;font-size:10px;font-weight:650;text-align:left;padding:5px}.hr-sheet-scroll{overflow:auto;max-width:100%;max-height:420px;border:1px solid #e8dcc8;border-radius:8px;background:#fff}</style>'
-    +'<div class="hr-sheet-scroll"><table style="min-width:1120px"><thead><tr><th>項次</th>'+head+'<th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+  box.innerHTML='<style>#hr-expense-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0;min-width:90px}#hr-expense-sheet td,#hr-expense-sheet th{border:1px solid #e8dcc8;padding:0}#hr-expense-sheet th{background:#d9eaf7;color:#253044;font-size:10px;font-weight:650;text-align:left;padding:5px}.hr-sheet-scroll{overflow:auto;max-width:100%;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff}</style>'
+    +'<div class="hr-sheet-scroll sheet-full-scroll"><table style="min-width:1120px;width:100%"><thead><tr><th>項次</th>'+head+'<th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="hrAdd()">新增一列</button><button class="btn-g" onclick="hrApplySummary()">回填金額與說明</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">人事費用合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(hrSum())+'</div></div></div>';
 }
 window.hrEdit=function(i,k,v){
@@ -4250,9 +4283,9 @@ window.openDraft=function(id){
   if(!d){alert('找不到這筆暫存表單');return;}
   if(!draftBelongsToCurrentUser(d)){alert('這份暫存表單不屬於目前登入帳號，無法開啟。');return;}
   var savedFiles=d.files||[];
-  var restorableFiles=savedFiles.filter(function(f){return !!f.url;});
+  var restorableFiles=savedFiles.filter(function(f){return !!(f.url||f.path||f.storagePath);});
   var missingFiles=savedFiles.length-restorableFiles.length;
-  S.prev=S.page;S.page='newreq';S.nrDraftId=d.id;S.nrType=d.type;S.nrRec=d.rec;S.nrPay=d.pay;S.lazyMode=!!d.lazyMode;S.nrStep=Math.min(3,Math.max(1,num(d.step||3)));S.nrFiles=restorableFiles.map(function(f){return{name:f.name||f.n,type:f.type||f.mime,size:f.size,url:f.url,uploadedAt:f.uploadedAt};});S.nrDraftFileNotice=missingFiles?('此草稿保留了 '+missingFiles+' 個附件檔名，但瀏覽器安全限制無法自動恢復檔案內容；正式送出前請重新上傳附件。'):'';S.lazyRows=(d.state&&d.state.lazyRows)||[];S.refundRows=(d.state&&d.state.refundRows)||[];S.purchaseRows=(d.state&&d.state.purchaseRows)||[];S.hrItem=(d.state&&d.state.hrItem)||S.hrItem;S.hrRows=(d.state&&d.state.hrRows)||[];S.pettyMode=(d.state&&d.state.pettyMode)||'general';S.travelFiles=(d.state&&d.state.travelFiles)||{};
+  S.prev=S.page;S.page='newreq';S.nrDraftId=d.id;S.nrType=d.type;S.nrRec=d.rec;S.nrPay=d.pay;S.lazyMode=!!d.lazyMode;S.nrStep=Math.min(3,Math.max(1,num(d.step||3)));S.nrFiles=restorableFiles.map(function(f){return{name:f.name||f.n,type:f.type||f.mime,size:f.size,url:f.url||'',bucket:f.bucket,path:f.path||f.storagePath||'',storagePath:f.storagePath||f.path||'',uploadedAt:f.uploadedAt,kind:f.kind||'draft_file'};});S.nrDraftFileNotice=missingFiles?('此草稿保留了 '+missingFiles+' 個附件檔名，但瀏覽器安全限制無法自動恢復檔案內容；正式送出前請重新上傳附件。'):'';S.lazyRows=(d.state&&d.state.lazyRows)||[];S.refundRows=(d.state&&d.state.refundRows)||[];S.purchaseRows=(d.state&&d.state.purchaseRows)||[];S.hrItem=(d.state&&d.state.hrItem)||S.hrItem;S.hrRows=(d.state&&d.state.hrRows)||[];S.pettyMode=(d.state&&d.state.pettyMode)||'general';S.travelFiles=(d.state&&d.state.travelFiles)||{};
   document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on');});
   el('pg-newreq').classList.add('on');el('page-title').textContent='編輯暫存表單';
   renderNR();
@@ -4276,6 +4309,23 @@ function renderExp(data){
     tb.innerHTML+='<tr style="cursor:pointer" onclick="openDetail(\''+r.id+'\')"><td><span style="font-family:monospace;font-size:10px;color:#64748b">'+r.no+'</span>'+(hf?' <span class="badge b-gray" style="font-size:9px">附件</span>':'')+( r.voucherId?' <span class="badge b-ok" style="font-size:9px">傳票</span>':'')+'</td><td><span class="badge b-ok" style="font-size:9px">正式送出</span></td><td><span class="ep" style="font-size:9px">'+e.s+'</span></td><td><span class="dt" style="font-size:9px">'+r.dc+'</span></td><td><span class="badge '+TCSS[r.type]+'">'+r.tL+'</span></td><td>'+r.app+'</td><td style="font-weight:500">'+fmt(r.amt)+'</td><td style="font-size:10px;color:#64748b;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.bankAcc||'—')+'</td><td><span class="badge '+SCSS[r.status]+'">'+SL[r.status]+'</span></td><td style="font-size:10px;color:#94a3b8">'+r.date+'</td></tr>';
   });
 }
+window.withdrawRequest=async function(rid){
+  var r=REQS.find(function(x){return x.id===rid;});
+  if(!r)return;
+  if(!canWithdrawRequest(r)){alert('這張單已進入執行長放款或後續關卡，不能抽單。');return;}
+  var reason=prompt('請輸入抽單原因（選填）','申請人自行抽單');
+  if(reason===null)return;
+  var s=activeStep(r);
+  if(s){s.a='cancelled';s.t=todaySlash();s.c=reason||'申請人自行抽單';}
+  r.status='cancelled';
+  r.cancelledAt=new Date().toISOString();
+  r.cancelledBy=S.user?S.user.n:'';
+  r.cancelReason=reason||'申請人自行抽單';
+  await dbUpdate('expense_requests',rid,{status:r.status,steps:r.steps,form_payload:Object.assign({},r.formPayload||{},{cancelledAt:r.cancelledAt,cancelledBy:r.cancelledBy,cancelReason:r.cancelReason})});
+  alert('已抽單取消這張申請。');
+  buildAll();
+  if(S.page==='detail')openDetail(rid);
+};
 
 // ══ 詳情（FIX 1+3+4）══
 window.openDetail=function(rid){
@@ -4292,6 +4342,7 @@ window.openDetail=function(rid){
   // FIX 1：會計確認後自動生成傳票
   if(r.status==='pending_voucher'&&canActRequest(r))acts.push(detailUpload+'<button class="btn-p" style="background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\')">確認憑據 · 自動切傳票</button>'+returnBtn);
   if(r.voucherId)acts.push('<button class="btn-g" onclick="showVoucherById(\''+r.voucherId+'\')">查看傳票 '+r.voucherId+'</button>');
+  if(canWithdrawRequest(r))acts.push('<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button>');
   el('detail-act').innerHTML=acts.join('');
   // FIX 3：顯示匯款欄位
   var feeAmt=requestBankFeeAmount(r);
@@ -4507,10 +4558,11 @@ function renderApprList(data){
     // FIX 2：歷史顯示「已核准」或「已退件」badge
     var histBadge=myStep&&myStep.a?('<span class="badge '+(myStep.a==='approved'?'b-ok':'b-rej')+'" style="font-size:9px;margin-left:4px">'+(myStep.a==='approved'?'已核准':'已退件')+'</span>'):'';
     if(S.aT==='mine')histBadge='<span class="badge '+(kind==='req'?(SCSS[r.status]||'b-gray'):'b-wait')+'" style="font-size:9px;margin-left:4px">'+statusLabel+'</span>';
+    var withdrawBtn=(S.aT==='mine'&&kind==='req'&&canWithdrawRequest(r))?'<button class="btn-s" style="font-size:10px;padding:3px 7px;color:#8a1010;border-color:#f0b0b0" onclick="event.stopPropagation();withdrawRequest(\''+r.id+'\')">抽單</button>':'';
     div.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-family:monospace;font-size:10px;color:#94a3b8">'+r.no+'</span><span class="ep" style="font-size:9px">'+e.s+'</span></div>'
       +'<div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:2px">'+(kind==='req'?r.app:r.applicant)+'<span class="badge '+(kind==='req'?'b-blue':(kind==='recv'?'b-wait':'b-teal'))+'" style="font-size:9px;margin-left:4px">'+(kind==='req'?'申請':(kind==='recv'?'收款':'發票'))+'</span>'+histBadge+'</div>'
       +'<div style="font-size:10px;color:#94a3b8;margin-bottom:4px">'+(kind==='req'?r.dc:(r.dc||'—'))+' · '+r.date+'</div>'
-      +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:500">'+fmt(kind==='req'?r.amt:r.total)+'</span><span class="badge '+(kind==='req'?(SCSS[r.status]||'b-gray'):(kind==='recv'?(r.status==='paid'?'b-ok':'b-wait'):'b-wait'))+'">'+statusLabel+'</span></div>';
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-size:13px;font-weight:500">'+fmt(kind==='req'?r.amt:r.total)+'</span><span style="display:flex;gap:5px;align-items:center">'+withdrawBtn+'<span class="badge '+(kind==='req'?(SCSS[r.status]||'b-gray'):(kind==='recv'?(r.status==='paid'?'b-ok':'b-wait'):'b-wait'))+'">'+statusLabel+'</span></span></div>';
     div.onclick=function(){kind==='req'?showApprD(r):(kind==='recv'?showReceiptTaskD(r):showInvApprD(r));};l.appendChild(div);
   });
 }
@@ -4563,6 +4615,7 @@ function showApprD(r){
   else if(canAct&&r.status==='pending_procurement'&&r.type==='purchase_request')actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="proc-actual-amt" value="'+(r.actualAmt||r.amt||0)+'" placeholder="請依發票憑據填寫實際支出"></div>'+approvalActionFields('proc-c','proc-files','proc-add-user')+'<button class="btn-p" style="width:100%;justify-content:center;background:#0f766e;margin-bottom:5px" onclick="submitProcurementActual(\''+r.id+'\')">提交憑據發票與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':'')+'<div style="font-size:10px;color:#8b7358;line-height:1.5">會計最後會以此實際支出金額切傳票與認列三表，預估金額僅保留作比較。</div></div>';
   else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080;margin-bottom:5px" onclick="doConfirmVoucher(\''+r.id+'\')">確認憑據 · 自動切傳票</button>'+returnBtn+'</div>';
   else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">核准此申請</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">整批退件</button></div>';
+  if(!actH&&canWithdrawRequest(r))actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-top:6px">單子尚未進入執行長放款關卡，因此申請人可以抽單取消。</div></div>';
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:monospace;font-size:10px;color:#c0a080">'+r.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+r.app+' · '+e.s+'</div></div></div>'
     +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+e.s+'</span>'],['部門',r.dc+' '+d.n],['類型','<span class="badge '+TCSS[r.type]+'">'+r.tL+'</span>'],[r.type==='purchase_request'?'預估金額':'金額','<strong>'+fmt(r.estimatedAmt||r.amt)+'</strong>'],['實際支出',r.type==='purchase_request'?(r.actualAmt?'<strong style="color:#0f766e">'+fmt(r.actualAmt)+'</strong>':'<span style="color:#94a3b8">待總務填寫</span>'):'—'],['匯款帳號','<span style="font-family:monospace;font-size:10px">'+(r.bankAcc||'—')+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
