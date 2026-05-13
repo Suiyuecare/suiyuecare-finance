@@ -2699,32 +2699,26 @@ function renderLazyExpensePage(){
   var advanceTemplateHtml=S.nrType==='advance_request'
     ?'<div class="fg" style="background:#fffaf3;border:1px solid #efd7b8;border-radius:9px;padding:9px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><div style="font-size:12px;font-weight:650;color:#334155">預支申請書下載</div><div style="font-size:10px;color:#8b7358;margin-top:2px">員工可先下載填寫，再於上方憑據區上傳 Word / Excel 檔一併送簽核。</div></div><div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-s" onclick="dlAdvanceTemplate(\'doc\')">Word</button><button class="btn-s" onclick="dlAdvanceTemplate(\'xls\')">Excel</button></div></div></div>'
     :'';
-  var fList=S.nrFiles.length?S.nrFiles.map(function(f,i){var nm=f.name||f.n||'附件',ext=nm.split('.').pop().toUpperCase();return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+ext+'</span><span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(nm)+'</span><button onclick="nrRemoveFile('+i+')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0;line-height:1">×</button></div>';}).join(''):'<div style="font-size:11px;color:#94a3b8;padding:3px 0">尚未上傳任何憑據</div>';
   c.innerHTML=
-    '<div class="card" style="margin-bottom:10px;padding:12px;border-left:4px solid var(--br)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="ph" style="font-size:17px">申請內容</div><div class="ps">步驟 1 選擇類型　→　步驟 2 填匯款資訊、上傳憑據、整理 Excel　→　送出後直接進簽核</div></div><button class="btn-g" onclick="buildNR()">切回申請類型</button></div></div>'
+    '<div class="card" style="margin-bottom:10px;padding:12px;border-left:4px solid var(--br)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="ph" style="font-size:17px">申請內容</div><div class="ps">步驟 1 選擇類型　→　步驟 2 上傳附件、整理 Excel、填寫申請與匯款資訊　→　送出後直接進簽核</div></div><button class="btn-g" onclick="buildNR()">切回申請類型</button></div></div>'
     +'<div style="display:flex;flex-direction:column;gap:10px">'
-      +'<div style="display:flex;flex-direction:column;gap:10px">'
-        +'<div class="card"><div class="chd"><span class="cht">2-1. 匯款資訊</span></div><div style="padding:12px">'
+      +'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span></div><div style="padding:12px"><div class="fr2">'
+        +receiptUploadPanelHtml({ocr:true,kind:'receipt'})
+        +passbookUploadPanelHtml()
+      +'</div></div></div>'
+      +'<div class="card"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="lazyAdd()">新增列</button><button class="btn-g" onclick="applyLazySummary()">回填總額</button></div></div><div style="padding:12px"><div id="lazy-sheet"></div><div style="margin-top:10px;border-top:1px solid #f0e6d6;padding-top:10px"><div style="display:flex;gap:8px;align-items:center"><div style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">送出後，系統會自動產生一份 Excel 檔：明細表、基本資料、匯款資訊與憑據照片會合併在同一份檔案內，並交給主管檢核。</div><button class="btn-s" style="min-width:100px;justify-content:center" onclick="nrSaveDraft()">暫存</button><button class="btn-p" style="min-width:150px;justify-content:center" onclick="submitNR()">送出簽核</button></div></div></div></div>'
+      +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:12px"><div class="fr2" style="align-items:start">'
+        +'<div>'
           +advanceTemplateHtml
           +pettyModeHtml
           +'<div class="fr2"><div class="fg"><label class="fl">支出人 / 申請人 *</label><select id="nr-app-sel" onchange="applicantSelectChanged()"><option value="">選擇員工</option>'+userOpts+'</select></div><div class="fg" id="nr-app-custom-wrap" style="display:none"><label class="fl">自行填寫申請人</label><input id="nr-app" value="'+(S.user?escAttr(S.user.n):'')+'" placeholder="申請人姓名"></div></div>'
           +'<div class="fr2"><div class="fg"><label class="fl">公司 / 法人 *</label><select id="nr-ent" onchange="nrEntityChanged()">'+entOpts+'</select></div><div class="fg"><label class="fl">組別 / 部門 *</label><select id="nr-dept" onchange="nrDeptChanged()">'+dOpts+'</select></div></div>'
           +'<div class="fg"><label class="fl">表單填寫日期</label><input type="date" id="nr-date" value="'+todayIso()+'"></div>'
-          +paymentFieldsHtml()
           +'<div class="fg"><label class="fl">目的 *</label><input id="nr-desc-purpose" placeholder="例：活動採買、交通差旅、辦公用品"></div>'
           +'<div class="fg"><label class="fl">備註內容</label><textarea id="nr-desc" rows="3" placeholder="補充說明，可由 Excel 明細自動帶入"></textarea></div>'
-        +'</div></div>'
-        +'<div class="card"><div class="chd"><span class="cht">2-2. 上傳憑據</span><button class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button></div><div style="padding:12px">'
-          +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">UPLOAD RECEIPTS</div><div style="font-size:14px;font-weight:650;color:#334155;margin-bottom:3px">點擊或拖放發票 / 收據 / PDF</div><div style="font-size:11px;color:#94a3b8;line-height:1.5">可一次上傳多張 JPG、PNG、PDF、Word、Excel；建議一張發票拍成一張照片，多張發票請分開拍後一次上傳。</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" onchange="nrFileChange(this)"></div>'
-          +'<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #f0c987;color:#7c3f00;font-size:11px;line-height:1.55">提醒：請不要把很多張發票拍成同一張照片，OCR 可能只辨識到其中一張。</div>'
-          +'<div id="nr-flist" style="margin-top:7px">'+fList+'</div>'
-          +'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OpenAI 解析憑據」，右側會產生可編輯表格。</div>'+lazyProgressHtml()
-        +'</div></div>'
-      +'</div>'
-      +'<div style="display:flex;flex-direction:column;gap:10px">'
-        +'<div class="card"><div class="chd"><span class="cht">2-3. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="lazyAdd()">新增列</button><button class="btn-g" onclick="applyLazySummary()">回填總額</button></div></div><div style="padding:12px"><div id="lazy-sheet"></div><div style="margin-top:10px;border-top:1px solid #f0e6d6;padding-top:10px"><div style="display:flex;gap:8px;align-items:center"><div style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">送出後，系統會自動產生一份 Excel 檔：明細表、基本資料、匯款資訊與憑據照片會合併在同一份檔案內，並交給主管檢核。</div><button class="btn-s" style="min-width:100px;justify-content:center" onclick="nrSaveDraft()">暫存</button><button class="btn-p" style="min-width:150px;justify-content:center" onclick="submitNR()">送出簽核</button></div></div></div></div>'
-        +lazyApprovalFlowHtml()
-      +'</div>'
+        +'</div><div>'+paymentFieldsHtml()+'</div>'
+      +'</div></div></div>'
+      +lazyApprovalFlowHtml()
     +'</div>';
   renderLazySheet();
   updNRUI();updNRAcct();renderFlow();
@@ -2766,15 +2760,15 @@ function renderNR(){
   }else if(S.nrStep===3){
     if(!S.nrPay)S.nrPay='bank';
     var aoHtml=isFinance()?'<div style="background:var(--warm);border-radius:7px;padding:8px;margin-bottom:8px;border:1px solid #f0e0c8"><div style="font-size:11px;font-weight:650;color:var(--brtxt);margin-bottom:5px">會計覆蓋科目（選填）</div><div class="fr2"><div><label class="fl">借方</label><select id="nr-dr" style="font-size:11px"><option value="">自動</option>'+ACCTS.filter(function(a){return a.s==='debit';}).map(function(a){return'<option value="'+a.c+'">'+a.c+' '+a.n+'</option>';}).join('')+'</select></div><div><label class="fl">貸方</label><select id="nr-cr" style="font-size:11px"><option value="">自動</option>'+ACCTS.filter(function(a){return a.s==='credit';}).map(function(a){return'<option value="'+a.c+'">'+a.c+' '+a.n+'</option>';}).join('')+'</select></div></div></div>':"";
-    var fList=S.nrFiles.length?S.nrFiles.map(function(f,i){var nm=f.name||f.n||'附件',ext=nm.split('.').pop().toUpperCase();return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+ext+'</span><span style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+nm+'</span><button onclick="nrRemoveFile('+i+')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0;line-height:1">×</button></div>';}).join(''):'<div style="font-size:11px;color:#94a3b8;padding:2px 0">尚未上傳任何憑據</div>';
     var userOpts=USERS.filter(function(u){return u.active;}).map(function(u){return'<option value="'+u.n+'" data-init="'+u.init+'">'+u.n+' （'+u.rL+'·'+u.dc+'）</option>';}).join('')+'<option value="__custom">自行輸入</option>';
     var defApp=S.user?S.user.n:'';
-    var lazyHtml=(S.nrType==='expense_reimbursement'||S.nrType==='travel_request')?'<div class="card" style="height:100%"><div class="chd"><span class="cht">2-3. 即時 Excel 明細表</span>'+(S.nrType==='expense_reimbursement'?'<button class="btn-g" onclick="lazyAnalyze()">OpenAI 解析憑據</button>':'')+'</div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">'+(S.nrType==='travel_request'?'依差旅項目自動產生明細，可直接修改金額與品項。住宿、交通、停車、其他請上傳憑據；膳什費依辦法免附憑證。':'先上傳一張或多張發票/憑據，再按解析。表格可直接修改，送出後會自動產生 CSV 電子檔，連同照片一起簽核。')+'</div><div id="lazy-status" style="font-size:11px;color:#94a3b8;margin-bottom:8px">'+(S.lazyBusy?'辨識中…':'等待上傳憑據')+'</div>'+lazyProgressHtml()+'<div id="lazy-sheet"></div></div></div>':'';
-    var purchaseSideHtml=S.nrType==='purchase_request'?'<div class="card" style="height:100%"><div class="chd"><span class="cht">2-3. 即時 Excel 明細表</span><span style="font-size:11px;color:#8b7358">預估合計：'+fmt(purchaseSum())+'</span></div><div style="padding:11px"><div id="purchase-sheet"></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:8px;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px">送出時只保存預估金額；總務採購完成後需上傳發票並填寫「實際支出」，會計最後以實際支出入帳。</div></div></div>'+lazyApprovalFlowHtml():'';
+    var lazyHtml=(S.nrType==='expense_reimbursement'||S.nrType==='travel_request')?'<div class="card" style="height:100%"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span>'+(S.nrType==='expense_reimbursement'?'<button class="btn-g" onclick="lazyAnalyze()">OpenAI 解析憑據</button>':'')+'</div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">'+(S.nrType==='travel_request'?'依差旅項目自動產生明細，可直接修改金額與品項。住宿、交通、停車、其他請上傳憑據；膳什費依辦法免附憑證。':'先上傳一張或多張發票/憑據，再按解析。表格可直接修改，送出後會自動產生 CSV 電子檔，連同照片一起簽核。')+'</div><div id="lazy-status" style="font-size:11px;color:#94a3b8;margin-bottom:8px">'+(S.lazyBusy?'辨識中…':'等待上傳憑據')+'</div>'+lazyProgressHtml()+'<div id="lazy-sheet"></div></div></div>':'';
+    var purchaseSideHtml=S.nrType==='purchase_request'?'<div class="card" style="height:100%"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><span style="font-size:11px;color:#8b7358">預估合計：'+fmt(purchaseSum())+'</span></div><div style="padding:11px"><div id="purchase-sheet"></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:8px;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px">送出時只保存預估金額；總務採購完成後需上傳發票並填寫「實際支出」，會計最後以實際支出入帳。</div></div></div>':'';
     var hrSideHtml=S.nrType==='hr_expense_request'?hrExpenseSideHtml():'';
     var travelHtml=S.nrType==='travel_request'?travelFieldsHtml():'';
     var welfareHtml=S.nrType==='welfare_request'?welfareFieldsHtml():'';
-    var refundHtml=S.nrType==='refund_request'?refundFieldsHtml():'';
+    var refundSideHtml=S.nrType==='refund_request'?refundFieldsHtml():'';
+    var refundHtml='';
     var purchaseHtml=S.nrType==='purchase_request'?purchaseFieldsHtml():'';
     var hrHtml=S.nrType==='hr_expense_request'?hrExpenseFieldsHtml():'';
     var ownerFieldsHtml=S.nrType==='hr_expense_request'
@@ -2791,23 +2785,28 @@ function renderNR(){
     var step3Cols='1fr';
     var step3WrapStyle='display:grid;grid-template-columns:'+step3Cols+';gap:10px;align-items:start';
     if(S.nrType==='hr_expense_request')step3WrapStyle+=';max-width:1180px;margin:0 auto;width:100%';
-    c.innerHTML='<div style="'+step3WrapStyle+'"><div class="card"><div class="chd"><span class="cht">步驟 3 — 填寫送出</span><button class="btn-g" onclick="'+((S.nrType==='travel_request'||S.nrType==='purchase_request'||S.nrType==='hr_expense_request')?'nrBack(1)':'nrBack(2)')+'">← 返回</button></div><div style="padding:11px">'
-      +ownerFieldsHtml
+    var sheetHtml=S.nrType==='hr_expense_request'?hrSideHtml:(purchaseSideHtml||refundSideHtml||lazyHtml||'<div class="card"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span></div><div style="padding:11px"><div id="lazy-sheet"></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:8px">此申請類型若無明細列，可直接在 2-3 填寫申請內容與總金額；送出時仍會保留附件與審核紀錄。</div></div></div>');
+    var leftInfoHtml=ownerFieldsHtml
       +'<div class="fg"><label class="fl">表單填寫日期</label><input type="date" id="nr-date" value="'+todayIso()+'"></div>'
       +travelHtml
       +welfareHtml
       +refundHtml
       +purchaseHtml
       +hrHtml
-      +(S.nrType==='hr_expense_request'?hrBatchPaymentFieldsHtml():paymentFieldsHtml())
       +'<div class="fg"><label class="fl">申請說明 * （請詳述費用用途）</label><textarea id="nr-desc" rows="3" placeholder="例：2026/05 居服部門薪資">'+(S.nrType==='hr_expense_request'?'2026/05 居服部門薪資':'')+'</textarea></div>'
-      +aoHtml
-      +'<div class="fg"><label class="fl">'+(S.nrType==='hr_expense_request'?'上傳薪資表 / 人事費用附件（Excel、PDF、Word，可多份）':'上傳發票 / 憑據照片（JPG、PNG、PDF、Word、Excel，可多張）')+'</label>'
-        +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">'+(S.nrType==='hr_expense_request'?'UPLOAD PAYROLL':'UPLOAD')+'</div><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:2px">'+(S.nrType==='hr_expense_request'?'點擊或拖放上傳薪資表、人事費用支出表或勞務報酬單':'點擊或拖放上傳憑據')+'</div><div style="font-size:11px;color:#94a3b8">'+(S.nrType==='hr_expense_request'?'Excel、PDF、Word、圖片皆可；9A、9B 勞務報酬單需附勞務報酬單':'JPG、PNG、PDF、Word、Excel')+'</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" onchange="nrFileChange(this)"></div>'
-        +'<div id="nr-flist" style="margin-top:4px">'+fList+'</div>'
-      +'</div>'
-      +(S.nrType==='hr_expense_request'?'':'<div style="display:flex;gap:7px"><button class="btn-s" style="flex:1" onclick="nrSaveDraft()">存草稿</button><button class="btn-p" style="flex:2;justify-content:center" onclick="submitNR()">送出申請 →</button></div>')
-    +'</div></div>'+(S.nrType==='hr_expense_request'?hrSideHtml:(purchaseSideHtml||lazyHtml))+'</div>';
+      +aoHtml;
+    var rightPayHtml=S.nrType==='hr_expense_request'?hrBatchPaymentFieldsHtml():paymentFieldsHtml();
+    c.innerHTML='<div style="display:flex;flex-direction:column;gap:10px;'+(S.nrType==='hr_expense_request'?'max-width:1180px;margin:0 auto;width:100%;':'')+'">'
+      +'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span><button class="btn-g" onclick="'+((S.nrType==='travel_request'||S.nrType==='purchase_request'||S.nrType==='hr_expense_request')?'nrBack(1)':'nrBack(2)')+'">← 返回</button></div><div style="padding:11px"><div class="fr2">'
+        +receiptUploadPanelHtml({ocr:S.nrType==='expense_reimbursement',kind:S.nrType==='hr_expense_request'?'payroll':'receipt'})
+        +(S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A/9B 勞報單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
+      +'</div></div></div>'
+      +sheetHtml
+      +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:11px"><div class="fr2" style="align-items:start"><div>'+leftInfoHtml+'</div><div>'+rightPayHtml+'</div></div>'
+      +'<div style="display:flex;gap:7px;margin-top:8px"><button class="btn-s" style="flex:1" onclick="nrSaveDraft()">存草稿</button><button class="btn-p" style="flex:2;justify-content:center" onclick="submitNR()">送出申請 →</button></div>'
+      +'</div></div>'
+      +(S.nrType==='hr_expense_request'?'':lazyApprovalFlowHtml())
+    +'</div>';
     renderLazySheet();
     if(S.nrType==='welfare_request')updateWelfareHint();
     if(S.nrType==='travel_request')syncTravelRows();
@@ -3460,6 +3459,33 @@ window.dlAdvanceTemplate=function(fmt){
   document.body.appendChild(a);a.click();a.remove();
   URL.revokeObjectURL(url);
 };
+function nrFileListHtml(maxWidth){
+  maxWidth=maxWidth||160;
+  if(!S.nrFiles.length)return'<div style="font-size:11px;color:#94a3b8;padding:3px 0">尚未上傳任何憑據</div>';
+  return S.nrFiles.map(function(f,i){
+    var nm=f.name||f.n||'附件',ext=nm.split('.').pop().toUpperCase();
+    return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+ext+'</span><span style="max-width:'+maxWidth+'px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(nm)+'</span><button onclick="nrRemoveFile('+i+')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0;line-height:1">×</button></div>';
+  }).join('');
+}
+function receiptUploadPanelHtml(opt){
+  opt=opt||{};
+  var isPayroll=opt.kind==='payroll';
+  var ocrBtn=opt.ocr?'<button class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button>':'';
+  return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%">'
+    +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:650;color:#334155">'+(isPayroll?'上傳薪資表 / 人事附件':'上傳憑據')+'</div>'+ocrBtn+'</div>'
+    +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">'+(isPayroll?'UPLOAD PAYROLL':'UPLOAD RECEIPTS')+'</div><div style="font-size:13px;font-weight:650;color:#334155;margin-bottom:3px">'+(isPayroll?'點擊或拖放薪資表、人事費用支出表或勞務報酬單':'點擊或拖放發票 / 收據 / PDF')+'</div><div style="font-size:11px;color:#94a3b8;line-height:1.5">'+(isPayroll?'Excel、PDF、Word、圖片皆可；9A、9B 勞務報酬單需附勞務報酬單':'可一次上傳多張 JPG、PNG、PDF、Word、Excel；建議一張發票拍成一張照片，多張發票請分開拍後一次上傳。')+'</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" onchange="nrFileChange(this)"></div>'
+    +(isPayroll?'':'<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #f0c987;color:#7c3f00;font-size:11px;line-height:1.55">提醒：請不要把很多張發票拍成同一張照片，OCR 可能只辨識到其中一張。</div>')
+    +'<div id="nr-flist" style="margin-top:7px">'+nrFileListHtml(180)+'</div>'
+    +(opt.ocr?'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OpenAI 解析憑據」，下方會產生可編輯表格。</div>':'<div style="font-size:11px;color:#8b7358;margin-top:8px">附件會隨申請單送簽核，主管可下載檢視。</div>')
+    +(opt.ocr?lazyProgressHtml():'')
+  +'</div>';
+}
+function passbookUploadPanelHtml(){
+  return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%">'
+    +'<div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">上傳存摺封面</div>'
+    +'<div class="fg" style="margin:0"><label class="fl">存摺封面（選填）</label><input type="file" id="nr-passbook-file" accept="image/*,.pdf" onchange="passbookFileChange(this)" style="font-size:11px;width:100%"><div id="nr-passbook-status" style="font-size:10px;color:#8b7358;margin-top:5px">可上傳存摺封面，系統會嘗試自動帶入 2-3 匯款資訊的收款人、銀行、分行與帳號。</div></div>'
+  +'</div>';
+}
 function paymentFieldsHtml(){
   return'<div style="background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:9px;margin-bottom:8px">'
     +'<div style="font-size:11px;font-weight:650;color:var(--brtxt);margin-bottom:7px">匯款資訊</div>'
@@ -3468,7 +3494,6 @@ function paymentFieldsHtml(){
     +'<div class="fr2"><div class="fg"><label class="fl">收款人 *</label><input id="nr-payee" placeholder="收款人姓名或公司名稱"></div><div class="fg"><label class="fl">預計匯款日 *</label><input type="date" id="nr-paydate" value="'+todayIso()+'"></div></div>'
     +'<div class="fg"><label class="fl">銀行類別 *</label><select id="nr-bank-type" onchange="bankTypeChanged()"><option value="mega">兆豐銀行</option><option value="other">非兆豐銀行</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">選擇非兆豐銀行且手續費為己方支出時，系統會多列公司設定的匯款手續費（預設 15 元）。</div></div>'
     +'<div class="fr3" id="nr-bank-detail"><div class="fg"><label class="fl">銀行資訊 *</label><input id="nr-bank-name" placeholder="例：玉山銀行 / 017 兆豐銀行" oninput="bankNameChanged()"></div><div class="fg"><label class="fl">分行 *</label><input id="nr-bank-branch" required placeholder="例：南京東路分行"></div><div class="fg"><label class="fl">帳號 *</label><input id="nr-bank-no" placeholder="例：808-678-000000"></div></div>'
-    +'<div class="fg" style="background:#fffaf3;border:1px solid #efd7b8;border-radius:8px;padding:8px"><label class="fl">存摺封面（選填）</label><input type="file" id="nr-passbook-file" accept="image/*,.pdf" onchange="passbookFileChange(this)" style="font-size:11px;width:100%"><div id="nr-passbook-status" style="font-size:10px;color:#8b7358;margin-top:5px">可上傳存摺封面，系統會嘗試自動帶入收款人、銀行、分行與帳號。</div></div>'
     +'</div>';
 }
 function hrBatchPaymentFieldsHtml(){
@@ -3733,7 +3758,7 @@ function refundFieldsHtml(){
   if(!S.refundRows.length)S.refundRows=[refundDefaultRow()];
   var mode=S.nrRec||'none';
   var hint=mode==='void_invoice'?'此類型需在下方附件區上傳「原發票電子檔」，送出時會一起交給主管與會計檢核。':'此類型適用於未開發票的多匯款、匯錯帳戶或其他無憑據退款。';
-  return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">退費申請資料</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="refundAdd()">新增列</button><button class="btn-g" onclick="refundApplySummary()">回填金額</button></div></div><div style="padding:11px">'
+  return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="refundAdd()">新增列</button><button class="btn-g" onclick="refundApplySummary()">回填金額</button></div></div><div style="padding:11px">'
     +'<div class="fr2"><div class="fg"><label class="fl">退費情境 *</label><select id="rf-scenario" onchange="S.nrRec=this.value;updNRAcct();renderNR()">'+(NR_REC.refund_request||[]).map(function(r){return'<option value="'+r.id+'" '+(mode===r.id?'selected':'')+'>'+r.l+'</option>';}).join('')+'</select></div><div class="fg"><label class="fl">退費合計</label><input id="rf-total" readonly value="'+fmt(refundSum())+'"></div></div>'
     +'<div style="font-size:11px;color:#8b7358;line-height:1.5;background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:8px;margin-bottom:9px">'+hint+'</div>'
     +'<div id="refund-sheet"></div>'
@@ -3981,8 +4006,7 @@ function hrExpenseFieldsHtml(){
 }
 function hrExpenseSideHtml(){
   return'<div style="margin-top:10px">'+
-    '<div class="card" style="width:100%"><div class="chd"><span class="cht">2-3. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="hrAdd()">新增列</button><button class="btn-g" onclick="hrApplySummary()">回填金額</button></div></div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">此表獨立滿版顯示，會隨申請單自動產生 Excel 附件，整批交給主管、會計與後續簽核關卡檢核。</div><div id="hr-expense-sheet"></div></div></div>'
-    +'<div style="display:flex;gap:8px;margin:10px 0"><button class="btn-s" style="flex:1;justify-content:center" onclick="nrSaveDraft()">儲存草稿</button><button class="btn-p" style="flex:2;justify-content:center" onclick="submitNR()">送出申請 →</button></div>'
+    '<div class="card" style="width:100%"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="hrAdd()">新增列</button><button class="btn-g" onclick="hrApplySummary()">回填金額</button></div></div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">此表獨立滿版顯示，會隨申請單自動產生 Excel 附件，整批交給主管、會計與後續簽核關卡檢核。</div><div id="hr-expense-sheet"></div></div></div>'
     +lazyApprovalFlowHtml()
   +'</div>';
 }
