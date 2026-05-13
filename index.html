@@ -2715,8 +2715,8 @@ function renderLazyExpensePage(){
           +'<div class="fg"><label class="fl">備註內容</label><textarea id="nr-desc" rows="3" placeholder="補充說明，可由 Excel 明細自動帶入"></textarea></div>'
         +'</div></div>'
         +'<div class="card"><div class="chd"><span class="cht">2-2. 上傳憑據</span><button class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button></div><div style="padding:12px">'
-          +'<div class="fg" style="margin-bottom:8px"><label class="fl">憑證類型</label><select id="nr-rec-lazy" onchange="S.nrRec=this.value;updNRAcct()">'+recOpts+'</select></div>'
-          +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">UPLOAD RECEIPTS</div><div style="font-size:14px;font-weight:650;color:#334155;margin-bottom:3px">點擊或拖放發票 / 收據 / PDF</div><div style="font-size:11px;color:#94a3b8">可一次上傳多張 JPG、PNG、PDF、Word、Excel</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" onchange="nrFileChange(this)"></div>'
+          +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">UPLOAD RECEIPTS</div><div style="font-size:14px;font-weight:650;color:#334155;margin-bottom:3px">點擊或拖放發票 / 收據 / PDF</div><div style="font-size:11px;color:#94a3b8;line-height:1.5">可一次上傳多張 JPG、PNG、PDF、Word、Excel；建議一張發票拍成一張照片，多張發票請分開拍後一次上傳。</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" onchange="nrFileChange(this)"></div>'
+          +'<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #f0c987;color:#7c3f00;font-size:11px;line-height:1.55">提醒：請不要把很多張發票拍成同一張照片，OCR 可能只辨識到其中一張。</div>'
           +'<div id="nr-flist" style="margin-top:7px">'+fList+'</div>'
           +'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OpenAI 解析憑據」，右側會產生可編輯表格。</div>'+lazyProgressHtml()
         +'</div></div>'
@@ -3174,7 +3174,7 @@ function syncLazyBankFeeRow(render){
   S.lazyRows=S.lazyRows.filter(function(r){return !r.systemFee;});
   var fee=lazyFeeRowAmount();
   if(fee>0){
-    S.lazyRows.push({no:'',date:todayIso(),item:'銀行手續費（己方支出，免憑證）',qty:1,unitName:'筆',unitPrice:fee,netAmount:fee,taxAmount:0,grossAmount:fee,total:fee,file:'免憑證',systemFee:true});
+    S.lazyRows.push({no:'',date:todayIso(),buyerTaxId:'',sellerTaxId:'',item:'銀行手續費（己方支出，免憑證）',qty:1,unitName:'筆',unitPrice:fee,netAmount:fee,taxAmount:0,grossAmount:fee,total:fee,file:'免憑證',systemFee:true});
   }
   if(render)renderLazySheet();
 }
@@ -3206,6 +3206,8 @@ function renderLazySheet(){
       +'<td style="width:34px;text-align:center;color:#94a3b8">'+(i+1)+'</td>'
       +'<td><input '+(r.systemFee?'readonly':'')+' value="'+escAttr(r.no||'')+'" onchange="lazyEdit('+i+',\'no\',this.value)"></td>'
       +'<td><input '+(r.systemFee?'readonly':'')+' type="date" value="'+escAttr(r.date||'')+'" onchange="lazyEdit('+i+',\'date\',this.value)"></td>'
+      +'<td><input '+(r.systemFee?'readonly':'')+' value="'+escAttr(r.buyerTaxId||r.buyerTax||'')+'" onchange="lazyEdit('+i+',\'buyerTaxId\',this.value)"></td>'
+      +'<td><input '+(r.systemFee?'readonly':'')+' value="'+escAttr(r.sellerTaxId||r.sellerTax||'')+'" onchange="lazyEdit('+i+',\'sellerTaxId\',this.value)"></td>'
       +'<td><input '+(r.systemFee?'readonly':'')+' value="'+escAttr(r.item||'')+'" onchange="lazyEdit('+i+',\'item\',this.value)"></td>'
       +'<td><input '+(r.systemFee?'readonly':'')+' type="number" min="0" step="0.01" value="'+escAttr(r.qty||1)+'" onchange="lazyEdit('+i+',\'qty\',this.value)"></td>'
       +'<td><input '+(r.systemFee?'readonly':'')+' value="'+escAttr(r.unitName||'')+'" placeholder="個" onchange="lazyEdit('+i+',\'unitName\',this.value)"></td>'
@@ -3218,7 +3220,7 @@ function renderLazySheet(){
       +'</tr>';
   }).join('');
   box.innerHTML='<style>#lazy-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0}#lazy-sheet td,#lazy-sheet th{border:1px solid #e8dcc8;padding:0}#lazy-sheet th{background:#f7ead6;color:#7c3f00;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
-    +'<div class="lazy-sheet-scroll sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:1040px;width:100%"><thead><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="lazy-sheet-scroll sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:1200px;width:100%"><thead><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>買方統編</th><th>賣方統編</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="lazyAdd()">新增一列</button><button class="btn-g" onclick="applyLazySummary()">回填金額與說明</button><button class="btn-g" onclick="nrSaveDraft()">暫存</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">明細合計（含稅，含手續費）</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(lazyDisplaySum())+'</div></div></div>';
   var nextScroll=box.querySelector('.lazy-sheet-scroll');
   if(nextScroll){nextScroll.scrollLeft=oldLeft;nextScroll.scrollTop=oldTop;}
@@ -3238,11 +3240,13 @@ window.lazyEdit=function(i,k,v){
   }
   renderLazySheet();applyLazySummary();
 };
-window.lazyAdd=function(){S.lazyRows=(S.lazyRows||[]).filter(function(r){return !r.systemFee;});S.lazyRows.push({no:'',date:todayIso(),item:'',qty:1,unitName:'',unitPrice:0,netAmount:0,taxAmount:0,grossAmount:0,total:0,file:''});syncLazyBankFeeRow(true);applyLazySummary();};
+window.lazyAdd=function(){S.lazyRows=(S.lazyRows||[]).filter(function(r){return !r.systemFee;});S.lazyRows.push({no:'',date:todayIso(),buyerTaxId:'',sellerTaxId:'',item:'',qty:1,unitName:'',unitPrice:0,netAmount:0,taxAmount:0,grossAmount:0,total:0,file:''});syncLazyBankFeeRow(true);applyLazySummary();};
 window.lazyDel=function(i){S.lazyRows.splice(i,1);syncLazyBankFeeRow(true);applyLazySummary();};
 function invoiceRowsFromOcr(data,fileName){
   var inv=data.invoice||data||{};
   var no=inv.invoice_number||'',date=inv.invoice_date||todayIso();
+  var buyerTaxId=inv.buyer_tax_id||inv.buyerTaxId||inv.buyer_uniform_number||inv.buyer_tax_number||'';
+  var sellerTaxId=inv.seller_tax_id||inv.sellerTaxId||inv.seller_uniform_number||inv.seller_tax_number||'';
   var items=Array.isArray(inv.items)?inv.items:[];
   if(!items.length)items=[{item_name:inv.description||'憑據費用',quantity:1,unit:'',unit_price:inv.amount_excluding_tax||inv.total_amount||0,subtotal:inv.amount_excluding_tax||inv.subtotal||0,tax_amount:inv.tax_amount||0,total_amount:inv.total_amount||inv.amount_excluding_tax||0}];
   var invNet=num(inv.amount_excluding_tax||inv.subtotal||0),invTax=num(inv.tax_amount||0),invTotal=num(inv.total_amount||0);
@@ -3260,7 +3264,7 @@ function invoiceRowsFromOcr(data,fileName){
       if(invTax)tax=invTax;
       if(invTotal)gross=invTotal;
     }
-    return{no:no,date:date,item:x.item_name||x.name||x.description||inv.description||'憑據費用',qty:qty,unitName:x.unit||x.unit_name||x.unitName||'',unitPrice:unitPrice,netAmount:net,taxAmount:tax,grossAmount:gross,total:gross,file:fileName};
+    return{no:no,date:date,buyerTaxId:buyerTaxId,sellerTaxId:sellerTaxId,item:x.item_name||x.name||x.description||inv.description||'憑據費用',qty:qty,unitName:x.unit||x.unit_name||x.unitName||'',unitPrice:unitPrice,netAmount:net,taxAmount:tax,grossAmount:gross,total:gross,file:fileName};
   });
 }
 function ocrErrorMessage(err){
@@ -3290,7 +3294,7 @@ window.lazyAnalyze=async function(){
       setLazyProgress((i+1)/S.nrFiles.length*100,'已完成 '+(i+1)+'/'+S.nrFiles.length+'（'+(f.name||f.n||'附件')+'）');
     }catch(err){
       var em=ocrErrorMessage(err);
-      all.push({no:'',date:todayIso(),item:'辨識失敗：'+em,qty:1,unitName:'',unitPrice:0,netAmount:0,taxAmount:0,grossAmount:0,total:0,file:f.name});
+      all.push({no:'',date:todayIso(),buyerTaxId:'',sellerTaxId:'',item:'辨識失敗：'+em,qty:1,unitName:'',unitPrice:0,netAmount:0,taxAmount:0,grossAmount:0,total:0,file:f.name});
       setLazyProgress((i+1)/S.nrFiles.length*100,'辨識失敗：'+em,true);
     }
   }
@@ -3299,16 +3303,16 @@ window.lazyAnalyze=async function(){
 };
 function lazyCsvAttachment(){
   if(!S.lazyRows.length)return null;
-  var head=['發票號碼','發票日期','品項','數量','單位','單價','未稅','營業稅','含稅價格','來源檔案'];
+  var head=['發票號碼','發票日期','買方統編','賣方統編','品項','數量','單位','單價','未稅','營業稅','含稅價格','來源檔案'];
   var esc=function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';};
-  var csv='\ufeff'+[head].concat(S.lazyRows.map(function(r){return[r.no,r.date,r.item,r.qty,r.unitName||'',r.unitPrice||r.unit||0,lazyNetAmount(r),lazyTaxAmount(r),lazyRowTotal(r),r.file];})).map(function(row){return row.map(esc).join(',');}).join('\n');
+  var csv='\ufeff'+[head].concat(S.lazyRows.map(function(r){return[r.no,r.date,r.buyerTaxId||r.buyerTax||'',r.sellerTaxId||r.sellerTax||'',r.item,r.qty,r.unitName||'',r.unitPrice||r.unit||0,lazyNetAmount(r),lazyTaxAmount(r),lazyRowTotal(r),r.file];})).map(function(row){return row.map(esc).join(',');}).join('\n');
   return {n:'費用明細_'+todayIso()+'.csv',t:'csv',mime:'text/csv',size:csv.length,url:'data:text/csv;charset=utf-8,'+encodeURIComponent(csv),uploadedAt:new Date().toISOString()};
 }
 function lazyDetailExcelAttachment(meta){
   meta=meta||{};
   var cell=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
-  var rows=(S.lazyRows.length?S.lazyRows:[{no:'',date:todayIso(),item:meta.desc||'申請明細',qty:1,unitName:'',unitPrice:meta.amount||0,netAmount:meta.amount||0,taxAmount:0,grossAmount:meta.amount||0,total:meta.amount||0,file:''}]).map(function(r,i){
-    return'<tr><td>'+(i+1)+'</td><td>'+cell(r.no)+'</td><td>'+cell(r.date)+'</td><td>'+cell(r.item)+'</td><td>'+cell(r.qty)+'</td><td>'+cell(r.unitName||'')+'</td><td>'+cell(r.unitPrice||r.unit||0)+'</td><td>'+cell(lazyNetAmount(r))+'</td><td>'+cell(lazyTaxAmount(r))+'</td><td>'+cell(lazyRowTotal(r))+'</td><td>'+cell(r.file)+'</td></tr>';
+  var rows=(S.lazyRows.length?S.lazyRows:[{no:'',date:todayIso(),buyerTaxId:'',sellerTaxId:'',item:meta.desc||'申請明細',qty:1,unitName:'',unitPrice:meta.amount||0,netAmount:meta.amount||0,taxAmount:0,grossAmount:meta.amount||0,total:meta.amount||0,file:''}]).map(function(r,i){
+    return'<tr><td>'+(i+1)+'</td><td>'+cell(r.no)+'</td><td>'+cell(r.date)+'</td><td>'+cell(r.buyerTaxId||r.buyerTax||'')+'</td><td>'+cell(r.sellerTaxId||r.sellerTax||'')+'</td><td>'+cell(r.item)+'</td><td>'+cell(r.qty)+'</td><td>'+cell(r.unitName||'')+'</td><td>'+cell(r.unitPrice||r.unit||0)+'</td><td>'+cell(lazyNetAmount(r))+'</td><td>'+cell(lazyTaxAmount(r))+'</td><td>'+cell(lazyRowTotal(r))+'</td><td>'+cell(r.file)+'</td></tr>';
   }).join('');
   var html='\ufeff<html><head><meta charset="utf-8"><style>body{font-family:Arial,\"Microsoft JhengHei\",sans-serif}table{border-collapse:collapse;margin-bottom:18px;width:100%}td,th{border:1px solid #999;padding:6px;font-size:12px;vertical-align:middle}th{background:#f4b183;color:#222}.title{font-size:18px;font-weight:bold;color:#7c3f00;margin:0 0 10px}</style></head><body>'
     +'<div class="title">經費明細表</div><table><tr><th colspan="4">基本資料</th></tr>'
@@ -3316,7 +3320,7 @@ function lazyDetailExcelAttachment(meta){
     +'<tr><td>申請人</td><td>'+cell(meta.app)+'</td><td>公司 / 法人</td><td>'+cell(meta.entity)+'</td></tr>'
     +'<tr><td>部門</td><td>'+cell(meta.department)+'</td><td>申請日期</td><td>'+cell(meta.date)+'</td></tr>'
     +'<tr><td>收款人</td><td>'+cell(meta.payee)+'</td><td>銀行帳號</td><td>'+cell(meta.bankText)+'</td></tr>'
-    +'</table><table><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th></tr>'+rows+'</table></body></html>';
+    +'</table><table><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>買方統編</th><th>賣方統編</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th></tr>'+rows+'</table></body></html>';
   return {n:'經費明細表_'+(meta.no||todayIso())+'.xls',t:'xls',mime:'application/vnd.ms-excel',size:html.length,url:'data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(html),uploadedAt:new Date().toISOString()};
 }
 function loadImageForPdf(src){
@@ -3391,8 +3395,8 @@ function lazyExcelAttachment(files,meta){
   files=normalizeFiles(files||[]);
   meta=meta||{};
   var cell=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
-  var detailRows=(S.lazyRows.length?S.lazyRows:[{no:'',date:todayIso(),item:meta.desc||'申請明細',qty:1,unitName:'',unitPrice:meta.amount||0,netAmount:meta.amount||0,taxAmount:0,grossAmount:meta.amount||0,total:meta.amount||0,file:''}]).map(function(r,i){
-    return'<tr><td>'+(i+1)+'</td><td>'+cell(r.no)+'</td><td>'+cell(r.date)+'</td><td>'+cell(r.item)+'</td><td>'+cell(r.qty)+'</td><td>'+cell(r.unitName||'')+'</td><td>'+cell(r.unitPrice||r.unit||0)+'</td><td>'+cell(lazyNetAmount(r))+'</td><td>'+cell(lazyTaxAmount(r))+'</td><td>'+cell(lazyRowTotal(r))+'</td><td>'+cell(r.file)+'</td></tr>';
+  var detailRows=(S.lazyRows.length?S.lazyRows:[{no:'',date:todayIso(),buyerTaxId:'',sellerTaxId:'',item:meta.desc||'申請明細',qty:1,unitName:'',unitPrice:meta.amount||0,netAmount:meta.amount||0,taxAmount:0,grossAmount:meta.amount||0,total:meta.amount||0,file:''}]).map(function(r,i){
+    return'<tr><td>'+(i+1)+'</td><td>'+cell(r.no)+'</td><td>'+cell(r.date)+'</td><td>'+cell(r.buyerTaxId||r.buyerTax||'')+'</td><td>'+cell(r.sellerTaxId||r.sellerTax||'')+'</td><td>'+cell(r.item)+'</td><td>'+cell(r.qty)+'</td><td>'+cell(r.unitName||'')+'</td><td>'+cell(r.unitPrice||r.unit||0)+'</td><td>'+cell(lazyNetAmount(r))+'</td><td>'+cell(lazyTaxAmount(r))+'</td><td>'+cell(lazyRowTotal(r))+'</td><td>'+cell(r.file)+'</td></tr>';
   }).join('');
   var imageRows=files.map(function(f,i){
     var isImg=String(f.mime||'').indexOf('image/')===0||/^data:image\//.test(f.url||'');
@@ -3407,7 +3411,7 @@ function lazyExcelAttachment(files,meta){
     +'<tr><td>申請金額</td><td>'+cell(meta.amount)+'</td><td>預計匯款日</td><td>'+cell(meta.expectedPayDate)+'</td></tr>'
     +'<tr><td>收款人</td><td>'+cell(meta.payee)+'</td><td>銀行帳號</td><td>'+cell(meta.bankText)+'</td></tr>'
     +'<tr><td>目的 / 說明</td><td colspan="3">'+cell(meta.desc)+'</td></tr></table>'
-    +'<table><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th></tr>'+detailRows+'</table>'
+    +'<table><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>買方統編</th><th>賣方統編</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th></tr>'+detailRows+'</table>'
     +'<table><tr><th>#</th><th>檔名</th><th>憑據照片</th></tr>'+imageRows+'</table>'
     +'</body></html>';
   return {n:'懶人申請憑據彙整_'+(meta.no||todayIso())+'.xls',t:'xls',mime:'application/vnd.ms-excel',size:html.length,url:'data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(html),uploadedAt:new Date().toISOString()};
