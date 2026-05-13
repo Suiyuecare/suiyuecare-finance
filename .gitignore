@@ -1,0 +1,9 @@
+.bin/
+.env
+.env.*
+!.env.example
+.vercel/
+supabase/.branches/
+supabase/.temp/
+*client_secret*.json
+*.pem
