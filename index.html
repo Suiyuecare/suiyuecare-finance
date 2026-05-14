@@ -2874,7 +2874,7 @@ function renderNR(){
     c.innerHTML='<div style="display:flex;flex-direction:column;gap:10px;'+(S.nrType==='hr_expense_request'?'max-width:1180px;margin:0 auto;width:100%;':'')+'">'
       +'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span><button class="btn-g" onclick="'+((S.nrType==='travel_request'||S.nrType==='purchase_request'||S.nrType==='hr_expense_request')?'nrBack(1)':'nrBack(2)')+'">← 返回</button></div><div style="padding:11px"><div class="fr2">'
         +(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():S.nrType==='travel_request'?travelAttachmentGuideHtml():receiptUploadPanelHtml({ocr:S.nrType==='expense_reimbursement',kind:S.nrType==='hr_expense_request'?'payroll':'receipt'}))
-        +(S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A/9B 勞報單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
+        +(S.nrType==='travel_request'?'':S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A/9B 勞報單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
       +'</div></div></div>'
       +sheetHtml
       +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:11px"><div class="nr-two-col"><div class="nr-info-panel"><div class="nr-info-title">支出資訊</div>'+leftInfoHtml+'</div><div class="nr-info-panel"><div class="nr-info-title">匯款資訊</div>'+rightPayHtml+'</div></div>'+(S.nrType==='travel_request'?'':submitActions)
@@ -3552,6 +3552,18 @@ function travelExcelAttachment(info,meta){
   var html='\ufeff<html><head><meta charset="utf-8"><style>body{font-family:Arial,\"Microsoft JhengHei\",sans-serif}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:7px;font-size:12px;text-align:left}th{background:#f4b183;width:180px}.title{font-size:18px;font-weight:bold;color:#7c3f00;margin-bottom:12px}</style></head><body><div class="title">差旅申請摘要</div><table>'+rows+'</table></body></html>';
   return {n:'差旅申請摘要_'+(meta.no||todayIso())+'.xls',t:'xls',mime:'application/vnd.ms-excel',size:html.length,url:'data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(html),uploadedAt:new Date().toISOString()};
 }
+function travelExpenseSheetAttachment(info,meta){
+  info=info||{};meta=meta||{};
+  var cell=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+  var rows=(info.rows||[]).map(function(r,i){
+    return'<tr><td>'+cell(i+1)+'</td><td>'+cell(r.label||travelKindLabel(r.kind))+'</td><td>'+cell(r.amount||0)+'</td><td>'+cell(r.kind==='other'?'不設上限':(r.limit||0))+'</td><td>'+cell(r.note||'')+'</td><td>'+cell(r.files||'')+'</td><td>'+cell(travelRowRuleText(r.kind))+'</td></tr>';
+  }).join('');
+  var total=(info.rows||[]).reduce(function(s,r){return s+num(r.amount);},0);
+  var html='\ufeff<html><head><meta charset="utf-8"><style>body{font-family:Arial,\"Microsoft JhengHei\",sans-serif}table{border-collapse:collapse;width:100%;margin-bottom:16px}th,td{border:1px solid #999;padding:7px;font-size:12px;text-align:left}th{background:#f7ead6}.title{font-size:18px;font-weight:bold;color:#7c3f00;margin-bottom:12px}</style></head><body><div class="title">差旅經費明細表</div>'
+    +'<table><tr><th>申請單號</th><td>'+cell(meta.no)+'</td><th>申請人</th><td>'+cell(meta.app)+'</td></tr><tr><th>同行人員</th><td colspan="3">'+cell(info.people||'')+'</td></tr><tr><th>合計</th><td colspan="3">'+cell(total)+'</td></tr></table>'
+    +'<table><tr><th>項次</th><th>費用項目</th><th>本次申請金額</th><th>申請金額上限</th><th>說明</th><th>憑據</th><th>規則</th></tr>'+rows+'</table></body></html>';
+  return {n:'差旅經費明細表_'+(meta.no||todayIso())+'.xls',t:'xls',mime:'application/vnd.ms-excel',size:html.length,url:'data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(html),uploadedAt:new Date().toISOString()};
+}
 function advanceTemplateHtml(){
   var today=todayIso();
   return '\ufeff<html><head><meta charset="utf-8"><style>'
@@ -3606,10 +3618,16 @@ function receiptUploadPanelHtml(opt){
   +'</div>';
 }
 function travelAttachmentGuideHtml(){
-  return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%">'
-    +'<div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">差旅憑據分類上傳</div>'
-    +'<div style="font-size:11px;color:#8b7358;line-height:1.7">差旅申請的憑據請到下方「2-4. 差旅申請資料」依類別上傳，僅開放住宿費、交通費、停車費、其他費用憑據。膳什費依管理辦法自動計算，不需要上傳憑據。</div>'
-    +'<div style="margin-top:8px;padding:8px;border-radius:8px;background:#fff;border:1px solid #f0e0c8;font-size:11px;color:#7c3f00;line-height:1.6">上傳後按「OpenAI 解析差旅憑據」，系統會把各項發票金額帶入 2-2 差旅費明細表。</div>'
+  return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%;grid-column:1/-1">'
+    +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:10px"><div><div style="font-size:12px;font-weight:650;color:#334155">差旅附件與同行人員</div><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-top:2px">先選本趟參與差旅的員工，再依住宿、交通、停車、其他四類上傳憑據；每一類都可上傳多份資料。</div></div><button class="btn-p" onclick="travelAnalyzeReceipts()">OpenAI 解析</button></div>'
+    +'<div class="fg"><label class="fl">本趟同行人員 *（可複選）</label><select id="tr-people-select" multiple size="6" onchange="travelPeopleSelectChanged(this)" style="min-height:132px">'+travelPeopleOptionsHtml()+'</select><div style="font-size:10px;color:#8b7358;margin-top:4px">清冊會使用目前系統 / Supabase 載入的啟用帳號。選到的人員類別會依差旅費管理辦法自動計算 2-2 申請金額上限與膳什費。</div></div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:8px">'
+      +travelExpenseItemHtml('lodging','住宿費','住宿憑據')
+      +travelExpenseItemHtml('transport','交通費','交通憑據')
+      +travelExpenseItemHtml('parking','停車費','停車憑據')
+      +travelExpenseItemHtml('other','其他費用','其他憑據')
+    +'</div>'
+    +'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳憑據後按「OpenAI 解析」，系統會依分類把金額填入 2-2 經費明細表；膳什費免憑據，會直接依同行人員類別與出差天數帶入。</div>'+lazyProgressHtml()
   +'</div>';
 }
 function advanceRequestUploadPanelHtml(){
@@ -3714,17 +3732,11 @@ function collectPaymentInfo(){
 }
 function travelFieldsHtml(){
   var opts=['公務出差','教育訓練','會議','拜訪','場勘','外部稽核','督導訪視','單位合作'];
-  var rule='<div style="background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:9px;margin-bottom:9px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><div style="font-size:12px;font-weight:650;color:#334155">差旅費管理辦法摘要</div><div style="font-size:11px;color:#8b7358;line-height:1.7;margin-top:3px">住宿費：主管級 2,000 元 / 晚，一般同仁 1,500 元 / 晚。膳什費：主管級 700 元 / 日，一般同仁 400 元 / 日。停車費：每日 300 元。住宿、交通、停車與其他費用需附憑據；膳什費依同行人員類別與天數自動計算。</div></div><button class="btn-s" onclick="openTravelPolicy()">檢視辦法</button></div></div>';
   return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">2-4. 差旅申請資料</span></div><div style="padding:11px">'
-    +rule
-    +'<div class="fg"><label class="fl">本趟同行人員 *</label><div id="tr-people-box" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px"></div><div style="font-size:10px;color:#8b7358;margin-top:4px">可複選員工；住宿與膳什費上限會依每位員工層級自動加總。</div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">差旅類型 *</label><select id="tr-type">'+opts.map(function(o){return'<option value="'+o+'">'+o+'</option>';}).join('')+'</select></div><div class="fg"><label class="fl">關聯專案／活動</label><input id="tr-project" placeholder="例：日照籌設、標案執行、居服拓區、訓練課程"></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">出差事由 *</label><input id="tr-reason" placeholder="簡述為什麼需要出差"></div><div class="fg"><label class="fl">預期成果 *</label><input id="tr-outcome" placeholder="例：會議紀錄、訪視紀錄、報價單、照片、場勘報告"></div></div>'
     +'<div class="fr3"><div class="fg"><label class="fl">出發日期與時間 *</label><input type="datetime-local" id="tr-start" onchange="calcTravelDays();syncTravelRows()"></div><div class="fg"><label class="fl">返回日期與時間 *</label><input type="datetime-local" id="tr-end" onchange="calcTravelDays();syncTravelRows()"></div><div class="fg"><label class="fl">出差天數</label><input id="tr-days" readonly placeholder="系統自動計算"></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">出發地 *</label><input id="tr-from" placeholder="公司、家裡、服務據點等"></div><div class="fg"><label class="fl">目的地 *</label><input id="tr-to" placeholder="地址或區域"></div></div>'
-    +'<div style="font-size:12px;font-weight:650;color:#334155;margin:10px 0 7px">憑據上傳與解析</div>'
-    +'<div class="fr2">'+travelExpenseItemHtml('lodging','住宿費','住宿憑據')+travelExpenseItemHtml('transport','交通費','交通憑據')+travelExpenseItemHtml('parking','停車費','停車憑據')+travelExpenseItemHtml('other','其他費用','其他憑據')+'</div>'
-    +'<div style="display:flex;gap:8px;align-items:center;margin-top:8px;background:#fff;border:1px solid #f0e0c8;border-radius:9px;padding:9px"><div style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">上傳憑據後可使用 OpenAI 解析，系統會依分類把金額填入 2-2 差旅費明細表。膳什費不用上傳憑據，會直接依同行人員與出差天數計算。</div><button class="btn-p" onclick="travelAnalyzeReceipts()">OpenAI 解析差旅憑據</button></div>'
     +'</div></div>';
 }
 function travelExpenseItemHtml(key,label,fileLabel){
@@ -3734,7 +3746,7 @@ function travelExpenseItemHtml(key,label,fileLabel){
     +'<div id="tr-'+key+'-files" style="font-size:10px;color:#8b7358;margin-top:5px">'+fileLabel+'尚未上傳</div></div>';
 }
 function travelSheetHtml(){
-  return'<div class="card"><div class="chd"><span class="cht">2-2. 差旅費明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="travelAddOtherRow()">新增其他項目</button><button class="btn-g" onclick="syncTravelRows()">重新計算上限</button></div></div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">左欄「本次申請金額」不可大於右欄「申請金額上限」；其他費用不設上限但須附憑據與說明。</div><div id="travel-sheet"></div></div></div>';
+  return'<div class="card"><div class="chd"><span class="cht">2-2. 經費明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="travelAddOtherRow()">新增其他項目</button><button class="btn-g" onclick="syncTravelRows()">重新計算上限</button></div></div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">本次申請金額不可大於申請金額上限；其他費用不設上限但須附憑據與說明。</div><div id="travel-sheet"></div></div></div>';
 }
 function travelPeople(){
   var ids=(S.travelPeople&&S.travelPeople.length)?S.travelPeople:(S.user?[S.user.id]:[]);
@@ -3762,14 +3774,21 @@ function ensureTravelRows(){
     S.travelRows=['lodging','transport','meal','parking','other'].map(function(k){return{kind:k,label:travelKindLabel(k),amount:0,limit:0,note:'',files:''};});
   }
 }
-function renderTravelPeople(){
-  var box=el('tr-people-box');if(!box)return;
+function travelPeopleOptionsHtml(){
   if(!S.travelPeople||!S.travelPeople.length)S.travelPeople=S.user?[S.user.id]:[];
-  box.innerHTML=USERS.filter(function(u){return u.active;}).map(function(u){
+  return USERS.filter(function(u){return u.active;}).map(function(u){
     var checked=S.travelPeople.indexOf(u.id)>-1;
-    return'<label style="display:flex;gap:6px;align-items:center;background:#fff;border:1px solid #efd7b8;border-radius:8px;padding:7px;font-size:11px;color:#334155"><input type="checkbox" '+(checked?'checked':'')+' onchange="travelPersonToggle(\''+u.id+'\',this.checked)"> <span style="font-weight:650">'+u.n+'</span><span style="color:#94a3b8"> '+u.rL+'</span></label>';
+    return'<option value="'+u.id+'" '+(checked?'selected':'')+'>'+u.n+'（'+u.rL+' · '+u.dc+'）</option>';
   }).join('');
 }
+function renderTravelPeople(){
+  var sel=el('tr-people-select');if(!sel)return;
+  sel.innerHTML=travelPeopleOptionsHtml();
+}
+window.travelPeopleSelectChanged=function(sel){
+  S.travelPeople=Array.from(sel.selectedOptions||[]).map(function(o){return o.value;});
+  syncTravelRows();
+};
 window.travelPersonToggle=function(id,checked){
   if(!S.travelPeople)S.travelPeople=[];
   S.travelPeople=S.travelPeople.filter(function(x){return x!==id;});
@@ -4491,6 +4510,7 @@ window.submitNR=async function(){
   }else if(S.nrType==='travel_request'){
     var travelBundle=await receiptBundleAttachment(attachments,{no:no,typeLabel:tL,app:appName});
     if(travelBundle)attachments.unshift(travelBundle);
+    attachments.unshift(travelExpenseSheetAttachment(travelInfo,{no:no,app:appName,entity:ent.full||ent.s,department:dc+' '+dept.n,amount:amt}));
     attachments.unshift(travelExcelAttachment(travelInfo,{no:no,app:appName,entity:ent.full||ent.s,department:dc+' '+dept.n,amount:amt}));
   }else if(S.nrType==='welfare_request'){
     var welfareBundle=await receiptBundleAttachment(attachments,{no:no,typeLabel:tL,app:appName});
