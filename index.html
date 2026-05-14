@@ -2234,11 +2234,9 @@ window.nrDeptChanged=function(){
 };
 function normalizeRequestEntityDept(eid,dc){
   var deptEnt=entityOfDept(dc);
-  if(isSharedDept(gD(dc)))return {ok:true,eid:eid||deptEnt||currentUserEntityId(),dc:dc,shared:true};
-  if(deptEnt&&eid&&deptEnt!==eid)return {ok:false,eid:eid,dc:dc,expected:deptEnt};
-  if(!eid&&deptEnt)eid=deptEnt;
-  if(eid&&!dc)dc=firstDeptForEntity(eid);
-  return {ok:true,eid:eid,dc:dc};
+  if(!eid)eid=currentUserEntityId()||deptEnt||'E1';
+  if(!dc)dc=firstDeptForEntity(eid)||((DEPTS.find(function(d){return d.lv>0;})||{}).c)||'A1101';
+  return {ok:true,eid:eid,dc:dc,deptEntity:deptEnt||''};
 }
 var PT={dashboard:'集團財務儀表板',newreq:'新增放款申請',expenses:'放款申請',detail:'申請單詳情',approvals:'簽核管理',vouchers:'傳票查詢',invoices:'開立發票',bills:'繳費單管理',recv:'收款情形',reports:'三表總覽',ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',settings:'系統設定'};
 window.openLazyExpense=function(btn){
@@ -2712,7 +2710,6 @@ function renderLazyExpensePage(){
   var typeLabel=requestTypeLabel(S.nrType||'expense_reimbursement');
   var dOpts=DEPTS.filter(function(d){return d.lv>0;}).map(function(d){return'<option value="'+d.c+'">'+'　'.repeat(d.lv-1)+d.c+' '+d.n+'</option>';}).join('');
   var entOpts=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.full+'</option>';}).join('');
-  var applicantProfile=applicantProfileHtml();
   var userOpts=USERS.filter(function(u){return u.active;}).map(function(u){return'<option value="'+u.n+'">'+u.n+'（'+u.rL+' · '+u.dc+'）</option>';}).join('')+'<option value="__custom">自行輸入</option>';
   var recOpts=(NR_REC[S.nrType]||[]).map(function(r){return'<option value="'+r.id+'" '+(S.nrRec===r.id?'selected':'')+'>'+r.l+'</option>';}).join('');
   var payOpts=NR_PAY.map(function(p){return'<option value="'+p.id+'" '+(S.nrPay===p.id?'selected':'')+'>'+p.l+'</option>';}).join('');
@@ -2733,8 +2730,7 @@ function renderLazyExpensePage(){
         +'<div class="nr-info-panel"><div class="nr-info-title">支出資訊</div>'
           +advanceTemplateHtml
           +pettyModeHtml
-          +'<div class="fr2"><div class="fg"><label class="fl">支出人 / 申請人 *</label><select id="nr-app-sel" onchange="applicantSelectChanged()"><option value="">選擇員工</option>'+userOpts+'</select></div><div class="fg" id="nr-app-custom-wrap" style="display:none"><label class="fl">自行填寫申請人</label><input id="nr-app" value="'+(S.user?escAttr(S.user.n):'')+'" placeholder="申請人姓名"></div></div>'
-          +'<div class="fr2"><div class="fg"><label class="fl">公司 / 法人 *</label><select id="nr-ent" onchange="nrEntityChanged()">'+entOpts+'</select></div><div class="fg"><label class="fl">該筆費用支出組別/部門/專案 *</label><select id="nr-dept" onchange="nrDeptChanged()">'+dOpts+'</select></div></div>'
+          +expenseOwnerFieldsHtml(entOpts,dOpts,userOpts,S.user?S.user.n:'')
           +'<div class="fg"><label class="fl">表單填寫日期</label><input type="date" id="nr-date" value="'+todayIso()+'"></div>'
           +'<div class="fg"><label class="fl">目的 *</label><input id="nr-desc-purpose" placeholder="例：活動採買、交通差旅、辦公用品"></div>'
           +'<div class="fg"><label class="fl">備註內容</label><textarea id="nr-desc" rows="3" placeholder="補充說明，可由 Excel 明細自動帶入"></textarea></div>'
@@ -2768,7 +2764,6 @@ function renderNR(){
   if(S.lazyMode){renderLazyExpensePage();return;}
   var dOpts=DEPTS.filter(function(d){return d.lv>0;}).map(function(d){return'<option value="'+d.c+'">'+'　'.repeat(d.lv-1)+d.c+' '+d.n+'</option>';}).join('');
   var entOpts=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.full+'</option>';}).join('');
-  var applicantProfile=applicantProfileHtml();
   if(S.nrStep===1){
     if(grid)grid.style.gridTemplateColumns='1fr';
     if(side)side.style.display='none';
@@ -2793,17 +2788,7 @@ function renderNR(){
     var refundHtml='';
     var purchaseHtml=S.nrType==='purchase_request'?purchaseFieldsHtml():'';
     var hrHtml=S.nrType==='hr_expense_request'?hrExpenseFieldsHtml():'';
-    var ownerFieldsHtml=S.nrType==='hr_expense_request'
-      ? applicantProfile
-        +'<div class="fg"><label class="fl">支出法人 *</label><select id="nr-ent" onchange="nrEntityChanged()">'+entOpts+'</select></div>'
-        +'<div class="fr2"><div class="fg"><label class="fl">該筆費用支出組別/部門/專案 *</label><select id="nr-dept" onchange="nrDeptChanged()" style="font-size:11px">'+dOpts+'</select></div>'
-          +'<div class="fg"><label class="fl">申請人 * <span style="font-size:10px;color:#94a3b8">（可選擇員工或自行輸入）</span></label><select id="nr-app-sel" onchange="applicantSelectChanged()"><option value="">— 選擇員工 —</option>'+userOpts+'</select></div></div>'
-        +'<div class="fg" id="nr-app-custom-wrap" style="display:none"><label class="fl">自行填寫申請人</label><input type="text" id="nr-app" placeholder="申請人姓名" value="'+defApp+'"></div>'
-      : applicantProfile
-        +'<div class="fr2"><div class="fg"><label class="fl">該筆費用支出組別/部門/專案 *</label><select id="nr-dept" onchange="nrDeptChanged()" style="font-size:11px">'+dOpts+'</select></div><div class="fg"><label class="fl">支出法人 *</label><select id="nr-ent" onchange="nrEntityChanged()">'+entOpts+'</select></div></div>'
-        +'<div class="fg"><label class="fl">申請人 * <span style="font-size:10px;color:#94a3b8">（可選擇員工或自行輸入）</span></label>'
-          +'<div style="display:flex;gap:6px"><select id="nr-app-sel" onchange="applicantSelectChanged()" style="flex:1"><option value="">— 選擇員工 —</option>'+userOpts+'</select>'
-          +'<div id="nr-app-custom-wrap" style="display:none;flex:1"><label class="fl">自行填寫申請人</label><input type="text" id="nr-app" placeholder="申請人姓名" value="'+defApp+'"></div></div></div>';
+    var ownerFieldsHtml=expenseOwnerFieldsHtml(entOpts,dOpts,userOpts,defApp);
     var step3Cols='1fr';
     var step3WrapStyle='display:grid;grid-template-columns:'+step3Cols+';gap:10px;align-items:start';
     if(S.nrType==='hr_expense_request')step3WrapStyle+=';max-width:1180px;margin:0 auto;width:100%';
@@ -2861,6 +2846,17 @@ function applicantProfileHtml(){
     +'</div>'
     +'<div style="font-size:10px;color:#8b7358;margin-top:5px">下方「支出法人 / 支出部門」才是三表與部門分類帳認列依據；申請人資料只記錄送件者。</div>'
   +'</div>';
+}
+function expenseOwnerFieldsHtml(entOpts,dOpts,userOpts,defApp){
+  return '<div class="fr2">'
+      +'<div class="fg"><label class="fl">支出法人 *</label><select id="nr-ent" onchange="nrEntityChanged()">'+entOpts+'</select></div>'
+      +'<div class="fg"><label class="fl">該筆費用支出組別/部門/專案 *</label><select id="nr-dept" onchange="nrDeptChanged()" style="font-size:11px">'+dOpts+'</select></div>'
+    +'</div>'
+    +'<div class="fr2">'
+      +'<div class="fg"><label class="fl">申請人 * <span style="font-size:10px;color:#94a3b8">（可選擇員工或自行輸入）</span></label><select id="nr-app-sel" onchange="applicantSelectChanged()"><option value="">— 選擇員工 —</option>'+userOpts+'</select></div>'
+      +'<div class="fg" id="nr-app-custom-wrap" style="display:none"><label class="fl">自行填寫申請人</label><input type="text" id="nr-app" placeholder="申請人姓名" value="'+escAttr(defApp||'')+'"></div>'
+    +'</div>'
+    +'<div style="font-size:10px;color:#8b7358;line-height:1.5;margin-top:-3px;margin-bottom:3px">三表與部門分類帳只依「支出法人」及「該筆費用支出組別/部門/專案」認列；申請人只作為送件與簽核追蹤。</div>';
 }
 function applyCurrentUserDefaults(){
   if(!S.user)return;
@@ -4234,10 +4230,6 @@ window.submitNR=async function(){
   var no='EXP-2026-'+(REQS.length+502).toString().padStart(4,'0');
   var eid=(el('nr-ent')||{}).value||'E1';var dc=(el('nr-dept')||{}).value||(S.user&&S.user.dc)||'A1101';
   var entityDeptCheck=normalizeRequestEntityDept(eid,dc);
-  if(!entityDeptCheck.ok){
-    alert('法人與部門不一致，請重新確認：目前法人是「'+gE(eid).full+'」，但部門「'+dc+' '+gD(dc).n+'」屬於「'+gE(entityDeptCheck.expected).full+'」。三表會依法人歸屬計算，不能送出錯配資料。');
-    return;
-  }
   eid=entityDeptCheck.eid;dc=entityDeptCheck.dc;
   var ent=gE(eid),dept=gD(dc);
   var appUser=S.user||USERS.find(function(u){return u.n===appName;})||USERS[0];
