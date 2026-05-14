@@ -3796,13 +3796,22 @@ function refundSum(){return (S.refundRows||[]).reduce(function(s,r){return s+ref
 function refundFieldsHtml(){
   if(!S.refundRows.length)S.refundRows=[refundDefaultRow()];
   var mode=S.nrRec||'none';
-  var hint=mode==='void_invoice'?'此類型需在下方附件區上傳「原發票電子檔」，送出時會一起交給主管與會計檢核。':'此類型適用於未開發票的多匯款、匯錯帳戶或其他無憑據退款。';
+  var hint=refundScenarioHint(mode);
   return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="refundAdd()">新增列</button><button class="btn-g" onclick="refundApplySummary()">回填金額</button></div></div><div style="padding:11px">'
-    +'<div class="fr2"><div class="fg"><label class="fl">退費情境 *</label><select id="rf-scenario" onchange="S.nrRec=this.value;updNRAcct();renderNR()">'+(NR_REC.refund_request||[]).map(function(r){return'<option value="'+r.id+'" '+(mode===r.id?'selected':'')+'>'+r.l+'</option>';}).join('')+'</select></div><div class="fg"><label class="fl">退費合計</label><input id="rf-total" readonly value="'+fmt(refundSum())+'"></div></div>'
-    +'<div style="font-size:11px;color:#8b7358;line-height:1.5;background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:8px;margin-bottom:9px">'+hint+'</div>'
+    +'<div class="fr2"><div class="fg"><label class="fl">退費情境 *</label><select id="rf-scenario" onchange="refundScenarioChanged(this.value)">'+(NR_REC.refund_request||[]).map(function(r){return'<option value="'+r.id+'" '+(mode===r.id?'selected':'')+'>'+r.l+'</option>';}).join('')+'</select></div><div class="fg"><label class="fl">退費合計</label><input id="rf-total" readonly value="'+fmt(refundSum())+'"></div></div>'
+    +'<div id="rf-hint" style="font-size:11px;color:#8b7358;line-height:1.5;background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:8px;margin-bottom:9px">'+hint+'</div>'
     +'<div id="refund-sheet"></div>'
     +'</div></div>';
 }
+function refundScenarioHint(mode){
+  return mode==='void_invoice'?'此類型需在 2-1「上傳附件」上傳原發票電子檔，送出時會一起交給主管與會計檢核。':'此類型適用於未開發票的多匯款、匯錯帳戶或其他無憑據退款。';
+}
+window.refundScenarioChanged=function(v){
+  S.nrRec=v||'none';
+  updNRAcct();
+  var hint=el('rf-hint');
+  if(hint)hint.textContent=refundScenarioHint(S.nrRec);
+};
 function renderRefundSheet(){
   var box=el('refund-sheet');if(!box)return;
   if(!S.refundRows.length)S.refundRows=[refundDefaultRow()];
