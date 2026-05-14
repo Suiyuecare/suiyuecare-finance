@@ -347,7 +347,7 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
   <!-- 新增申請 -->
   <div class="pg" id="pg-newreq">
     <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
-      <button onclick="goBack()" class="btn-g">&#8592;</button>
+      <button onclick="newReqBack()" class="btn-g">&#8592;</button>
       <div style="flex:1"><div class="ph">新增放款申請</div><div class="ps">三步驟引導 · 完成後送出簽核並由系統產生傳票資料</div></div>
     </div>
     <div id="nr-ok" style="display:none;padding:9px 13px;border-radius:8px;background:#eaf8d8;border:1px solid #a0d870;color:#1a5010;font-size:12px;font-weight:500;margin-bottom:10px"></div>
@@ -2255,6 +2255,14 @@ window.nav=function(id,btn){
   if(id==='settings')buildSettings();
 };
 window.goBack=function(){nav(S.prev,null);};
+window.newReqBack=function(){
+  if(S.page==='newreq'&&(S.nrStep>1||S.nrType||S.lazyMode||S.nrDraftId)){
+    buildNR();
+    el('page-title').textContent=PT.newreq;
+    return;
+  }
+  goBack();
+};
 function buildAll(){buildDash();buildExp();buildApprovals();buildNotifs();buildUsers();if(S.page==='settings')buildSettings();if(S.page==='compliance')buildCompliance();}
 
 // ══ 真實財務資料計算 ══
@@ -4360,6 +4368,7 @@ window.withdrawRequest=async function(rid){
 // ══ 詳情（FIX 1+3+4）══
 window.openDetail=function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
+  if(S.page!=='detail')S.prev=S.page;
   nav('detail',null);
   var d=gD(r.dc);var e=gE(r.eid);
   el('detail-hd').innerHTML='<div style="font-size:15px;font-weight:500;color:#1e293b">'+r.no+' <span class="badge '+SCSS[r.status]+'">'+SL[r.status]+'</span></div><div style="font-size:12px;color:#94a3b8;margin-top:2px">'+r.app+' · '+r.dc+' '+d.n+'</div>';
