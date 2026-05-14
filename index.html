@@ -276,9 +276,10 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
     <button class="ni" onclick="nav('approvals',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>簽核管理<span class="cnt" id="appr-cnt">2</span></button>
     <div class="ns">傳票管理</div>
     <button class="ni" id="nav-voucher" onclick="nav('vouchers',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h4"/></svg></span>傳票查詢</button>
-    <div class="ns">開立發票 / 繳費</div>
-    <button class="ni" onclick="nav('invoices',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M7 4h10v16l-2-1-2 1-2-1-2 1-2-1zM10 9h4M10 13h4"/></svg></span>開立發票</button>
-    <button class="ni" id="nav-bills" onclick="nav('bills',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM4 10h16M8 15h3"/></svg></span>繳費單管理</button>
+    <div class="ns">收入申請</div>
+    <button class="ni" id="nav-shareholder" onclick="nav('shareholder',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M12 3v18M6 8h12M7 16h10M5 12h14"/></svg></span>股東往來</button>
+    <button class="ni" id="nav-invoices" onclick="nav('invoices',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M7 4h10v16l-2-1-2 1-2-1-2 1-2-1zM10 9h4M10 13h4"/></svg></span>開立發票</button>
+    <button class="ni" id="nav-bills" onclick="nav('bills',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM4 10h16M8 15h3"/></svg></span>申請繳費單</button>
     <button class="ni" id="nav-recv" onclick="nav('recv',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 18h16M6 15l4-4 3 3 5-7"/></svg></span>收款情形</button>
     <div class="ns">財務報表</div>
     <button class="ni" id="nav-rpt" onclick="nav('reports',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"/></svg></span>三表總覽</button>
@@ -437,6 +438,26 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
       <div style="padding:10px 14px;border-top:1px solid #f0e6d6;flex-shrink:0;text-align:right">
         <button onclick="document.getElementById('m-voucher').style.display='none'" class="btn-s">關閉</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 股東往來 -->
+  <div class="pg" id="pg-shareholder">
+    <div style="display:flex;justify-content:space-between;margin-bottom:12px;gap:10px;align-items:flex-start">
+      <div><div class="ph">股東往來</div><div class="ps">股東借款、還款、增資入帳；完成後直接寫入分類帳並同步三表</div></div>
+      <button class="btn-s" onclick="nav('reports',null)">查看三表</button>
+    </div>
+    <div class="g2" style="align-items:start">
+      <div class="card"><div class="chd"><span class="cht">新增股東往來 / 資本額</span></div><div style="padding:13px">
+        <div class="fr2"><div class="fg"><label class="fl">法人 *</label><select id="sh-ent"></select></div><div class="fg"><label class="fl">歸屬組別 / 部門 / 專案 *</label><select id="sh-dept"></select></div></div>
+        <div class="fr2"><div class="fg"><label class="fl">交易類型 *</label><select id="sh-type" onchange="updateShareholderPreview()"><option value="capital">股東出資 / 增資</option><option value="loan_in">股東借款給公司</option><option value="loan_repay">公司償還股東借款</option></select></div><div class="fg"><label class="fl">入帳日期 *</label><input type="date" id="sh-date"></div></div>
+        <div class="fr2"><div class="fg"><label class="fl">股東姓名 / 名稱 *</label><input id="sh-name" placeholder="例：李佳泰"></div><div class="fg"><label class="fl">金額 *</label><input type="number" min="0" id="sh-amt" placeholder="0" oninput="updateShareholderPreview()"></div></div>
+        <div class="fr2"><div class="fg"><label class="fl">銀行帳戶 / 摘要</label><input id="sh-bank" placeholder="例：兆豐銀行 0177"></div><div class="fg"><label class="fl">附件</label><input type="file" id="sh-file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"></div></div>
+        <div class="fg"><label class="fl">備註</label><textarea id="sh-note" rows="3" placeholder="例：股東匯入公司帳戶作為營運資金 / 增資款"></textarea></div>
+        <div id="sh-preview" style="background:var(--warm);border:1px solid #f0e0c8;border-radius:9px;padding:9px;font-size:12px;color:#334155;margin-bottom:10px"></div>
+        <button class="btn-p" style="width:100%;justify-content:center" onclick="submitShareholderTxn()">建立傳票並入帳</button>
+      </div></div>
+      <div class="card"><div class="chd"><span class="cht">近期股東往來傳票</span><span id="sh-count" style="font-size:11px;color:#94a3b8"></span></div><div id="sh-list" style="padding:10px"></div></div>
     </div>
   </div>
 
@@ -1188,12 +1209,12 @@ var SETTINGS_ORIGINAL=null;
 var USER_EDIT_ID='';
 var PAGE_LABELS={
   dashboard:'儀表板',newreq:'新增申請',expenses:'放款申請',approvals:'簽核管理',
-  vouchers:'傳票查詢',invoices:'開立發票',bills:'繳費單管理',recv:'收款情形',reports:'三表總覽',
+  vouchers:'傳票查詢',shareholder:'股東往來',invoices:'開立發票',bills:'申請繳費單',recv:'收款情形',reports:'三表總覽',
   ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',settings:'系統設定'
 };
 var PERMISSION_PAGES=Object.keys(PAGE_LABELS).filter(function(p){return p!=='detail';});
 function defaultRolePermissions(){
-  var common=['dashboard','newreq','expenses','approvals','invoices','notif'];
+  var common=['dashboard','newreq','expenses','approvals','notif'];
   var finance=PERMISSION_PAGES.filter(function(p){return p!=='settings';});
   return {
     employee:common.slice(),
@@ -1742,12 +1763,13 @@ function canManageSettings(){return S.user&&['ceo','admin_director'].indexOf(S.u
 function canAccessPage(id){
   if(id==='detail')return true;
   if(!S.user)return false;
+  if(['shareholder','invoices','bills','recv'].indexOf(id)>-1)return ['ceo','admin_director','accountant'].indexOf(S.user.role)>-1;
   var allowed=ROLE_PERMISSIONS[S.user.role]||defaultRolePermissions()[S.user.role]||[];
   return allowed.indexOf(id)>-1;
 }
 function applyRolePermissions(){
   if(!S.user)return;
-  var ids={bills:'nav-bills',recv:'nav-recv',vouchers:'nav-voucher',reports:'nav-rpt',ledger:'nav-ldg',accounts:'nav-acc',compliance:'nav-compliance',users:'nav-users',settings:'nav-settings'};
+  var ids={shareholder:'nav-shareholder',invoices:'nav-invoices',bills:'nav-bills',recv:'nav-recv',vouchers:'nav-voucher',reports:'nav-rpt',ledger:'nav-ldg',accounts:'nav-acc',compliance:'nav-compliance',users:'nav-users',settings:'nav-settings'};
   Object.keys(ids).forEach(function(page){
     var node=el(ids[page]);
     if(node)node.style.display=canAccessPage(page)?'':'none';
@@ -2238,7 +2260,7 @@ function normalizeRequestEntityDept(eid,dc){
   if(!dc)dc=firstDeptForEntity(eid)||((DEPTS.find(function(d){return d.lv>0;})||{}).c)||'A1101';
   return {ok:true,eid:eid,dc:dc,deptEntity:deptEnt||''};
 }
-var PT={dashboard:'集團財務儀表板',newreq:'新增放款申請',expenses:'放款申請',detail:'申請單詳情',approvals:'簽核管理',vouchers:'傳票查詢',invoices:'開立發票',bills:'繳費單管理',recv:'收款情形',reports:'三表總覽',ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',settings:'系統設定'};
+var PT={dashboard:'集團財務儀表板',newreq:'新增放款申請',expenses:'放款申請',detail:'申請單詳情',approvals:'簽核管理',vouchers:'傳票查詢',shareholder:'股東往來',invoices:'開立發票',bills:'申請繳費單',recv:'收款情形',reports:'三表總覽',ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',settings:'系統設定'};
 window.openLazyExpense=function(btn){
   if(!canAccessPage('newreq')){alert('您的角色沒有此功能權限');return;}
   S.prev=S.page;S.page='newreq';
@@ -2262,6 +2284,7 @@ window.nav=function(id,btn){
   if(id==='reports')buildReports();
   if(id==='ledger')renderLedger();
   if(id==='accounts')renderAccounts();
+  if(id==='shareholder')buildShareholderCapital();
   if(id==='invoices')buildInvoices();
   if(id==='bills')buildBills();
   if(id==='recv')buildRecv();
@@ -5289,6 +5312,61 @@ function recvInvoiceRowHtml(i,RECV){
   var proof=i.receiptFiles&&i.receiptFiles.length;
   return'<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid #f5ede0"><div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--brtxt)">'+i.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+i.buyer+'</div><div style="font-size:10px;color:#94a3b8">'+(proof?'收款證明 '+proof+' 份':'尚無收款證明')+'</div></div><div style="text-align:right;margin-left:7px;flex-shrink:0"><div style="font-size:12px;font-weight:500">'+fmt(i.total)+'</div><span class="badge '+(RECV[i.status]||'b-gray')+'">'+receiptStatusLabel(i)+'</span></div>'+(i.status==='unpaid'&&S.user&&S.user.role==='accountant'?'<label style="margin-left:7px;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:500;background:#e6f4d8;border:1px solid #b0e090;color:#1a5010;cursor:pointer;flex-shrink:0">上傳證明送複核<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="submitReceiptReview(\''+i.id+'\',this)"></label>':'')+(i.status==='pending_receipt_review'&&S.user&&S.user.role==='admin_director'?'<button class="btn-g" style="margin-left:7px;color:#1a5010" onclick="approveReceiptReview(\''+i.id+'\')">複核通過</button>':'')+'</div>';
 }
+
+// ══ 股東往來 / 資本額 ══
+function shareholderTxnMeta(type){
+  var map={
+    capital:{label:'股東出資 / 增資',dr:'1112',drN:'銀行存款',cr:'3110',crN:'實收資本',cash:'籌資活動現金流入'},
+    loan_in:{label:'股東借款給公司',dr:'1112',drN:'銀行存款',cr:'2192',crN:'股東往來',cash:'籌資活動現金流入'},
+    loan_repay:{label:'公司償還股東借款',dr:'2192',drN:'股東往來',cr:'1112',crN:'銀行存款',cash:'籌資活動現金流出'}
+  };
+  return map[type]||map.capital;
+}
+function buildShareholderCapital(){
+  if(!canAccessPage('shareholder'))return;
+  var ent=el('sh-ent'),dept=el('sh-dept'),date=el('sh-date');
+  if(ent)ent.innerHTML=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.full+'</option>';}).join('');
+  if(dept)dept.innerHTML=DEPTS.filter(function(d){return d.lv>0;}).map(function(d){return'<option value="'+d.c+'">'+d.c+' '+d.n+'</option>';}).join('');
+  if(date&&!date.value)date.value=todayIso();
+  updateShareholderPreview();
+  renderShareholderList();
+}
+window.updateShareholderPreview=function(){
+  var type=(el('sh-type')||{}).value||'capital',amt=num((el('sh-amt')||{}).value),m=shareholderTxnMeta(type),box=el('sh-preview');
+  if(!box)return;
+  box.innerHTML='<div style="font-size:11px;color:#8b7358;margin-bottom:5px">入帳分錄預覽</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><div style="background:#eaf8d8;border:1px solid #b0e090;border-radius:8px;padding:8px"><div style="font-size:10px;color:#1a5010">借方</div><strong>'+m.dr+' '+m.drN+'</strong><div style="font-size:11px;color:#1a5010;margin-top:2px">'+fmt(amt)+'</div></div><div style="background:#fde8e8;border:1px solid #f0b0b0;border-radius:8px;padding:8px"><div style="font-size:10px;color:#8a1010">貸方</div><strong>'+m.cr+' '+m.crN+'</strong><div style="font-size:11px;color:#8a1010;margin-top:2px">'+fmt(amt)+'</div></div></div>'
+    +'<div style="font-size:10px;color:#8b7358;margin-top:7px">三表呈現：銀行存款會影響資產負債表；'+(type==='capital'?'實收資本會列入股東權益。':'股東往來會列入負債。')+'現金流量表列為'+m.cash+'。</div>';
+};
+function shareholderVoucherRows(v){
+  return (v.entries||[]).map(function(e){return {entry_date:v.date.replace(/\//g,'-'),description:v.desc,entity_id:v.eid,department_code:e.dept||'',debit:e.t==='dr'?e.amt:0,credit:e.t==='cr'?e.amt:0,account_code:e.ac,account_name:e.an,reference_no:v.no};});
+}
+window.submitShareholderTxn=async function(){
+  if(!canAccessPage('shareholder')){alert('只有執行長、行政部門主任、會計可以操作');return;}
+  var eid=(el('sh-ent')||{}).value||'E1',dc=(el('sh-dept')||{}).value||firstDeptForEntity(eid),type=(el('sh-type')||{}).value||'capital';
+  var name=((el('sh-name')||{}).value||'').trim(),amt=num((el('sh-amt')||{}).value),date=((el('sh-date')||{}).value||todayIso()).replace(/-/g,'/');
+  var bank=((el('sh-bank')||{}).value||'').trim(),note=((el('sh-note')||{}).value||'').trim(),m=shareholderTxnMeta(type);
+  if(!name){alert('請填寫股東姓名 / 名稱');return;}
+  if(!amt){alert('請填寫金額');return;}
+  var seq=String(VOUCHERS.length+901).padStart(4,'0'),no='CAP-2026-'+seq,vid='VCAP-'+seq;
+  var desc=m.label+' — '+name+(bank?' · '+bank:'')+(note?' · '+note:'');
+  var entries=[{t:'dr',ac:m.dr,an:m.drN,dept:dc,amt:amt},{t:'cr',ac:m.cr,an:m.crN,dept:dc,amt:amt}];
+  var voucher={id:vid,no:vid,reqId:no,eid:eid,entS:gE(eid).s,date:date,desc:desc,entries:entries,total:amt,creator:S.user?S.user.n:'系統',posted:true};
+  VOUCHERS.unshift(voucher);
+  entries.forEach(function(e){LEDGER.unshift({date:date,desc:desc,eid:eid,dc:dc,dr:e.t==='dr'?amt:0,cr:e.t==='cr'?amt:0,ac:e.ac,an:e.an,ref:no});});
+  await dbInsert('vouchers',{id:voucher.id,no:voucher.no,request_id:voucher.reqId,entity_id:voucher.eid,entity_name:voucher.entS,voucher_date:voucher.date.replace(/\//g,'-'),description:voucher.desc,entries:voucher.entries,total:voucher.total,creator:voucher.creator,posted:voucher.posted});
+  await Promise.all(shareholderVoucherRows(voucher).map(function(row){return dbInsert('ledger_entries',row);}));
+  NOTIFS.unshift({id:'n_'+Date.now(),type:'system',title:'股東往來已入帳',body:m.label+' '+fmt(amt)+' 已寫入 '+gE(eid).s+' 分類帳',time:'剛才',read:false});
+  await dbInsert('notifications',notifDbRow(NOTIFS[0]));
+  ['sh-name','sh-amt','sh-bank','sh-note'].forEach(function(id){var x=el(id);if(x)x.value='';});
+  updateShareholderPreview();renderShareholderList();buildDash();buildReports();renderLedger();renderVouchers();alert('已建立傳票 '+vid+'，三表將依正式分類帳同步更新。');
+};
+function renderShareholderList(){
+  var rows=VOUCHERS.filter(function(v){return /^VCAP-/.test(v.id)||/^CAP-/.test(v.reqId||'');}).slice(0,12);
+  var box=el('sh-list'),cnt=el('sh-count');if(cnt)cnt.textContent=rows.length+' 筆';
+  if(!box)return;
+  box.innerHTML=rows.length?rows.map(function(v){return'<div style="padding:9px 0;border-bottom:1px solid #f0e6d6"><div style="display:flex;justify-content:space-between;gap:8px"><div><div style="font-size:12px;font-weight:650;color:#334155">'+v.no+'</div><div style="font-size:10px;color:#94a3b8">'+v.date+' · '+gE(v.eid).full+'</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:650">'+fmt(v.total)+'</div><button class="btn-g" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="showVoucherById(\''+v.id+'\')">檢視</button></div></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:4px">'+v.desc+'</div></div>';}).join(''):'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px;border:1.5px dashed #e0d0b8;border-radius:9px">尚無股東往來傳票</div>';
+}
 window.openRecvBatch=function(batchId){
   var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue',pending_receipt_review:'b-purp'};
   var items=INVS.filter(function(i){return i.batchId===batchId&&invoiceIsReceivable(i);});
@@ -5740,11 +5818,14 @@ function renderSettingFees(){
 function renderSettingPermissions(){
   var head=el('settings-perm-head'),body=el('settings-perms');if(!head||!body)return;
   var roles=Object.keys(RL);
+  var incomePages=['shareholder','invoices','bills','recv'];
+  var incomeRoles=['ceo','admin_director','accountant'];
   head.innerHTML='<tr><th>功能</th>'+roles.map(function(r){return'<th>'+RL[r]+'</th>';}).join('')+'</tr>';
   body.innerHTML=PERMISSION_PAGES.map(function(p){
     return'<tr><td style="font-weight:650;color:#334155">'+PAGE_LABELS[p]+'</td>'+roles.map(function(r){
-      var checked=(ROLE_PERMISSIONS[r]||[]).indexOf(p)>-1;
-      var locked=p==='settings';
+      var isIncome=incomePages.indexOf(p)>-1,allowedIncome=incomeRoles.indexOf(r)>-1;
+      var checked=isIncome?allowedIncome:(ROLE_PERMISSIONS[r]||[]).indexOf(p)>-1;
+      var locked=p==='settings'||isIncome;
       return'<td style="text-align:center"><input type="checkbox" '+(checked?'checked':'')+' '+(locked||!SETTINGS_EDIT?'disabled':'')+' onchange="toggleRolePermission(\''+r+'\',\''+p+'\',this.checked)"></td>';
     }).join('')+'</tr>';
   }).join('');
