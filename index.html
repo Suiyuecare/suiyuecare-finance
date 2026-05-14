@@ -349,7 +349,6 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
     <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
       <button onclick="goBack()" class="btn-g">&#8592;</button>
       <div style="flex:1"><div class="ph">新增放款申請</div><div class="ps">三步驟引導 · 完成後送出簽核並由系統產生傳票資料</div></div>
-      <button class="btn-s" onclick="nrSaveDraft()">暫存</button>
     </div>
     <div id="nr-ok" style="display:none;padding:9px 13px;border-radius:8px;background:#eaf8d8;border:1px solid #a0d870;color:#1a5010;font-size:12px;font-weight:500;margin-bottom:10px"></div>
     <div style="display:flex;align-items:center;gap:5px;padding:9px 13px;background:#fff;border:1px solid #eedfc8;border-radius:12px;margin-bottom:12px;flex-wrap:wrap">
@@ -2706,13 +2705,13 @@ function renderLazyExpensePage(){
         +receiptUploadPanelHtml({ocr:true,kind:'receipt'})
         +passbookUploadPanelHtml()
       +'</div></div></div>'
-      +'<div class="card"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="lazyAdd()">新增列</button><button class="btn-g" onclick="applyLazySummary()">回填總額</button></div></div><div style="padding:12px"><div id="lazy-sheet"></div><div style="margin-top:10px;border-top:1px solid #f0e6d6;padding-top:10px"><div style="display:flex;gap:8px;align-items:center"><div style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">送出後，系統會自動產生一份 Excel 檔：明細表、基本資料、匯款資訊與憑據照片會合併在同一份檔案內，並交給主管檢核。</div><button class="btn-s" style="min-width:100px;justify-content:center" onclick="nrSaveDraft()">暫存</button><button class="btn-p" style="min-width:150px;justify-content:center" onclick="submitNR()">送出簽核</button></div></div></div></div>'
+      +'<div class="card"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="lazyAdd()">新增列</button><button class="btn-g" onclick="applyLazySummary()">回填總額</button></div></div><div style="padding:12px"><div id="lazy-sheet"></div><div style="margin-top:10px;border-top:1px solid #f0e6d6;padding-top:10px"><div style="font-size:11px;color:#8b7358;line-height:1.5">送出後，系統會自動產生一份 Excel 檔：明細表、基本資料、匯款資訊與憑據照片會合併在同一份檔案內，並交給主管檢核。</div></div></div></div>'
       +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:12px"><div class="fr2" style="align-items:start">'
         +'<div>'
           +advanceTemplateHtml
           +pettyModeHtml
           +'<div class="fr2"><div class="fg"><label class="fl">支出人 / 申請人 *</label><select id="nr-app-sel" onchange="applicantSelectChanged()"><option value="">選擇員工</option>'+userOpts+'</select></div><div class="fg" id="nr-app-custom-wrap" style="display:none"><label class="fl">自行填寫申請人</label><input id="nr-app" value="'+(S.user?escAttr(S.user.n):'')+'" placeholder="申請人姓名"></div></div>'
-          +'<div class="fr2"><div class="fg"><label class="fl">公司 / 法人 *</label><select id="nr-ent" onchange="nrEntityChanged()">'+entOpts+'</select></div><div class="fg"><label class="fl">組別 / 部門 *</label><select id="nr-dept" onchange="nrDeptChanged()">'+dOpts+'</select></div></div>'
+          +'<div class="fr2"><div class="fg"><label class="fl">公司 / 法人 *</label><select id="nr-ent" onchange="nrEntityChanged()">'+entOpts+'</select></div><div class="fg"><label class="fl">該筆費用支出組別/部門/專案 *</label><select id="nr-dept" onchange="nrDeptChanged()">'+dOpts+'</select></div></div>'
           +'<div class="fg"><label class="fl">表單填寫日期</label><input type="date" id="nr-date" value="'+todayIso()+'"></div>'
           +'<div class="fg"><label class="fl">目的 *</label><input id="nr-desc-purpose" placeholder="例：活動採買、交通差旅、辦公用品"></div>'
           +'<div class="fg"><label class="fl">備註內容</label><textarea id="nr-desc" rows="3" placeholder="補充說明，可由 Excel 明細自動帶入"></textarea></div>'
@@ -2774,11 +2773,11 @@ function renderNR(){
     var ownerFieldsHtml=S.nrType==='hr_expense_request'
       ? applicantProfile
         +'<div class="fg"><label class="fl">支出法人 *</label><select id="nr-ent" onchange="nrEntityChanged()">'+entOpts+'</select></div>'
-        +'<div class="fr2"><div class="fg"><label class="fl">支出部門 *</label><select id="nr-dept" onchange="nrDeptChanged()" style="font-size:11px">'+dOpts+'</select></div>'
+        +'<div class="fr2"><div class="fg"><label class="fl">該筆費用支出組別/部門/專案 *</label><select id="nr-dept" onchange="nrDeptChanged()" style="font-size:11px">'+dOpts+'</select></div>'
           +'<div class="fg"><label class="fl">申請人 * <span style="font-size:10px;color:#94a3b8">（可選擇員工或自行輸入）</span></label><select id="nr-app-sel" onchange="applicantSelectChanged()"><option value="">— 選擇員工 —</option>'+userOpts+'</select></div></div>'
         +'<div class="fg" id="nr-app-custom-wrap" style="display:none"><label class="fl">自行填寫申請人</label><input type="text" id="nr-app" placeholder="申請人姓名" value="'+defApp+'"></div>'
       : applicantProfile
-        +'<div class="fr2"><div class="fg"><label class="fl">支出部門 *</label><select id="nr-dept" onchange="nrDeptChanged()" style="font-size:11px">'+dOpts+'</select></div><div class="fg"><label class="fl">支出法人 *</label><select id="nr-ent" onchange="nrEntityChanged()">'+entOpts+'</select></div></div>'
+        +'<div class="fr2"><div class="fg"><label class="fl">該筆費用支出組別/部門/專案 *</label><select id="nr-dept" onchange="nrDeptChanged()" style="font-size:11px">'+dOpts+'</select></div><div class="fg"><label class="fl">支出法人 *</label><select id="nr-ent" onchange="nrEntityChanged()">'+entOpts+'</select></div></div>'
         +'<div class="fg"><label class="fl">申請人 * <span style="font-size:10px;color:#94a3b8">（可選擇員工或自行輸入）</span></label>'
           +'<div style="display:flex;gap:6px"><select id="nr-app-sel" onchange="applicantSelectChanged()" style="flex:1"><option value="">— 選擇員工 —</option>'+userOpts+'</select>'
           +'<div id="nr-app-custom-wrap" style="display:none;flex:1"><label class="fl">自行填寫申請人</label><input type="text" id="nr-app" placeholder="申請人姓名" value="'+defApp+'"></div></div></div>';
@@ -2803,7 +2802,6 @@ function renderNR(){
       +'</div></div></div>'
       +sheetHtml
       +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:11px"><div class="fr2" style="align-items:start"><div>'+leftInfoHtml+'</div><div>'+rightPayHtml+'</div></div>'
-      +'<div style="display:flex;gap:7px;margin-top:8px"><button class="btn-s" style="flex:1" onclick="nrSaveDraft()">存草稿</button><button class="btn-p" style="flex:2;justify-content:center" onclick="submitNR()">送出申請 →</button></div>'
       +'</div></div>'
       +(S.nrType==='hr_expense_request'?'':lazyApprovalFlowHtml())
     +'</div>';
@@ -3117,9 +3115,12 @@ function lazyApprovalFlowHtml(){
     ['7','申請人確認','款項撥付後，申請人確認已收到款項或已完成必要交付。'],
     ['8','會計確認入帳','會計確認憑據與金流後正式入帳，系統產生傳票並寫入帳冊。']
   ];
-  return'<div class="card"><div class="chd"><span class="cht">2-4. 簽核流程</span><span style="font-size:10px;color:#94a3b8">每關任務</span></div><div style="padding:12px"><div class="flow-wrap">'+rows.map(function(r){
+  return'<div class="card"><div class="chd"><span class="cht">2-4. 簽核流程</span><span style="font-size:10px;color:#94a3b8">每關任務</span></div><div style="padding:12px">'+nrSubmitActionsHtml()+'<div class="flow-wrap">'+rows.map(function(r){
     return'<div class="flow-step"><div class="flow-dot">'+r[0]+'</div><div class="flow-body"><div class="flow-label">'+r[1]+'</div><div class="flow-sub">'+r[2]+'</div></div></div>';
   }).join('')+'</div></div></div>';
+}
+function nrSubmitActionsHtml(){
+  return'<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;padding:10px;border:1px solid #f0e0c8;background:#fff8ed;border-radius:10px"><div style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊都填寫完成後，再暫存或送出簽核。</div><button class="btn-s" style="min-width:100px;justify-content:center" onclick="nrSaveDraft()">暫存</button><button class="btn-p" style="min-width:150px;justify-content:center" onclick="submitNR()">送出簽核</button></div>';
 }
 window.applicantSelectChanged=function(keepValue){
   var sel=el('nr-app-sel'),inp=el('nr-app'),wrap=el('nr-app-custom-wrap');
@@ -3220,7 +3221,7 @@ function renderLazySheet(){
   }).join('');
   box.innerHTML='<style>#lazy-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0}#lazy-sheet td,#lazy-sheet th{border:1px solid #e8dcc8;padding:0}#lazy-sheet th{background:#f7ead6;color:#7c3f00;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
     +'<div class="lazy-sheet-scroll sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:1200px;width:100%"><thead><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>買方統編</th><th>賣方統編</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
-    +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="lazyAdd()">新增一列</button><button class="btn-g" onclick="applyLazySummary()">回填金額與說明</button><button class="btn-g" onclick="nrSaveDraft()">暫存</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">明細合計（含稅，含手續費）</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(lazyDisplaySum())+'</div></div></div>';
+    +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="lazyAdd()">新增一列</button><button class="btn-g" onclick="applyLazySummary()">回填金額與說明</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">明細合計（含稅，含手續費）</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(lazyDisplaySum())+'</div></div></div>';
   var nextScroll=box.querySelector('.lazy-sheet-scroll');
   if(nextScroll){nextScroll.scrollLeft=oldLeft;nextScroll.scrollTop=oldTop;}
 }
@@ -3491,9 +3492,10 @@ function paymentFieldsHtml(){
     +'<div style="font-size:11px;font-weight:650;color:var(--brtxt);margin-bottom:7px">匯款資訊</div>'
     +'<div class="fr2"><div class="fg"><label class="fl">付款方式 *</label><select id="nr-pay-form" onchange="S.nrPay=this.value;updNRAcct()"><option value="bank" selected>銀行轉帳</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">備註：公司是兆豐銀行；收款銀行也是兆豐時不列手續費分錄</div></div><div class="fg"><label class="fl">總金額 *</label><input type="number" id="nr-amt" placeholder="0"></div></div>'
     +'<div class="fg"><label class="fl">手續費</label><select id="nr-fee-bearer" onchange="syncLazyBankFeeRow(true)"><option value="己方支出">己方支出</option><option value="對方支出">對方支出</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">己方支出且非兆豐收款銀行時，系統會依公司別設定自動切 Dr 6290 手續費，並在即時 Excel 增加免憑證明細</div></div>'
-    +'<div class="fr2"><div class="fg"><label class="fl">收款人 *</label><input id="nr-payee" placeholder="收款人姓名或公司名稱"></div><div class="fg"><label class="fl">預計匯款日 *</label><input type="date" id="nr-paydate" value="'+todayIso()+'"></div></div>'
+    +'<div class="fg"><label class="fl">收款人 *</label><input id="nr-payee" placeholder="收款人姓名或公司名稱"></div>'
     +'<div class="fg"><label class="fl">銀行類別 *</label><select id="nr-bank-type" onchange="bankTypeChanged()"><option value="mega">兆豐銀行</option><option value="other">非兆豐銀行</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">選擇非兆豐銀行且手續費為己方支出時，系統會多列公司設定的匯款手續費（預設 15 元）。</div></div>'
     +'<div class="fr3" id="nr-bank-detail"><div class="fg"><label class="fl">銀行資訊 *</label><input id="nr-bank-name" placeholder="例：玉山銀行 / 017 兆豐銀行" oninput="bankNameChanged()"></div><div class="fg"><label class="fl">分行 *</label><input id="nr-bank-branch" required placeholder="例：南京東路分行"></div><div class="fg"><label class="fl">帳號 *</label><input id="nr-bank-no" placeholder="例：808-678-000000"></div></div>'
+    +'<div class="fg"><label class="fl">預計匯款日 *</label><input type="date" id="nr-paydate" value="'+todayIso()+'"></div>'
     +'</div>';
 }
 function hrBatchPaymentFieldsHtml(){
@@ -3787,7 +3789,7 @@ function renderRefundSheet(){
   }).join('');
   box.innerHTML='<style>#refund-sheet table input,#refund-sheet table select{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0;min-width:92px}#refund-sheet td,#refund-sheet th{border:1px solid #e8dcc8;padding:0}#refund-sheet th{background:#d9eaf7;color:#253044;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
     +'<div class="sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:1260px;width:100%"><thead><tr><th>原繳費金額</th><th>退費原因</th><th>其他退費原因</th><th>退費說明</th><th>應收金額</th><th>實收金額</th><th>應退金額</th><th>計算說明</th><th>退款方式</th><th>銀行名稱</th><th>分行名稱 *</th><th>戶名</th><th>帳號</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
-    +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="refundAdd()">新增一列</button><button class="btn-g" onclick="refundApplySummary()">回填金額與說明</button><button class="btn-g" onclick="nrSaveDraft()">暫存</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">應退合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(refundSum())+'</div></div></div>';
+    +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="refundAdd()">新增一列</button><button class="btn-g" onclick="refundApplySummary()">回填金額與說明</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">應退合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(refundSum())+'</div></div></div>';
   var total=el('rf-total');if(total)total.value=fmt(refundSum());
 }
 window.refundEdit=function(i,k,v){
@@ -3888,7 +3890,7 @@ function renderPurchaseSheet(){
   }).join('');
   box.innerHTML='<style>#purchase-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0;min-width:92px}#purchase-sheet td,#purchase-sheet th{border:1px solid #e8dcc8;padding:0}#purchase-sheet th{background:#d9eaf7;color:#253044;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
     +'<div class="sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:980px;width:100%"><thead><tr><th>項次</th><th>品項名稱</th><th>數量</th><th>單價</th><th>金額</th><th>用途說明</th><th>商品連結</th><th>備註</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
-    +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="purchaseAdd()">新增一列</button><button class="btn-g" onclick="purchaseApplySummary()">回填金額與說明</button><button class="btn-g" onclick="nrSaveDraft()">暫存</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">採購合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(purchaseSum())+'</div></div></div>';
+    +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="purchaseAdd()">新增一列</button><button class="btn-g" onclick="purchaseApplySummary()">回填金額與說明</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">採購合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(purchaseSum())+'</div></div></div>';
   var total=el('po-total');if(total)total.value=fmt(purchaseSum());
 }
 window.purchaseEdit=function(i,k,v){
