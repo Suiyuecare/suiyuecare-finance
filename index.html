@@ -3720,15 +3720,16 @@ var WELFARE_ITEMS=[
 ];
 function welfareFieldsHtml(){
   var opts=WELFARE_ITEMS.map(function(w,i){return'<option value="'+i+'">'+w.name+'</option>';}).join('');
-  return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">福利申請資料</span></div><div style="padding:11px">'
+  return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;margin:9px 0">'
+    +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:8px">福利申請資料</div>'
     +'<div style="background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:9px;margin-bottom:9px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><div style="font-size:12px;font-weight:650;color:#334155">福利管理辦法</div><div style="font-size:10px;color:#8b7358;margin-top:2px">請先確認福利項目、申請資格、應備文件與申請期限，再送出申請。</div></div><div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-s" onclick="openWelfarePolicy()">檢視</button><button class="btn-s" onclick="downloadWelfarePolicy()">下載</button></div></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">福利項目 *</label><select id="wf-item" onchange="updateWelfareHint()">'+opts+'</select></div><div class="fg"><label class="fl">是否建議用福利申請單</label><input id="wf-recommend" readonly></div></div>'
     +'<div class="fg"><label class="fl">原因 / 適用說明</label><textarea id="wf-reason" rows="3" readonly></textarea></div>'
     +'<div class="fr3"><div class="fg"><label class="fl">申請金額 *</label><input type="number" min="0" id="wf-amount" oninput="if(el(\'nr-amt\'))el(\'nr-amt\').value=this.value" placeholder="依福利辦法填寫"></div><div class="fg"><label class="fl">事件 / 發生日 *</label><input type="date" id="wf-event-date"></div><div class="fg"><label class="fl">申請對象</label><input id="wf-target" placeholder="本人、配偶、子女、父母、介紹對象等"></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">資格或年資狀態</label><input id="wf-eligibility" placeholder="例：在職滿半年、課程符合資格、住院達 3 天以上"></div><div class="fg"><label class="fl">是否已申請 / 已用額度</label><input id="wf-used" placeholder="例：本年度尚未申請、已用 2,000 元"></div></div>'
     +'<div class="fg"><label class="fl">應附證明文件</label><textarea id="wf-docs" rows="2" placeholder="例：課程證明、繳費證明、喜帖/戶籍資料、死亡證明、診斷證明、介紹到職資料"></textarea></div>'
-    +'<div style="font-size:11px;color:#8b7358;line-height:1.5;background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:8px">相關文件請使用下方「上傳發票 / 憑據照片」區塊上傳，可上傳 PDF、圖片、診斷證明、戶籍資料、訃聞、課程證明等。</div>'
-    +'</div></div>';
+    +'<div style="font-size:11px;color:#8b7358;line-height:1.5;background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:8px">相關文件請使用 2-1「上傳附件」區塊上傳，可上傳 PDF、圖片、診斷證明、戶籍資料、訃聞、課程證明等。</div>'
+    +'</div>';
 }
 window.openWelfarePolicy=function(){
   window.open('assets/welfare-policy.pdf','_blank');
