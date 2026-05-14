@@ -2795,7 +2795,6 @@ function renderNR(){
     var sheetHtml=S.nrType==='hr_expense_request'?hrSideHtml:(purchaseSideHtml||refundSideHtml||lazyHtml||'<div class="card"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span></div><div style="padding:11px"><div id="lazy-sheet"></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:8px">此申請類型若無明細列，可直接在 2-3 填寫申請內容與總金額；送出時仍會保留附件與審核紀錄。</div></div></div>');
     var leftInfoHtml=ownerFieldsHtml
       +'<div class="fg"><label class="fl">表單填寫日期</label><input type="date" id="nr-date" value="'+todayIso()+'"></div>'
-      +travelHtml
       +welfareHtml
       +refundHtml
       +purchaseHtml
@@ -2803,15 +2802,17 @@ function renderNR(){
       +'<div class="fg"><label class="fl">申請說明 * （請詳述費用用途）</label><textarea id="nr-desc" rows="3" placeholder="例：2026/05 居服部門薪資">'+(S.nrType==='hr_expense_request'?'2026/05 居服部門薪資':'')+'</textarea></div>'
       +aoHtml;
     var rightPayHtml=S.nrType==='hr_expense_request'?hrBatchPaymentFieldsHtml():paymentFieldsHtml();
+    var submitActions=nrSubmitActionsHtml(S.nrType==='travel_request');
     c.innerHTML='<div style="display:flex;flex-direction:column;gap:10px;'+(S.nrType==='hr_expense_request'?'max-width:1180px;margin:0 auto;width:100%;':'')+'">'
       +'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span><button class="btn-g" onclick="'+((S.nrType==='travel_request'||S.nrType==='purchase_request'||S.nrType==='hr_expense_request')?'nrBack(1)':'nrBack(2)')+'">← 返回</button></div><div style="padding:11px"><div class="fr2">'
         +(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():receiptUploadPanelHtml({ocr:S.nrType==='expense_reimbursement',kind:S.nrType==='hr_expense_request'?'payroll':'receipt'}))
         +(S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A/9B 勞報單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
       +'</div></div></div>'
       +sheetHtml
-      +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:11px"><div class="nr-two-col"><div class="nr-info-panel"><div class="nr-info-title">支出資訊</div>'+leftInfoHtml+'</div><div class="nr-info-panel"><div class="nr-info-title">匯款資訊</div>'+rightPayHtml+'</div></div>'+nrSubmitActionsHtml()
+      +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:11px"><div class="nr-two-col"><div class="nr-info-panel"><div class="nr-info-title">支出資訊</div>'+leftInfoHtml+'</div><div class="nr-info-panel"><div class="nr-info-title">匯款資訊</div>'+rightPayHtml+'</div></div>'+(S.nrType==='travel_request'?'':submitActions)
       +'</div></div>'
-      +(S.nrType==='hr_expense_request'?'':lazyApprovalFlowHtml())
+      +(S.nrType==='travel_request'?travelHtml+submitActions:'')
+      +(S.nrType==='hr_expense_request'?'':lazyApprovalFlowHtml(S.nrType==='travel_request'?'2-5. 簽核流程':'2-4. 簽核流程'))
     +'</div>';
     renderLazySheet();
     if(S.nrType==='welfare_request')updateWelfareHint();
@@ -3123,7 +3124,7 @@ window.nrSaveDraft=async function(){
 };
 window.nrFileChange=function(inp){S.nrDraftFileNotice='';Array.from(inp.files).forEach(function(f){S.nrFiles.push(f);});renderNRFList();inp.value='';};
 window.nrFileDrop=function(e){S.nrDraftFileNotice='';el('nr-dz').classList.remove('drag');Array.from(e.dataTransfer.files).forEach(function(f){S.nrFiles.push(f);});renderNRFList();};
-function lazyApprovalFlowHtml(){
+function lazyApprovalFlowHtml(title){
   var rows=S.nrType==='advance_request'?[
     ['1','申請人送件','填寫預支資料，上傳已填寫的預支申請書與存摺封面，送出後開始流程。'],
     ['2','主管通過','確認預支事由、金額與業務必要性。'],
@@ -3143,12 +3144,13 @@ function lazyApprovalFlowHtml(){
     ['7','申請人確認','款項撥付後，申請人確認已收到款項或已完成必要交付。'],
     ['8','會計確認入帳','會計確認憑據與金流後正式入帳，系統產生傳票並寫入帳冊。']
   ];
-  return'<div class="card"><div class="chd"><span class="cht">2-4. 簽核流程</span><span style="font-size:10px;color:#94a3b8">每關任務</span></div><div style="padding:12px"><div class="flow-wrap">'+rows.map(function(r){
+  return'<div class="card"><div class="chd"><span class="cht">'+(title||'2-4. 簽核流程')+'</span><span style="font-size:10px;color:#94a3b8">每關任務</span></div><div style="padding:12px"><div class="flow-wrap">'+rows.map(function(r){
     return'<div class="flow-step"><div class="flow-dot">'+r[0]+'</div><div class="flow-body"><div class="flow-label">'+r[1]+'</div><div class="flow-sub">'+r[2]+'</div></div></div>';
   }).join('')+'</div></div></div>';
 }
-function nrSubmitActionsHtml(){
-  return'<div style="display:flex;gap:8px;align-items:center;margin-top:12px;padding:10px;border:1px solid #f0e0c8;background:#fff8ed;border-radius:10px"><div style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊都填寫完成後，再暫存或送出簽核。</div><button class="btn-s" style="min-width:100px;justify-content:center" onclick="nrSaveDraft()">暫存</button><button class="btn-p" style="min-width:150px;justify-content:center" onclick="submitNR()">送出簽核</button></div>';
+function nrSubmitActionsHtml(includeTravelStep){
+  var msg=includeTravelStep?'確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊、2-4 差旅申請資料都填寫完成後，再暫存或送出簽核。':'確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊都填寫完成後，再暫存或送出簽核。';
+  return'<div style="display:flex;gap:8px;align-items:center;margin-top:12px;padding:10px;border:1px solid #f0e0c8;background:#fff8ed;border-radius:10px"><div style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">'+msg+'</div><button class="btn-s" style="min-width:100px;justify-content:center" onclick="nrSaveDraft()">暫存</button><button class="btn-p" style="min-width:150px;justify-content:center" onclick="submitNR()">送出簽核</button></div>';
 }
 window.applicantSelectChanged=function(keepValue){
   var sel=el('nr-app-sel'),inp=el('nr-app'),wrap=el('nr-app-custom-wrap');
@@ -3612,7 +3614,7 @@ function collectPaymentInfo(){
 function travelFieldsHtml(){
   var opts=['公務出差','教育訓練','會議','拜訪','場勘','外部稽核','督導訪視','單位合作'];
   var rule='<div style="background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:9px;margin-bottom:9px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><div style="font-size:12px;font-weight:650;color:#334155">差旅費管理辦法摘要</div><div style="font-size:11px;color:#8b7358;line-height:1.7;margin-top:3px">住宿費：主管級 2,000 元 / 晚，一般同仁 1,500 元 / 晚。膳什費：主管級 700 元 / 日，一般同仁 400 元 / 日。膳什費採定額給付，免附憑證。</div></div><button class="btn-s" onclick="openTravelPolicy()">檢視辦法</button></div></div>';
-  return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">差旅申請資料</span></div><div style="padding:11px">'
+  return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">2-4. 差旅申請資料</span></div><div style="padding:11px">'
     +rule
     +'<div class="fr2"><div class="fg"><label class="fl">差旅類型 *</label><select id="tr-type">'+opts.map(function(o){return'<option value="'+o+'">'+o+'</option>';}).join('')+'</select></div><div class="fg"><label class="fl">關聯專案／活動</label><input id="tr-project" placeholder="例：日照籌設、標案執行、居服拓區、訓練課程"></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">出差事由 *</label><input id="tr-reason" placeholder="簡述為什麼需要出差"></div><div class="fg"><label class="fl">預期成果 *</label><input id="tr-outcome" placeholder="例：會議紀錄、訪視紀錄、報價單、照片、場勘報告"></div></div>'
