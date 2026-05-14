@@ -2728,7 +2728,7 @@ function renderLazyExpensePage(){
           +'<div class="fg"><label class="fl">目的 *</label><input id="nr-desc-purpose" placeholder="例：活動採買、交通差旅、辦公用品"></div>'
           +'<div class="fg"><label class="fl">備註內容</label><textarea id="nr-desc" rows="3" placeholder="補充說明，可由 Excel 明細自動帶入"></textarea></div>'
         +'</div><div class="nr-info-panel"><div class="nr-info-title">匯款資訊</div>'+paymentFieldsHtml()+'</div>'
-      +'</div></div></div>'
+      +'</div>'+nrSubmitActionsHtml()+'</div></div>'
       +lazyApprovalFlowHtml()
     +'</div>';
   renderLazySheet();
@@ -2813,7 +2813,7 @@ function renderNR(){
         +(S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A/9B 勞報單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
       +'</div></div></div>'
       +sheetHtml
-      +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:11px"><div class="nr-two-col"><div class="nr-info-panel"><div class="nr-info-title">支出資訊</div>'+leftInfoHtml+'</div><div class="nr-info-panel"><div class="nr-info-title">匯款資訊</div>'+rightPayHtml+'</div></div>'
+      +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:11px"><div class="nr-two-col"><div class="nr-info-panel"><div class="nr-info-title">支出資訊</div>'+leftInfoHtml+'</div><div class="nr-info-panel"><div class="nr-info-title">匯款資訊</div>'+rightPayHtml+'</div></div>'+nrSubmitActionsHtml()
       +'</div></div>'
       +(S.nrType==='hr_expense_request'?'':lazyApprovalFlowHtml())
     +'</div>';
@@ -3127,12 +3127,12 @@ function lazyApprovalFlowHtml(){
     ['7','申請人確認','款項撥付後，申請人確認已收到款項或已完成必要交付。'],
     ['8','會計確認入帳','會計確認憑據與金流後正式入帳，系統產生傳票並寫入帳冊。']
   ];
-  return'<div class="card"><div class="chd"><span class="cht">2-4. 簽核流程</span><span style="font-size:10px;color:#94a3b8">每關任務</span></div><div style="padding:12px">'+nrSubmitActionsHtml()+'<div class="flow-wrap">'+rows.map(function(r){
+  return'<div class="card"><div class="chd"><span class="cht">2-4. 簽核流程</span><span style="font-size:10px;color:#94a3b8">每關任務</span></div><div style="padding:12px"><div class="flow-wrap">'+rows.map(function(r){
     return'<div class="flow-step"><div class="flow-dot">'+r[0]+'</div><div class="flow-body"><div class="flow-label">'+r[1]+'</div><div class="flow-sub">'+r[2]+'</div></div></div>';
   }).join('')+'</div></div></div>';
 }
 function nrSubmitActionsHtml(){
-  return'<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;padding:10px;border:1px solid #f0e0c8;background:#fff8ed;border-radius:10px"><div style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊都填寫完成後，再暫存或送出簽核。</div><button class="btn-s" style="min-width:100px;justify-content:center" onclick="nrSaveDraft()">暫存</button><button class="btn-p" style="min-width:150px;justify-content:center" onclick="submitNR()">送出簽核</button></div>';
+  return'<div style="display:flex;gap:8px;align-items:center;margin-top:12px;padding:10px;border:1px solid #f0e0c8;background:#fff8ed;border-radius:10px"><div style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊都填寫完成後，再暫存或送出簽核。</div><button class="btn-s" style="min-width:100px;justify-content:center" onclick="nrSaveDraft()">暫存</button><button class="btn-p" style="min-width:150px;justify-content:center" onclick="submitNR()">送出簽核</button></div>';
 }
 window.applicantSelectChanged=function(keepValue){
   var sel=el('nr-app-sel'),inp=el('nr-app'),wrap=el('nr-app-custom-wrap');
