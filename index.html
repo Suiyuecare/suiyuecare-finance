@@ -64,6 +64,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 #pg-newreq .fr2,#pg-newreq .fr3{grid-template-columns:1fr!important}
 #pg-newreq #nr-main-grid{grid-template-columns:1fr!important}
 #pg-newreq .sheet-full-scroll{max-height:68vh!important}
+.nr-two-col{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:12px;align-items:start}
+.nr-info-panel{background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:11px;min-height:100%}
+.nr-info-title{font-size:12px;font-weight:650;color:#334155;margin-bottom:9px}
+@media(max-width:860px){.nr-two-col{grid-template-columns:1fr!important}}
 .si-dot{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;flex-shrink:0;transition:all .2s}
 .si-wait{background:var(--warm);color:#b09070;border:1px solid #e0d0b8}
 .si-cur{background:var(--br);color:#fff}
@@ -2714,8 +2718,8 @@ function renderLazyExpensePage(){
         +passbookUploadPanelHtml()
       +'</div></div></div>'
       +'<div class="card"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="lazyAdd()">新增列</button><button class="btn-g" onclick="applyLazySummary()">回填總額</button></div></div><div style="padding:12px"><div id="lazy-sheet"></div><div style="margin-top:10px;border-top:1px solid #f0e6d6;padding-top:10px"><div style="font-size:11px;color:#8b7358;line-height:1.5">送出後，系統會自動產生一份 Excel 檔：明細表、基本資料、匯款資訊與憑據照片會合併在同一份檔案內，並交給主管檢核。</div></div></div></div>'
-      +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:12px"><div class="fr2" style="align-items:start">'
-        +'<div>'
+      +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:12px"><div class="nr-two-col">'
+        +'<div class="nr-info-panel"><div class="nr-info-title">支出資訊</div>'
           +advanceTemplateHtml
           +pettyModeHtml
           +'<div class="fr2"><div class="fg"><label class="fl">支出人 / 申請人 *</label><select id="nr-app-sel" onchange="applicantSelectChanged()"><option value="">選擇員工</option>'+userOpts+'</select></div><div class="fg" id="nr-app-custom-wrap" style="display:none"><label class="fl">自行填寫申請人</label><input id="nr-app" value="'+(S.user?escAttr(S.user.n):'')+'" placeholder="申請人姓名"></div></div>'
@@ -2723,7 +2727,7 @@ function renderLazyExpensePage(){
           +'<div class="fg"><label class="fl">表單填寫日期</label><input type="date" id="nr-date" value="'+todayIso()+'"></div>'
           +'<div class="fg"><label class="fl">目的 *</label><input id="nr-desc-purpose" placeholder="例：活動採買、交通差旅、辦公用品"></div>'
           +'<div class="fg"><label class="fl">備註內容</label><textarea id="nr-desc" rows="3" placeholder="補充說明，可由 Excel 明細自動帶入"></textarea></div>'
-        +'</div><div>'+paymentFieldsHtml()+'</div>'
+        +'</div><div class="nr-info-panel"><div class="nr-info-title">匯款資訊</div>'+paymentFieldsHtml()+'</div>'
       +'</div></div></div>'
       +lazyApprovalFlowHtml()
     +'</div>';
@@ -2809,7 +2813,7 @@ function renderNR(){
         +(S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A/9B 勞報單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
       +'</div></div></div>'
       +sheetHtml
-      +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:11px"><div class="fr2" style="align-items:start"><div>'+leftInfoHtml+'</div><div>'+rightPayHtml+'</div></div>'
+      +'<div class="card"><div class="chd"><span class="cht">2-3. 申請與匯款資訊</span></div><div style="padding:11px"><div class="nr-two-col"><div class="nr-info-panel"><div class="nr-info-title">支出資訊</div>'+leftInfoHtml+'</div><div class="nr-info-panel"><div class="nr-info-title">匯款資訊</div>'+rightPayHtml+'</div></div>'
       +'</div></div>'
       +(S.nrType==='hr_expense_request'?'':lazyApprovalFlowHtml())
     +'</div>';
@@ -3497,7 +3501,6 @@ function passbookUploadPanelHtml(){
 }
 function paymentFieldsHtml(){
   return'<div style="background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:9px;margin-bottom:8px">'
-    +'<div style="font-size:11px;font-weight:650;color:var(--brtxt);margin-bottom:7px">匯款資訊</div>'
     +'<div class="fr2"><div class="fg"><label class="fl">付款方式 *</label><select id="nr-pay-form" onchange="S.nrPay=this.value;updNRAcct()"><option value="bank" selected>銀行轉帳</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">備註：公司是兆豐銀行；收款銀行也是兆豐時不列手續費分錄</div></div><div class="fg"><label class="fl">總金額 *</label><input type="number" id="nr-amt" placeholder="0"></div></div>'
     +'<div class="fg"><label class="fl">手續費</label><select id="nr-fee-bearer" onchange="syncLazyBankFeeRow(true)"><option value="己方支出">己方支出</option><option value="對方支出">對方支出</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">己方支出且非兆豐收款銀行時，系統會依公司別設定自動切 Dr 6290 手續費，並在即時 Excel 增加免憑證明細</div></div>'
     +'<div class="fg"><label class="fl">收款人 *</label><input id="nr-payee" placeholder="收款人姓名或公司名稱"></div>'
@@ -3508,7 +3511,6 @@ function paymentFieldsHtml(){
 }
 function hrBatchPaymentFieldsHtml(){
   return'<div style="background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:9px;margin-bottom:8px">'
-    +'<div style="font-size:11px;font-weight:650;color:var(--brtxt);margin-bottom:7px">整批匯款資訊</div>'
     +'<div class="fr2"><div class="fg"><label class="fl">付款方式 *</label><select id="nr-pay-form" onchange="S.nrPay=this.value;updNRAcct()"><option value="bank" selected>銀行轉帳（整批匯款）</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">人事費用以薪資表或人事費用明細整批撥款，不填個別收款人與個別銀行資料。</div></div><div class="fg"><label class="fl">總金額 *</label><input type="number" id="nr-amt" placeholder="0" readonly></div></div>'
     +'<div class="fg"><label class="fl">預計整批匯款日 *</label><input type="date" id="nr-paydate" value="'+todayIso()+'"></div>'
     +'</div>';
