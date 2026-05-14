@@ -1235,6 +1235,7 @@ var S={user:null,page:'dashboard',prev:'dashboard',nT:'all',aT:'p',bF:'all',accS
        invMode:'single',rptTab:'bs',demoLogin:false,nrDraftId:'',bRows:[{buyer:'',taxid:'',desc:'',amt:''}]};
 var DRAFT_LEGACY_KEY='module_finance_request_drafts_v1';
 var DRAFT_KEY_BASE='module_finance_request_drafts_v2';
+var LOCAL_APP_STATE_KEY='module_finance_runtime_state_v1';
 var DRAFTS=[];
 
 // Supabase 設定：填入 Project Settings > API 裡的 Project URL 與 anon public key。
@@ -1707,7 +1708,7 @@ function notifDbRow(n){
   return {id:n.id,type:n.type,title:n.title,body:n.body,time:n.time,read:n.read,request_id:n.reqId||null};
 }
 async function dbInsert(table,row){
-  if(S.demoLogin)return;
+  if(S.demoLogin){saveLocalAppState();return;}
   var client=getSb();if(!client)return;
   var r=await client.from(table).insert(row);
   if(r.error&&table==='expense_requests'&&isSchemaCacheMiss(r.error.message)){
@@ -1722,7 +1723,7 @@ async function dbInsert(table,row){
   if(r.error)console.warn('Supabase insert failed:',table,r.error.message);
 }
 async function dbUpdate(table,id,values){
-  if(S.demoLogin)return;
+  if(S.demoLogin){saveLocalAppState();return;}
   var client=getSb();if(!client)return;
   var r=await client.from(table).update(values).eq('id',id);
   if(r.error&&table==='expense_requests'&&isSchemaCacheMiss(r.error.message)){
@@ -1732,7 +1733,7 @@ async function dbUpdate(table,id,values){
   if(r.error)console.warn('Supabase update failed:',table,r.error.message);
 }
 async function dbUpsert(table,row){
-  if(S.demoLogin)return;
+  if(S.demoLogin){saveLocalAppState();return;}
   var client=getSb();if(!client)return;
   var r=await client.from(table).upsert(row);
   if(r.error)console.warn('Supabase upsert failed:',table,r.error.message);
@@ -2031,6 +2032,49 @@ function invoicePaidMonth(i){
   if(i.status!=='paid')return '';
   return monthKey(i.paidAt)||monthKey(i.date)||'未指定';
 }
+function sanitizeLocalFile(f){
+  f=f||{};
+  var url=f.url||'';
+  var size=num(f.size);
+  if(/^data:/i.test(String(url||''))&&size>700000)url='';
+  return Object.assign({},f,{url:url});
+}
+function sanitizeLocalReq(r){
+  r=Object.assign({},r||{});
+  r.files=normalizeFiles(r.files||[]).map(sanitizeLocalFile);
+  r.actualFiles=normalizeFiles(r.actualFiles||[]).map(sanitizeLocalFile);
+  r.passbookFiles=normalizeFiles(r.passbookFiles||[]).map(sanitizeLocalFile);
+  if(r.formPayload&&r.formPayload.passbookFiles)r.formPayload=Object.assign({},r.formPayload,{passbookFiles:normalizeFiles(r.formPayload.passbookFiles).map(sanitizeLocalFile)});
+  return r;
+}
+function saveLocalAppState(){
+  try{
+    var state={
+      requests:(REQS||[]).map(sanitizeLocalReq),
+      notifications:NOTIFS||[],
+      vouchers:VOUCHERS||[],
+      ledger:LEDGER||[],
+      invoices:INVS||[],
+      bills:BILLS||[]
+    };
+    localStorage.setItem(LOCAL_APP_STATE_KEY,JSON.stringify(state));
+  }catch(err){
+    console.warn('local app state save failed',err);
+  }
+}
+function loadLocalAppState(){
+  try{
+    var state=JSON.parse(localStorage.getItem(LOCAL_APP_STATE_KEY)||'{}')||{};
+    if(Array.isArray(state.requests))REQS=state.requests.map(mapReq);
+    if(Array.isArray(state.notifications))NOTIFS=state.notifications.map(mapNotif);
+    if(Array.isArray(state.vouchers))VOUCHERS=state.vouchers.map(mapVoucher);
+    if(Array.isArray(state.ledger))LEDGER=state.ledger.map(mapLedger);
+    if(Array.isArray(state.invoices))INVS=state.invoices.map(mapInv);
+    if(Array.isArray(state.bills))BILLS=state.bills.map(mapBill);
+  }catch(err){
+    console.warn('local app state load failed',err);
+  }
+}
 
 // ══ 登入 ══
 window.doLogin=async function(){
@@ -2118,6 +2162,7 @@ async function handleOAuthReturn(){
 }
 function doEnter(u){
   S.user=u;
+  if(S.demoLogin)loadLocalAppState();
   el('sb-av').textContent=u.init;el('sb-name').textContent=u.n;
   el('sb-role').textContent=u.rL+' · '+u.dc;el('top-info').textContent=u.n+' · '+u.rL;
   showModuleHub();
@@ -2920,13 +2965,16 @@ window.pettyModeChanged=function(v){
 };
 window.nrR=function(r){S.nrRec=r;if(!S.nrPay)S.nrPay='bank';S.nrStep=3;renderNR();};
 window.nrHrItem=function(id){
+  var prevState=collectNRFormState();
   S.hrItem=id;
   var item=hrItem();
   S.nrRec=item.rec;
   S.nrPay='bank';
-  S.hrRows=[hrDefaultRow()];
+  if(!(S.hrRows&&S.hrRows.length))S.hrRows=[hrDefaultRow()];
+  S.hrRows=S.hrRows.map(function(r){return Object.assign({},r,{'類別':item.label});});
   S.nrStep=3;
   renderNR();
+  setTimeout(function(){applyNRFormState(Object.assign({},prevState,{hrItem:id,hrRows:S.hrRows}));},0);
 };
 window.nrP=function(p){S.nrPay=p;S.nrStep=3;renderNR();};
 window.nrBack=function(n){S.nrStep=n;renderNR();};
@@ -3053,6 +3101,13 @@ function updateDraftCounters(){
   var cnt=el('draft-count');if(cnt)cnt.textContent=DRAFTS.length+' 筆';
   var ac=el('draft-appr-cnt');if(ac)ac.textContent=DRAFTS.length;
 }
+function openDraftsAfterSave(){
+  S.aT='drafts';
+  nav('approvals',null);
+  buildApprovals();
+  var ok=el('nr-ok');
+  if(ok)ok.style.display='none';
+}
 async function serializeDraftFiles(recordNo){
   var out=[];
   for(var i=0;i<S.nrFiles.length;i++){
@@ -3140,6 +3195,7 @@ window.nrSaveDraft=async function(){
     var ok=el('nr-ok');
     if(ok){ok.style.display='block';ok.textContent='草稿已暫存，可在「簽核管理 > 暫存表單」或支出申請的暫存欄位繼續編輯。';setTimeout(function(){ok.style.display='none';},3500);}
     else alert('草稿已暫存');
+    setTimeout(openDraftsAfterSave,350);
   }catch(err){
     console.error('draft save failed',err);
     alert('暫存失敗：'+(err&&err.message?err.message:'請稍後再試'));
@@ -3654,7 +3710,7 @@ function travelExpenseItemHtml(key,label,hint,fileLabel){
   var hasFile=key!=='meal';
   return'<div style="border:1px solid #efd7b8;border-radius:9px;padding:9px;margin-bottom:8px;background:#fff">'
     +'<div class="fr3"><div class="fg"><label class="fl">是否申請'+label+'</label><select id="tr-'+key+'-yn" onchange="travelToggle(\''+key+'\')"><option value="否">否</option><option value="是">是</option></select></div>'
-    +'<div class="fg"><label class="fl">'+label+'金額</label><input type="number" min="0" step="1" id="tr-'+key+'-amt" placeholder="0" oninput="syncTravelRows()"></div>'
+    +'<div class="fg"><label class="fl">'+label+'金額</label><input type="number" min="0" step="1" id="tr-'+key+'-amt" placeholder="0" oninput="syncTravelRows()" onchange="syncTravelRows()" onblur="syncTravelRows()"></div>'
     +'<div class="fg"><label class="fl">'+(hasFile?fileLabel:'憑證')+'</label>'+(hasFile?'<input type="file" id="tr-'+key+'-file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" onchange="travelFileChange(\''+key+'\',this)">':'<div style="font-size:11px;color:#94a3b8;padding:7px 0">膳什費免附憑證</div>')+'</div></div>'
     +'<div style="font-size:10px;color:#8b7358">'+hint+'</div></div>';
 }
@@ -3709,7 +3765,7 @@ function syncTravelRows(){
     var amt=num((el('tr-'+k+'-amt')||{}).value||0);
     if(!amt&&k==='meal')amt=travelMealRate()*Math.max(1,Math.ceil(travelDaysNum()||1));
     if(!amt&&k==='lodging')amt=travelLodgingRate()*Math.max(1,Math.ceil(travelDaysNum()||1)-1);
-    rows.push({no:'',date:todayIso(),item:labels[k],qty:k==='meal'?Math.max(1,Math.ceil(travelDaysNum()||1)):1,unitName:k==='meal'?'日':'筆',unitPrice:k==='meal'?travelMealRate():amt,total:amt,file:k==='meal'?'免憑證':travelFileNames(k)});
+    rows.push({no:'',date:todayIso(),item:labels[k],qty:k==='meal'?Math.max(1,Math.ceil(travelDaysNum()||1)):1,unitName:k==='meal'?'日':'筆',unitPrice:k==='meal'?travelMealRate():amt,netAmount:amt,taxAmount:0,grossAmount:amt,total:amt,file:k==='meal'?'免憑證':travelFileNames(k)});
   });
   S.lazyRows=rows;
   renderLazySheet();
@@ -4071,7 +4127,7 @@ function hrExpenseFieldsHtml(){
   return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">人事費用申請資料</span></div><div style="padding:11px">'
     +'<div class="fg"><label class="fl">人事支出項目 *</label><select id="hr-item-select" onchange="hrSetItem(this.value)">'+opts+'</select></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">費用月份 / 薪資月份</label><input type="month" id="hr-period" value="'+todayMonth()+'"></div><div class="fg"><label class="fl">勞務期間</label><input id="hr-labor-period" placeholder="接案人員填寫，例：2026/05/01-05/31"></div></div>'
-    +'<div style="background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:9px;margin-bottom:8px"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:6px">範本下載與上傳</div><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">請下載適用範本填寫後，在下方「上傳薪資表 / 人事費用附件」上傳。9A/9B 勞報單請一併上傳勞務報酬單。</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/hr_expense_template.xlsx\',\'人事費用支出.xlsx\')">下載人事費用支出 Excel</button><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/labor_service_fee.docx\',\'勞務報酬單.docx\')">下載勞務報酬單 Word</button></div></div>'
+    +'<div style="background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:9px;margin-bottom:8px"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:6px">範本下載與上傳</div><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">請下載適用範本填寫後，在上方「2-1. 上傳附件」區塊上傳薪資表、人事費用支出表或勞務報酬單。9A/9B 勞報單請一併上傳勞務報酬單。</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/hr_expense_template.xlsx\',\'人事費用支出.xlsx\')">下載人事費用支出 Excel</button><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/labor_service_fee.docx\',\'勞務報酬單.docx\')">下載勞務報酬單 Word</button></div></div>'
     +contractorHint
     +'</div></div>';
 }
@@ -4082,12 +4138,15 @@ function hrExpenseSideHtml(){
   +'</div>';
 }
 window.hrSetItem=function(id){
+  var prevState=collectNRFormState();
   S.hrItem=id;
   var item=hrItem();
   S.nrRec=item.rec;
-  S.hrRows=[hrDefaultRow()];
+  if(!(S.hrRows&&S.hrRows.length))S.hrRows=[hrDefaultRow()];
+  S.hrRows=S.hrRows.map(function(r){return Object.assign({},r,{'類別':item.label});});
   updNRAcct();
   renderNR();
+  setTimeout(function(){applyNRFormState(Object.assign({},prevState,{hrItem:id,hrRows:S.hrRows}));},0);
 };
 function renderHrExpenseSheet(){
   var box=el('hr-expense-sheet');if(!box)return;
