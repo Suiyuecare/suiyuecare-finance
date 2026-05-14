@@ -1489,6 +1489,8 @@ function requestCashPostedAt(r){
 }
 function requestCashAmount(r){
   if(!r)return 0;
+  var fp=r.formPayload||r.form_payload||{};
+  if(requestCashPostedAt(r)&&num(fp.cashAmount))return num(fp.cashAmount);
   var base=num(r.actualAmt||r.actual_amount||r.amt||r.amount);
   return base+requestBankFeeAmount(r);
 }
@@ -1774,6 +1776,16 @@ function buildApprovalSteps(appUser,requestType){
     steps.push({r:label||RL[role]||role,rk:role,uid:u?u.id:'',n:'',a:'',t:'',c:'',status:status});
   }
   var direct=directSupervisorRole(appUser.role);
+  if(requestType==='advance_request'){
+    add(direct,'主管通過',STEP_FOR[direct]||'pending_section_chief');
+    add('dept_manager','部門主管通過','pending_dept_manager');
+    add('admin_director','行政部門主任','pending_admin_director');
+    add('accountant','會計','pending_accountant');
+    add('ceo','執行長放款','pending_ceo');
+    steps.push({r:'申請人提供最後支出最正確的憑據',rk:'applicant_confirm',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_applicant_confirm',purpose:'請申請人上傳最後實際花費的發票、憑據照片與即時 Excel 明細，作為核銷依據。'});
+    steps.push({r:'會計收到最後憑據並入帳調整',rk:'accountant_final',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_voucher',purpose:'會計收回實體憑據，確認多退少補，並以最後正確費用調整入帳；三表以本關最終金額認列。'});
+    return steps;
+  }
   add(direct,'上一層級主管：'+(RL[direct]||direct),STEP_FOR[direct]||'pending_section_chief');
   add('dept_manager','部門主管','pending_dept_manager');
   add('admin_director','行政部門主任','pending_admin_director');
@@ -1793,6 +1805,7 @@ function buildInvoiceApprovalSteps(appUser){
   return steps;
 }
 function stepPurpose(s){
+  if(s&&s.purpose)return s.purpose;
   var map={
     applicant_submit:'申請人建立表單、上傳附件並送出，系統正式開始簽核流程。',
     direct_supervisor:'確認申請內容、金額與業務必要性，避免不合理或重複申請。',
@@ -2707,14 +2720,12 @@ function renderLazyExpensePage(){
   var pettyModeHtml=S.nrType==='petty_cash_request'
     ?'<div class="fg"><label class="fl">零用金申請類型 *</label><select id="petty-mode" onchange="pettyModeChanged(this.value)"><option value="initial" '+(pettyMode==='initial'?'selected':'')+'>初次申請</option><option value="general" '+(pettyMode!=='initial'?'selected':'')+'>一般申請</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">初次申請只填申請金額，不需憑據；會計科目列為 1191 暫付款，現金流量表顯示銀行流出。一般申請則補足上月不足，憑據正常認列支出。</div></div>'
     :'';
-  var advanceTemplateHtml=S.nrType==='advance_request'
-    ?'<div class="fg" style="background:#fffaf3;border:1px solid #efd7b8;border-radius:9px;padding:9px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><div style="font-size:12px;font-weight:650;color:#334155">預支申請書下載</div><div style="font-size:10px;color:#8b7358;margin-top:2px">員工可先下載填寫，再於上方憑據區上傳 Word / Excel 檔一併送簽核。</div></div><div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-s" onclick="dlAdvanceTemplate(\'doc\')">Word</button><button class="btn-s" onclick="dlAdvanceTemplate(\'xls\')">Excel</button></div></div></div>'
-    :'';
+  var advanceTemplateHtml='';
   c.innerHTML=
     '<div class="card" style="margin-bottom:10px;padding:12px;border-left:4px solid var(--br)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="ph" style="font-size:17px">申請內容</div><div class="ps">步驟 1 選擇類型　→　步驟 2 上傳附件、整理 Excel、填寫申請與匯款資訊　→　送出後直接進簽核</div></div><button class="btn-g" onclick="buildNR()">切回申請類型</button></div></div>'
     +'<div style="display:flex;flex-direction:column;gap:10px">'
       +'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span></div><div style="padding:12px"><div class="fr2">'
-        +receiptUploadPanelHtml({ocr:true,kind:'receipt'})
+        +(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():receiptUploadPanelHtml({ocr:true,kind:'receipt'}))
         +passbookUploadPanelHtml()
       +'</div></div></div>'
       +'<div class="card"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="lazyAdd()">新增列</button><button class="btn-g" onclick="applyLazySummary()">回填總額</button></div></div><div style="padding:12px"><div id="lazy-sheet"></div><div style="margin-top:10px;border-top:1px solid #f0e6d6;padding-top:10px"><div style="font-size:11px;color:#8b7358;line-height:1.5">送出後，系統會自動產生一份 Excel 檔：明細表、基本資料、匯款資訊與憑據照片會合併在同一份檔案內，並交給主管檢核。</div></div></div></div>'
@@ -2809,7 +2820,7 @@ function renderNR(){
     var rightPayHtml=S.nrType==='hr_expense_request'?hrBatchPaymentFieldsHtml():paymentFieldsHtml();
     c.innerHTML='<div style="display:flex;flex-direction:column;gap:10px;'+(S.nrType==='hr_expense_request'?'max-width:1180px;margin:0 auto;width:100%;':'')+'">'
       +'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span><button class="btn-g" onclick="'+((S.nrType==='travel_request'||S.nrType==='purchase_request'||S.nrType==='hr_expense_request')?'nrBack(1)':'nrBack(2)')+'">← 返回</button></div><div style="padding:11px"><div class="fr2">'
-        +receiptUploadPanelHtml({ocr:S.nrType==='expense_reimbursement',kind:S.nrType==='hr_expense_request'?'payroll':'receipt'})
+        +(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():receiptUploadPanelHtml({ocr:S.nrType==='expense_reimbursement',kind:S.nrType==='hr_expense_request'?'payroll':'receipt'}))
         +(S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A/9B 勞報單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
       +'</div></div></div>'
       +sheetHtml
@@ -3117,7 +3128,16 @@ window.nrSaveDraft=async function(){
 window.nrFileChange=function(inp){S.nrDraftFileNotice='';Array.from(inp.files).forEach(function(f){S.nrFiles.push(f);});renderNRFList();inp.value='';};
 window.nrFileDrop=function(e){S.nrDraftFileNotice='';el('nr-dz').classList.remove('drag');Array.from(e.dataTransfer.files).forEach(function(f){S.nrFiles.push(f);});renderNRFList();};
 function lazyApprovalFlowHtml(){
-  var rows=[
+  var rows=S.nrType==='advance_request'?[
+    ['1','申請人送件','填寫預支資料，上傳已填寫的預支申請書與存摺封面，送出後開始流程。'],
+    ['2','主管通過','確認預支事由、金額與業務必要性。'],
+    ['3','部門主管通過','確認部門預算、專案歸屬與預支風險。'],
+    ['4','行政部門主任','確認行政流程、申請書完整性與匯款資料。'],
+    ['5','會計','確認暫付款科目、付款資料與後續核銷責任。'],
+    ['6','執行長放款','核准後視為款項實際發出，現金流量表於本關通過時計入銀行流出。'],
+    ['7','申請人提供最後支出最正確的憑據','款項使用後，上傳最後實際花費的發票、憑據照片與即時 Excel 明細表。'],
+    ['8','會計收到最後憑據','收回實體憑據與多退少補款項，三表依最後正確費用金額調整入帳，而非一開始送單金額。']
+  ]:[
     ['1','申請人送件','確認申請內容、匯款資料、憑據照片與 Excel 明細無誤後送出。'],
     ['2','申請人上一層級主管','確認費用是否合理、是否為業務必要支出，並檢查金額與用途。'],
     ['3','申請人部門主管','確認部門預算、成本歸屬與跨組別影響；若與上一層級主管相同則自動跳過。'],
@@ -3491,6 +3511,14 @@ function receiptUploadPanelHtml(opt){
     +'<div id="nr-flist" style="margin-top:7px">'+nrFileListHtml(180)+'</div>'
     +(opt.ocr?'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OpenAI 解析憑據」，下方會產生可編輯表格。</div>':'<div style="font-size:11px;color:#8b7358;margin-top:8px">附件會隨申請單送簽核，主管可下載檢視。</div>')
     +(opt.ocr?lazyProgressHtml():'')
+  +'</div>';
+}
+function advanceRequestUploadPanelHtml(){
+  return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%">'
+    +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px"><div><div style="font-size:12px;font-weight:650;color:#334155">預支申請書下載與上傳</div><div style="font-size:10px;color:#8b7358;margin-top:2px;line-height:1.5">請先下載預支申請書填寫完成，再把填好的 Word / Excel / PDF 上傳回本區；這裡不是上傳消費憑據。</div></div><div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-s" onclick="dlAdvanceTemplate(\'doc\')">Word</button><button class="btn-s" onclick="dlAdvanceTemplate(\'xls\')">Excel</button></div></div>'
+    +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">UPLOAD ADVANCE FORM</div><div style="font-size:13px;font-weight:650;color:#334155;margin-bottom:3px">上傳已填寫的預支申請書</div><div style="font-size:11px;color:#94a3b8;line-height:1.5">可上傳 Word、Excel、PDF 或掃描圖片；最後實際花費的發票憑據請於第 7 關再補上。</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" onchange="nrFileChange(this)"></div>'
+    +'<div id="nr-flist" style="margin-top:7px">'+nrFileListHtml(180)+'</div>'
+    +'<div style="font-size:11px;color:#8b7358;margin-top:8px">預支款核准撥付後會先列為暫付款；執行長放款通過時計入現金流，最後會計依第 7 關補上的正確憑據調整三表。</div>'
   +'</div>';
 }
 function passbookUploadPanelHtml(){
@@ -4190,6 +4218,7 @@ window.submitNR=async function(){
       S.nrRec='receipt';
     }
   }
+  if(S.nrType==='advance_request'&&!S.nrFiles.length){alert('預支申請需先在 2-1 上傳已填寫的預支申請書。');return;}
   var appName=((el('nr-app')||{}).value||'').trim()||(S.user?S.user.n:'');
   if(!appName){alert('請填寫申請人姓名');return;}
   if(!amt){alert('請填寫申請金額');return;}
@@ -4376,12 +4405,13 @@ window.openDetail=function(rid){
   el('detail-hd').innerHTML='<div style="font-size:15px;font-weight:500;color:#1e293b">'+r.no+' <span class="badge '+SCSS[r.status]+'">'+SL[r.status]+'</span></div><div style="font-size:12px;color:#94a3b8;margin-top:2px">'+r.app+' · '+r.dc+' '+d.n+'</div>';
   var curStep=activeStep(r);var acts=[];
   var detailUpload='<div style="min-width:260px;max-width:420px;flex:1">'+approvalActionFields('appr-c','appr-files','appr-add-user')+'</div>';
+  var advanceFinalAmtField=r.type==='advance_request'?'<div class="fg"><label class="fl">最後實際支出金額 *</label><input type="number" min="0" id="advance-final-amt" value="'+(r.actualAmt||r.amt||0)+'" placeholder="請依最後發票與 Excel 明細填寫"></div>':'';
   var returnBtn=canActRequest(r)&&canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPrevious(\''+r.id+'\')">退回上一關</button>':'';
   if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request')acts.push('<div style="min-width:280px;max-width:520px;flex:1"><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="proc-actual-amt" value="'+(r.actualAmt||r.amt||0)+'"></div>'+approvalActionFields('proc-c','proc-files','proc-add-user')+'</div><button class="btn-p" style="background:#0f766e" onclick="submitProcurementActual(\''+r.id+'\')">提交實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
   else if(canActRequest(r)&&r.status!=='pending_applicant_confirm'&&r.status!=='pending_voucher')acts.push(detailUpload+'<button class="btn-p" onclick="doApprove(\''+r.id+'\')">核准</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">退件</button>');
-  if(r.status==='pending_applicant_confirm'&&canActRequest(r))acts.push(detailUpload+'<button class="btn-p" style="background:#1a7040" onclick="doConfirmPay(\''+r.id+'\')">'+(r.type==='purchase_request'?'確認收到採購商品':'確認已撥款')+'</button>'+returnBtn);
+  if(r.status==='pending_applicant_confirm'&&canActRequest(r))acts.push((r.type==='advance_request'?'<div style="min-width:260px;max-width:460px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">請在此上傳最後實際花費的發票、憑據照片與即時 Excel 明細表，交給會計做最後核銷。</div>'+approvalActionFields('appr-c','appr-files','appr-add-user')+'</div>':detailUpload)+'<button class="btn-p" style="background:#1a7040" onclick="doConfirmPay(\''+r.id+'\')">'+(r.type==='purchase_request'?'確認收到採購商品':r.type==='advance_request'?'提交最後憑據與 Excel 明細':'確認已撥款')+'</button>'+returnBtn);
   // FIX 1：會計確認後自動生成傳票
-  if(r.status==='pending_voucher'&&canActRequest(r))acts.push(detailUpload+'<button class="btn-p" style="background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\')">確認憑據 · 自動切傳票</button>'+returnBtn);
+  if(r.status==='pending_voucher'&&canActRequest(r))acts.push('<div style="min-width:260px;max-width:460px;flex:1">'+advanceFinalAmtField+approvalActionFields('appr-c','appr-files','appr-add-user')+'</div><button class="btn-p" style="background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn);
   if(r.voucherId)acts.push('<button class="btn-g" onclick="showVoucherById(\''+r.voucherId+'\')">查看傳票 '+r.voucherId+'</button>');
   if(canWithdrawRequest(r))acts.push('<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button>');
   el('detail-act').innerHTML=acts.join('');
@@ -4389,7 +4419,8 @@ window.openDetail=function(rid){
   var feeAmt=requestBankFeeAmount(r);
   var feeNote=feeAmt?('（自動切分錄 '+fmt(feeAmt)+'）'):(isMegaBankRecipient(r)?'（兆豐收款銀行，不列手續費分錄）':'');
   var bankDetail=(r.payee||r.bankName||r.bankNo)?('收款人：'+(r.payee||'—')+'<br>銀行：'+(r.bankName||'—')+(r.bankBranch?' '+r.bankBranch:'')+'<br>帳號：<span style="font-family:monospace">'+(r.bankNo||'—')+'</span><br>預計匯款日：'+(r.expectedPayDate||'—')+'<br>手續費：'+(requestFeeBearer(r)||'—')+feeNote):(r.bankAcc||'—');
-  var cells=[['法人','<span class="ep">'+e.s+'</span>'],['部門','<span class="dt">'+r.dc+'</span>'],['類型','<span class="badge '+TCSS[r.type]+'">'+r.tL+'</span>'],[r.type==='purchase_request'?'預估金額':'金額','<strong style="font-size:15px">'+fmt(r.estimatedAmt||r.amt)+'</strong>'],['實際支出',r.type==='purchase_request'?(r.actualAmt?'<strong style="font-size:15px;color:#0f766e">'+fmt(r.actualAmt)+'</strong>':'<span style="color:#94a3b8">待總務填寫</span>'):'—'],['申請人',r.app],['日期',r.date],['匯款資訊','<span style="font-size:11px;color:var(--brtxt);line-height:1.5">'+bankDetail+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:8px;padding:7px;border:1px solid #f0e0c8"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+x[0]+'</div><div style="font-size:12px">'+x[1]+'</div></div>';}).join('');
+  var actualText=(r.type==='purchase_request'||r.type==='advance_request')?(r.actualAmt?'<strong style="font-size:15px;color:#0f766e">'+fmt(r.actualAmt)+'</strong>':'<span style="color:#94a3b8">'+(r.type==='advance_request'?'待會計依最後憑據填寫':'待總務填寫')+'</span>'):'—';
+  var cells=[['法人','<span class="ep">'+e.s+'</span>'],['部門','<span class="dt">'+r.dc+'</span>'],['類型','<span class="badge '+TCSS[r.type]+'">'+r.tL+'</span>'],[r.type==='purchase_request'||r.type==='advance_request'?'原申請金額':'金額','<strong style="font-size:15px">'+fmt(r.estimatedAmt||r.amt)+'</strong>'],['最後實際支出',actualText],['申請人',r.app],['日期',r.date],['匯款資訊','<span style="font-size:11px;color:var(--brtxt);line-height:1.5">'+bankDetail+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:8px;padding:7px;border:1px solid #f0e0c8"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+x[0]+'</div><div style="font-size:12px">'+x[1]+'</div></div>';}).join('');
   var filesHtml='';
   if(r.files&&r.files.length)filesHtml='<div style="margin-top:8px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">已上傳憑據（'+r.files.length+'個）</div><div>'+r.files.map(function(f,i){return fileChipDownloadHtml(f,r.id,i);}).join('')+'</div></div>';
   var hasSubmitStep=(r.steps||[]).some(function(s){return s.rk==='applicant_submit';});
@@ -4445,6 +4476,7 @@ window.doConfirmPay=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
   if(!canActRequest(r)){alert('目前不是您的確認步驟');return;}
   var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
+  if(r.type==='advance_request'&&(!p.files||!p.files.length)){alert('預支申請第 7 關需上傳最後花費的發票、憑據照片與即時 Excel 明細表。');return;}
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'approval_step');
   approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
   await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps,form_payload:r.formPayload||{}});buildAll();openDetail(rid);
@@ -4458,6 +4490,12 @@ window.doConfirmVoucher=async function(rid){
   var seqNum=r.no.replace('EXP-2026-','');
   var vid='V2026-'+seqNum;
   var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
+  if(r.type==='advance_request'){
+    var finalAmt=num((el('advance-final-amt')||{}).value);
+    if(!finalAmt){alert('請填寫最後實際支出金額，作為三表最後入帳調整依據。');return;}
+    r.actualAmt=finalAmt;
+    r.formPayload=Object.assign({},r.formPayload||{},{advanceFinalAmount:finalAmt,advanceFinalSettledAt:new Date().toISOString(),advanceOriginalAmount:r.estimatedAmt||r.amt});
+  }
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'approval_step');
   approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
   if(p.addUid){
@@ -4517,7 +4555,7 @@ window.doConfirmVoucher=async function(rid){
     return;
   }
   if(!rpc||rpc.missing){
-    await dbUpdate('expense_requests',rid,{amount:r.amt,status:r.status,step:r.step,steps:r.steps,voucher_id:r.voucherId,fee_bearer:r.feeBearer||requestFeeBearer(r)||null,bank_fee_amount:bankFee,form_payload:r.formPayload||{}});
+    await dbUpdate('expense_requests',rid,{amount:r.amt,actual_amount:r.actualAmt||null,status:r.status,step:r.step,steps:r.steps,voucher_id:r.voucherId,fee_bearer:r.feeBearer||requestFeeBearer(r)||null,bank_fee_amount:bankFee,form_payload:r.formPayload||{}});
     await dbInsert('vouchers',{id:newVoucher.id,no:newVoucher.no,request_id:newVoucher.reqId,entity_id:newVoucher.eid,entity_name:newVoucher.entS,voucher_date:newVoucher.date.replace(/\//g,'-'),description:newVoucher.desc,entries:newVoucher.entries,total:newVoucher.total,creator:newVoucher.creator,posted:newVoucher.posted});
     await dbInsert('ledger_entries',{entry_date:todayIso(),description:r.tL+' — '+r.app,entity_id:r.eid,department_code:r.dc,debit:entryAmt,credit:0,account_code:r.dr,account_name:r.drN,reference_no:r.no});
     if(bankFee>0)await dbInsert('ledger_entries',{entry_date:todayIso(),description:r.tL+' 銀行手續費',entity_id:r.eid,department_code:r.dc,debit:bankFee,credit:0,account_code:'6290',account_name:'手續費',reference_no:r.no});
@@ -4651,15 +4689,17 @@ function showApprD(r){
   }).join('');
   var actH='';
   var fieldsH=approvalActionFields('appr-c','appr-files','appr-add-user');
+  var advanceFieldsH=r.type==='advance_request'?'<div style="font-size:10px;color:#8b7358;line-height:1.5;margin-bottom:7px">請上傳最後實際花費的發票、憑據照片與即時 Excel 明細表。</div>'+fieldsH:fieldsH;
+  var advanceFinalAmtField=r.type==='advance_request'?'<div class="fg"><label class="fl">最後實際支出金額 *</label><input type="number" min="0" id="advance-final-amt" value="'+(r.actualAmt||r.amt||0)+'" placeholder="請依最後發票與 Excel 明細填寫"></div>':'';
   var returnBtn=canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPrevious(\''+r.id+'\')">退回上一關</button>':'';
-  if(canAct&&r.status==='pending_applicant_confirm')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a7040;margin-bottom:5px" onclick="doConfirmPay(\''+r.id+'\')">'+(r.type==='purchase_request'?'確認收到採購商品':'確認已撥款')+'</button>'+returnBtn+'</div>';
+  if(canAct&&r.status==='pending_applicant_confirm')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+advanceFieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a7040;margin-bottom:5px" onclick="doConfirmPay(\''+r.id+'\')">'+(r.type==='purchase_request'?'確認收到採購商品':r.type==='advance_request'?'提交最後憑據與 Excel 明細':'確認已撥款')+'</button>'+returnBtn+'</div>';
   else if(canAct&&r.status==='pending_procurement'&&r.type==='purchase_request')actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="proc-actual-amt" value="'+(r.actualAmt||r.amt||0)+'" placeholder="請依發票憑據填寫實際支出"></div>'+approvalActionFields('proc-c','proc-files','proc-add-user')+'<button class="btn-p" style="width:100%;justify-content:center;background:#0f766e;margin-bottom:5px" onclick="submitProcurementActual(\''+r.id+'\')">提交憑據發票與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':'')+'<div style="font-size:10px;color:#8b7358;line-height:1.5">會計最後會以此實際支出金額切傳票與認列三表，預估金額僅保留作比較。</div></div>';
-  else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080;margin-bottom:5px" onclick="doConfirmVoucher(\''+r.id+'\')">確認憑據 · 自動切傳票</button>'+returnBtn+'</div>';
+  else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+advanceFinalAmtField+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080;margin-bottom:5px" onclick="doConfirmVoucher(\''+r.id+'\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn+'</div>';
   else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">核准此申請</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">整批退件</button></div>';
   if(!actH&&canWithdrawRequest(r))actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-top:6px">單子尚未進入執行長放款關卡，因此申請人可以抽單取消。</div></div>';
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:monospace;font-size:10px;color:#c0a080">'+r.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+r.app+' · '+e.s+'</div></div></div>'
-    +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+e.s+'</span>'],['部門',r.dc+' '+d.n],['類型','<span class="badge '+TCSS[r.type]+'">'+r.tL+'</span>'],[r.type==='purchase_request'?'預估金額':'金額','<strong>'+fmt(r.estimatedAmt||r.amt)+'</strong>'],['實際支出',r.type==='purchase_request'?(r.actualAmt?'<strong style="color:#0f766e">'+fmt(r.actualAmt)+'</strong>':'<span style="color:#94a3b8">待總務填寫</span>'):'—'],['匯款帳號','<span style="font-family:monospace;font-size:10px">'+(r.bankAcc||'—')+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
+    +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+e.s+'</span>'],['部門',r.dc+' '+d.n],['類型','<span class="badge '+TCSS[r.type]+'">'+r.tL+'</span>'],[r.type==='purchase_request'||r.type==='advance_request'?'原申請金額':'金額','<strong>'+fmt(r.estimatedAmt||r.amt)+'</strong>'],['最後實際支出',(r.type==='purchase_request'||r.type==='advance_request')?(r.actualAmt?'<strong style="color:#0f766e">'+fmt(r.actualAmt)+'</strong>':'<span style="color:#94a3b8">'+(r.type==='advance_request'?'待會計依最後憑據填寫':'待總務填寫')+'</span>'):'—'],['匯款帳號','<span style="font-family:monospace;font-size:10px">'+(r.bankAcc||'—')+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
     +'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:7px;padding:7px;font-size:12px">'+r.desc+'</div></div>'
     +'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">主管檢核附件</div>'+requestPrimaryFilesHtml(r)+'</div>'
     +(r.steps.length?'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">簽核進度</div>'+sh+'</div>':"")
