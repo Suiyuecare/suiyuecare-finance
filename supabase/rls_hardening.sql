@@ -155,6 +155,8 @@ as $$
   select
     public.is_finance_accounting()
     or p_request.applicant = public.current_finance_user_name()
+    or p_request.form_payload -> 'applicantProfile' ->> 'id' = public.current_finance_user_id()
+    or lower(p_request.form_payload -> 'applicantProfile' ->> 'email') = lower(auth.jwt() ->> 'email')
     or public.json_steps_include_current_user(p_request.steps)
     or public.json_steps_role_matches(p_request.steps)
     or (
@@ -280,6 +282,42 @@ drop policy if exists system_settings_admin_insert on public.system_settings;
 drop policy if exists system_settings_admin_update on public.system_settings;
 drop policy if exists system_settings_admin_delete on public.system_settings;
 
+-- Re-applying this file should be safe in production. Drop the scoped policies
+-- this file owns before recreating them.
+drop policy if exists finance_users_select_authenticated on public.finance_users;
+drop policy if exists finance_users_insert_admin on public.finance_users;
+drop policy if exists finance_users_update_admin on public.finance_users;
+drop policy if exists finance_users_delete_ceo on public.finance_users;
+drop policy if exists system_settings_select_authenticated on public.system_settings;
+drop policy if exists system_settings_insert_admin on public.system_settings;
+drop policy if exists system_settings_update_admin on public.system_settings;
+drop policy if exists system_settings_delete_ceo on public.system_settings;
+drop policy if exists expense_requests_select_scoped on public.expense_requests;
+drop policy if exists expense_requests_insert_own_or_finance on public.expense_requests;
+drop policy if exists expense_requests_update_actor on public.expense_requests;
+drop policy if exists expense_requests_delete_ceo_only on public.expense_requests;
+drop policy if exists invoices_select_scoped on public.invoices;
+drop policy if exists invoices_insert_authenticated_requester on public.invoices;
+drop policy if exists invoices_update_actor on public.invoices;
+drop policy if exists invoices_delete_ceo_only on public.invoices;
+drop policy if exists vouchers_select_accounting on public.vouchers;
+drop policy if exists vouchers_insert_accountant_ceo on public.vouchers;
+drop policy if exists vouchers_update_accountant_ceo on public.vouchers;
+drop policy if exists vouchers_delete_ceo_only on public.vouchers;
+drop policy if exists ledger_entries_select_accounting on public.ledger_entries;
+drop policy if exists ledger_entries_insert_accountant_ceo on public.ledger_entries;
+drop policy if exists ledger_entries_update_accountant_ceo on public.ledger_entries;
+drop policy if exists ledger_entries_delete_ceo_only on public.ledger_entries;
+drop policy if exists bills_select_finance on public.bills;
+drop policy if exists bills_insert_finance on public.bills;
+drop policy if exists bills_update_finance on public.bills;
+drop policy if exists bills_delete_ceo_only on public.bills;
+drop policy if exists notifications_select_authenticated on public.notifications;
+drop policy if exists notifications_insert_finance_or_system_actor on public.notifications;
+drop policy if exists notifications_update_authenticated_read_state on public.notifications;
+drop policy if exists notifications_delete_ceo_only on public.notifications;
+drop policy if exists module_audit_logs_select_admin_accounting on public.module_audit_logs;
+
 -- ---------------------------------------------------------------------------
 -- finance_users
 -- ---------------------------------------------------------------------------
@@ -358,6 +396,8 @@ to authenticated
 with check (
   public.is_finance_accounting()
   or applicant = public.current_finance_user_name()
+  or form_payload -> 'applicantProfile' ->> 'id' = public.current_finance_user_id()
+  or lower(form_payload -> 'applicantProfile' ->> 'email') = lower(auth.jwt() ->> 'email')
 );
 
 create policy expense_requests_update_actor

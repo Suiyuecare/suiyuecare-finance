@@ -76,7 +76,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .step-type:hover,.step-type.on{border-color:var(--br);background:var(--brxxl)}
 .step-opt{padding:8px 12px;border-radius:9px;border:1px solid #e0d0b8;cursor:pointer;background:#fff;text-align:left;width:100%;margin-bottom:5px;transition:all .15s}
 .step-opt:hover,.step-opt.on{border-color:var(--br);background:var(--brxxl)}
-/* 八階段簽核流程 */
+/* 簽核流程預覽 */
 .flow-wrap{padding:2px 0}
 .flow-step{display:flex;align-items:flex-start;gap:10px;position:relative}
 .flow-step:not(:last-child)::after{content:'';position:absolute;left:9px;top:22px;width:1px;bottom:-7px;background:#e0d0b8}
@@ -365,7 +365,7 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
     </div>
     <div class="g2" id="nr-main-grid"><div id="nr-content"></div>
       <div id="nr-side-panel" style="display:flex;flex-direction:column;gap:10px">
-        <div class="card"><div class="chd"><span class="cht">八階段簽核流程</span><span style="font-size:10px;background:var(--brxxl);color:var(--brtxt);padding:2px 7px;border-radius:99px;border:1px solid var(--brxl)">依申請人層級自動跳關</span></div><div style="padding:11px 13px"><div class="flow-wrap" id="nr-flow"></div></div></div>
+        <div class="card"><div class="chd"><span class="cht">簽核流程預覽</span><span style="font-size:10px;background:var(--brxxl);color:var(--brtxt);padding:2px 7px;border-radius:99px;border:1px solid var(--brxl)">依申請人層級自動跳關</span></div><div style="padding:11px 13px"><div class="flow-wrap" id="nr-flow"></div></div></div>
       </div>
     </div>
   </div>
@@ -762,7 +762,7 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
             <table style="min-width:480px"><thead><tr style="background:var(--warm)"><th>#</th><th>法人</th><th>費用項目</th><th>金額</th><th>期限</th><th>方式</th><th>說明</th></tr></thead><tbody id="bb-tbody"></tbody></table>
           </div>
           <div style="background:var(--brxxl);border:1px solid var(--brxl);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--brtxt);margin-bottom:10px">
-            批量建立後，每筆繳費單將依照八階段簽核流程送出，系統自動通知下一位簽核人。
+            批量建立後，每筆繳費單將依照簽核流程送出，系統自動通知下一位簽核人。
           </div>
           <div style="display:flex;gap:7px;justify-content:flex-end">
             <button class="btn-s" onclick="document.getElementById('m-add-bill').style.display='none'">取消</button>
@@ -1298,13 +1298,17 @@ function normalizeFileMeta(f){
 }
 function normalizeFiles(files){return Array.isArray(files)?files.map(normalizeFileMeta):[];}
 function fileToAttachment(file){
-  if(file&&file.url){
+  if(file&&(file.url||file.path||file.storagePath||file.storage_path)){
+    var path=file.path||file.storagePath||file.storage_path||'';
     return Promise.resolve({
       n:file.n||file.name||'附件',
       t:file.t||fileExt(file.n||file.name||''),
       mime:file.mime||file.type||'',
       size:num(file.size),
-      url:file.url,
+      url:file.url||'',
+      bucket:file.bucket||file.storage_bucket||SUPABASE_ATTACHMENT_BUCKET,
+      path:path,
+      storagePath:path,
       uploadedAt:file.uploadedAt||file.uploaded_at||new Date().toISOString(),
       kind:file.kind||file.category||''
     });
@@ -1518,7 +1522,8 @@ function requestCashAmount(r){
 }
 function mapReq(r){
   var payload=r.formPayload||r.form_payload||{};
-  var mapped={id:r.id,no:r.no,eid:r.eid||r.entity_id,dc:r.dc||r.department_code,app:r.app||r.applicant,type:r.type,tL:r.tL||r.type_label,amt:num(r.amt||r.amount),estimatedAmt:num(r.estimatedAmt||r.estimated_amount||r.amt||r.amount),actualAmt:num(r.actualAmt||r.actual_amount),actualFiles:normalizeFiles(r.actualFiles||r.actual_files||[]),formPayload:payload,passbookFiles:normalizeFiles(r.passbookFiles||r.passbook_files||payload.passbookFiles||[]),desc:r.desc||r.description||'',payee:r.payee||'',bankType:r.bankType||r.bank_type||'',bankName:r.bankName||r.bank_name||'',bankBranch:r.bankBranch||r.bank_branch||'',bankNo:r.bankNo||r.bank_no||'',expectedPayDate:r.expectedPayDate||fromIsoDate(r.expected_pay_date)||'',bankAcc:r.bankAcc||r.bank_account||'',feeBearer:r.feeBearer||r.fee_bearer||'',pettyMode:r.pettyMode||r.petty_mode||'',status:r.status,step:num(r.step||1),ver:num(r.ver||1),date:r.date||fromIsoDate(r.request_date||r.created_at),dr:r.dr||r.debit_account,drN:r.drN||r.debit_account_name,cr:r.cr||r.credit_account,crN:r.credit_account_name||r.crN,files:normalizeFiles(r.files||r.attachments||[]),steps:r.steps||[],voucherId:r.voucherId||r.voucher_id||''};
+  var profile=payload.applicantProfile||{};
+  var mapped={id:r.id,no:r.no,eid:r.eid||r.entity_id,dc:r.dc||r.department_code,app:r.app||r.applicant,applicantId:r.applicantId||r.applicant_id||profile.id||'',applicantEmail:r.applicantEmail||r.applicant_email||profile.email||'',type:r.type,tL:r.tL||r.type_label,amt:num(r.amt||r.amount),estimatedAmt:num(r.estimatedAmt||r.estimated_amount||r.amt||r.amount),actualAmt:num(r.actualAmt||r.actual_amount),actualFiles:normalizeFiles(r.actualFiles||r.actual_files||[]),formPayload:payload,passbookFiles:normalizeFiles(r.passbookFiles||r.passbook_files||payload.passbookFiles||[]),desc:r.desc||r.description||'',payee:r.payee||'',bankType:r.bankType||r.bank_type||'',bankName:r.bankName||r.bank_name||'',bankBranch:r.bankBranch||r.bank_branch||'',bankNo:r.bankNo||r.bank_no||'',expectedPayDate:r.expectedPayDate||fromIsoDate(r.expected_pay_date)||'',bankAcc:r.bankAcc||r.bank_account||'',feeBearer:r.feeBearer||r.fee_bearer||'',pettyMode:r.pettyMode||r.petty_mode||'',status:r.status,step:num(r.step||1),ver:num(r.ver||1),date:r.date||fromIsoDate(r.request_date||r.created_at),dr:r.dr||r.debit_account,drN:r.drN||r.debit_account_name,cr:r.cr||r.credit_account,crN:r.credit_account_name||r.crN,files:normalizeFiles(r.files||r.attachments||[]),steps:r.steps||[],voucherId:r.voucherId||r.voucher_id||''};
   if(mapped.type==='hr_expense_request'&&!mapped.voucherId&&payload.hrItem){
     var hm=hrAccountingMap(payload.hrItem);
     mapped.dr=hm.dr;mapped.drN=hm.drN;mapped.cr=hm.cr;mapped.crN=hm.crN;
@@ -1708,8 +1713,8 @@ function notifDbRow(n){
   return {id:n.id,type:n.type,title:n.title,body:n.body,time:n.time,read:n.read,request_id:n.reqId||null};
 }
 async function dbInsert(table,row){
-  if(S.demoLogin){saveLocalAppState();return;}
-  var client=getSb();if(!client)return;
+  if(S.demoLogin){saveLocalAppState();return {ok:true,demo:true};}
+  var client=getSb();if(!client)return {ok:true,skipped:true};
   var r=await client.from(table).insert(row);
   if(r.error&&table==='expense_requests'&&isSchemaCacheMiss(r.error.message)){
     console.warn('Supabase insert retry without extended expense columns:',r.error.message);
@@ -1720,7 +1725,8 @@ async function dbInsert(table,row){
     console.warn('Supabase ledger insert retry without entity_id:',r.error.message);
     r=await client.from(table).insert(lr);
   }
-  if(r.error)console.warn('Supabase insert failed:',table,r.error.message);
+  if(r.error){console.warn('Supabase insert failed:',table,r.error.message);return {ok:false,error:r.error};}
+  return {ok:true,data:r.data};
 }
 async function dbUpdate(table,id,values){
   if(S.demoLogin){saveLocalAppState();return;}
@@ -1793,7 +1799,8 @@ function buildApprovalSteps(appUser,requestType){
   }
   var steps=[];
   function add(role,label,status){
-    if(!role||role===appUser.role)return;
+    if(!role)return;
+    if(role===appUser.role&&role!=='ceo')return;
     if(steps.some(function(s){return s.rk===role;}))return;
     var u=firstUserByRole(role);
     steps.push({r:label||RL[role]||role,rk:role,uid:u?u.id:'',n:'',a:'',t:'',c:'',status:status});
@@ -1874,7 +1881,7 @@ function requestIsMine(r){
   if(!S.user||!r)return false;
   var fp=r.formPayload||{};
   var profile=fp.applicantProfile||{};
-  return S.user.id===r.applicantId||currentUserIsNamed(r.app)||currentUserIsNamed(r.applicant)||currentUserIsNamed(profile.name)||S.user.email===r.applicantEmail;
+  return S.user.id===r.applicantId||S.user.id===profile.id||currentUserIsNamed(r.app)||currentUserIsNamed(r.applicant)||currentUserIsNamed(profile.name)||S.user.email===r.applicantEmail||S.user.email===profile.email;
 }
 function requestReachedCeoFunding(r){
   if(!r)return false;
@@ -1975,14 +1982,17 @@ function appendReturnNote(step,comment){
 function returnRequestToPrevious(r,comment,files){
   var idx=activeStepIndex(r);
   if(idx<0)return false;
-  if(idx===0){
-    r.steps.splice(0,0,{r:'申請人補件後重新送出',rk:'applicant_revision',uid:(S.user&&S.user.id)||'',n:'',a:'',t:'',c:'',files:[],status:'pending_applicant_confirm'});
-    appendReturnNote(r.steps[0],comment);
-    if(files&&files.length)r.steps[0].files=normalizeFiles(r.steps[0].files||[]).concat(files);
+  var prev=idx>0?r.steps[idx-1]:null;
+  if(idx===0||(prev&&prev.rk==='applicant_submit')){
+    var applicantUser=USERS.find(function(u){return u.id===r.applicantId||u.n===r.app;})||USERS[0];
+    var revision={r:'申請人補件後重新送出',rk:'applicant_revision',uid:applicantUser.id,n:'',a:'',t:'',c:'',files:[],status:'pending_applicant_confirm'};
+    r.steps.splice(idx,0,revision);
+    appendReturnNote(revision,comment);
+    if(files&&files.length)revision.files=normalizeFiles(revision.files||[]).concat(files);
     syncRequestStatus(r);
     return true;
   }
-  var prev=r.steps[idx-1];if(!prev)return false;
+  if(!prev)return false;
   prev.a='';prev.n='';prev.t='';
   appendReturnNote(prev,comment);
   if(files&&files.length)prev.files=normalizeFiles(prev.files||[]).concat(files);
@@ -2006,14 +2016,16 @@ function approveInvoiceStep(i,comment,files,addUid){
 function returnInvoiceToPrevious(i,comment,files){
   var idx=activeStepIndex(i);
   if(idx<0)return false;
-  if(idx===0){
-    i.steps.splice(0,0,{r:'申請人補件後重新送出',rk:'applicant_revision',uid:i.applicantId||'',n:'',a:'',t:'',c:'',files:[],status:'pending_invoice_applicant'});
-    appendReturnNote(i.steps[0],comment);
-    if(files&&files.length)i.steps[0].files=normalizeFiles(i.steps[0].files||[]).concat(files);
+  var prev=idx>0?i.steps[idx-1]:null;
+  if(idx===0||(prev&&prev.rk==='applicant_submit')){
+    var revision={r:'申請人補件後重新送出',rk:'applicant_revision',uid:i.applicantId||'',n:'',a:'',t:'',c:'',files:[],status:'pending_invoice_applicant'};
+    i.steps.splice(idx,0,revision);
+    appendReturnNote(revision,comment);
+    if(files&&files.length)revision.files=normalizeFiles(revision.files||[]).concat(files);
     syncInvoiceStatus(i);
     return true;
   }
-  var prev=i.steps[idx-1];if(!prev)return false;
+  if(!prev)return false;
   prev.a='';prev.n='';prev.t='';
   appendReturnNote(prev,comment);
   if(files&&files.length)prev.files=normalizeFiles(prev.files||[]).concat(files);
@@ -2902,7 +2914,7 @@ function applicantProfileData(){
   var u=S.user||{};
   var dc=u.dc||'';
   var eid=u.eid||entityOfDept(dc)||currentUserEntityId();
-  return {name:u.n||'',departmentCode:dc,departmentName:dc?gD(dc).n:'',entityId:eid,entityName:eid?gE(eid).full:''};
+  return {id:u.id||'',email:u.email||'',name:u.n||'',departmentCode:dc,departmentName:dc?gD(dc).n:'',entityId:eid,entityName:eid?gE(eid).full:''};
 }
 function applicantProfileHtml(){
   var p=applicantProfileData();
@@ -2979,7 +2991,7 @@ window.nrHrItem=function(id){
 window.nrP=function(p){S.nrPay=p;S.nrStep=3;renderNR();};
 window.nrBack=function(n){S.nrStep=n;renderNR();};
 function draftInputIds(){
-  return ['nr-app','nr-app-sel','nr-dept','nr-ent','nr-date','nr-amt','nr-pay-form','nr-fee-bearer','nr-payee','nr-paydate','nr-bank-type','nr-bank-name','nr-bank-branch','nr-bank-no','nr-desc-purpose','nr-desc','tr-type','tr-project','tr-reason','tr-outcome','tr-start','tr-end','tr-days','tr-from','tr-to','tr-lodging-yn','tr-lodging-amt','tr-transport-yn','tr-transport-amt','tr-meal-yn','tr-meal-amt','tr-parking-yn','tr-parking-amt','tr-other-yn','tr-other-amt','wf-item','wf-recommend','wf-reason','wf-amount','wf-event-date','wf-target','wf-eligibility','wf-used','wf-docs','po-type','po-reason','po-budget','po-urgent','po-asset','po-need-date','po-deposit-date','po-deposit','po-balance','po-bank-code','po-bank-branch','po-bank-account','hr-period','hr-labor-period'];
+  return ['nr-app','nr-app-sel','nr-dept','nr-ent','nr-date','nr-amt','nr-pay-form','nr-fee-bearer','nr-payee','nr-paydate','nr-bank-type','nr-bank-name','nr-bank-branch','nr-bank-no','nr-desc-purpose','nr-desc','tr-days-manual','tr-type','tr-project','tr-reason','tr-outcome','tr-start','tr-end','tr-days','tr-from','tr-to','tr-lodging-yn','tr-lodging-amt','tr-transport-yn','tr-transport-amt','tr-meal-yn','tr-meal-amt','tr-parking-yn','tr-parking-amt','tr-other-yn','tr-other-amt','wf-item','wf-recommend','wf-reason','wf-amount','wf-event-date','wf-target','wf-eligibility','wf-used','wf-docs','po-type','po-reason','po-budget','po-urgent','po-asset','po-need-date','po-deposit-date','po-deposit','po-balance','po-bank-code','po-bank-branch','po-bank-account','hr-period','hr-labor-period'];
 }
 function draftOwnerKey(){
   if(!S.user)return'guest';
@@ -3620,7 +3632,7 @@ function receiptUploadPanelHtml(opt){
 function travelAttachmentGuideHtml(){
   return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%;grid-column:1/-1">'
     +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:10px"><div><div style="font-size:12px;font-weight:650;color:#334155">差旅附件與同行人員</div><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-top:2px">先選本趟參與差旅的員工，再依住宿、交通、停車、其他四類上傳憑據；每一類都可上傳多份資料。</div></div><button class="btn-p" onclick="travelAnalyzeReceipts()">OpenAI 解析</button></div>'
-    +'<div class="fg"><label class="fl">本趟同行人員 *（可複選）</label><select id="tr-people-select" multiple size="6" onchange="travelPeopleSelectChanged(this)" style="min-height:132px">'+travelPeopleOptionsHtml()+'</select><div style="font-size:10px;color:#8b7358;margin-top:4px">清冊會使用目前系統 / Supabase 載入的啟用帳號。選到的人員類別會依差旅費管理辦法自動計算 2-2 申請金額上限與膳什費。</div></div>'
+    +'<div class="fr2"><div class="fg"><label class="fl">本趟同行人員 *（可複選）</label><details id="tr-people-dd" style="position:relative"><summary id="tr-people-summary" style="list-style:none;cursor:pointer;background:#fff;border:1px solid #e0d0b8;border-radius:8px;padding:9px 10px;font-size:12px;color:#334155">選擇同行人員</summary><div id="tr-people-box" style="position:absolute;z-index:50;left:0;right:0;max-height:220px;overflow:auto;background:#fff;border:1px solid #e0d0b8;border-radius:9px;margin-top:5px;padding:7px;box-shadow:0 16px 34px rgba(80,52,20,.16)"></div></details><div style="font-size:10px;color:#8b7358;margin-top:4px">清冊會使用目前系統 / Supabase 載入的啟用帳號。選到的人員類別會依差旅費管理辦法自動計算 2-2 申請金額上限與膳什費。</div></div><div class="fg"><label class="fl">出差天數 *</label><input type="number" min="0.5" step="0.5" id="tr-days-manual" value="'+(travelDaysNum()||1)+'" oninput="syncTravelRows()" onchange="syncTravelRows()"><div style="font-size:10px;color:#8b7358;margin-top:4px">住宿費以 n-1 晚計算；交通費、膳什費、停車費以 n 天計算；其他費用不限。</div></div></div>'
     +'<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:8px">'
       +travelExpenseItemHtml('lodging','住宿費','住宿憑據')
       +travelExpenseItemHtml('transport','交通費','交通憑據')
@@ -3735,7 +3747,7 @@ function travelFieldsHtml(){
   return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">2-4. 差旅申請資料</span></div><div style="padding:11px">'
     +'<div class="fr2"><div class="fg"><label class="fl">差旅類型 *</label><select id="tr-type">'+opts.map(function(o){return'<option value="'+o+'">'+o+'</option>';}).join('')+'</select></div><div class="fg"><label class="fl">關聯專案／活動</label><input id="tr-project" placeholder="例：日照籌設、標案執行、居服拓區、訓練課程"></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">出差事由 *</label><input id="tr-reason" placeholder="簡述為什麼需要出差"></div><div class="fg"><label class="fl">預期成果 *</label><input id="tr-outcome" placeholder="例：會議紀錄、訪視紀錄、報價單、照片、場勘報告"></div></div>'
-    +'<div class="fr3"><div class="fg"><label class="fl">出發日期與時間 *</label><input type="datetime-local" id="tr-start" onchange="calcTravelDays();syncTravelRows()"></div><div class="fg"><label class="fl">返回日期與時間 *</label><input type="datetime-local" id="tr-end" onchange="calcTravelDays();syncTravelRows()"></div><div class="fg"><label class="fl">出差天數</label><input id="tr-days" readonly placeholder="系統自動計算"></div></div>'
+    +'<div class="fr2"><div class="fg"><label class="fl">出發日期與時間 *</label><input type="datetime-local" id="tr-start" onchange="calcTravelDays();syncTravelRows()"></div><div class="fg"><label class="fl">返回日期與時間 *</label><input type="datetime-local" id="tr-end" onchange="calcTravelDays();syncTravelRows()"></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">出發地 *</label><input id="tr-from" placeholder="公司、家裡、服務據點等"></div><div class="fg"><label class="fl">目的地 *</label><input id="tr-to" placeholder="地址或區域"></div></div>'
     +'</div></div>';
 }
@@ -3781,9 +3793,18 @@ function travelPeopleOptionsHtml(){
     return'<option value="'+u.id+'" '+(checked?'selected':'')+'>'+u.n+'（'+u.rL+' · '+u.dc+'）</option>';
   }).join('');
 }
+function travelPeopleSummary(){
+  var people=travelPeople();
+  return people.length?people.map(function(u){return u.n;}).join('、'):'選擇同行人員';
+}
 function renderTravelPeople(){
-  var sel=el('tr-people-select');if(!sel)return;
-  sel.innerHTML=travelPeopleOptionsHtml();
+  if(!S.travelPeople||!S.travelPeople.length)S.travelPeople=S.user?[S.user.id]:[];
+  var summary=el('tr-people-summary');if(summary)summary.textContent=travelPeopleSummary();
+  var box=el('tr-people-box');if(!box)return;
+  box.innerHTML=USERS.filter(function(u){return u.active;}).map(function(u){
+    var checked=S.travelPeople.indexOf(u.id)>-1;
+    return'<label style="display:flex;gap:6px;align-items:center;padding:7px;border-radius:7px;font-size:11px;color:#334155;cursor:pointer"><input type="checkbox" '+(checked?'checked':'')+' onchange="travelPersonToggle(\''+u.id+'\',this.checked)"> <span style="font-weight:650">'+u.n+'</span><span style="color:#94a3b8">'+u.rL+' · '+u.dc+'</span></label>';
+  }).join('');
 }
 window.travelPeopleSelectChanged=function(sel){
   S.travelPeople=Array.from(sel.selectedOptions||[]).map(function(o){return o.value;});
@@ -3793,18 +3814,21 @@ window.travelPersonToggle=function(id,checked){
   if(!S.travelPeople)S.travelPeople=[];
   S.travelPeople=S.travelPeople.filter(function(x){return x!==id;});
   if(checked)S.travelPeople.push(id);
+  renderTravelPeople();
   syncTravelRows();
 };
 window.calcTravelDays=function(){
-  var s=(el('tr-start')||{}).value,e=(el('tr-end')||{}).value,out=el('tr-days');
-  if(!out)return;
-  if(!s||!e){out.value='';return;}
+  var s=(el('tr-start')||{}).value,e=(el('tr-end')||{}).value,out=el('tr-days'),manual=el('tr-days-manual');
+  if(!s||!e){if(out)out.value='';return;}
   var diff=new Date(e)-new Date(s);
-  if(!isFinite(diff)||diff<0){out.value='時間需大於出發時間';return;}
+  if(!isFinite(diff)||diff<0){if(out)out.value='時間需大於出發時間';return;}
   var days=Math.max(0.5,Math.ceil(diff/86400000*2)/2);
-  out.value=days+' 天';
+  if(out)out.value=days+' 天';
+  if(manual)manual.value=days;
 };
 function travelDaysNum(){
+  var manual=num((el('tr-days-manual')||{}).value);
+  if(manual)return manual;
   var v=((el('tr-days')||{}).value||'').match(/[\d.]+/);
   return v?num(v[0]):0;
 }
@@ -3929,7 +3953,8 @@ function collectTravelInfo(){
   var get=function(id){return ((el(id)||{}).value||'').trim();};
   syncTravelRows();
   var people=travelPeople();
-  var info={type:get('tr-type'),project:get('tr-project'),reason:get('tr-reason'),outcome:get('tr-outcome'),start:get('tr-start'),end:get('tr-end'),days:get('tr-days'),from:get('tr-from'),to:get('tr-to'),people:people.map(function(u){return u.n+'（'+u.rL+'）';}).join('、'),rows:S.travelRows||[],items:(S.travelRows||[]).filter(function(r){return num(r.amount)>0;}).map(function(r){return r.label+' '+fmt(r.amount)+' / 上限 '+(r.kind==='other'?'不設上限':fmt(r.limit||0))+(r.files?'（'+r.files+'）':'');}).join('；')};
+  var daysNum=travelDaysNum();
+  var info={type:get('tr-type'),project:get('tr-project'),reason:get('tr-reason'),outcome:get('tr-outcome'),start:get('tr-start'),end:get('tr-end'),days:daysNum?(daysNum+' 天'):'',from:get('tr-from'),to:get('tr-to'),people:people.map(function(u){return u.n+'（'+u.rL+'）';}).join('、'),rows:S.travelRows||[],items:(S.travelRows||[]).filter(function(r){return num(r.amount)>0;}).map(function(r){return r.label+' '+fmt(r.amount)+' / 上限 '+(r.kind==='other'?'不設上限':fmt(r.limit||0))+(r.files?'（'+r.files+'）':'');}).join('；')};
   info.requiredMissing=['reason','outcome','start','end','from','to'].filter(function(k){return !info[k];});
   if(!people.length)info.requiredMissing.push('people');
   info.summary=[
@@ -4544,14 +4569,15 @@ window.submitNR=async function(){
   }
   uploadCount=attachments.length+passbookAttachments.length;
   var bankFeeAmount=requestBankFeeAmount({eid:eid,dc:dc,bankType:pay.bankType,bankName:pay.bankName,bankAcc:bank,feeBearer:pay.feeBearer});
-  var newReq={id:'r_'+Date.now(),no:no,eid:eid,dc:dc,app:appName,type:S.nrType,tL:tL,amt:amt,desc:desc,
+  var applicantProfile=applicantProfileData();
+  var newReq={id:'r_'+Date.now(),no:no,eid:eid,dc:dc,app:appName,applicantId:appUser.id||applicantProfile.id||'',applicantEmail:appUser.email||applicantProfile.email||'',type:S.nrType,tL:tL,amt:amt,desc:desc,
     payee:pay.payee,bankName:pay.bankName,bankBranch:pay.bankBranch,bankNo:pay.bankNo,expectedPayDate:pay.expectedPayDate.replace(/-/g,'/'),
     feeBearer:pay.feeBearer,bankType:pay.bankType,bankFeeAmount:bankFeeAmount,bankAcc:bank,pettyMode:S.pettyMode||'',status:nextStep?nextStep.status:'completed',step:nextStep?2:8,ver:1,date:((el('nr-date')||{}).value||todayIso()).replace(/-/g,'/'),
     dr:a.dr,drN:a.drN,cr:a.cr,crN:a.crN,
     files:attachments,
     passbookFiles:passbookAttachments,
     steps:steps,voucherId:'',
-    formPayload:{applicantProfile:applicantProfileData(),expenseEntity:eid,expenseDepartment:dc,lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:passbookAttachments,travelInfo:travelInfo||null,welfareInfo:welfareInfo||null,refundInfo:refundInfo||null,purchaseInfo:purchaseInfo||null,hrInfo:hrInfo||null}};
+    formPayload:{applicantProfile:applicantProfile,expenseEntity:eid,expenseDepartment:dc,lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:passbookAttachments,travelInfo:travelInfo||null,welfareInfo:welfareInfo||null,refundInfo:refundInfo||null,purchaseInfo:purchaseInfo||null,hrInfo:hrInfo||null}};
   if(S.nrType==='purchase_request'){
     newReq.estimatedAmt=amt;
     newReq.actualAmt=0;
@@ -4561,7 +4587,15 @@ window.submitNR=async function(){
   var newNotif={id:'n_'+Date.now(),type:'approval',title:'新申請待'+(firstStep.r||'簽核'),body:S.user.n+'的'+tL+'（'+fmt(amt)+'），附'+uploadCount+'個憑據',time:'剛才',read:false,reqId:newReq.id};
   REQS.unshift(newReq);
   NOTIFS.unshift(newNotif);
-  await dbInsert('expense_requests',reqDbRow(newReq));
+  var reqInsert=await dbInsert('expense_requests',reqDbRow(newReq));
+  if(!reqInsert||!reqInsert.ok){
+    REQS=REQS.filter(function(r){return r.id!==newReq.id;});
+    NOTIFS=NOTIFS.filter(function(n){return n.id!==newNotif.id;});
+    var msg=reqInsert&&reqInsert.error?(reqInsert.error.message||JSON.stringify(reqInsert.error)):'未知原因';
+    alert('申請單沒有成功寫入 Supabase，所以不會出現在簽核管理。請先處理後端權限或欄位問題：'+msg);
+    buildNR();buildDash();buildExp();renderNotifs();
+    return;
+  }
   await dbInsert('notifications',notifDbRow(newNotif));
 	  if(S.nrDraftId){var oldDraftId=S.nrDraftId;loadDrafts();DRAFTS=DRAFTS.filter(function(d){return d.id!==oldDraftId||!draftBelongsToCurrentUser(d);});saveDrafts();await deleteDraftRemote(oldDraftId);S.nrDraftId='';renderDrafts();}
   var ok=el('nr-ok');ok.style.display='block';
@@ -4681,7 +4715,7 @@ window.openDetail=function(rid){
     +'<div class="card"><div class="chd"><span class="cht">申請資訊</span></div><div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+cells+'</div><div style="padding:0 12px 12px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;border:1px solid #f0e0c8">'+r.desc+'</div>'+filesHtml+'</div></div>'
     +'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById(\''+r.voucherId+'\')">'+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+r.dr+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+r.drN+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+r.cr+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+r.crN+'</div></div></div>'+(feeAmt?'<div style="font-size:11px;color:#6a5840;margin-top:6px;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:6px">己方支出手續費會自動增加：Dr 6290 手續費 '+fmt(feeAmt)+'，Cr '+r.cr+' 銀行存款合計 '+fmt(r.amt+feeAmt)+'。</div>':'')+'<div style="font-size:11px;color:#94a3b8;margin-top:6px">提醒：數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
     +'</div>'
-    +'<div class="card"><div class="chd"><span class="cht">八階段簽核進度</span><span style="font-size:11px;color:#94a3b8">步驟 '+(r.step||2)+'/8</span></div><div style="padding:12px">'+tl+'</div></div>';
+    +'<div class="card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">步驟 '+(r.step||2)+'/8</span></div><div style="padding:12px">'+tl+'</div></div>';
 };
 
 window.doApprove=async function(rid){

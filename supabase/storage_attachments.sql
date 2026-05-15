@@ -1,7 +1,8 @@
 -- Module Finance attachment storage.
--- Apply after module_finance_production_schema.sql and rls_hardening.sql.
+-- Apply after module_finance_production_schema.sql, rls_hardening.sql, and compliance_and_drafts.sql.
 --
 -- File path format used by index.html:
+--   draft_requests/YYYY-MM/draft_123/draft_file/file.png
 --   expense_requests/YYYY-MM/EXP-2026-0001/request_files/file.xls
 --   expense_requests/YYYY-MM/EXP-2026-0001/passbook/file.png
 --   invoices/YYYY-MM/AA-123456/receipt_proof/file.pdf
@@ -39,7 +40,7 @@ create table if not exists public.file_attachments (
   id uuid primary key default gen_random_uuid(),
   bucket_id text not null default 'finance-attachments',
   storage_path text not null unique,
-  record_type text not null check (record_type in ('expense_requests','invoices')),
+  record_type text not null check (record_type in ('draft_requests','expense_requests','invoices')),
   record_no text not null,
   file_kind text not null,
   file_name text not null,
@@ -48,6 +49,21 @@ create table if not exists public.file_attachments (
   uploaded_by text,
   uploaded_at timestamptz not null default now()
 );
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'file_attachments_record_type_check'
+      and conrelid = 'public.file_attachments'::regclass
+  ) then
+    alter table public.file_attachments drop constraint file_attachments_record_type_check;
+  end if;
+  alter table public.file_attachments
+    add constraint file_attachments_record_type_check
+    check (record_type in ('draft_requests','expense_requests','invoices'));
+end $$;
 
 alter table public.file_attachments enable row level security;
 
@@ -65,6 +81,19 @@ for select
 to authenticated
 using (
   (
+    record_type = 'draft_requests'
+    and exists (
+      select 1
+      from public.draft_requests d
+      where d.id = file_attachments.record_no
+        and (
+          lower(d.owner_email) = lower(auth.jwt() ->> 'email')
+          or d.owner_id = public.current_finance_user_id()
+          or public.is_finance_admin()
+        )
+    )
+  )
+  or (
     record_type = 'expense_requests'
     and exists (
       select 1
@@ -109,6 +138,19 @@ using (
   bucket_id = 'finance-attachments'
   and (
     (
+      (storage.foldername(name))[1] = 'draft_requests'
+      and exists (
+        select 1
+        from public.draft_requests d
+        where d.id = (storage.foldername(name))[3]
+          and (
+            lower(d.owner_email) = lower(auth.jwt() ->> 'email')
+            or d.owner_id = public.current_finance_user_id()
+            or public.is_finance_admin()
+          )
+      )
+    )
+    or (
       (storage.foldername(name))[1] = 'expense_requests'
       and exists (
         select 1
@@ -136,7 +178,7 @@ to authenticated
 with check (
   bucket_id = 'finance-attachments'
   and public.current_finance_user_id() is not null
-  and (storage.foldername(name))[1] in ('expense_requests','invoices')
+  and (storage.foldername(name))[1] in ('draft_requests','expense_requests','invoices')
 );
 
 create policy finance_attachments_update_owner_or_ceo
