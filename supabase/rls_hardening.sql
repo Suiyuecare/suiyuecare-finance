@@ -145,6 +145,62 @@ as $$
   )
 $$;
 
+create or replace function public.json_active_step_matches_current_user(steps jsonb)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with step_rows as (
+    select
+      s,
+      row_number() over (
+        order by coalesce(nullif(s ->> 'step_order', '')::int, nullif(s ->> 'order', '')::int, ordinality::int)
+      ) as rn
+    from jsonb_array_elements(coalesce(steps, '[]'::jsonb)) with ordinality as x(s, ordinality)
+    where coalesce(s ->> 'a', s ->> 'status', '') not in ('approved','rejected','returned')
+  )
+  select exists (
+    select 1
+    from step_rows
+    where rn = 1
+      and (
+        s ->> 'uid' = public.current_finance_user_id()
+        or s ->> 'n' = public.current_finance_user_name()
+        or s ->> 'rk' = public.current_finance_role()
+        or s ->> 'approver_role' = public.current_finance_role()
+      )
+  )
+$$;
+
+create or replace function public.is_expense_request_owner(p_request public.expense_requests)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    p_request.applicant = public.current_finance_user_name()
+    or p_request.applicant_id = public.current_finance_user_id()
+    or lower(p_request.applicant_email) = lower(auth.jwt() ->> 'email')
+    or p_request.form_payload -> 'applicantProfile' ->> 'id' = public.current_finance_user_id()
+    or lower(p_request.form_payload -> 'applicantProfile' ->> 'email') = lower(auth.jwt() ->> 'email')
+$$;
+
+create or replace function public.is_invoice_owner(p_invoice public.invoices)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    p_invoice.applicant = public.current_finance_user_name()
+    or p_invoice.applicant_id = public.current_finance_user_id()
+$$;
+
 create or replace function public.can_read_expense_request(p_request public.expense_requests)
 returns boolean
 language sql
@@ -154,11 +210,7 @@ set search_path = public
 as $$
   select
     public.is_finance_accounting()
-    or p_request.applicant = public.current_finance_user_name()
-    or p_request.applicant_id = public.current_finance_user_id()
-    or lower(p_request.applicant_email) = lower(auth.jwt() ->> 'email')
-    or p_request.form_payload -> 'applicantProfile' ->> 'id' = public.current_finance_user_id()
-    or lower(p_request.form_payload -> 'applicantProfile' ->> 'email') = lower(auth.jwt() ->> 'email')
+    or public.is_expense_request_owner(p_request)
     or public.json_steps_include_current_user(p_request.steps)
     or public.json_steps_role_matches(p_request.steps)
     or (
@@ -183,11 +235,10 @@ security definer
 set search_path = public
 as $$
   select
-    public.is_finance_accounting()
-    or public.json_steps_include_current_user(p_request.steps)
-    or public.json_steps_role_matches(p_request.steps)
+    public.current_finance_role() in ('accountant','ceo')
+    or public.json_active_step_matches_current_user(p_request.steps)
     or (
-      p_request.applicant = public.current_finance_user_name()
+      public.is_expense_request_owner(p_request)
       and p_request.status in ('pending_applicant_confirm','returned')
     )
     or (
@@ -206,8 +257,7 @@ set search_path = public
 as $$
   select
     public.is_finance_accounting()
-    or p_invoice.applicant = public.current_finance_user_name()
-    or p_invoice.applicant_id = public.current_finance_user_id()
+    or public.is_invoice_owner(p_invoice)
     or public.json_steps_include_current_user(p_invoice.steps)
     or public.json_steps_role_matches(p_invoice.steps)
     or (
@@ -224,10 +274,9 @@ security definer
 set search_path = public
 as $$
   select
-    public.is_finance_accounting()
-    or public.json_steps_include_current_user(p_invoice.steps)
-    or public.json_steps_role_matches(p_invoice.steps)
-    or p_invoice.applicant_id = public.current_finance_user_id()
+    public.current_finance_role() in ('accountant','ceo','admin_director')
+    or public.json_active_step_matches_current_user(p_invoice.steps)
+    or public.is_invoice_owner(p_invoice)
 $$;
 
 revoke all on function public.current_finance_user() from public, anon;
@@ -242,6 +291,9 @@ revoke all on function public.is_finance_hr() from public, anon;
 revoke all on function public.is_finance_general_affairs() from public, anon;
 revoke all on function public.json_steps_include_current_user(jsonb) from public, anon;
 revoke all on function public.json_steps_role_matches(jsonb) from public, anon;
+revoke all on function public.json_active_step_matches_current_user(jsonb) from public, anon;
+revoke all on function public.is_expense_request_owner(public.expense_requests) from public, anon;
+revoke all on function public.is_invoice_owner(public.invoices) from public, anon;
 revoke all on function public.can_read_expense_request(public.expense_requests) from public, anon;
 revoke all on function public.can_update_expense_request(public.expense_requests) from public, anon;
 revoke all on function public.can_read_invoice(public.invoices) from public, anon;
@@ -259,6 +311,9 @@ grant execute on function public.is_finance_hr() to authenticated;
 grant execute on function public.is_finance_general_affairs() to authenticated;
 grant execute on function public.json_steps_include_current_user(jsonb) to authenticated;
 grant execute on function public.json_steps_role_matches(jsonb) to authenticated;
+grant execute on function public.json_active_step_matches_current_user(jsonb) to authenticated;
+grant execute on function public.is_expense_request_owner(public.expense_requests) to authenticated;
+grant execute on function public.is_invoice_owner(public.invoices) to authenticated;
 grant execute on function public.can_read_expense_request(public.expense_requests) to authenticated;
 grant execute on function public.can_update_expense_request(public.expense_requests) to authenticated;
 grant execute on function public.can_read_invoice(public.invoices) to authenticated;
@@ -267,6 +322,28 @@ grant execute on function public.can_update_invoice(public.invoices) to authenti
 -- ---------------------------------------------------------------------------
 -- Remove broad policies
 -- ---------------------------------------------------------------------------
+
+alter table public.finance_users enable row level security;
+alter table public.system_settings enable row level security;
+alter table public.voucher_serials enable row level security;
+alter table public.expense_requests enable row level security;
+alter table public.invoices enable row level security;
+alter table public.vouchers enable row level security;
+alter table public.bills enable row level security;
+alter table public.notifications enable row level security;
+alter table public.ledger_entries enable row level security;
+alter table public.module_audit_logs enable row level security;
+
+alter table public.finance_users force row level security;
+alter table public.system_settings force row level security;
+alter table public.voucher_serials force row level security;
+alter table public.expense_requests force row level security;
+alter table public.invoices force row level security;
+alter table public.vouchers force row level security;
+alter table public.bills force row level security;
+alter table public.notifications force row level security;
+alter table public.ledger_entries force row level security;
+alter table public.module_audit_logs force row level security;
 
 drop policy if exists finance_users_authenticated on public.finance_users;
 drop policy if exists expense_requests_authenticated on public.expense_requests;
@@ -294,6 +371,7 @@ drop policy if exists system_settings_select_authenticated on public.system_sett
 drop policy if exists system_settings_insert_admin on public.system_settings;
 drop policy if exists system_settings_update_admin on public.system_settings;
 drop policy if exists system_settings_delete_ceo on public.system_settings;
+drop policy if exists voucher_serials_accounting on public.voucher_serials;
 drop policy if exists expense_requests_select_scoped on public.expense_requests;
 drop policy if exists expense_requests_insert_own_or_finance on public.expense_requests;
 drop policy if exists expense_requests_update_actor on public.expense_requests;
@@ -382,6 +460,17 @@ to authenticated
 using (public.current_finance_role() = 'ceo');
 
 -- ---------------------------------------------------------------------------
+-- voucher_serials
+-- ---------------------------------------------------------------------------
+
+create policy voucher_serials_accounting
+on public.voucher_serials
+for all
+to authenticated
+using (public.is_finance_accounting())
+with check (public.is_finance_accounting());
+
+-- ---------------------------------------------------------------------------
 -- expense_requests
 -- ---------------------------------------------------------------------------
 
@@ -397,11 +486,7 @@ for insert
 to authenticated
 with check (
   public.is_finance_accounting()
-  or applicant = public.current_finance_user_name()
-  or applicant_id = public.current_finance_user_id()
-  or lower(applicant_email) = lower(auth.jwt() ->> 'email')
-  or form_payload -> 'applicantProfile' ->> 'id' = public.current_finance_user_id()
-  or lower(form_payload -> 'applicantProfile' ->> 'email') = lower(auth.jwt() ->> 'email')
+  or public.is_expense_request_owner(expense_requests)
 );
 
 create policy expense_requests_update_actor
@@ -433,8 +518,7 @@ for insert
 to authenticated
 with check (
   public.is_finance_accounting()
-  or applicant = public.current_finance_user_name()
-  or applicant_id = public.current_finance_user_id()
+  or public.is_invoice_owner(invoices)
 );
 
 create policy invoices_update_actor

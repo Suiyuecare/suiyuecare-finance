@@ -2,10 +2,18 @@
 -- Apply after module_finance_production_schema.sql, rls_hardening.sql, and compliance_and_drafts.sql.
 --
 -- File path format used by index.html:
---   draft_requests/YYYY-MM/draft_123/draft_file/file.png
---   expense_requests/YYYY-MM/EXP-2026-0001/request_files/file.xls
---   expense_requests/YYYY-MM/EXP-2026-0001/passbook/file.png
---   invoices/YYYY-MM/AA-123456/receipt_proof/file.pdf
+--   <record_type>/<YYYY>/<MM>/<entity_id>/<department_code>/<record_no>/<file_kind>/<file>
+-- Examples:
+--   draft_requests/2026/05/E1/A1101/draft_123/draft_file/file.png
+--   expense_requests/2026/05/E1/A1101/EXP-2026-0001/request_files/file.xls
+--   expense_requests/2026/05/E1/A1101/EXP-2026-0001/passbook/file.png
+--   invoices/2026/05/E1/A1101/AA-123456/receipt_proof/file.pdf
+--
+-- Archive rule:
+--   - Year/month are based on the form/request/invoice date, not upload time.
+--   - Entity and department are copied from the request/invoice so reporting and file audit match.
+--   - Supporting documents are retained for 10 years by default.
+--   - Old YYYY-MM paths remain readable for backward compatibility.
 
 begin;
 
@@ -40,18 +48,35 @@ create table if not exists public.file_attachments (
   id uuid primary key default gen_random_uuid(),
   bucket_id text not null default 'finance-attachments',
   storage_path text not null unique,
-  record_type text not null check (record_type in ('draft_requests','expense_requests','invoices')),
+  record_type text not null check (record_type in ('draft_requests','expense_requests','invoices','vouchers')),
   record_no text not null,
   file_kind text not null,
   file_name text not null,
   file_type text,
   file_size bigint,
   uploaded_by text,
+  archive_year text,
+  archive_month text,
+  entity_id text,
+  department_code text,
+  record_date date,
+  archive_path text,
+  retention_policy text not null default 'finance_supporting_docs_10y',
+  retention_until date,
   uploaded_at timestamptz not null default now()
 );
 
 do $$
 begin
+  alter table public.file_attachments add column if not exists archive_year text;
+  alter table public.file_attachments add column if not exists archive_month text;
+  alter table public.file_attachments add column if not exists entity_id text;
+  alter table public.file_attachments add column if not exists department_code text;
+  alter table public.file_attachments add column if not exists record_date date;
+  alter table public.file_attachments add column if not exists archive_path text;
+  alter table public.file_attachments add column if not exists retention_policy text not null default 'finance_supporting_docs_10y';
+  alter table public.file_attachments add column if not exists retention_until date;
+
   if exists (
     select 1
     from pg_constraint
@@ -62,10 +87,18 @@ begin
   end if;
   alter table public.file_attachments
     add constraint file_attachments_record_type_check
-    check (record_type in ('draft_requests','expense_requests','invoices'));
+    check (record_type in ('draft_requests','expense_requests','invoices','vouchers'));
 end $$;
 
+create index if not exists file_attachments_archive_lookup_idx
+on public.file_attachments (record_type, archive_year, archive_month, entity_id, department_code, record_no);
+
+create index if not exists file_attachments_retention_idx
+on public.file_attachments (retention_until)
+where retention_until is not null;
+
 alter table public.file_attachments enable row level security;
+alter table public.file_attachments force row level security;
 
 revoke all on table public.file_attachments from anon;
 revoke all on table public.file_attachments from authenticated;
@@ -142,7 +175,7 @@ using (
       and exists (
         select 1
         from public.draft_requests d
-        where d.id = (storage.foldername(name))[3]
+        where d.id in ((storage.foldername(name))[3], (storage.foldername(name))[6])
           and (
             lower(d.owner_email) = lower(auth.jwt() ->> 'email')
             or d.owner_id = public.current_finance_user_id()
@@ -155,7 +188,7 @@ using (
       and exists (
         select 1
         from public.expense_requests r
-        where r.no = (storage.foldername(name))[3]
+        where r.no in ((storage.foldername(name))[3], (storage.foldername(name))[6])
           and public.can_read_expense_request(r)
       )
     )
@@ -164,7 +197,7 @@ using (
       and exists (
         select 1
         from public.invoices i
-        where i.no = (storage.foldername(name))[3]
+        where i.no in ((storage.foldername(name))[3], (storage.foldername(name))[6])
           and public.can_read_invoice(i)
       )
     )
@@ -178,7 +211,7 @@ to authenticated
 with check (
   bucket_id = 'finance-attachments'
   and public.current_finance_user_id() is not null
-  and (storage.foldername(name))[1] in ('draft_requests','expense_requests','invoices')
+  and (storage.foldername(name))[1] in ('draft_requests','expense_requests','invoices','vouchers')
 );
 
 create policy finance_attachments_update_owner_or_ceo

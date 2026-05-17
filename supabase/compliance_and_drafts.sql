@@ -68,6 +68,12 @@ alter table public.compliance_archives enable row level security;
 alter table public.annual_reviews enable row level security;
 alter table public.compliance_audit_logs enable row level security;
 
+alter table public.draft_requests force row level security;
+alter table public.period_closes force row level security;
+alter table public.compliance_archives force row level security;
+alter table public.annual_reviews force row level security;
+alter table public.compliance_audit_logs force row level security;
+
 revoke all on table public.draft_requests from anon;
 revoke all on table public.period_closes from anon;
 revoke all on table public.compliance_archives from anon;
@@ -164,10 +170,11 @@ create policy annual_reviews_delete_ceo on public.annual_reviews for delete to a
 
 drop policy if exists compliance_audit_logs_select_finance on public.compliance_audit_logs;
 drop policy if exists compliance_audit_logs_insert_authenticated on public.compliance_audit_logs;
+drop policy if exists compliance_audit_logs_insert_finance on public.compliance_audit_logs;
 drop policy if exists compliance_audit_logs_delete_ceo on public.compliance_audit_logs;
 
 create policy compliance_audit_logs_select_finance on public.compliance_audit_logs for select to authenticated using (public.is_finance_accounting());
-create policy compliance_audit_logs_insert_authenticated on public.compliance_audit_logs for insert to authenticated with check (public.current_finance_user_id() is not null);
+create policy compliance_audit_logs_insert_finance on public.compliance_audit_logs for insert to authenticated with check (public.is_finance_accounting());
 create policy compliance_audit_logs_delete_ceo on public.compliance_audit_logs for delete to authenticated using (public.current_finance_role() = 'ceo');
 
 commit;
