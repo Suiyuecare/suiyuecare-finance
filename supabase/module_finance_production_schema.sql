@@ -33,6 +33,8 @@ create table if not exists expense_requests (
   entity_id text not null,
   department_code text not null,
   applicant text not null,
+  applicant_id text,
+  applicant_email text,
   type text not null,
   type_label text,
   amount numeric(14,2) not null check (amount >= 0),
@@ -71,6 +73,8 @@ alter table expense_requests add column if not exists bank_type text;
 alter table expense_requests add column if not exists bank_name text;
 alter table expense_requests add column if not exists bank_branch text;
 alter table expense_requests add column if not exists bank_no text;
+alter table expense_requests add column if not exists applicant_id text;
+alter table expense_requests add column if not exists applicant_email text;
 alter table expense_requests add column if not exists expected_pay_date date;
 alter table expense_requests add column if not exists fee_bearer text;
 alter table expense_requests add column if not exists bank_fee_amount numeric(14,2) not null default 0;
