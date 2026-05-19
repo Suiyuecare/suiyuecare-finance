@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>歲悅長照集團 · 財務管理系統 v2</title>
+<title>歲悅長照集團 · 財務管理系統 V3</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
 :root{--br:#ea880c;--brd:#c97008;--brl:#f5c060;--brxl:#fde8bc;--brxxl:#fff8ed;--brtxt:#5c3800;--cream:#fdf8f2;--warm:#f8f0e4}
@@ -200,6 +200,12 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
 .manual-download:hover{background:rgba(255,255,255,.25);transform:translateY(-1px)}
 .manual-download span{font-size:12px;font-weight:750;letter-spacing:.03em}
 .manual-download strong{font-size:11px;color:rgba(255,255,255,.78);font-weight:650}
+.version-note{margin-top:18px;padding:12px 13px;border-radius:12px;border:1px solid rgba(255,255,255,.38);background:rgba(255,255,255,.14);box-shadow:0 14px 34px rgba(92,46,0,.1)}
+.version-note-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.version-note-title{font-size:12px;font-weight:850;color:#fff;letter-spacing:.04em}
+.version-note-badge{font-size:10px;font-weight:850;color:#7c3f00;background:#fff7ed;border:1px solid rgba(255,255,255,.55);border-radius:999px;padding:3px 8px}
+.version-note ul{margin:0;padding-left:16px;color:rgba(255,255,255,.82);font-size:11px;line-height:1.65}
+.version-note li{margin:2px 0}
 .hub-manual{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 12px;border-radius:8px;border:1px solid #dfc9b1;background:#fff7ed;color:#8a4b06;font-size:12px;font-weight:750;text-decoration:none}
 .hub-manual:hover{border-color:#d97706;background:#fff3de}
 .google-btn{border-radius:8px;font-weight:650}
@@ -257,6 +263,91 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
 .type-copy{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:2px}
 .type-title{font-size:12px;font-weight:650;color:#334155;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .type-desc{font-size:10px;color:#94a3b8;line-height:1.35;margin:0;min-height:27px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* RWD：桌機、平板、手機共用 */
+@media(max-width:1100px){
+  body{padding:8px;align-items:stretch;justify-content:stretch}
+  .app{max-width:none;width:100%;height:calc(100dvh - 16px);border-radius:14px}
+  .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hub-main{width:calc(100% - 36px);padding:32px 0 42px}
+}
+@media(max-width:900px){
+  body{padding:0;min-height:100dvh}
+  .app{height:100dvh;border-radius:0;border:none;box-shadow:none;flex-direction:column}
+  .sb{width:100%;height:auto;max-height:172px;flex:none;border-right:none;border-bottom:1px solid rgba(255,255,255,.08)}
+  .sb-logo{padding:10px 12px}
+  .brand-logo{width:34px;height:34px;border-radius:10px}
+  .brand-name{font-size:12px}
+  .brand-sub{font-size:9px}
+  nav{display:flex;gap:5px;overflow-x:auto;overflow-y:hidden;padding:7px 8px;flex:none;scroll-snap-type:x proximity}
+  nav::-webkit-scrollbar{height:3px;width:0}
+  .ns{display:none}
+  .ni{width:auto;min-width:max-content;flex:0 0 auto;margin:0;padding:7px 9px;scroll-snap-align:start}
+  .ni .dot{display:none}
+  .sb-bot{display:none}
+  .main{min-height:0;flex:1}
+  .topbar{height:auto;min-height:48px;padding:8px 12px;gap:8px;flex-wrap:wrap}
+  #page-title{min-width:160px}
+  #top-info{width:100%;font-size:10px}
+  .content{padding:12px}
+  .g2,.g3,.g4,.fr2,.fr3,#dept-arch{grid-template-columns:1fr!important}
+  .nr-two-col{grid-template-columns:1fr!important}
+  .card{overflow-x:auto}
+  .card>table, .card table{min-width:620px}
+  .chd{padding:8px 10px;align-items:flex-start}
+  .tb-bar,.rtab-bar{overflow-x:auto;white-space:nowrap}
+  .tb,.rtab{flex:0 0 auto}
+  .modal{width:calc(100vw - 24px);max-height:88dvh}
+  .modal-lg{width:calc(100vw - 24px)}
+  .entry-row{grid-template-columns:70px minmax(160px,1fr) 86px 86px;min-width:520px}
+}
+@media(max-width:760px){
+  #login-screen{flex-direction:column;overflow-y:auto}
+  .login-left{width:100%;min-height:auto;padding:28px 22px 24px}
+  .login-right{width:100%;padding:24px 20px 30px;align-items:flex-start}
+  .login-mark{grid-template-columns:58px 1fr;gap:12px;margin-bottom:22px}
+  .login-brand{width:58px;height:58px;border-radius:16px}
+  .login-title{font-size:22px}
+  .login-points{gap:6px}
+  .version-note,.manual-download{margin-top:12px}
+  .version-note ul{font-size:10.5px;line-height:1.55}
+  .module-hub{overflow-y:auto}
+  .hub-top{height:auto;min-height:62px;padding:10px 14px;gap:10px;align-items:flex-start;flex-wrap:wrap}
+  .hub-top>div:last-child{width:100%;justify-content:space-between;gap:8px}
+  .hub-main{width:calc(100% - 28px);padding:24px 0 32px}
+  .hub-title{font-size:24px}
+  .hub-desc{font-size:12px}
+  .module-grid{grid-template-columns:1fr!important;gap:10px}
+  .module-card{min-height:150px;padding:18px}
+  .ph{font-size:15px}
+  .ps{font-size:11px;line-height:1.5}
+  .btn-p,.btn-s,.btn-g{min-height:34px}
+  input,select,textarea{min-height:36px;font-size:13px}
+  .sheet-full-scroll{max-height:58dvh!important}
+  #pg-newreq .card .chd .cht{font-size:12px}
+  .flow-step{gap:8px}
+  .flow-label{font-size:11px}
+  .flow-sub{font-size:10px}
+}
+@media(max-width:520px){
+  .content{padding:10px}
+  .topbar button{padding:6px 8px}
+  .g4{gap:7px}
+  .sc{padding:9px 10px}
+  .chd{gap:8px}
+  .chd>div{width:100%;justify-content:flex-start!important}
+  .manual-download{padding:10px 11px}
+  .hub-manual{height:30px;padding:0 9px;font-size:11px}
+  .badge,.ep,.dt{font-size:9px}
+  table{font-size:11px}
+  th,td{padding:6px 8px}
+  .card>table, .card table{min-width:560px}
+  .appr-card{padding:9px}
+  .file-chip{max-width:100%}
+  .bar-lbl{width:52px}
+  .bar-val{width:58px}
+}
 </style>
 </head>
 <body>
@@ -265,7 +356,7 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
 <div class="sb" id="sidebar" style="display:none">
   <div class="sb-logo">
     <div class="brand-logo" aria-label="歲悅長照"><img src="assets/suiyue-logo-transparent.png" alt="歲悅長照形象標章"></div>
-    <div><div class="brand-name">歲悅長照集團</div><div class="brand-sub">Finance OS v2</div></div>
+    <div><div class="brand-name">歲悅長照集團</div><div class="brand-sub">Finance OS V3</div></div>
   </div>
   <nav>
     <div class="ns">總覽</div>
@@ -564,6 +655,15 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
         <div style="overflow-x:auto"><table><thead><tr><th>項目</th><th>資料來源</th><th style="text-align:right">金額</th><th>說明</th></tr></thead><tbody id="tax-body"></tbody></table></div>
       </div>
     </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="chd"><span class="cht">三表試算平衡</span><span id="trial-source-note" style="font-size:10px;color:#94a3b8">只檢查正式分類帳，不含暫估資料</span></div>
+      <div style="padding:12px">
+        <div class="g4" id="trial-kpis" style="margin-bottom:10px"></div>
+        <div id="trial-alert" style="margin-bottom:10px"></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>檢查項目</th><th>結果</th><th style="text-align:right">差額</th><th>說明</th></tr></thead><tbody id="trial-body"></tbody></table></div>
+        <div id="trial-issues" style="margin-top:10px"></div>
+      </div>
+    </div>
     <div class="rtab-bar"><button class="rtab on" onclick="rptTab('bs',this)">資產負債表</button><button class="rtab" onclick="rptTab('pl',this)">損益表</button><button class="rtab" onclick="rptTab('cf',this)">現金流量表</button></div>
     <div id="rpt-bs"><div class="g4" id="bs-kpis"></div><div class="g2"><div class="card"><div class="chd"><span class="cht">資產</span></div><table><tbody id="bs-asset"></tbody></table></div><div class="card"><div class="chd"><span class="cht">負債及股東權益</span></div><table><tbody id="bs-liab"></tbody></table></div></div><div id="bs-chk" style="margin-top:9px;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:500;text-align:center"></div></div>
     <div id="rpt-pl" style="display:none"><div class="g4" id="pl-kpis"></div><div class="g2"><div class="card"><div class="chd"><span class="cht">損益明細</span></div><table><thead><tr><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">佔收入%</th><th style="width:80px">視覺</th><th style="width:82px">傳票</th></tr></thead><tbody id="pl-body"></tbody></table></div><div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:10px;color:#334155">費用結構（佔費用%）</div><div id="pl-chart"></div><div style="font-size:11px;color:#94a3b8;margin-top:7px;padding-top:7px;border-top:1px solid #f0e6d6" id="pl-summary"></div></div></div></div>
@@ -662,13 +762,14 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
       <div class="card"><div class="chd"><span class="cht">4. 年度財報匯出</span><button class="btn-g" onclick="exportAnnualPackage()">下載年度包</button></div><div style="padding:12px" id="annual-box"></div></div>
     </div>
     <div class="g2" style="margin-bottom:12px">
-      <div class="card"><div class="chd"><span class="cht">5. 不可刪除 Audit Log</span><span style="font-size:10px;color:#94a3b8">最近 12 筆</span></div><div style="padding:12px" id="audit-box"></div></div>
+      <div class="card"><div class="chd"><span class="cht">5. 不可刪除 Audit Log</span><div style="display:flex;gap:6px;align-items:center"><span style="font-size:10px;color:#94a3b8">最近 12 筆</span><button class="btn-g" style="font-size:10px;padding:3px 8px" onclick="exportAuditLogs()">匯出 CSV</button></div></div><div style="padding:12px" id="audit-box"></div></div>
       <div class="card"><div class="chd"><span class="cht">6. 已入帳資料鎖定</span></div><div style="padding:12px" id="lock-box"></div></div>
     </div>
     <div class="g2">
       <div class="card"><div class="chd"><span class="cht">7. 原始憑證與記帳憑證對應表</span></div><div style="padding:12px" id="doc-map-box"></div></div>
       <div class="card"><div class="chd"><span class="cht">8. 執行長年度審核</span><button class="btn-p" onclick="approveAnnualReview()">審核通過</button></div><div style="padding:12px" id="annual-review-box"></div></div>
     </div>
+    <div class="card" style="margin-top:12px"><div class="chd"><span class="cht">9. 備份與還原</span><div style="display:flex;gap:6px;align-items:center"><button class="btn-g" onclick="downloadBackupPackage()">下載備份包</button><label class="btn-s" style="cursor:pointer">上傳備份包<input type="file" accept="application/json,.json" style="display:none" onchange="backupFileChange(this)"></label></div></div><div style="padding:12px" id="backup-box"></div></div>
   </div>
 
   <!-- 通知 -->
@@ -700,9 +801,10 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
     </div></div>
     <div id="settings-pending-wrap" class="card" style="margin-bottom:12px;display:none"></div>
     <div id="settings-sync-note" class="card" style="margin-bottom:12px;padding:12px;font-size:12px;color:#64748b;line-height:1.7">前台法人、部門、科目、手續費與功能權限會讀取同一份後台設定。修改後會立即更新目前畫面，並寫入 Supabase 供其他使用者同步。行政部門主任送出的異動須待執行長檢核通過才會生效。</div>
+    <div id="settings-version-wrap" class="card" style="margin-bottom:12px"></div>
     <div id="settings-panel-entities" class="set-panel card" style="margin-bottom:12px"><div class="chd"><span class="cht">法人資訊</span><div class="settings-write" style="display:flex;gap:6px"><button class="btn-g" onclick="saveEntitySettings()">儲存法人</button><button class="btn-p" onclick="addEntitySetting()">+ 新增法人</button></div></div><div style="overflow-x:auto"><table><thead><tr><th>ID</th><th>短名稱</th><th>完整名稱</th><th>統編</th><th>色彩</th><th class="settings-action-head">操作</th></tr></thead><tbody id="settings-ents"></tbody></table></div></div>
     <div id="settings-panel-departments" class="set-panel card" style="margin-bottom:12px;display:none"><div class="chd"><span class="cht">部門資訊</span><div class="settings-write" style="display:flex;gap:6px"><button class="btn-g" onclick="saveDeptSettings()">儲存部門</button><button class="btn-p" onclick="addDeptSetting()">+ 新增部門</button></div></div><div style="overflow-x:auto"><table><thead><tr><th>部門代號</th><th>部門名稱</th><th>公司別</th><th>層級</th><th class="settings-action-head">操作</th></tr></thead><tbody id="settings-depts"></tbody></table></div></div>
-    <div id="settings-panel-accounts" class="set-panel card" style="margin-bottom:12px;display:none"><div class="chd"><span class="cht">會計科目</span><div class="settings-write" style="display:flex;gap:6px"><button class="btn-g" onclick="saveAcctSettings()">儲存科目</button><button class="btn-p" onclick="addAcctSetting()">+ 新增科目</button></div></div><div style="overflow-x:auto"><table><thead><tr><th>代號</th><th>名稱</th><th>借/貸</th><th>適用部門</th><th>啟用</th><th class="settings-action-head">操作</th></tr></thead><tbody id="settings-accts"></tbody></table></div></div>
+    <div id="settings-panel-accounts" class="set-panel card" style="margin-bottom:12px;display:none"><div class="chd"><span class="cht">會計科目</span><div class="settings-write" style="display:flex;gap:6px"><button class="btn-g" onclick="saveAcctSettings()">送出科目異動</button><button class="btn-p" onclick="addAcctSetting()">+ 新增科目</button></div></div><div style="padding:10px 12px;border-bottom:1px solid #f0e6d6;background:#fff8ed"><div style="font-size:11px;color:#6a5840;line-height:1.6">會計科目屬正式帳務設定，新增、編輯、停用或刪除都會產生異動單；非執行長送出後須待執行長核准才會生效。</div><div class="settings-write" style="margin-top:8px"><label class="fl">異動原因 *</label><textarea id="acct-change-reason" rows="2" placeholder="例：配合會計師建議新增科目、停用不再使用科目、修正科目名稱…" style="font-size:12px"></textarea></div></div><div style="overflow-x:auto"><table><thead><tr><th>代號</th><th>名稱</th><th>借/貸</th><th>適用部門</th><th>啟用</th><th class="settings-action-head">操作</th></tr></thead><tbody id="settings-accts"></tbody></table></div></div>
     <div id="settings-panel-fees" class="set-panel card" style="margin-bottom:12px;display:none"><div class="chd"><span class="cht">手續費金額</span><span style="font-size:10px;color:#94a3b8">每間公司可各自設定；非兆豐且己方支出時套用</span></div><div style="overflow-x:auto"><table><thead><tr><th>公司別</th><th>單筆銀行手續費</th><th>說明</th></tr></thead><tbody id="settings-fees"></tbody></table></div><div class="settings-write" style="padding:10px 12px;border-top:1px solid #f0e6d6;justify-content:flex-end"><button class="btn-p" onclick="saveFeeSetting()">儲存手續費</button></div></div>
     <div id="settings-panel-permissions" class="set-panel card" style="display:none"><div class="chd"><span class="cht">層級功能權限</span><span style="font-size:10px;color:#94a3b8">勾選代表該層級可使用該功能</span></div><div style="overflow:auto"><table><thead id="settings-perm-head"></thead><tbody id="settings-perms"></tbody></table></div></div>
   </div>
@@ -791,6 +893,23 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
         <div class="login-point">業務、人資、會計系統統一入口</div>
         <div class="login-point">登入後才會進入各模組工作台</div>
       </div>
+      <div class="version-note">
+        <div class="version-note-head">
+          <div class="version-note-title">V2 → V3 修訂重點</div>
+          <div class="version-note-badge">Finance OS V3</div>
+        </div>
+        <ul>
+          <li>強化簽核、暫存、抽單、退回上一關與加簽流程穩定性。</li>
+          <li>補上附件下載權限與 Storage 下載備援，主管可回查憑據。</li>
+          <li>三表改以正式分類帳追溯來源，降低重複入帳風險。</li>
+          <li>營業稅拆分進項與銷項，並可檢查可折抵金額。</li>
+          <li>新增股東往來、月結鎖帳、傳票沖銷調整與系統設定版本紀錄。</li>
+        </ul>
+      </div>
+      <a class="manual-download" href="docs/歲悅會計系統_V2-V3修訂重點.html" download>
+        <span>V2-V3 修訂重點</span>
+        <strong>下載</strong>
+      </a>
       <a class="manual-download" href="docs/歲悅會計系統教育訓練手冊_橘色版.docx" download>
         <span>教育訓練手冊</span>
         <strong>下載</strong>
@@ -811,6 +930,10 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
       <div class="fg"><label class="fl">密碼</label><input type="password" id="login-pw" placeholder="請輸入密碼" value=""></div>
       <button class="btn-p" style="width:100%;justify-content:center;padding:9px;margin-bottom:10px" onclick="doLogin()">登入</button>
       <div id="login-err" style="color:#8a1010;font-size:12px;text-align:center;display:none;margin-bottom:10px"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:7px 9px;margin-bottom:10px">
+        <div><div style="font-size:11px;font-weight:750;color:#7c3f00">資料環境</div><div style="font-size:10px;color:#8b7358;margin-top:1px">正式與測試資料分開保存，測試不進正式三表。</div></div>
+        <select id="login-data-env" onchange="setDataEnvironment(this.value)" style="width:auto;font-size:11px"><option value="production">正式資料</option><option value="test">測試資料</option></select>
+      </div>
       <div style="font-size:11px;color:#94a3b8;margin-bottom:6px">測試帳號（線上版請使用 Supabase Auth 密碼登入）</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
         <button onclick="quickLogin('accountant')" class="btn-g" style="font-size:11px;padding:6px">王會計師（會計）</button>
@@ -840,6 +963,7 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
         <div id="hub-user-name" style="font-size:13px;font-weight:750;color:#172033">使用者</div>
         <div id="hub-user-role" style="font-size:11px;color:#7a8699;margin-top:2px">已登入</div>
       </div>
+      <a class="hub-manual" href="docs/歲悅會計系統_V2-V3修訂重點.html" download>V2-V3 修訂重點</a>
       <a class="hub-manual" href="docs/歲悅會計系統教育訓練手冊_橘色版.docx" download>教育訓練手冊</a>
       <button class="btn-s" onclick="showLogin()">登出</button>
     </div>
@@ -975,9 +1099,6 @@ var AMAP={
   'travel_request_invoice_bank':{dr:'6040',drN:'差旅費-發票',cr:'1112',crN:'銀行存款'},
   'travel_request_receipt_bank':{dr:'6041',drN:'差旅費-收據',cr:'1112',crN:'銀行存款'},
   'travel_request_none_bank':{dr:'6041',drN:'差旅費-待補憑證',cr:'1112',crN:'銀行存款'},
-  'welfare_request_form_bank':{dr:'6190',drN:'職工福利',cr:'1112',crN:'銀行存款'},
-  'welfare_request_receipt_bank':{dr:'6190',drN:'職工福利',cr:'1112',crN:'銀行存款'},
-  'welfare_request_none_bank':{dr:'6190',drN:'職工福利',cr:'1112',crN:'銀行存款'},
   'purchase_request_invoice_bank':{dr:'6270',drN:'採購支出-發票',cr:'1112',crN:'銀行存款'},
   'purchase_request_quotation_bank':{dr:'6270',drN:'採購支出-報價',cr:'1112',crN:'銀行存款'},
   'purchase_request_form_bank':{dr:'6270',drN:'採購支出-申請單',cr:'1112',crN:'銀行存款'},
@@ -1019,7 +1140,6 @@ var NR_REC={
   advance_request:[{id:'form',l:'預支申請書'},{id:'none',l:'無憑證（事前申請）'}],
   petty_cash_request:[{id:'receipt',l:'收據'},{id:'invoice',l:'統一發票'}],
   travel_request:[{id:'invoice',l:'統一發票'},{id:'receipt',l:'收據（無發票）'},{id:'none',l:'無憑證（待補）'}],
-  welfare_request:[{id:'form',l:'福利申請證明'},{id:'receipt',l:'收據'},{id:'none',l:'無憑證'}],
   purchase_request:[{id:'invoice',l:'統一發票'},{id:'quotation',l:'報價單/比價資料'},{id:'form',l:'採購申請單'}],
   refund_request:[{id:'none',l:'沒有憑據（多匯款／匯錯帳戶／未開發票）'},{id:'void_invoice',l:'發票要作廢（需上傳原發票電子檔）'}],
   hr_expense_request:[{id:'form',l:'薪資條/報表'},{id:'form2',l:'勞務報酬單'},{id:'invoice',l:'統一發票（廠商）'}],
@@ -1043,14 +1163,13 @@ function nrTypeIcon(type){
     advance_request:'<path d="M12 5v14M5 12h14"/>',
     petty_cash_request:'<path d="M4 7h16v12H4zM7 7V5h10v2M8 13h8"/>',
     travel_request:'<path d="M2 16l20-8-8 20-3-8-9-4zM14 8l-3 12"/>',
-    welfare_request:'<path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z"/>',
     purchase_request:'<path d="M6 7h15l-2 8H8zM6 7 5 4H3M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM18 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>',
     refund_request:'<path d="M7 7h9a4 4 0 0 1 0 8H6M9 4 6 7l3 3"/>',
     hr_expense_request:'<path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20a6 6 0 0 1 12 0M17 8a2.5 2.5 0 0 1 0 5M17 16a5 5 0 0 1 4 4"/>'
   };
   return '<svg viewBox="0 0 24 24">'+(icons[type]||'<path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h4"/>')+'</svg>';
 }
-var TCSS={expense_reimbursement:'b-wait',payment_request:'b-blue',advance_request:'b-purp',petty_cash_request:'b-teal',travel_request:'b-ok',welfare_request:'b-gray',purchase_request:'b-gray',refund_request:'b-rej',hr_expense_request:'b-purp'};
+var TCSS={expense_reimbursement:'b-wait',payment_request:'b-blue',advance_request:'b-purp',petty_cash_request:'b-teal',travel_request:'b-ok',purchase_request:'b-gray',refund_request:'b-rej',hr_expense_request:'b-purp'};
 var SCSS={completed:'b-ok',rejected:'b-rej',cancelled:'b-gray',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_procurement:'b-teal',pending_hr:'b-blue',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal',pending_countersign:'b-purp'};
 var SL={completed:'已完成',rejected:'已退件',cancelled:'已抽單取消',pending_section_chief:'待上一層主管',pending_dept_manager:'待部門主管',pending_admin_director:'待行政部門主任',pending_procurement:'待總務採購審核',pending_hr:'待人資',pending_accountant:'待會計',pending_ceo:'待執行長',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳',pending_countersign:'待指定員工加簽'};
 var RL={employee:'一般組員',section_chief:'課長',dept_manager:'部門主管',admin_director:'行政部門主任',general_affairs:'總務',hr:'人資',accountant:'會計',ceo:'執行長'};
@@ -1186,6 +1305,7 @@ var PERIOD_CLOSES=[];
 var AUDIT_LOGS=[];
 var ARCHIVES=[];
 var ANNUAL_REVIEWS=[];
+var BACKUP_EVENTS=[];
 var BANK_TRANSFER_FEE=15;
 var BANK_TRANSFER_FEES={};
 var SYSTEM_SETTINGS={};
@@ -1208,6 +1328,7 @@ var SETTINGS_KEYS=['entities','departments','accounts','bank_transfer_fees','rol
 var SETTINGS_TAB='entities';
 var SETTINGS_EDIT=false;
 var SETTINGS_ORIGINAL=null;
+var SETTINGS_VERSIONS=[];
 var USER_EDIT_ID='';
 var PAGE_LABELS={
   dashboard:'儀表板',newreq:'新增申請',expenses:'放款申請',approvals:'簽核管理',
@@ -1238,6 +1359,7 @@ var S={user:null,page:'dashboard',prev:'dashboard',nT:'all',aT:'p',bF:'all',accS
 var DRAFT_LEGACY_KEY='module_finance_request_drafts_v1';
 var DRAFT_KEY_BASE='module_finance_request_drafts_v2';
 var LOCAL_APP_STATE_KEY='module_finance_runtime_state_v1';
+function localAppStateKey(){return LOCAL_APP_STATE_KEY+'_'+activeDataEnvironment();}
 var DRAFTS=[];
 var MEMORY_STORAGE={};
 var storageDeniedWarned=false;
@@ -1295,6 +1417,9 @@ var sb=null;
 var realtimeChannel=null;
 var syncTimer=null;
 var lastSyncAt='';
+var DATA_ENV_PRODUCTION='production';
+var DATA_ENV_TEST='test';
+var DATA_ENV_KEY='module_finance_data_environment_v1';
 
 function hasSupabase(){
   return !!(SUPABASE_URL&&SUPABASE_ANON_KEY&&window.supabase&&window.supabase.createClient);
@@ -1313,6 +1438,28 @@ function todaySlash(){return todayIso().replace(/-/g,'/');}
 function todayMonth(){return todayIso().slice(0,7);}
 function todayShort(){var d=new Date();return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0');}
 function monthLabel(m){var p=String(m||todayMonth()).split('-');return p[0]+'年'+String(Number(p[1]||1))+'月';}
+function initialDataEnvironment(){
+  var q=new URLSearchParams(location.search||'').get('env');
+  var stored=safeJsonGet(DATA_ENV_KEY,'');
+  var v=q||stored||DATA_ENV_PRODUCTION;
+  return v===DATA_ENV_TEST?DATA_ENV_TEST:DATA_ENV_PRODUCTION;
+}
+var FINANCE_DATA_ENV=initialDataEnvironment();
+function activeDataEnvironment(){return S.demoLogin?DATA_ENV_TEST:FINANCE_DATA_ENV;}
+function setDataEnvironment(env){
+  FINANCE_DATA_ENV=env===DATA_ENV_TEST?DATA_ENV_TEST:DATA_ENV_PRODUCTION;
+  safeJsonSet(DATA_ENV_KEY,FINANCE_DATA_ENV);
+}
+function dataEnvLabel(env){return (env||activeDataEnvironment())===DATA_ENV_TEST?'測試資料':'正式資料';}
+function rowDataEnvironment(row){
+  return (row&&(row.dataEnv||row.data_environment||row.env||row.environment))||DATA_ENV_PRODUCTION;
+}
+function inActiveDataEnvironment(row){return rowDataEnvironment(row)===activeDataEnvironment();}
+function stampDataEnvironment(row){
+  row=row||{};
+  if(!row.dataEnv)row.dataEnv=activeDataEnvironment();
+  return row;
+}
 function ensureOption(sel,value,label){
   if(!sel||!value)return;
   if(!Array.from(sel.options||[]).some(function(o){return o.value===value;})){
@@ -1320,6 +1467,7 @@ function ensureOption(sel,value,label){
   }
 }
 function setRuntimeDefaults(){
+  var envSel=el('login-data-env');if(envSel)envSel.value=FINANCE_DATA_ENV;
   ensureOption(el('rpt-month'),todayMonth(),monthLabel(todayMonth()));
   ensureOption(el('l-month'),todayMonth().replace(/-/g,'/'),monthLabel(todayMonth()));
   [['inv-date',todayIso()],['nr-date',todayIso()],['b-month',todayMonth()],['rpt-month',todayMonth()]].forEach(function(x){var e=el(x[0]);if(e)e.value=x[1];});
@@ -1347,7 +1495,8 @@ function normalizeFileMeta(f){
     entityId:f.entityId||f.entity_id||'',
     departmentCode:f.departmentCode||f.department_code||'',
     recordDate:f.recordDate||f.record_date||'',
-    retentionUntil:f.retentionUntil||f.retention_until||''
+    retentionUntil:f.retentionUntil||f.retention_until||'',
+    dataEnv:f.dataEnv||f.data_environment||rowDataEnvironment(f)
   };
 }
 function normalizeFiles(files){return Array.isArray(files)?files.map(normalizeFileMeta):[];}
@@ -1364,13 +1513,14 @@ function fileToAttachment(file){
       path:path,
       storagePath:path,
       uploadedAt:file.uploadedAt||file.uploaded_at||new Date().toISOString(),
-      kind:file.kind||file.category||''
+      kind:file.kind||file.category||'',
+      dataEnv:file.dataEnv||file.data_environment||activeDataEnvironment()
     });
   }
   return new Promise(function(resolve,reject){
     var reader=new FileReader();
     reader.onload=function(){
-      resolve({n:file.name,t:fileExt(file.name),mime:file.type||'',size:file.size||0,url:String(reader.result||''),uploadedAt:new Date().toISOString(),kind:file.kind||file.category||''});
+      resolve({n:file.name,t:fileExt(file.name),mime:file.type||'',size:file.size||0,url:String(reader.result||''),uploadedAt:new Date().toISOString(),kind:file.kind||file.category||'',dataEnv:activeDataEnvironment()});
     };
     reader.onerror=function(){reject(reader.error||new Error('file read failed'));};
     reader.readAsDataURL(file);
@@ -1402,6 +1552,7 @@ function attachmentArchiveContext(ctx){
   ctx=ctx||{};
   var recordType=safeStorageSegment(ctx.recordType||'expense_requests','expense_requests');
   var recordNo=safeStorageSegment(ctx.recordNo||'unknown','unknown');
+  var dataEnvironment=safeStorageSegment(ctx.dataEnvironment||ctx.dataEnv||activeDataEnvironment(),DATA_ENV_PRODUCTION);
   var linkedReq=REQS.find(function(r){return r.no===ctx.recordNo||r.id===ctx.recordNo;});
   var linkedInv=INVS.find(function(i){return i.no===ctx.recordNo||i.id===ctx.recordNo;});
   var payload=(linkedReq&&linkedReq.formPayload)||{};
@@ -1417,6 +1568,7 @@ function attachmentArchiveContext(ctx){
     year:parts.year,
     month:parts.month,
     ym:parts.ym,
+    dataEnvironment:dataEnvironment,
     recordDate:parts.date,
     entityId:safeStorageSegment(eid,'unknown_entity'),
     departmentCode:safeStorageSegment(dc,'unknown_dept'),
@@ -1446,7 +1598,7 @@ async function uploadAttachmentToSupabase(att,ctx){
   var recordNo=archive.recordNo;
   var kind=archive.kind;
   var name=safeStorageName(att.n||att.name||'attachment');
-  var path=[recordType,archive.year,archive.month,archive.entityId,archive.departmentCode,recordNo,kind,Date.now()+'_'+Math.random().toString(36).slice(2)+'_'+name].join('/');
+  var path=[recordType,archive.dataEnvironment,archive.year,archive.month,archive.entityId,archive.departmentCode,recordNo,kind,Date.now()+'_'+Math.random().toString(36).slice(2)+'_'+name].join('/');
   var blob=dataUrlToBlob(att.url,att.mime||att.type);
   var up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:blob.type||att.mime||'application/octet-stream',upsert:false});
   if(up.error)throw up.error;
@@ -1460,6 +1612,7 @@ async function uploadAttachmentToSupabase(att,ctx){
       file_name:att.n||att.name||name,
       file_type:blob.type||att.mime||'',
       file_size:att.size||blob.size||0,
+      data_environment:archive.dataEnvironment,
       uploaded_by:S.user?S.user.id:null,
       archive_year:archive.year,
       archive_month:archive.ym,
@@ -1472,14 +1625,14 @@ async function uploadAttachmentToSupabase(att,ctx){
     };
     var meta=await client.from('file_attachments').insert(metaRow);
     if(meta.error&&isSchemaCacheMiss(meta.error.message)){
-      ['archive_year','archive_month','entity_id','department_code','record_date','archive_path','retention_policy','retention_until'].forEach(function(k){delete metaRow[k];});
+      ['archive_year','archive_month','entity_id','department_code','record_date','archive_path','retention_policy','retention_until','data_environment'].forEach(function(k){delete metaRow[k];});
       meta=await client.from('file_attachments').insert(metaRow);
     }
     if(meta.error)throw meta.error;
   }catch(metaErr){
     console.warn('Supabase attachment metadata insert skipped:',metaErr&&metaErr.message?metaErr.message:metaErr);
   }
-  return Object.assign({},att,{url:'',bucket:SUPABASE_ATTACHMENT_BUCKET,path:path,storagePath:path,archivePath:path,archiveYear:archive.year,archiveMonth:archive.ym,entityId:archive.entityId,departmentCode:archive.departmentCode,recordDate:archive.recordDate,retentionUntil:archive.retentionUntil,uploadedAt:new Date().toISOString(),kind:att.kind||kind});
+  return Object.assign({},att,{url:'',bucket:SUPABASE_ATTACHMENT_BUCKET,path:path,storagePath:path,archivePath:path,archiveYear:archive.year,archiveMonth:archive.ym,entityId:archive.entityId,departmentCode:archive.departmentCode,recordDate:archive.recordDate,retentionUntil:archive.retentionUntil,uploadedAt:new Date().toISOString(),kind:att.kind||kind,dataEnv:archive.dataEnvironment});
 }
 async function uploadAttachmentsToSupabase(files,ctx){
   var out=[];
@@ -1518,6 +1671,87 @@ async function signAttachmentUrl(f){
   }
   return f.url||'';
 }
+function storagePublicUrl(f){
+  f=normalizeFileMeta(f);
+  var path=f.path||f.storagePath||f.storage_path;
+  if(!path||!SUPABASE_URL)return f.url||'';
+  var bucket=f.bucket||SUPABASE_ATTACHMENT_BUCKET;
+  return SUPABASE_URL.replace(/\/$/,'')+'/storage/v1/object/public/'+encodeURIComponent(bucket)+'/'+String(path).split('/').map(encodeURIComponent).join('/');
+}
+function attachmentPathParts(f){
+  var path=String((f&&f.path)||(f&&f.storagePath)||(f&&f.storage_path)||(f&&f.archivePath)||'');
+  return path?path.split('/').filter(Boolean):[];
+}
+function attachmentRecordNoFromPath(f){
+  var p=attachmentPathParts(f);
+  if(p.length>=8&&(p[1]===DATA_ENV_PRODUCTION||p[1]===DATA_ENV_TEST))return p[6];
+  if(p.length>=7)return p[5];
+  if(p.length>=4)return p[2];
+  return '';
+}
+function attachmentRecordTypeFromPath(f){
+  return attachmentPathParts(f)[0]||'';
+}
+function fileIdentity(f){
+  f=normalizeFileMeta(f);
+  return [f.path||f.storagePath||f.archivePath||'',f.url||'',f.n||'',f.size||''].join('|');
+}
+function attachmentInList(f,list){
+  var key=fileIdentity(f);
+  return normalizeFiles(list||[]).some(function(x){return fileIdentity(x)===key;});
+}
+function findAttachmentOwner(f){
+  f=normalizeFileMeta(f);
+  var recordNo=attachmentRecordNoFromPath(f),recordType=attachmentRecordTypeFromPath(f);
+  if(recordType==='expense_requests'||!recordType){
+    var req=REQS.find(function(r){
+      var passbook=normalizeFiles(r.passbookFiles||((r.formPayload||{}).passbookFiles)||[]);
+      return r.no===recordNo||r.id===recordNo||attachmentInList(f,r.files)||attachmentInList(f,passbook)||attachmentInList(f,r.actualFiles)||((r.steps||[]).some(function(s){return attachmentInList(f,s.files);}));
+    });
+    if(req)return {type:'expense_requests',record:req};
+  }
+  if(recordType==='invoices'||!recordType){
+    var inv=INVS.find(function(i){
+      return i.no===recordNo||i.id===recordNo||attachmentInList(f,i.receiptFiles)||((i.steps||[]).some(function(s){return attachmentInList(f,s.files);}));
+    });
+    if(inv)return {type:'invoices',record:inv};
+  }
+  if(recordType==='draft_requests')return {type:'draft_requests',recordNo:recordNo};
+  if(recordType==='vouchers')return {type:'vouchers',recordNo:recordNo};
+  return {type:recordType||'',recordNo:recordNo};
+}
+function canReadRequestAttachment(r){
+  if(!S.user||!r)return false;
+  if(isFinance())return true;
+  if(requestIsMine(r))return true;
+  if(canActRequest(r))return true;
+  if((r.steps||[]).some(function(s){return stepBelongsToUser(s,r);}))return true;
+  if(['section_chief','dept_manager'].indexOf(S.user.role)>-1&&r.dc===S.user.dc)return true;
+  if(S.user.role==='general_affairs'&&r.type==='purchase_request')return true;
+  if(S.user.role==='hr'&&r.type==='hr_expense_request')return true;
+  return false;
+}
+function canReadInvoiceAttachment(i){
+  if(!S.user||!i)return false;
+  if(isFinance())return true;
+  if(invoiceIsMine(i))return true;
+  if(canActInvoice(i)||canActReceipt(i))return true;
+  if((i.steps||[]).some(function(s){return stepBelongsToUser(s,i);}))return true;
+  if(['section_chief','dept_manager'].indexOf(S.user.role)>-1&&i.dc===S.user.dc)return true;
+  return false;
+}
+function canDownloadAttachment(f,ctx){
+  if(!S.user)return false;
+  ctx=ctx||findAttachmentOwner(f);
+  if(ctx.type==='expense_requests')return canReadRequestAttachment(ctx.record);
+  if(ctx.type==='invoices')return canReadInvoiceAttachment(ctx.record);
+  if(ctx.type==='draft_requests'){
+    var draft=DRAFTS.find(function(d){return d.id===ctx.recordNo;});
+    return !!(draft&&(draft.ownerId===S.user.id||draft.ownerEmail===S.user.email||isFinance()));
+  }
+  if(ctx.type==='vouchers')return isFinance();
+  return isFinance();
+}
 function fileChipDownloadHtml(f,reqId,idx){
   f=normalizeFileMeta(f);
   var ext=(f.t||fileExt(f.n)).toUpperCase();
@@ -1530,11 +1764,16 @@ function fileChipDownloadHtml(f,reqId,idx){
     +'</div>';
 }
 var STEP_DOWNLOADS=[];
-async function downloadFileMeta(f){
+async function downloadFileMeta(f,ctx){
   f=normalizeFileMeta(f);
   if(!f||(!f.url&&!f.path&&!f.storagePath)){alert('這個附件只有檔名，沒有保存到檔案內容；請重新上傳一次，之後就可以下載。');return;}
+  if(!canDownloadAttachment(f,ctx)){alert('您沒有權限下載這個附件。若您是此單簽核人，請確認目前登入帳號與簽核流程一致。');return;}
   var href='';
-  try{href=await signAttachmentUrl(f);}catch(err){console.error(err);alert('附件下載連結產生失敗，請確認 Supabase Storage 權限。');return;}
+  try{href=await signAttachmentUrl(f);}catch(err){
+    console.error(err);
+    href=f.url||storagePublicUrl(f);
+    if(!href){alert('附件下載連結產生失敗，請確認 Supabase Storage 權限。');return;}
+  }
   if(!href){alert('附件沒有可下載的位置。');return;}
   var revokeUrl='';
   if(/^data:/i.test(href)){
@@ -1595,7 +1834,7 @@ async function uploadApprovalFiles(p,recordType,recordNo,kind){
 window.downloadAttachment=function(reqId,idx){
   var r=REQS.find(function(x){return x.id===reqId;});
   var f=r&&r.files?normalizeFileMeta(r.files[idx]):null;
-  downloadFileMeta(f);
+  downloadFileMeta(f,{type:'expense_requests',record:r});
 };
 function mapUser(u){
   var dc=u.dc||u.department_code;
@@ -1632,15 +1871,109 @@ function loadComplianceStores(){
   AUDIT_LOGS=safeJsonGet(complianceStoreKey('audit_logs'),[])||[];
   ARCHIVES=safeJsonGet(complianceStoreKey('archives'),[])||[];
   ANNUAL_REVIEWS=safeJsonGet(complianceStoreKey('annual_reviews'),[])||[];
+  BACKUP_EVENTS=safeJsonGet(complianceStoreKey('backup_events'),[])||[];
 }
 function saveComplianceStore(name,value){safeJsonSet(complianceStoreKey(name),value||[]);}
-async function auditLog(action,target,detail){
-  var row={id:'aud_'+Date.now()+'_'+Math.random().toString(36).slice(2),time:new Date().toISOString(),user:S.user?S.user.n:'系統',role:S.user?S.user.role:'system',action:action,target:target,detail:detail||''};
+async function auditLog(action,target,detail,meta){
+  meta=meta||{};
+  var row={id:'aud_'+Date.now()+'_'+Math.random().toString(36).slice(2),time:new Date().toISOString(),user:S.user?S.user.n:'系統',role:S.user?S.user.role:'system',action:action,target:target,detail:detail||'',eid:meta.eid||meta.entity_id||'',period:meta.period||'',dataEnv:activeDataEnvironment()};
   AUDIT_LOGS.unshift(row);
   saveComplianceStore('audit_logs',AUDIT_LOGS);
-  await dbInsert('compliance_audit_logs',{id:row.id,action:row.action,target:row.target,detail:row.detail,actor_name:row.user,actor_role:row.role,created_at:row.time});
+  var payload={id:row.id,action:row.action,target:row.target,detail:row.detail,actor_name:row.user,actor_role:row.role,created_at:row.time,entity_id:row.eid||null,period:row.period||null,data_environment:row.dataEnv};
+  var ins=await dbInsert('compliance_audit_logs',payload);
+  if(ins&&ins.ok===false&&ins.error&&isSchemaCacheMiss(ins.error.message)){
+    delete payload.entity_id;delete payload.period;delete payload.data_environment;
+    await dbInsert('compliance_audit_logs',payload);
+  }
 }
+function csvCell(v){
+  return '"'+String(v==null?'':v).replace(/"/g,'""').replace(/\r?\n/g,' ')+'"';
+}
+async function sha256Text(text){
+  if(window.crypto&&crypto.subtle){
+    var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  }
+  var h=0,s=String(text||'');
+  for(var i=0;i<s.length;i++){h=((h<<5)-h+s.charCodeAt(i))|0;}
+  return 'fallback_'+Math.abs(h);
+}
+function downloadTextFile(text,filename,type){
+  var blob=new Blob([text],{type:type||'application/json;charset=utf-8'});
+  var url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=filename;a.style.display='none';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},300);
+}
+function backupSummary(pkg){
+  var d=(pkg&&pkg.data)||{};
+  return {
+    requests:(d.requests||[]).length,
+    invoices:(d.invoices||[]).length,
+    vouchers:(d.vouchers||[]).length,
+    ledger:(d.ledger||[]).length,
+    bills:(d.bills||[]).length,
+    notifications:(d.notifications||[]).length,
+    users:(d.users||[]).length,
+    settings:d.settings?5:0
+  };
+}
+async function recordBackupEvent(action,status,detail,summary,hash,fileName){
+  var row={id:'bak_'+Date.now()+'_'+Math.random().toString(36).slice(2),action:action,status:status||'completed',fileName:fileName||'',hash:hash||'',summary:summary||{},by:S.user?S.user.n:'系統',time:new Date().toISOString(),note:detail||'',dataEnv:activeDataEnvironment()};
+  BACKUP_EVENTS.unshift(row);
+  saveComplianceStore('backup_events',BACKUP_EVENTS);
+  await upsertComplianceRemote('backup_restore_events',{id:row.id,action:row.action,status:row.status,file_name:row.fileName,file_hash:row.hash,summary:row.summary,actor_name:row.by,note:row.note,created_at:row.time,data_environment:row.dataEnv});
+  await auditLog(action==='restore'?'資料還原':'資料備份','備份與還原',detail||'',{period:todayMonth()});
+}
+function auditLogRowsForExport(eid,period){
+  var start=periodStart(period),end=periodEnd(period),ent=gE(eid);
+  return (AUDIT_LOGS||[]).filter(function(a){
+    var d=normDate(a.time);
+    var inDate=(!start||!end||!d||(d>=start&&d<=end));
+    var inMeta=(!a.period||a.period===period)&&(!a.eid||a.eid===eid);
+    return inDate&&inMeta;
+  }).map(function(a){
+    return {
+      time:a.time||'',
+      actor:a.user||'',
+      role:a.role||'',
+      action:a.action||'',
+      target:a.target||'',
+      detail:a.detail||'',
+      entity:(a.eid?(gE(a.eid).full||gE(a.eid).s):'')||ent.full||ent.s||eid,
+      period:a.period||period
+    };
+  });
+}
+window.exportAuditLogs=async function(){
+  if(!isFinance()){alert('只有會計、行政部門主任或執行長可以匯出 audit log');return;}
+  var eid=compEntity(),period=compPeriod(),rows=auditLogRowsForExport(eid,period),ent=gE(eid);
+  var csv='Audit Log 匯出\n法人,'+csvCell(ent.full||ent.s||eid)+'\n期間,'+csvCell(period)+'\n匯出時間,'+csvCell(new Date().toISOString())+'\n匯出人,'+csvCell(S.user?S.user.n:'系統')+'\n筆數,'+rows.length+'\n\n';
+  csv+='時間,使用者,角色,動作,標的,說明,法人,期間\n';
+  csv+=rows.map(function(r){return [r.time,r.actor,r.role,r.action,r.target,r.detail,r.entity,r.period].map(csvCell).join(',');}).join('\n');
+  if(rows.length)csv+='\n';
+  dlCSV(csv,'audit_log_'+eid+'_'+period+'.csv');
+  await auditLog('Audit Log 匯出',(ent.s||eid)+' '+period,'匯出 '+rows.length+' 筆操作紀錄',{eid:eid,period:period});
+  buildCompliance();
+};
 function periodClosed(eid,period){return PERIOD_CLOSES.some(function(x){return x.eid===eid&&x.period===period&&x.status==='closed';});}
+function accountingPeriodOf(dateVal){
+  var d=String(dateVal||todayIso()).replace(/\//g,'-').slice(0,10);
+  return /^\d{4}-\d{2}/.test(d)?d.slice(0,7):todayMonth();
+}
+function periodClosedForDate(eid,dateVal){return periodClosed(eid,accountingPeriodOf(dateVal));}
+function periodLockMessage(eid,dateVal,action){
+  var period=accountingPeriodOf(dateVal),ent=gE(eid);
+  return (action||'入帳')+'失敗：'+(ent.s||eid)+' '+period+' 已關帳。請改用下一個未關帳月份建立沖銷或調整傳票。';
+}
+function ensureOpenPostingPeriod(eid,dateVal,action){
+  if(periodClosedForDate(eid,dateVal)){alert(periodLockMessage(eid,dateVal,action));return false;}
+  return true;
+}
+function periodTrialBalanceStatus(eid,period){
+  var rows=ledgerRows(eid,period),dr=rows.reduce(function(s,r){return s+num(r.dr);},0),cr=rows.reduce(function(s,r){return s+num(r.cr);},0);
+  return {rows:rows.length,debit:dr,credit:cr,diff:Math.round((dr-cr)*100)/100,ok:Math.abs(dr-cr)<0.5};
+}
 function voucherLocked(v){return !!(v&&v.posted)||periodClosed(v&&v.eid,v&&String(v.date||'').slice(0,7).replace('/','-'));}
 function voucherYear(voucherDate){
   var d=String(voucherDate||todayIso()).replace(/\//g,'-');
@@ -1792,6 +2125,18 @@ function advanceActualAmount(r){
   var fp=(r&&r.formPayload)||(r&&r.form_payload)||{};
   return num(fp.advanceFinalAmount||(r&&r.actualAmt)||(r&&r.actual_amount));
 }
+function advanceFinalFiles(r){
+  if(!r||r.type!=='advance_request')return [];
+  var fp=(r.formPayload||r.form_payload)||{};
+  return normalizeFiles((r.actualFiles||r.actual_files||[]).concat(fp.advanceFinalFiles||[]));
+}
+function advanceReadyForFinalAccounting(r){
+  if(!r||r.type!=='advance_request')return {ok:true};
+  var files=advanceFinalFiles(r);
+  if(!files.some(attachmentIsReceiptEvidence))return {ok:false,msg:'預支申請第 7 關需先上傳最後實際花費的發票、收據或 PDF 憑據。'};
+  if(!files.some(attachmentIsExcel))return {ok:false,msg:'預支申請第 7 關需上傳最後即時 Excel 明細表，會計才可核銷。'};
+  return {ok:true};
+}
 function isAdvanceDisbursementLedger(r,row){
   if(!r||r.type!=='advance_request'||!row)return false;
   var key=String(row.postingKey||row.posting_key||'');
@@ -1823,11 +2168,11 @@ async function postAdvanceDisbursementEvent(r){
   var voucher={
     id:vid,no:vid,reqId:r.id,eid:r.eid,entS:gE(r.eid).s,date:fromIsoDate(postedAt)||todaySlash(),
     desc:'預支撥款 — '+r.app+' （'+r.no+'）',
-    entries:entries,total:amount+fee,creator:'系統自動',posted:true,postedAt:postedAt,postingLockedAt:postedAt
+    entries:entries,total:amount+fee,creator:'系統自動',posted:true,postedAt:postedAt,postingLockedAt:postedAt,dataEnv:activeDataEnvironment()
   };
   VOUCHERS.unshift(voucher);
   entries.forEach(function(e,i){
-    LEDGER.unshift({date:voucher.date,desc:voucher.desc,eid:r.eid,dc:r.dc,dr:e.t==='dr'?e.amt:0,cr:e.t==='cr'?e.amt:0,ac:e.ac,an:e.an,ref:r.no,postingKey:ledgerPostingKey('advance_disbursement:'+r.no+':'+(i+1)+':'+e.ac+':'+e.t),sourceType:'advance_disbursement',sourceId:r.id,sourceNo:r.no,voucherNo:vid});
+    LEDGER.unshift({date:voucher.date,desc:voucher.desc,eid:r.eid,dc:r.dc,dr:e.t==='dr'?e.amt:0,cr:e.t==='cr'?e.amt:0,ac:e.ac,an:e.an,ref:r.no,postingKey:ledgerPostingKey('advance_disbursement:'+r.no+':'+(i+1)+':'+e.ac+':'+e.t),sourceType:'advance_disbursement',sourceId:r.id,sourceNo:r.no,voucherNo:vid,dataEnv:activeDataEnvironment()});
   });
   r.formPayload=Object.assign({},r.formPayload||{},{
     advanceOriginalAmount:amount,
@@ -1853,7 +2198,8 @@ async function postAdvanceDisbursementEvent(r){
       source_type:'advance_disbursement',
       source_id:r.id,
       source_no:r.no,
-      voucher_no:vid
+      voucher_no:vid,
+      data_environment:activeDataEnvironment()
     });
   }));
   return true;
@@ -1877,7 +2223,7 @@ window.renderAdvanceSettlementPreview=function(original){
 function mapReq(r){
   var payload=r.formPayload||r.form_payload||{};
   var profile=payload.applicantProfile||{};
-  var mapped={id:r.id,no:r.no,eid:r.eid||r.entity_id,dc:r.dc||r.department_code,app:r.app||r.applicant,applicantId:r.applicantId||r.applicant_id||profile.id||'',applicantEmail:r.applicantEmail||r.applicant_email||profile.email||'',type:r.type,tL:r.tL||r.type_label,amt:num(r.amt||r.amount),estimatedAmt:num(r.estimatedAmt||r.estimated_amount||r.amt||r.amount),actualAmt:num(r.actualAmt||r.actual_amount),actualFiles:normalizeFiles(r.actualFiles||r.actual_files||[]),formPayload:payload,passbookFiles:normalizeFiles(r.passbookFiles||r.passbook_files||payload.passbookFiles||[]),desc:r.desc||r.description||'',payee:r.payee||'',bankType:r.bankType||r.bank_type||'',bankName:r.bankName||r.bank_name||'',bankBranch:r.bankBranch||r.bank_branch||'',bankNo:r.bankNo||r.bank_no||'',expectedPayDate:r.expectedPayDate||fromIsoDate(r.expected_pay_date)||'',bankAcc:r.bankAcc||r.bank_account||'',feeBearer:r.feeBearer||r.fee_bearer||'',pettyMode:r.pettyMode||r.petty_mode||'',status:r.status,step:num(r.step||1),ver:num(r.ver||1),date:r.date||fromIsoDate(r.request_date||r.created_at),dr:r.dr||r.debit_account,drN:r.drN||r.debit_account_name,cr:r.cr||r.credit_account,crN:r.credit_account_name||r.crN,files:normalizeFiles(r.files||r.attachments||[]),steps:jsonArrayValue(r.steps),voucherId:r.voucherId||r.voucher_id||'',cashPostedAt:r.cashPostedAt||r.cash_posted_at||'',ledgerPostedAt:r.ledgerPostedAt||r.ledger_posted_at||'',postingLockedAt:r.postingLockedAt||r.posting_locked_at||'',voidedAt:r.voidedAt||r.voided_at||''};
+  var mapped={id:r.id,no:r.no,eid:r.eid||r.entity_id,dc:r.dc||r.department_code,app:r.app||r.applicant,applicantId:r.applicantId||r.applicant_id||profile.id||'',applicantEmail:r.applicantEmail||r.applicant_email||profile.email||'',type:r.type,tL:r.tL||r.type_label,amt:num(r.amt||r.amount),estimatedAmt:num(r.estimatedAmt||r.estimated_amount||r.amt||r.amount),actualAmt:num(r.actualAmt||r.actual_amount),actualFiles:normalizeFiles(r.actualFiles||r.actual_files||[]),formPayload:payload,passbookFiles:normalizeFiles(r.passbookFiles||r.passbook_files||payload.passbookFiles||[]),desc:r.desc||r.description||'',payee:r.payee||'',bankType:r.bankType||r.bank_type||'',bankName:r.bankName||r.bank_name||'',bankBranch:r.bankBranch||r.bank_branch||'',bankNo:r.bankNo||r.bank_no||'',expectedPayDate:r.expectedPayDate||fromIsoDate(r.expected_pay_date)||'',bankAcc:r.bankAcc||r.bank_account||'',feeBearer:r.feeBearer||r.fee_bearer||'',pettyMode:r.pettyMode||r.petty_mode||'',status:r.status,step:num(r.step||1),ver:num(r.ver||1),date:r.date||fromIsoDate(r.request_date||r.created_at),dr:r.dr||r.debit_account,drN:r.drN||r.debit_account_name,cr:r.cr||r.credit_account,crN:r.credit_account_name||r.crN,files:normalizeFiles(r.files||r.attachments||[]),steps:jsonArrayValue(r.steps),voucherId:r.voucherId||r.voucher_id||'',cashPostedAt:r.cashPostedAt||r.cash_posted_at||'',ledgerPostedAt:r.ledgerPostedAt||r.ledger_posted_at||'',postingLockedAt:r.postingLockedAt||r.posting_locked_at||'',voidedAt:r.voidedAt||r.voided_at||'',dataEnv:rowDataEnvironment(r)};
   if(mapped.type==='hr_expense_request'&&!mapped.voucherId&&payload.hrItem){
     var hm=hrAccountingMap(payload.hrItem);
     mapped.dr=hm.dr;mapped.drN=hm.drN;mapped.cr=hm.cr;mapped.crN=hm.crN;
@@ -1889,16 +2235,16 @@ function mapReq(r){
   return mapped;
 }
 function mapVoucher(v){
-  return {id:v.id,no:v.no||v.id,reqId:v.reqId||v.request_id,eid:v.eid||v.entity_id,entS:v.entS||v.entity_name,date:v.date||fromIsoDate(v.voucher_date||v.created_at),desc:v.desc||v.description||'',entries:v.entries||[],total:num(v.total||v.amount),creator:v.creator||'系統自動',posted:v.posted!==false,postedAt:v.postedAt||v.posted_at||'',postingLockedAt:v.postingLockedAt||v.posting_locked_at||'',voidedAt:v.voidedAt||v.voided_at||'',adjusts:v.adjusts||v.adjusts_voucher_no||v.source_voucher_no||'',adjustmentType:v.adjustmentType||v.adjustment_type||''};
+  return {id:v.id,no:v.no||v.id,reqId:v.reqId||v.request_id,eid:v.eid||v.entity_id,entS:v.entS||v.entity_name,date:v.date||fromIsoDate(v.voucher_date||v.created_at),desc:v.desc||v.description||'',entries:v.entries||[],total:num(v.total||v.amount),creator:v.creator||'系統自動',posted:v.posted!==false,postedAt:v.postedAt||v.posted_at||'',postingLockedAt:v.postingLockedAt||v.posting_locked_at||'',voidedAt:v.voidedAt||v.voided_at||'',adjusts:v.adjusts||v.adjusts_voucher_no||v.source_voucher_no||'',adjustmentType:v.adjustmentType||v.adjustment_type||'',dataEnv:rowDataEnvironment(v)};
 }
 function mapBill(b){
-  return {id:b.id,item:b.item,ik:b.ik||b.item_key,eid:b.eid||b.entity_id,entL:b.entL||b.entity_name,amt:num(b.amt||b.amount),due:b.due||fromIsoDate(b.due_date),method:b.method||'',note:b.note||'',status:b.status||'unpaid'};
+  return {id:b.id,item:b.item,ik:b.ik||b.item_key,eid:b.eid||b.entity_id,entL:b.entL||b.entity_name,amt:num(b.amt||b.amount),due:b.due||fromIsoDate(b.due_date),method:b.method||'',note:b.note||'',status:b.status||'unpaid',dataEnv:rowDataEnvironment(b)};
 }
 function mapInv(i){
-  return {id:i.id,no:i.no,eid:i.eid||i.entity_id,en:i.en||i.entity_name,dc:i.dc||i.department_code||'',buyer:i.buyer,taxId:i.taxId||i.tax_id||i.taxid||'',applicant:i.applicant||i.app||'',applicantId:i.applicantId||i.applicant_id||'',batchId:i.batchId||i.batch_id||'',amt:num(i.amt||i.amount),tax:num(i.tax),total:num(i.total),date:i.date||fromIsoDate(i.invoice_date),paidAt:i.paidAt||i.paid_at||'',status:i.status||'unpaid',approvalStatus:i.approvalStatus||i.approval_status||'completed',approvalStep:num(i.approvalStep||i.approval_step||8),steps:i.steps||[],desc:i.desc||i.description||'',receiptFiles:normalizeFiles(i.receiptFiles||i.receipt_files||[]),receiptNote:i.receiptNote||i.receipt_note||'',receiptSubmittedAt:i.receiptSubmittedAt||i.receipt_submitted_at||'',receiptSubmittedBy:i.receiptSubmittedBy||i.receipt_submitted_by||'',revenuePosted:!!(i.revenuePosted||i.revenue_posted),revenuePostedAt:i.revenuePostedAt||i.revenue_posted_at||'',cashReceiptPostedAt:i.cashReceiptPostedAt||i.cash_receipt_posted_at||'',postingLockedAt:i.postingLockedAt||i.posting_locked_at||''};
+  return {id:i.id,no:i.no,eid:i.eid||i.entity_id,en:i.en||i.entity_name,dc:i.dc||i.department_code||'',buyer:i.buyer,taxId:i.taxId||i.tax_id||i.taxid||'',applicant:i.applicant||i.app||'',applicantId:i.applicantId||i.applicant_id||'',batchId:i.batchId||i.batch_id||'',amt:num(i.amt||i.amount),tax:num(i.tax),total:num(i.total),date:i.date||fromIsoDate(i.invoice_date),paidAt:i.paidAt||i.paid_at||'',status:i.status||'unpaid',approvalStatus:i.approvalStatus||i.approval_status||'completed',approvalStep:num(i.approvalStep||i.approval_step||8),steps:i.steps||[],desc:i.desc||i.description||'',receiptFiles:normalizeFiles(i.receiptFiles||i.receipt_files||[]),receiptNote:i.receiptNote||i.receipt_note||'',receiptSubmittedAt:i.receiptSubmittedAt||i.receipt_submitted_at||'',receiptSubmittedBy:i.receiptSubmittedBy||i.receipt_submitted_by||'',revenuePosted:!!(i.revenuePosted||i.revenue_posted),revenuePostedAt:i.revenuePostedAt||i.revenue_posted_at||'',cashReceiptPostedAt:i.cashReceiptPostedAt||i.cash_receipt_posted_at||'',postingLockedAt:i.postingLockedAt||i.posting_locked_at||'',dataEnv:rowDataEnvironment(i)};
 }
 function mapNotif(n){
-  return {id:n.id,type:n.type||'system',title:n.title,body:n.body,time:n.time||'剛才',read:!!n.read,reqId:n.reqId||n.request_id||''};
+  return {id:n.id,type:n.type||'system',title:n.title,body:n.body,time:n.time||'剛才',read:!!n.read,reqId:n.reqId||n.request_id||'',dataEnv:rowDataEnvironment(n)};
 }
 function jsonArrayValue(v){
   if(Array.isArray(v))return v;
@@ -1912,7 +2258,7 @@ function mapLedger(l){
   var linkedReq=(REQS||[]).find(function(r){return r.no===ref;});
   var linkedInv=(INVS||[]).find(function(i){return i.no===ref;});
   var dc=l.dc||l.department_code;
-  return {id:l.id||'',date:l.date||fromIsoDate(l.entry_date),desc:l.desc||l.description||'',eid:l.eid||l.entity_id||(linkedReq&&linkedReq.eid)||(linkedInv&&linkedInv.eid)||entityOfDept(dc),dc:dc,dr:num(l.dr||l.debit),cr:num(l.cr||l.credit),ac:l.ac||l.account_code,an:l.an||l.account_name,ref:ref,postingKey:l.postingKey||l.posting_key||'',sourceType:l.sourceType||l.source_type||'',sourceId:l.sourceId||l.source_id||'',sourceNo:l.sourceNo||l.source_no||'',voucherNo:l.voucherNo||l.voucher_no||''};
+  return {id:l.id||'',date:l.date||fromIsoDate(l.entry_date),desc:l.desc||l.description||'',eid:l.eid||l.entity_id||(linkedReq&&linkedReq.eid)||(linkedInv&&linkedInv.eid)||entityOfDept(dc),dc:dc,dr:num(l.dr||l.debit),cr:num(l.cr||l.credit),ac:l.ac||l.account_code,an:l.an||l.account_name,ref:ref,postingKey:l.postingKey||l.posting_key||'',sourceType:l.sourceType||l.source_type||'',sourceId:l.sourceId||l.source_id||'',sourceNo:l.sourceNo||l.source_no||'',voucherNo:l.voucherNo||l.voucher_no||'',dataEnv:rowDataEnvironment(l)};
 }
 function mapRemoteDraft(r){
   var payload=r.payload||{};
@@ -1926,13 +2272,16 @@ function mapRemoteDraft(r){
     ownerEmail:r.owner_email||payload.ownerEmail||'',
     ownerName:r.owner_name||payload.ownerName||'',
     updatedAt:r.updated_at||payload.updatedAt,
-    files:r.files||payload.files||[]
+    files:r.files||payload.files||[],
+    dataEnv:r.dataEnv||r.data_environment||payload.dataEnv||payload.dataEnvironment||DATA_ENV_PRODUCTION
   }));
 }
-function mapPeriodClose(r){return {id:r.id,eid:r.entity_id,period:r.period,status:r.status||'closed',by:r.closed_by||'',time:r.closed_at||'',note:r.note||''};}
-function mapComplianceArchive(r){return {id:r.id,eid:r.entity_id,period:r.period,docs:num(r.docs_count),fileCount:num(r.file_count),by:r.archived_by||'',time:r.archived_at||'',retainDocsUntil:r.retain_docs_until||'',retainBooksUntil:r.retain_books_until||''};}
-function mapAnnualReview(r){return {id:r.id,eid:r.entity_id,period:r.period,status:r.status||'approved',by:r.reviewed_by||'',time:r.reviewed_at||'',note:r.note||''};}
-function mapComplianceAudit(r){return {id:r.id,time:r.created_at,user:r.actor_name||'',role:r.actor_role||'',action:r.action,target:r.target||'',detail:r.detail||''};}
+function mapPeriodClose(r){return {id:r.id,eid:r.entity_id,period:r.period,status:r.status||'closed',by:r.closed_by||'',time:r.closed_at||'',note:r.note||'',dataEnv:rowDataEnvironment(r)};}
+function mapComplianceArchive(r){return {id:r.id,eid:r.entity_id,period:r.period,docs:num(r.docs_count),fileCount:num(r.file_count),by:r.archived_by||'',time:r.archived_at||'',retainDocsUntil:r.retain_docs_until||'',retainBooksUntil:r.retain_books_until||'',dataEnv:rowDataEnvironment(r)};}
+function mapAnnualReview(r){return {id:r.id,eid:r.entity_id,period:r.period,status:r.status||'approved',by:r.reviewed_by||'',time:r.reviewed_at||'',note:r.note||'',dataEnv:rowDataEnvironment(r)};}
+function mapComplianceAudit(r){return {id:r.id,time:r.created_at,user:r.actor_name||'',role:r.actor_role||'',action:r.action,target:r.target||'',detail:r.detail||'',eid:r.entity_id||'',period:r.period||'',dataEnv:rowDataEnvironment(r)};}
+function mapBackupEvent(r){return {id:r.id,action:r.action||'backup',status:r.status||'completed',fileName:r.file_name||r.fileName||'',hash:r.file_hash||r.hash||'',summary:r.summary||{},by:r.actor_name||r.by||'',time:r.created_at||r.time||'',note:r.note||'',dataEnv:rowDataEnvironment(r)};}
+function mapSettingVersion(r){return {id:r.id,versionNo:r.version_no||r.versionNo||r.id,target:r.target||'',summary:r.summary||'',snapshot:r.snapshot||{},changeRequestId:r.change_request_id||r.changeRequestId||'',createdBy:r.created_by||r.createdBy||'',approvedBy:r.approved_by||r.approvedBy||'',createdAt:r.created_at||r.createdAt||'',dataEnv:rowDataEnvironment(r)};}
 function normalizeSettingValue(v){
   if(typeof v==='string'){try{return JSON.parse(v);}catch(e){return v;}}
   return v;
@@ -1962,6 +2311,7 @@ function applySystemSettings(rows){
   BANK_TRANSFER_FEES=Object.assign({},SYSTEM_SETTINGS.bank_transfer_fees||{});
   ENTS.forEach(function(e){if(BANK_TRANSFER_FEES[e.id]==null)BANK_TRANSFER_FEES[e.id]=BANK_TRANSFER_FEE;});
   ROLE_PERMISSIONS=Object.assign(defaultRolePermissions(),SYSTEM_SETTINGS.role_permissions||{});
+  if(!SETTINGS_VERSIONS.length)SETTINGS_VERSIONS=safeJsonGet(settingsVersionStoreKey(),[])||[];
 }
 function currentSystemSettings(){
   return {entities:ENTS,departments:DEPTS,accounts:ACCTS,bank_transfer_fees:BANK_TRANSFER_FEES,role_permissions:ROLE_PERMISSIONS};
@@ -1993,24 +2343,28 @@ async function loadRemoteData(){
     loadOptionalTable(client,'period_closes','closed_at',false),
     loadOptionalTable(client,'compliance_archives','archived_at',false),
     loadOptionalTable(client,'annual_reviews','reviewed_at',false),
-    loadOptionalTable(client,'compliance_audit_logs','created_at',false)
+    loadOptionalTable(client,'compliance_audit_logs','created_at',false),
+    loadOptionalTable(client,'backup_restore_events','created_at',false),
+    loadOptionalTable(client,'system_setting_versions','created_at',false)
   ];
   var res=await Promise.all(jobs);
   var err=res.find(function(r){return r.error;});
   if(err){throw err.error;}
   USERS=(res[0].data||[]).map(mapUser);
-  REQS=(res[1].data||[]).map(mapReq);
-  VOUCHERS=(res[2].data||[]).map(mapVoucher);
-  BILLS=(res[3].data||[]).map(mapBill);
-  INVS=(res[4].data||[]).map(mapInv);
-  NOTIFS=(res[5].data||[]).map(mapNotif);
-  LEDGER=(res[6].data||[]).map(mapLedger);
+  REQS=(res[1].data||[]).map(mapReq).filter(inActiveDataEnvironment);
+  VOUCHERS=(res[2].data||[]).map(mapVoucher).filter(inActiveDataEnvironment);
+  BILLS=(res[3].data||[]).map(mapBill).filter(inActiveDataEnvironment);
+  INVS=(res[4].data||[]).map(mapInv).filter(inActiveDataEnvironment);
+  NOTIFS=(res[5].data||[]).map(mapNotif).filter(inActiveDataEnvironment);
+  LEDGER=(res[6].data||[]).map(mapLedger).filter(inActiveDataEnvironment);
   applySystemSettings(res[7].data||[]);
   if(Array.isArray(res[8]))DRAFTS=res[8].map(mapRemoteDraft).filter(draftBelongsToCurrentUser);
-  if(Array.isArray(res[9]))PERIOD_CLOSES=res[9].map(mapPeriodClose);
-  if(Array.isArray(res[10]))ARCHIVES=res[10].map(mapComplianceArchive);
-  if(Array.isArray(res[11]))ANNUAL_REVIEWS=res[11].map(mapAnnualReview);
-  if(Array.isArray(res[12]))AUDIT_LOGS=res[12].map(mapComplianceAudit);
+  if(Array.isArray(res[9]))PERIOD_CLOSES=res[9].map(mapPeriodClose).filter(inActiveDataEnvironment);
+  if(Array.isArray(res[10]))ARCHIVES=res[10].map(mapComplianceArchive).filter(inActiveDataEnvironment);
+  if(Array.isArray(res[11]))ANNUAL_REVIEWS=res[11].map(mapAnnualReview).filter(inActiveDataEnvironment);
+  if(Array.isArray(res[12]))AUDIT_LOGS=res[12].map(mapComplianceAudit).filter(inActiveDataEnvironment);
+  if(Array.isArray(res[13]))BACKUP_EVENTS=res[13].map(mapBackupEvent).filter(inActiveDataEnvironment);
+  if(Array.isArray(res[14]))SETTINGS_VERSIONS=res[14].map(mapSettingVersion).filter(inActiveDataEnvironment);
   lastSyncAt=new Date().toISOString();
   return true;
 }
@@ -2043,7 +2397,7 @@ function startRealtime(){
   var client=getSb();
   if(!client||realtimeChannel)return;
   realtimeChannel=client.channel('module-finance-live');
-  ['expense_requests','invoices','ledger_entries','bills','vouchers','notifications','finance_users','system_settings','draft_requests','period_closes','compliance_archives','annual_reviews','compliance_audit_logs'].forEach(function(table){
+  ['expense_requests','invoices','ledger_entries','bills','vouchers','notifications','finance_users','system_settings','draft_requests','period_closes','compliance_archives','annual_reviews','compliance_audit_logs','backup_restore_events','system_setting_versions'].forEach(function(table){
     realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:table},function(){refreshRemoteData(table);});
   });
   realtimeChannel.subscribe(function(status){
@@ -2051,11 +2405,11 @@ function startRealtime(){
   });
 }
 function reqDbRow(r){
-  return {id:r.id,no:r.no,entity_id:r.eid,department_code:r.dc,applicant:r.app,applicant_id:r.applicantId||'',applicant_email:r.applicantEmail||'',type:r.type,type_label:r.tL,amount:r.amt,estimated_amount:r.estimatedAmt||null,actual_amount:r.actualAmt||null,description:r.desc,payee:r.payee||null,bank_type:r.bankType||null,bank_name:r.bankName||null,bank_branch:r.bankBranch||null,bank_no:r.bankNo||null,expected_pay_date:r.expectedPayDate?r.expectedPayDate.replace(/\//g,'-'):null,bank_account:r.bankAcc,fee_bearer:r.feeBearer||requestFeeBearer(r)||null,bank_fee_amount:requestBankFeeAmount(r),status:r.status,step:r.step,ver:r.ver,request_date:r.date?r.date.replace(/\//g,'-'):null,debit_account:r.dr,debit_account_name:r.drN,credit_account:r.cr,credit_account_name:r.crN,files:r.files,actual_files:r.actualFiles||[],steps:r.steps,petty_mode:r.pettyMode||null,form_payload:r.formPayload||{},voucher_id:r.voucherId||null,cash_posted_at:requestCashPostedAt(r)||null,ledger_posted_at:requestLedgerPostedAt(r)||null,posting_locked_at:r.postingLockedAt||r.posting_locked_at||null,voided_at:r.voidedAt||r.voided_at||null};
+  return {id:r.id,no:r.no,entity_id:r.eid,department_code:r.dc,applicant:r.app,applicant_id:r.applicantId||'',applicant_email:r.applicantEmail||'',type:r.type,type_label:r.tL,amount:r.amt,estimated_amount:r.estimatedAmt||null,actual_amount:r.actualAmt||null,description:r.desc,payee:r.payee||null,bank_type:r.bankType||null,bank_name:r.bankName||null,bank_branch:r.bankBranch||null,bank_no:r.bankNo||null,expected_pay_date:r.expectedPayDate?r.expectedPayDate.replace(/\//g,'-'):null,bank_account:r.bankAcc,fee_bearer:r.feeBearer||requestFeeBearer(r)||null,bank_fee_amount:requestBankFeeAmount(r),status:r.status,step:r.step,ver:r.ver,request_date:r.date?r.date.replace(/\//g,'-'):null,debit_account:r.dr,debit_account_name:r.drN,credit_account:r.cr,credit_account_name:r.crN,files:r.files,actual_files:r.actualFiles||[],steps:r.steps,petty_mode:r.pettyMode||null,form_payload:r.formPayload||{},voucher_id:r.voucherId||null,cash_posted_at:requestCashPostedAt(r)||null,ledger_posted_at:requestLedgerPostedAt(r)||null,posting_locked_at:r.postingLockedAt||r.posting_locked_at||null,voided_at:r.voidedAt||r.voided_at||null,data_environment:r.dataEnv||activeDataEnvironment()};
 }
 function stripExpenseExtendedFields(row){
   var x=Object.assign({},row);
-  ['estimated_amount','actual_amount','actual_files','petty_mode','form_payload','bank_type','applicant_id','applicant_email','cash_posted_at','ledger_posted_at','posting_locked_at','voided_at'].forEach(function(k){delete x[k];});
+  ['estimated_amount','actual_amount','actual_files','petty_mode','form_payload','bank_type','applicant_id','applicant_email','cash_posted_at','ledger_posted_at','posting_locked_at','voided_at','data_environment'].forEach(function(k){delete x[k];});
   return x;
 }
 function stripMissingApplicantFields(row){
@@ -2066,7 +2420,7 @@ function stripMissingApplicantFields(row){
 }
 function stripPostingLockFields(row){
   var x=Object.assign({},row);
-  ['cash_posted_at','ledger_posted_at','posting_locked_at','voided_at','revenue_posted_at','cash_receipt_posted_at','posted_at','posting_key','source_type','source_id','source_no','voucher_no','adjusts_voucher_no','adjustment_type'].forEach(function(k){delete x[k];});
+  ['cash_posted_at','ledger_posted_at','posting_locked_at','voided_at','revenue_posted_at','cash_receipt_posted_at','posted_at','posting_key','source_type','source_id','source_no','voucher_no','adjusts_voucher_no','adjustment_type','data_environment'].forEach(function(k){delete x[k];});
   return x;
 }
 function isSchemaCacheMiss(msg){
@@ -2077,16 +2431,16 @@ function userDbRow(u){
   return {id:u.id,name:u.n,email:u.email,demo_password:u.pw||DEMO_PASSWORD,role:u.role,role_label:u.rL||RL[u.role]||u.role,entity_id:u.eid||entityOfDept(u.dc)||'E1',department_code:u.dc,init:u.init||String(u.n||'?').slice(0,1),active:u.active!==false};
 }
 function billDbRow(b){
-  return {id:b.id,item:b.item,item_key:b.ik,entity_id:b.eid,entity_name:b.entL,amount:b.amt,due_date:b.due?b.due.replace(/\//g,'-'):null,method:b.method,note:b.note,status:b.status};
+  return {id:b.id,item:b.item,item_key:b.ik,entity_id:b.eid,entity_name:b.entL,amount:b.amt,due_date:b.due?b.due.replace(/\//g,'-'):null,method:b.method,note:b.note,status:b.status,data_environment:b.dataEnv||activeDataEnvironment()};
 }
 function invoiceDbRow(i){
-  return {id:i.id,no:i.no,entity_id:i.eid,entity_name:i.en,department_code:i.dc,buyer:i.buyer,tax_id:i.taxId||i.taxid||null,applicant:i.applicant,applicant_id:i.applicantId||null,batch_id:i.batchId||null,amount:i.amt,tax:i.tax,total:i.total,invoice_date:i.date?i.date.replace(/\//g,'-'):null,paid_at:i.paidAt||null,status:i.status,approval_status:i.approvalStatus,approval_step:i.approvalStep,steps:i.steps,description:i.desc||'',receipt_files:i.receiptFiles||[],receipt_note:i.receiptNote||null,receipt_submitted_at:i.receiptSubmittedAt||null,receipt_submitted_by:i.receiptSubmittedBy||null,revenue_posted:!!i.revenuePosted,revenue_posted_at:invoiceRevenuePostedAt(i)||null,cash_receipt_posted_at:invoiceCashPostedAt(i)||null,posting_locked_at:i.postingLockedAt||i.posting_locked_at||null};
+  return {id:i.id,no:i.no,entity_id:i.eid,entity_name:i.en,department_code:i.dc,buyer:i.buyer,tax_id:i.taxId||i.taxid||null,applicant:i.applicant,applicant_id:i.applicantId||null,batch_id:i.batchId||null,amount:i.amt,tax:i.tax,total:i.total,invoice_date:i.date?i.date.replace(/\//g,'-'):null,paid_at:i.paidAt||null,status:i.status,approval_status:i.approvalStatus,approval_step:i.approvalStep,steps:i.steps,description:i.desc||'',receipt_files:i.receiptFiles||[],receipt_note:i.receiptNote||null,receipt_submitted_at:i.receiptSubmittedAt||null,receipt_submitted_by:i.receiptSubmittedBy||null,revenue_posted:!!i.revenuePosted,revenue_posted_at:invoiceRevenuePostedAt(i)||null,cash_receipt_posted_at:invoiceCashPostedAt(i)||null,posting_locked_at:i.postingLockedAt||i.posting_locked_at||null,data_environment:i.dataEnv||activeDataEnvironment()};
 }
 function voucherDbRow(v){
-  return {id:v.id,no:v.no,request_id:v.reqId||null,entity_id:v.eid,entity_name:v.entS,voucher_date:v.date?v.date.replace(/\//g,'-'):todayIso(),description:v.desc||'',entries:v.entries||[],total:v.total||0,creator:v.creator||'系統自動',posted:v.posted!==false,posted_at:v.postedAt||new Date().toISOString(),posting_locked_at:v.postingLockedAt||new Date().toISOString(),adjusts_voucher_no:v.adjusts||null,adjustment_type:v.adjustmentType||null};
+  return {id:v.id,no:v.no,request_id:v.reqId||null,entity_id:v.eid,entity_name:v.entS,voucher_date:v.date?v.date.replace(/\//g,'-'):todayIso(),description:v.desc||'',entries:v.entries||[],total:v.total||0,creator:v.creator||'系統自動',posted:v.posted!==false,posted_at:v.postedAt||new Date().toISOString(),posting_locked_at:v.postingLockedAt||new Date().toISOString(),adjusts_voucher_no:v.adjusts||null,adjustment_type:v.adjustmentType||null,data_environment:v.dataEnv||activeDataEnvironment()};
 }
 function notifDbRow(n){
-  return {id:n.id,type:n.type,title:n.title,body:n.body,time:n.time,read:n.read,request_id:n.reqId||null};
+  return {id:n.id,type:n.type,title:n.title,body:n.body,time:n.time,read:n.read,request_id:n.reqId||null,data_environment:n.dataEnv||activeDataEnvironment()};
 }
 async function dbInsert(table,row){
   if(S.demoLogin){saveLocalAppState();return {ok:true,demo:true};}
@@ -2109,7 +2463,13 @@ async function dbInsert(table,row){
     console.warn('Supabase insert retry without posting-lock columns:',table,r.error.message);
     r=await client.from(table).insert(stripPostingLockFields(row));
   }
+  if(r.error&&isSchemaCacheMiss(r.error.message)&&row&&row.data_environment){
+    var erow=Object.assign({},row);delete erow.data_environment;
+    console.warn('Supabase insert retry without data_environment:',table,r.error.message);
+    r=await client.from(table).insert(erow);
+  }
   if(r.error){console.warn('Supabase insert failed:',table,r.error.message);return {ok:false,error:r.error};}
+  saveLocalAppStateSoon();
   return {ok:true,data:r.data};
 }
 async function dbUpdate(table,id,values){
@@ -2128,7 +2488,13 @@ async function dbUpdate(table,id,values){
     console.warn('Supabase update retry without posting-lock columns:',table,r.error.message);
     r=await client.from(table).update(stripPostingLockFields(values)).eq('id',id);
   }
+  if(r.error&&isSchemaCacheMiss(r.error.message)&&values&&values.data_environment){
+    var evalues=Object.assign({},values);delete evalues.data_environment;
+    console.warn('Supabase update retry without data_environment:',table,r.error.message);
+    r=await client.from(table).update(evalues).eq('id',id);
+  }
   if(r.error){console.warn('Supabase update failed:',table,r.error.message);return {ok:false,error:r.error};}
+  saveLocalAppStateSoon();
   return {ok:true,data:r.data};
 }
 async function dbDelete(table,id){
@@ -2136,6 +2502,7 @@ async function dbDelete(table,id){
   var client=getSb();if(!client)return {ok:true,skipped:true};
   var r=await client.from(table).delete().eq('id',id);
   if(r.error){console.warn('Supabase delete failed:',table,r.error.message);return {ok:false,error:r.error};}
+  saveLocalAppStateSoon();
   return {ok:true,data:r.data};
 }
 async function dbUpsert(table,row){
@@ -2143,6 +2510,7 @@ async function dbUpsert(table,row){
   var client=getSb();if(!client)return;
   var r=await client.from(table).upsert(row);
   if(r.error)console.warn('Supabase upsert failed:',table,r.error.message);
+  else saveLocalAppStateSoon();
 }
 function isRpcMissing(err){
   var msg=String((err&&err.message)||err||'').toLowerCase();
@@ -2166,7 +2534,7 @@ function gD(c){return DEPTS.find(function(d){return d.c===c;})||{c:c,n:c,lv:2};}
 function gE(id){return ENTS.find(function(e){return e.id===id;})||ENTS[0];}
 function isFinance(){return S.user&&['accountant','ceo','admin_director'].indexOf(S.user.role)>-1;}
 function canManageUsers(){return S.user&&['ceo','admin_director'].indexOf(S.user.role)>-1;}
-function canManageSettings(){return S.user&&['ceo','admin_director'].indexOf(S.user.role)>-1;}
+function canManageSettings(){return S.user&&['ceo','admin_director','accountant'].indexOf(S.user.role)>-1;}
 function canAccessPage(id){
   if(id==='detail')return true;
   if(!S.user)return false;
@@ -2233,7 +2601,6 @@ function buildApprovalSteps(appUser,requestType){
   add(direct,'上一層級主管：'+(RL[direct]||direct),STEP_FOR[direct]||'pending_section_chief');
   add('dept_manager','部門主管','pending_dept_manager');
   add('admin_director','行政部門主任','pending_admin_director');
-  if(requestType==='welfare_request')add('hr','人資審核','pending_hr');
   add('accountant','會計','pending_accountant');
   add('ceo','執行長','pending_ceo');
   steps.push({r:'申請人確認：確認已撥款',rk:'applicant_confirm',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_applicant_confirm'});
@@ -2491,14 +2858,17 @@ function saveLocalAppState(){
       invoices:INVS||[],
       bills:BILLS||[]
     };
-    safeJsonSet(LOCAL_APP_STATE_KEY,state);
+    safeJsonSet(localAppStateKey(),state);
   }catch(err){
     console.warn('local app state save failed',err);
   }
 }
+function saveLocalAppStateSoon(){
+  try{setTimeout(saveLocalAppState,0);}catch(e){saveLocalAppState();}
+}
 function loadLocalAppState(){
   try{
-    var state=safeJsonGet(LOCAL_APP_STATE_KEY,{})||{};
+    var state=safeJsonGet(localAppStateKey(),{})||{};
     if(Array.isArray(state.requests))REQS=state.requests.map(mapReq);
     if(Array.isArray(state.notifications))NOTIFS=state.notifications.map(mapNotif);
     if(Array.isArray(state.vouchers))VOUCHERS=state.vouchers.map(mapVoucher);
@@ -2512,6 +2882,7 @@ function loadLocalAppState(){
 
 // ══ 登入 ══
 window.doLogin=async function(){
+  var envSel=el('login-data-env');if(envSel)setDataEnvironment(envSel.value);
   var email=(el('login-email')||{}).value||'';
   var pw=(el('login-pw')||{}).value||'';
   var client=getSb();
@@ -2529,6 +2900,7 @@ window.doLogin=async function(){
   var u=USERS.find(function(u){return u.email===email&&u.pw===pw&&u.active;});
   if(!u){el('login-err').style.display='block';el('login-err').textContent='帳號或密碼錯誤';return;}
   S.demoLogin=true;
+  setDataEnvironment(DATA_ENV_TEST);
   doEnter(u);
 };
 async function demoLoginByEmail(email,pw,authMessage){
@@ -2545,6 +2917,7 @@ async function demoLoginByEmail(email,pw,authMessage){
   if(u&&!u.pw)u.pw=DEMO_PASSWORD;
   if(!u.pw||u.pw!==pw)return false;
   S.demoLogin=true;
+  setDataEnvironment(DATA_ENV_TEST);
   doEnter(u);
   return true;
 }
@@ -2568,9 +2941,11 @@ function oauthRedirectUrl(){
 window.quickLogin=function(role){
   var map={employee:USERS[0],section_chief:USERS[1],dept_manager:USERS[2],ceo:USERS[3],admin_director:USERS[4],accountant:USERS[5],hr:USERS[6],general_affairs:USERS[7]};
   S.demoLogin=true;
+  setDataEnvironment(DATA_ENV_TEST);
   doEnter(map[role]);
 };
 window.googleLogin=async function(){
+  var envSel=el('login-data-env');if(envSel)setDataEnvironment(envSel.value);
   var client=getSb();
   if(!client){
     alert('Google 登入前，請先填入 Supabase anon public key，並在 Supabase 後台啟用 Google Provider。Google client secret 不可以放在 HTML。');
@@ -2596,15 +2971,15 @@ async function handleOAuthReturn(){
 }
 function doEnter(u){
   S.user=u;
-  if(S.demoLogin)loadLocalAppState();
+  loadLocalAppState();
   el('sb-av').textContent=u.init;el('sb-name').textContent=u.n;
-  el('sb-role').textContent=u.rL+' · '+u.dc;el('top-info').textContent=u.n+' · '+u.rL;
+  el('sb-role').textContent=u.rL+' · '+u.dc;el('top-info').textContent=u.n+' · '+u.rL+' · '+dataEnvLabel();
   showModuleHub();
   applyRolePermissions();
   setRuntimeDefaults();
   initFilters();buildAll();
   if(S.demoLogin){
-    el('top-info').textContent=u.n+' · '+u.rL+' · 本機測試模式';
+    el('top-info').textContent=u.n+' · '+u.rL+' · 本機測試模式 · '+dataEnvLabel();
     return;
   }
   if(hasSupabase()){
@@ -2619,6 +2994,8 @@ function doEnter(u){
       }
     }).catch(function(err){
       console.warn('Supabase sync failed:',err);
+      loadLocalAppState();
+      initFilters();buildAll();
       el('top-info').textContent=oldInfo+' · 使用本機 demo 資料';
       alert('Supabase 讀取失敗：'+(err.message||err));
     });
@@ -2827,26 +3204,26 @@ function periodEnd(period){
   return new Date(yy,mm,0).toISOString().slice(0,10);
 }
 function ledgerRowsForEntity(eid,period){
-  return LEDGER.filter(function(r){return inEntity(eid,r,'ledger')&&inPeriod(r.date,period);});
+  return LEDGER.filter(function(r){return inActiveDataEnvironment(r)&&inEntity(eid,r,'ledger')&&inPeriod(r.date,period);});
 }
 function ledgerRows(eid,period){return ledgerRowsForEntity(eid,period);}
 function ledgerRowsToPeriodEnd(eid,period){
   var end=periodEnd(period);
   return LEDGER.filter(function(r){
     var d=normDate(r.date);
-    return inEntity(eid,r,'ledger')&&(!end||d<=end);
+    return inActiveDataEnvironment(r)&&inEntity(eid,r,'ledger')&&(!end||d<=end);
   });
 }
 function ledgerRowsBeforePeriod(eid,period){
   var start=periodStart(period);
   return LEDGER.filter(function(r){
     var d=normDate(r.date);
-    return inEntity(eid,r,'ledger')&&start&&d&&d<start;
+    return inActiveDataEnvironment(r)&&inEntity(eid,r,'ledger')&&start&&d&&d<start;
   });
 }
 function ledgerRowsForDepartment(dept,period,acct){
   return LEDGER.filter(function(r){
-    return (dept==='all'||r.dc===dept)&&(acct==='all'||r.ac===acct)&&inPeriod(r.date,period);
+    return inActiveDataEnvironment(r)&&(dept==='all'||r.dc===dept)&&(acct==='all'||r.ac===acct)&&inPeriod(r.date,period);
   });
 }
 function hasLedger(eid,period){return ledgerRows(eid,period).length>0;}
@@ -2868,10 +3245,10 @@ function traceButton(kind,key,label){
   return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openReportTraceModal(\''+kind+'\',\''+String(key||'').replace(/'/g,'\\\'')+'\')">'+(label||'追溯')+'</button>';
 }
 function reqsFor(eid,period,doneOnly){
-  return REQS.filter(function(r){return inEntity(eid,r,'req')&&inPeriod(r.date,period)&&(!doneOnly||isReqDone(r));});
+  return REQS.filter(function(r){return inActiveDataEnvironment(r)&&inEntity(eid,r,'req')&&inPeriod(r.date,period)&&(!doneOnly||isReqDone(r));});
 }
 function invsFor(eid,period,paidOnly){
-  return INVS.filter(function(i){return inEntity(eid,i,'inv')&&inPeriod(i.date,period)&&(!paidOnly||i.status==='paid');});
+  return INVS.filter(function(i){return inActiveDataEnvironment(i)&&inEntity(eid,i,'inv')&&inPeriod(i.date,period)&&(!paidOnly||i.status==='paid');});
 }
 function invDept(i){
   return i.dc||((USERS.find(function(u){return u.id===i.applicantId||u.n===i.applicant;})||{}).dc)||'A1101';
@@ -2891,6 +3268,9 @@ async function postInvoiceRevenue(i){
   if(POSTING_IN_FLIGHT[lockKey])return false;
   POSTING_IN_FLIGHT[lockKey]=true;
   var dc=invDept(i),amt=i.total||i.amt||0,date=i.date||new Date().toISOString().slice(0,10).replace(/-/g,'/');
+  var outputTax=Math.min(amt,Math.max(0,num(i.tax)));
+  var revenueAmt=Math.max(0,amt-outputTax);
+  if(!ensureOpenPostingPeriod(i.eid||entityOfDept(dc),date,'發票收入認列')){delete POSTING_IN_FLIGHT[lockKey];return false;}
   var rpc=null;
   try{
     rpc=await callAccountingRpc('post_invoice_revenue',{p_invoice_id:i.id});
@@ -2902,15 +3282,18 @@ async function postInvoiceRevenue(i){
   }
   if(rpc&&rpc.ok&&rpc.data&&rpc.data.idempotent){i.revenuePosted=true;i.revenuePostedAt=invoiceRevenuePostedAt(i)||new Date().toISOString();delete POSTING_IN_FLIGHT[lockKey];return true;}
   var ts=new Date().toISOString();
-  var ar={date:date,desc:'發票開立應收 — '+(i.buyer||''),eid:i.eid||entityOfDept(dc),dc:dc,dr:amt,cr:0,ac:'1123',an:'應收帳款',ref:i.no};
-  var rev={date:date,desc:'發票收入 — '+(i.buyer||''),eid:i.eid||entityOfDept(dc),dc:dc,dr:0,cr:amt,ac:'4100',an:'已開立發票收入',ref:i.no};
+  var ar={date:date,desc:'發票開立應收 — '+(i.buyer||''),eid:i.eid||entityOfDept(dc),dc:dc,dr:amt,cr:0,ac:'1123',an:'應收帳款',ref:i.no,dataEnv:activeDataEnvironment()};
+  var rev={date:date,desc:'發票收入 — '+(i.buyer||''),eid:i.eid||entityOfDept(dc),dc:dc,dr:0,cr:revenueAmt,ac:'4100',an:'已開立發票收入',ref:i.no,dataEnv:activeDataEnvironment()};
+  var tax=outputTax>0?{date:date,desc:'發票銷項稅額 — '+(i.buyer||''),eid:i.eid||entityOfDept(dc),dc:dc,dr:0,cr:outputTax,ac:'2134',an:'銷項稅額',ref:i.no,dataEnv:activeDataEnvironment()}:null;
+  if(tax)LEDGER.unshift(tax);
   LEDGER.unshift(rev);LEDGER.unshift(ar);
   i.revenuePosted=true;
   i.revenuePostedAt=ts;
   i.postingLockedAt=i.postingLockedAt||ts;
   if(!rpc||rpc.missing){
-    await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:ar.desc,entity_id:ar.eid,department_code:dc,debit:amt,credit:0,account_code:'1123',account_name:'應收帳款',reference_no:i.no,posting_key:ledgerPostingKey('invoice:'+i.no+':revenue:ar'),source_type:'invoice',source_id:i.id,source_no:i.no});
-    await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:rev.desc,entity_id:rev.eid,department_code:dc,debit:0,credit:amt,account_code:'4100',account_name:'已開立發票收入',reference_no:i.no,posting_key:ledgerPostingKey('invoice:'+i.no+':revenue:income'),source_type:'invoice',source_id:i.id,source_no:i.no});
+    await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:ar.desc,entity_id:ar.eid,department_code:dc,debit:amt,credit:0,account_code:'1123',account_name:'應收帳款',reference_no:i.no,posting_key:ledgerPostingKey('invoice:'+i.no+':revenue:ar'),source_type:'invoice',source_id:i.id,source_no:i.no,data_environment:activeDataEnvironment()});
+    await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:rev.desc,entity_id:rev.eid,department_code:dc,debit:0,credit:revenueAmt,account_code:'4100',account_name:'已開立發票收入',reference_no:i.no,posting_key:ledgerPostingKey('invoice:'+i.no+':revenue:income'),source_type:'invoice',source_id:i.id,source_no:i.no,data_environment:activeDataEnvironment()});
+    if(tax)await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:tax.desc,entity_id:tax.eid,department_code:dc,debit:0,credit:outputTax,account_code:'2134',account_name:'銷項稅額',reference_no:i.no,posting_key:ledgerPostingKey('invoice:'+i.no+':revenue:output_tax'),source_type:'invoice',source_id:i.id,source_no:i.no,data_environment:activeDataEnvironment()});
     await dbUpdate('invoices',i.id,{revenue_posted:true,revenue_posted_at:i.revenuePostedAt,posting_locked_at:i.postingLockedAt});
   }
   delete POSTING_IN_FLIGHT[lockKey];
@@ -2925,6 +3308,7 @@ async function postInvoiceCashReceipt(i){
   if(POSTING_IN_FLIGHT[lockKey])return false;
   POSTING_IN_FLIGHT[lockKey]=true;
   var dc=invDept(i),amt=i.total||i.amt||0,date=fromIsoDate(i.paidAt)||new Date().toISOString().slice(0,10).replace(/-/g,'/');
+  if(!ensureOpenPostingPeriod(i.eid||entityOfDept(dc),date,'收款現金流入帳')){delete POSTING_IN_FLIGHT[lockKey];return false;}
   var rpc=null;
   try{
     rpc=await callAccountingRpc('post_invoice_cash_receipt',{p_invoice_id:i.id,p_paid_at:i.paidAt||new Date().toISOString(),p_reviewed_by:S.user?S.user.n:null,p_review_note:(el('receipt-review-note')||{}).value||null});
@@ -2936,14 +3320,14 @@ async function postInvoiceCashReceipt(i){
   }
   if(rpc&&rpc.ok&&rpc.data&&rpc.data.idempotent){i.cashReceiptPostedAt=invoiceCashPostedAt(i)||new Date().toISOString();delete POSTING_IN_FLIGHT[lockKey];return true;}
   var ts=new Date().toISOString();
-  var bank={date:date,desc:'發票收款入帳 — '+(i.buyer||''),eid:i.eid||entityOfDept(dc),dc:dc,dr:amt,cr:0,ac:'1112',an:'銀行存款',ref:i.no};
-  var ar={date:date,desc:'沖轉應收帳款 — '+(i.buyer||''),eid:i.eid||entityOfDept(dc),dc:dc,dr:0,cr:amt,ac:'1123',an:'應收帳款',ref:i.no};
+  var bank={date:date,desc:'發票收款入帳 — '+(i.buyer||''),eid:i.eid||entityOfDept(dc),dc:dc,dr:amt,cr:0,ac:'1112',an:'銀行存款',ref:i.no,dataEnv:activeDataEnvironment()};
+  var ar={date:date,desc:'沖轉應收帳款 — '+(i.buyer||''),eid:i.eid||entityOfDept(dc),dc:dc,dr:0,cr:amt,ac:'1123',an:'應收帳款',ref:i.no,dataEnv:activeDataEnvironment()};
   LEDGER.unshift(ar);LEDGER.unshift(bank);
   i.cashReceiptPostedAt=ts;
   i.postingLockedAt=i.postingLockedAt||ts;
   if(!rpc||rpc.missing){
-    await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:bank.desc,entity_id:bank.eid,department_code:dc,debit:amt,credit:0,account_code:'1112',account_name:'銀行存款',reference_no:i.no,posting_key:ledgerPostingKey('invoice:'+i.no+':receipt:bank'),source_type:'invoice',source_id:i.id,source_no:i.no});
-    await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:ar.desc,entity_id:ar.eid,department_code:dc,debit:0,credit:amt,account_code:'1123',account_name:'應收帳款',reference_no:i.no,posting_key:ledgerPostingKey('invoice:'+i.no+':receipt:ar'),source_type:'invoice',source_id:i.id,source_no:i.no});
+    await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:bank.desc,entity_id:bank.eid,department_code:dc,debit:amt,credit:0,account_code:'1112',account_name:'銀行存款',reference_no:i.no,posting_key:ledgerPostingKey('invoice:'+i.no+':receipt:bank'),source_type:'invoice',source_id:i.id,source_no:i.no,data_environment:activeDataEnvironment()});
+    await dbInsert('ledger_entries',{entry_date:date.replace(/\//g,'-'),description:ar.desc,entity_id:ar.eid,department_code:dc,debit:0,credit:amt,account_code:'1123',account_name:'應收帳款',reference_no:i.no,posting_key:ledgerPostingKey('invoice:'+i.no+':receipt:ar'),source_type:'invoice',source_id:i.id,source_no:i.no,data_environment:activeDataEnvironment()});
     await dbUpdate('invoices',i.id,{cash_receipt_posted_at:i.cashReceiptPostedAt,posting_locked_at:i.postingLockedAt});
   }
   delete POSTING_IN_FLIGHT[lockKey];
@@ -2998,6 +3382,38 @@ function balanceRows(eid,period){
   eq=rowsFromMap(equity);eqTotal=eq.reduce(function(s,r){return s+r.v;},0);
   return {assets:a,liabs:l,equity:eq,assetTotal:aTotal,liabTotal:lTotal,equityTotal:eqTotal,source:ledgerRowsToPeriodEnd(eid,period).length?'ledger':'empty'};
 }
+function trialBalanceStatus(eid,period){
+  var periodRows=ledgerRows(eid,period),toDateRows=ledgerRowsToPeriodEnd(eid,period);
+  function totals(rows){
+    return rows.reduce(function(o,r){o.dr+=num(r.dr);o.cr+=num(r.cr);return o;},{dr:0,cr:0});
+  }
+  var p=totals(periodRows),td=totals(toDateRows),bs=balanceRows(eid,period),cf=cashFlow(eid,period);
+  var assetDiff=bs.assetTotal-(bs.liabTotal+bs.equityTotal);
+  var cashBook=toDateRows.filter(function(r){return isCashAcct(r.ac)&&!isDuplicateRequestCashLedger(r);}).reduce(function(s,r){return s+num(r.dr)-num(r.cr);},0);
+  cashBook+=requestCashEvents(eid,period,true).concat(requestCashEvents(eid,period,false)).reduce(function(s,e){return s+e.amount;},0);
+  var cashDiff=cf.end-cashBook;
+  function pass(diff){return Math.abs(diff)<0.5;}
+  var missingRef=periodRows.filter(function(r){return !r.ref&&!r.sourceNo&&!r.voucherNo;});
+  var oneSided=periodRows.filter(function(r){return (num(r.dr)>0&&num(r.cr)>0)||(!num(r.dr)&&!num(r.cr));});
+  var duplicateKeys={};
+  periodRows.forEach(function(r){var k=r.postingKey||'';if(k)duplicateKeys[k]=(duplicateKeys[k]||0)+1;});
+  var dupRows=periodRows.filter(function(r){return r.postingKey&&duplicateKeys[r.postingKey]>1;});
+  var checks=[
+    {key:'period',name:'本期借貸平衡',diff:p.dr-p.cr,pass:pass(p.dr-p.cr),desc:'本期所有正式分類帳借方應等於貸方。'},
+    {key:'to_date',name:'累計借貸平衡',diff:td.dr-td.cr,pass:pass(td.dr-td.cr),desc:'截至本期末所有正式分類帳借方應等於貸方。'},
+    {key:'balance_sheet',name:'資產負債表平衡',diff:assetDiff,pass:pass(assetDiff),desc:'資產總額應等於負債加權益，本期損益會列入 3440。'},
+    {key:'cash_flow',name:'現金流與帳上現金',diff:cashDiff,pass:pass(cashDiff),desc:'現金流期末現金應與 1111/1112 類科目帳面餘額一致。'},
+    {key:'source_ref',name:'來源追溯完整性',diff:missingRef.length,pass:missingRef.length===0,desc:'正式分類帳應有來源單號、傳票號或 posting key。'},
+    {key:'entry_shape',name:'分錄格式合理性',diff:oneSided.length,pass:oneSided.length===0,desc:'單筆分錄不可同時有借貸，也不可借貸皆為 0。'},
+    {key:'posting_key',name:'Posting Key 唯一性',diff:dupRows.length,pass:dupRows.length===0,desc:'同期間不應出現重複 posting key，避免重複入帳。'}
+  ];
+  var issues=[].concat(
+    missingRef.slice(0,12).map(function(r){return {kind:'來源缺漏',row:r,msg:'缺少來源單號或傳票號'};}),
+    oneSided.slice(0,12).map(function(r){return {kind:'分錄格式',row:r,msg:'借貸欄位不合理'};}),
+    dupRows.slice(0,12).map(function(r){return {kind:'重複鍵值',row:r,msg:'Posting Key 重複：'+r.postingKey};})
+  );
+  return {periodRows:periodRows.length,toDateRows:toDateRows.length,periodDebit:p.dr,periodCredit:p.cr,toDateDebit:td.dr,toDateCredit:td.cr,assetDiff:assetDiff,cashBook:cashBook,cashFlowEnd:cf.end,cashDiff:cashDiff,checks:checks,issues:issues,ok:checks.every(function(c){return c.pass;}),source:periodRows.length||toDateRows.length?'ledger':'empty'};
+}
 function requestByRef(ref){
   return REQS.find(function(r){return r.no===ref;})||null;
 }
@@ -3008,6 +3424,7 @@ function isDuplicateRequestCashLedger(row){
 function requestCashEvents(eid,period,before){
   var events=[];
   REQS.forEach(function(r){
+    if(!inActiveDataEnvironment(r))return;
     ensureRequestCashPostedFromCeo(r);
     var posted=requestCashPostedAt(r);
     if(!posted||!inEntity(eid,r,'req'))return;
@@ -3063,12 +3480,18 @@ function sourceText(s){return s==='ledger'?'正式分類帳分錄':'尚無正式
 function voucherByLedgerRef(ref){
   return VOUCHERS.find(function(v){return v.no===ref||v.reqId===ref||v.id===ref;})||null;
 }
+function isShareholderVoucher(v){
+  if(!v)return false;
+  var txt=(v.reqId||'')+' '+(v.id||'')+' '+(v.no||'')+' '+(v.desc||'');
+  return /^TXN-CAP/.test(v.reqId||'')||/^CAP\d{4}-/.test(v.id||v.no||'')||/股東|增資|實收資本|股東往來/.test(txt);
+}
 function sourceByLedgerRef(ref){
   var req=REQS.find(function(r){return r.no===ref||r.id===ref;});
-  if(req)return {type:'request',label:'申請單',no:req.no,id:req.id,title:req.tL||'申請',name:req.app||'',files:normalizeFiles(req.files).length+normalizeFiles(req.passbookFiles).length+normalizeFiles(req.actualFiles).length};
+  if(req)return {type:'request',label:'申請單',no:req.no,id:req.id,title:req.tL||'申請',name:req.app||'',files:normalizeFiles(req.files).length+normalizeFiles(req.passbookFiles).length+normalizeFiles(req.actualFiles).length,approvals:(req.steps||[]).filter(function(s){return s.a==='approved';}).length};
   var inv=INVS.find(function(i){return i.no===ref||i.id===ref;});
-  if(inv)return {type:'invoice',label:'發票',no:inv.no,id:inv.id,title:inv.buyer||'發票',name:inv.applicant||'',files:normalizeFiles(inv.receiptFiles).length};
+  if(inv)return {type:'invoice',label:'發票',no:inv.no,id:inv.id,title:inv.buyer||'發票',name:inv.applicant||'',files:normalizeFiles(inv.receiptFiles).length,approvals:(inv.steps||[]).filter(function(s){return s.a==='approved';}).length};
   var v=voucherByLedgerRef(ref);
+  if(isShareholderVoucher(v))return {type:'shareholder',label:'股東往來 / 資本額',no:v.reqId||v.no,id:v.id,title:v.desc||'股東往來傳票',name:v.creator||'',files:0};
   if(v)return {type:'voucher',label:'傳票',no:v.no,id:v.id,title:v.desc||'傳票',name:v.creator||'',files:0};
   return {type:'ledger',label:'分類帳',no:ref||'—',id:'',title:'未連結來源',name:'',files:0};
 }
@@ -3111,6 +3534,7 @@ window.openReportTraceModal=function(kind,key){
   function sourceAction(r){
     if(r.source.type==='request')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openDetail(\''+r.source.id+'\')">申請</button>';
     if(r.source.type==='invoice')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="closeAppr();nav(\'invoices\',null)">發票</button>';
+    if(r.source.type==='shareholder')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+r.source.id+'\')">股東傳票</button>';
     if(r.voucher)return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+r.voucher.id+'\')">傳票</button>';
     return'<span style="font-size:10px;color:#94a3b8">—</span>';
   }
@@ -3118,7 +3542,7 @@ window.openReportTraceModal=function(kind,key){
     var src=r.source||sourceByLedgerRef(r.ref),dept=(r.dc||'')+' '+(gD(r.dc).n||''),v=r.voucher;
     return'<tr><td style="font-size:11px;color:#64748b;white-space:nowrap">'+(r.date||'—')+'</td>'
       +'<td><div style="font-size:11px;color:var(--brtxt);font-weight:650">'+(src.no||r.ref||'—')+'</div><div style="font-size:10px;color:#94a3b8">'+src.label+(r.virtual?' · 現金流事件':'')+(v?' · 傳票 '+v.no:'')+'</div></td>'
-      +'<td><div style="font-size:12px;color:#334155">'+(r.desc||src.title||'—')+'</div><div style="font-size:10px;color:#94a3b8">'+dept+' · '+(src.name||'')+'</div></td>'
+      +'<td><div style="font-size:12px;color:#334155">'+(r.desc||src.title||'—')+'</div><div style="font-size:10px;color:#94a3b8">'+dept+' · '+(src.name||'')+' · 附件 '+(src.files||0)+' · 核准 '+(src.approvals||0)+'</div></td>'
       +'<td style="font-size:10px;color:#64748b">'+(r.postingKey||'—')+'</td>'
       +'<td style="text-align:right;font-family:monospace;color:#1a5010">'+(r.dr?fmt(r.dr):'—')+'</td>'
       +'<td style="text-align:right;font-family:monospace;color:#8a1010">'+(r.cr?fmt(r.cr):'—')+'</td>'
@@ -3145,6 +3569,17 @@ function requestTaxAmount(r){
   var rows=[].concat(p.lazyRows||[]);
   if(p.travelInfo&&Array.isArray(p.travelInfo.rows))rows=rows.concat(p.travelInfo.rows);
   return rows.reduce(function(s,row){return s+lazyTaxAmount(row||{});},0);
+}
+function requestGrossAmount(r){
+  if(!r)return 0;
+  if(r.type==='purchase_request')return purchaseFinalAmount(r)||purchaseEstimatedAmount(r)||num(r.amt||r.amount);
+  if(r.type==='advance_request')return advanceActualAmount(r)||advanceOriginalAmount(r);
+  return num(r.actualAmt||r.actual_amount||r.amt||r.amount);
+}
+function requestNetTaxSplit(r,amount){
+  var gross=num(amount||requestGrossAmount(r));
+  var tax=Math.min(gross,Math.max(0,requestTaxAmount(r)));
+  return {gross:gross,tax:tax,net:Math.max(0,gross-tax)};
 }
 function outputTaxRecognized(i){
   return invoiceRevenueRecognized(i)&&num(i.tax)>0;
@@ -3372,7 +3807,7 @@ function renderNR(){
   var grid=el('nr-main-grid'),side=el('nr-side-panel');
   if(grid)grid.style.gridTemplateColumns='';
   if(side)side.style.display='flex';
-  if(S.nrStep===3&&(S.nrType==='purchase_request'||S.nrType==='hr_expense_request'||S.nrType==='welfare_request')){
+  if(S.nrStep===3&&(S.nrType==='purchase_request'||S.nrType==='hr_expense_request')){
     if(grid)grid.style.gridTemplateColumns='1fr';
     if(side)side.style.display='none';
   }
@@ -3398,7 +3833,6 @@ function renderNR(){
     var purchaseSideHtml=S.nrType==='purchase_request'?'<div class="card" style="height:100%"><div class="chd"><span class="cht">2-1. 採購需求明細</span><span style="font-size:11px;color:#8b7358">申請人填寫</span></div><div style="padding:11px"><div id="purchase-sheet"></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:8px;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px">此階段不需上傳憑據或存摺封面，也不填匯款資料。總務會在下一關找商品並填寫預估付款資料。</div></div></div>':'';
     var hrSideHtml=S.nrType==='hr_expense_request'?hrExpenseSideHtml():'';
     var travelHtml=S.nrType==='travel_request'?travelFieldsHtml():'';
-    var welfareHtml=S.nrType==='welfare_request'?welfareFieldsHtml():'';
     var refundSideHtml=S.nrType==='refund_request'?refundFieldsHtml():'';
     var refundHtml='';
     var purchaseHtml=S.nrType==='purchase_request'?purchaseFieldsHtml():'';
@@ -3410,7 +3844,6 @@ function renderNR(){
     var sheetHtml=S.nrType==='travel_request'?travelSheetHtml():(S.nrType==='hr_expense_request'?hrSideHtml:(purchaseSideHtml||refundSideHtml||lazyHtml||'<div class="card"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span></div><div style="padding:11px"><div id="lazy-sheet"></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:8px">此申請類型若無明細列，可直接在 2-3 填寫申請內容與總金額；送出時仍會保留附件與審核紀錄。</div></div></div>'));
     var leftInfoHtml=ownerFieldsHtml
       +'<div class="fg"><label class="fl">表單填寫日期</label><input type="date" id="nr-date" value="'+todayIso()+'"></div>'
-      +welfareHtml
       +refundHtml
       +purchaseHtml
       +hrHtml
@@ -3418,7 +3851,7 @@ function renderNR(){
       +aoHtml;
     var rightPayHtml=S.nrType==='hr_expense_request'?hrBatchPaymentFieldsHtml():(S.nrType==='purchase_request'?'<div style="font-size:12px;color:#334155;line-height:1.7;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:10px">採購申請由申請人先提出商品項目、數量與商品連結即可。總務會在下一關填寫預估匯款金額、收款人、銀行分行帳號與預計匯款日。</div>':paymentFieldsHtml());
     var submitActions=nrSubmitActionsHtml(S.nrType==='travel_request');
-    var uploadSectionHtml=S.nrType==='purchase_request'?'':'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span><button class="btn-g" onclick="'+((S.nrType==='travel_request'||S.nrType==='hr_expense_request'||S.nrType==='welfare_request')?'nrBack(1)':'nrBack(2)')+'">← 返回</button></div><div style="padding:11px"><div class="fr2">'
+    var uploadSectionHtml=S.nrType==='purchase_request'?'':'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span><button class="btn-g" onclick="'+((S.nrType==='travel_request'||S.nrType==='hr_expense_request')?'nrBack(1)':'nrBack(2)')+'">← 返回</button></div><div style="padding:11px"><div class="fr2">'
         +(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():S.nrType==='travel_request'?travelAttachmentGuideHtml():receiptUploadPanelHtml({ocr:S.nrType==='expense_reimbursement',kind:S.nrType==='hr_expense_request'?'payroll':'receipt'}))
         +(S.nrType==='travel_request'?'':S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A/9B 勞報單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
       +'</div></div></div>';
@@ -3431,7 +3864,6 @@ function renderNR(){
       +(S.nrType==='travel_request'?travelApprovalOverviewHtml():S.nrType==='hr_expense_request'?'':lazyApprovalFlowHtml('2-4. 簽核流程'))
     +'</div>';
     renderLazySheet();
-    if(S.nrType==='welfare_request')updateWelfareHint();
     if(S.nrType==='travel_request')syncTravelRows();
     if(S.nrType==='refund_request')renderRefundSheet();
     if(S.nrType==='purchase_request')renderPurchaseSheet();
@@ -3496,8 +3928,6 @@ window.nrT=function(t){
     S.nrRec='receipt';S.nrPay='bank';S.lazyMode=false;S.nrStep=3;
   }else if(t==='purchase_request'){
     S.nrRec='form';S.nrPay='bank';S.lazyMode=false;S.nrStep=3;
-  }else if(t==='welfare_request'){
-    S.nrRec='form';S.nrPay='bank';S.lazyMode=false;S.nrStep=3;
   }else if(t==='hr_expense_request'){
     S.nrRec=hrItem().rec;S.nrPay='bank';S.lazyMode=false;S.nrStep=3;
   }else{
@@ -3529,7 +3959,7 @@ window.nrHrItem=function(id){
 window.nrP=function(p){S.nrPay=p;S.nrStep=3;renderNR();};
 window.nrBack=function(n){S.nrStep=n;renderNR();};
 function draftInputIds(){
-  return ['nr-app','nr-app-sel','nr-dept','nr-ent','nr-date','nr-amt','nr-pay-form','nr-fee-bearer','nr-payee','nr-paydate','nr-bank-type','nr-bank-name','nr-bank-branch','nr-bank-no','nr-desc-purpose','nr-desc','tr-days-manual','tr-type','tr-project','tr-reason','tr-outcome','tr-start','tr-end','tr-days','tr-from','tr-to','tr-lodging-yn','tr-lodging-amt','tr-transport-yn','tr-transport-amt','tr-meal-yn','tr-meal-amt','tr-parking-yn','tr-parking-amt','tr-other-yn','tr-other-amt','wf-item','wf-recommend','wf-reason','wf-amount','wf-event-date','wf-target','wf-eligibility','wf-used','wf-docs','po-type','po-reason','po-budget','po-urgent','po-asset','po-need-date','po-deposit-date','po-deposit','po-balance','po-bank-code','po-bank-branch','po-bank-account','hr-period','hr-labor-period'];
+  return ['nr-app','nr-app-sel','nr-dept','nr-ent','nr-date','nr-amt','nr-pay-form','nr-fee-bearer','nr-payee','nr-paydate','nr-bank-type','nr-bank-name','nr-bank-branch','nr-bank-no','nr-desc-purpose','nr-desc','tr-days-manual','tr-type','tr-project','tr-reason','tr-outcome','tr-start','tr-end','tr-days','tr-from','tr-to','tr-lodging-yn','tr-lodging-amt','tr-transport-yn','tr-transport-amt','tr-meal-yn','tr-meal-amt','tr-parking-yn','tr-parking-amt','tr-other-yn','tr-other-amt','po-type','po-reason','po-budget','po-urgent','po-asset','po-need-date','po-deposit-date','po-deposit','po-balance','po-bank-code','po-bank-branch','po-bank-account','hr-period','hr-labor-period'];
 }
 function draftOwnerKey(){
   if(!S.user)return'guest';
@@ -3540,6 +3970,7 @@ function draftStorageKey(){
 }
 function draftBelongsToCurrentUser(d){
   if(!S.user||!d)return false;
+  if(rowDataEnvironment(d)!==activeDataEnvironment())return false;
   if(d.ownerId&&d.ownerId===S.user.id)return true;
   if(d.ownerEmail&&String(d.ownerEmail).toLowerCase()===String(S.user.email||'').toLowerCase())return true;
   return false;
@@ -3591,13 +4022,19 @@ function draftDbRow(d){
     applicant:d.applicant||'',
     payload:d,
     files:d.files||[],
+    data_environment:d.dataEnv||d.dataEnvironment||activeDataEnvironment(),
     updated_at:d.updatedAt||new Date().toISOString()
   };
 }
 async function saveDraftRemote(d){
   if(S.demoLogin||!hasSupabase())return false;
   var client=getSb();if(!client)return false;
-  var r=await client.from('draft_requests').upsert(draftDbRow(d));
+  var row=draftDbRow(d);
+  var r=await client.from('draft_requests').upsert(row);
+  if(r.error&&isSchemaCacheMiss(r.error.message)&&row.data_environment){
+    delete row.data_environment;
+    r=await client.from('draft_requests').upsert(row);
+  }
   if(r.error){
     if(remoteTableMissing(r.error)){console.warn('draft_requests not installed; draft kept in localStorage');return false;}
     throw r.error;
@@ -3618,6 +4055,10 @@ async function upsertComplianceRemote(table,row){
   if(S.demoLogin||!hasSupabase())return false;
   var client=getSb();if(!client)return false;
   var r=await client.from(table).upsert(row);
+  if(r.error&&isSchemaCacheMiss(r.error.message)&&row&&row.data_environment){
+    var retry=Object.assign({},row);delete retry.data_environment;
+    r=await client.from(table).upsert(retry);
+  }
   if(r.error){
     if(remoteTableMissing(r.error)){console.warn(table+' not installed; kept in localStorage');return false;}
     throw r.error;
@@ -3632,7 +4073,7 @@ function sanitizeDraftFile(f){
   var isData=/^data:/i.test(String(url||''));
   var keepUrl=url&&(!isData||size<=800000)?url:'';
   var path=f.path||f.storagePath||f.storage_path||'';
-  return {name:name,type:f.type||f.mime||'',size:size,url:keepUrl,bucket:f.bucket||f.storage_bucket||SUPABASE_ATTACHMENT_BUCKET,path:path,storagePath:path,uploadedAt:f.uploadedAt||f.uploaded_at||'',kind:f.kind||f.category||'',draftOnly:!keepUrl&&!path};
+  return {name:name,type:f.type||f.mime||'',size:size,url:keepUrl,bucket:f.bucket||f.storage_bucket||SUPABASE_ATTACHMENT_BUCKET,path:path,storagePath:path,uploadedAt:f.uploadedAt||f.uploaded_at||'',kind:f.kind||f.category||'',dataEnv:f.dataEnv||f.data_environment||activeDataEnvironment(),draftOnly:!keepUrl&&!path};
 }
 function sanitizeTravelDraftFiles(map){
   var out={};
@@ -3645,7 +4086,7 @@ function sanitizeDraftForStorage(d){
   d=d||{};
   var state=Object.assign({},d.state||{});
   state.travelFiles=sanitizeTravelDraftFiles(state.travelFiles||{});
-  return Object.assign({},d,{state:state,files:(d.files||[]).map(sanitizeDraftFile),ownerId:d.ownerId||'',ownerEmail:d.ownerEmail||'',ownerName:d.ownerName||''});
+  return Object.assign({},d,{state:state,files:(d.files||[]).map(sanitizeDraftFile),ownerId:d.ownerId||'',ownerEmail:d.ownerEmail||'',ownerName:d.ownerName||'',dataEnv:d.dataEnv||d.dataEnvironment||activeDataEnvironment()});
 }
 function updateDraftCounters(){
   var cnt=el('draft-count');if(cnt)cnt.textContent=DRAFTS.length+' 筆';
@@ -3702,7 +4143,6 @@ function applyNRFormState(state){
   if(state.travelFiles)S.travelFiles=state.travelFiles;
   if(state.travelPeople)S.travelPeople=state.travelPeople;
   if(state.travelRows)S.travelRows=state.travelRows;
-  if(S.nrType==='welfare_request')updateWelfareHint();
   if(S.nrType==='travel_request'){renderTravelPeople();calcTravelDays();syncTravelRows();}
   updateBankTypeUI();
   renderNRFList();updNRAcct();
@@ -4553,39 +4993,6 @@ function collectTravelInfo(){
   ].join('\\n');
   return info;
 }
-var WELFARE_ITEMS=[
-  {name:'課程訓練補助／長照積分補助',recommend:'要',reason:'每年補助 4,000 元，需確認員工資格、課程內容、金額與是否已用額度。手冊也提到尚未上身障／失智課程者可提前使用課程訓練津貼補助。'},
-  {name:'自家人使用長照服務部分負擔減免',recommend:'要',reason:'這類會涉及員工家屬、服務內容、減免金額，且手冊註明依「員工家屬照護福利管理辦法」辦理。'},
-  {name:'員工介紹費',recommend:'要',reason:'居服員、日照照服員、居家督導員介紹費 6,000 元，滿半年後第七個月發放，需要申請與追蹤到職滿半年條件。'},
-  {name:'開發個案獎金',recommend:'要',reason:'簽約完成核發 2,000 元，需確認個案來源、簽約日期、是否重複申請。'},
-  {name:'婚喪喜慶津貼',recommend:'要',reason:'金額 1,100～3,600 元，且附件明定申請時效、應備證明文件，最適合走福利申請單。'},
-  {name:'結婚津貼',recommend:'要',reason:'員工本人結婚 2,600 元，需附喜帖或戶籍登記證明。'},
-  {name:'喪葬慰問金',recommend:'要',reason:'父母、配偶、子女過世，需附訃聞或死亡證明。'},
-  {name:'傷病慰問金',recommend:'要',reason:'員工本人住院達 3 天以上，需附醫生診斷證明或住院單據。'}
-];
-function welfareFieldsHtml(){
-  var opts=WELFARE_ITEMS.map(function(w,i){return'<option value="'+i+'">'+w.name+'</option>';}).join('');
-  return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;margin:9px 0">'
-    +'<div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:8px">福利申請資料</div>'
-    +'<div style="background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:9px;margin-bottom:9px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><div style="font-size:12px;font-weight:650;color:#334155">福利管理辦法</div><div style="font-size:10px;color:#8b7358;margin-top:2px">請先確認福利項目、申請資格、應備文件與申請期限，再送出申請。</div></div><div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-s" onclick="openWelfarePolicy()">檢視</button><button class="btn-s" onclick="downloadWelfarePolicy()">下載</button></div></div></div>'
-    +'<div class="fr2"><div class="fg"><label class="fl">福利項目 *</label><select id="wf-item" onchange="updateWelfareHint()">'+opts+'</select></div><div class="fg"><label class="fl">是否建議用福利申請單</label><input id="wf-recommend" readonly></div></div>'
-    +'<div class="fg"><label class="fl">原因 / 適用說明</label><textarea id="wf-reason" rows="3" readonly></textarea></div>'
-    +'<div class="fr3"><div class="fg"><label class="fl">申請金額 *</label><input type="number" min="0" id="wf-amount" oninput="if(el(\'nr-amt\'))el(\'nr-amt\').value=this.value" placeholder="依福利辦法填寫"></div><div class="fg"><label class="fl">事件 / 發生日 *</label><input type="date" id="wf-event-date"></div><div class="fg"><label class="fl">申請對象</label><input id="wf-target" placeholder="本人、配偶、子女、父母、介紹對象等"></div></div>'
-    +'<div class="fr2"><div class="fg"><label class="fl">資格或年資狀態</label><input id="wf-eligibility" placeholder="例：在職滿半年、課程符合資格、住院達 3 天以上"></div><div class="fg"><label class="fl">是否已申請 / 已用額度</label><input id="wf-used" placeholder="例：本年度尚未申請、已用 2,000 元"></div></div>'
-    +'<div class="fg"><label class="fl">應附證明文件</label><textarea id="wf-docs" rows="2" placeholder="例：課程證明、繳費證明、喜帖/戶籍資料、死亡證明、診斷證明、介紹到職資料"></textarea></div>'
-    +'<div style="font-size:11px;color:#8b7358;line-height:1.5;background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:8px">相關文件請使用 2-1「上傳附件」區塊上傳，可上傳 PDF、圖片、診斷證明、戶籍資料、訃聞、課程證明等。</div>'
-    +'</div>';
-}
-window.openWelfarePolicy=function(){
-  window.open('assets/welfare-policy.pdf','_blank');
-};
-window.downloadWelfarePolicy=function(){
-  var a=document.createElement('a');
-  a.href='assets/welfare-policy.pdf';
-  a.download='歲悅長照_員工福利手冊_20260206_v3.0.pdf';
-  a.style.display='none';
-  document.body.appendChild(a);a.click();a.remove();
-};
 window.downloadStaticTemplate=function(path,name){
   var a=document.createElement('a');
   a.href=new URL(path,window.location.href).href;
@@ -4595,37 +5002,6 @@ window.downloadStaticTemplate=function(path,name){
   a.style.display='none';
   document.body.appendChild(a);a.click();a.remove();
 };
-window.updateWelfareHint=function(){
-  var idx=parseInt(((el('wf-item')||{}).value||'0'),10),w=WELFARE_ITEMS[idx]||WELFARE_ITEMS[0];
-  if(el('wf-recommend'))el('wf-recommend').value=w.recommend;
-  if(el('wf-reason'))el('wf-reason').value=w.reason;
-  if(el('nr-desc-purpose'))el('nr-desc-purpose').value=w.name;
-};
-function collectWelfareInfo(){
-  var get=function(id){return ((el(id)||{}).value||'').trim();};
-  var idx=parseInt(get('wf-item')||'0',10),w=WELFARE_ITEMS[idx]||WELFARE_ITEMS[0];
-  var info={item:w.name,recommend:w.recommend,reason:w.reason,amount:get('wf-amount'),eventDate:get('wf-event-date'),target:get('wf-target'),eligibility:get('wf-eligibility'),used:get('wf-used'),docs:get('wf-docs')};
-  info.requiredMissing=['amount','eventDate'].filter(function(k){return !info[k];});
-  info.summary=[
-    '福利項目：'+info.item,
-    '是否建議用福利申請單：'+info.recommend,
-    '原因：'+info.reason,
-    '申請金額：'+info.amount,
-    '事件／發生日：'+info.eventDate,
-    '申請對象：'+(info.target||'未填'),
-    '資格或年資狀態：'+(info.eligibility||'未填'),
-    '是否已申請／已用額度：'+(info.used||'未填'),
-    '應附證明文件：'+(info.docs||'請見附件')
-  ].join('\\n');
-  return info;
-}
-function welfareExcelAttachment(info,meta){
-  info=info||{};meta=meta||{};
-  var cell=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
-  var rows=[['申請單號',meta.no],['申請人',meta.app],['公司 / 法人',meta.entity],['部門',meta.department],['福利項目',info.item],['是否建議用福利申請單',info.recommend],['原因',info.reason],['申請金額',info.amount],['事件／發生日',info.eventDate],['申請對象',info.target],['資格或年資狀態',info.eligibility],['是否已申請／已用額度',info.used],['應附證明文件',info.docs||'請見附件']].map(function(r){return'<tr><th>'+cell(r[0])+'</th><td>'+cell(r[1]||'')+'</td></tr>';}).join('');
-  var html='\ufeff<html><head><meta charset="utf-8"><style>body{font-family:Arial,\"Microsoft JhengHei\",sans-serif}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:7px;font-size:12px;text-align:left;vertical-align:top}th{background:#f4b183;width:180px}.title{font-size:18px;font-weight:bold;color:#7c3f00;margin-bottom:12px}</style></head><body><div class="title">福利申請摘要</div><table>'+rows+'</table></body></html>';
-  return {n:'福利申請摘要_'+(meta.no||todayIso())+'.xls',t:'xls',mime:'application/vnd.ms-excel',size:html.length,url:'data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(html),uploadedAt:new Date().toISOString()};
-}
 function refundDefaultRow(){
   return {originalAmount:0,reason:'',otherReason:'',description:'',receivableAmount:0,receivedAmount:0,refundAmount:0,calculationNote:'',method:'銀行轉帳',bankName:'',branchName:'',accountName:'',accountNo:''};
 }
@@ -4775,6 +5151,17 @@ function purchaseFinalAmount(r){
   if(r&&r.type==='purchase_request')return purchaseActualAmount(r);
   return num(r&&r.actualAmt||r&&r.actualAmount)||num(r&&r.amt)||0;
 }
+function purchaseHasFinalEvidence(r){
+  if(!r||r.type!=='purchase_request')return true;
+  var files=normalizeFiles((r.actualFiles||[]).concat(((r.formPayload||{}).purchaseActual||{}).files||[]));
+  return files.some(attachmentIsReceiptEvidence);
+}
+function purchaseReadyForFinalAccounting(r){
+  if(!r||r.type!=='purchase_request')return {ok:true};
+  if(!purchaseActualAmount(r))return {ok:false,msg:'採購申請需先由總務填寫最後實際支出金額。'};
+  if(!purchaseHasFinalEvidence(r))return {ok:false,msg:'採購申請需先由總務上傳最後採購發票或憑據，會計才可以銷帳入帳。'};
+  return {ok:true};
+}
 function purchaseAmountCompareHtml(r){
   if(!r||r.type!=='purchase_request')return'';
   var est=purchaseEstimatedAmount(r),actual=purchaseActualAmount(r),diff=actual?actual-est:0;
@@ -4792,6 +5179,16 @@ function pettyModeValue(r){
 }
 function pettyIsInitial(r){return r&&r.type==='petty_cash_request'&&pettyModeValue(r)==='initial';}
 function pettyIsGeneral(r){return r&&r.type==='petty_cash_request'&&!pettyIsInitial(r);}
+function pettyReadyForFinalAccounting(r){
+  if(!r||r.type!=='petty_cash_request')return {ok:true};
+  if(pettyIsInitial(r))return {ok:true};
+  var rows=((r.formPayload||{}).lazyRows)||[];
+  var hasAmount=rows.some(function(row){return !row.systemFee&&lazyRowTotal(row)>0;});
+  var hasEvidence=normalizeFiles(r.files||[]).some(attachmentIsReceiptEvidence);
+  if(!hasAmount)return {ok:false,msg:'零用金一般申請需先填寫本次憑據明細金額，避免以補款金額直接入費用。'};
+  if(!hasEvidence)return {ok:false,msg:'零用金一般申請需上傳憑據，會計才可以認列費用。'};
+  return {ok:true};
+}
 function normalizePettyAccounting(r){
   if(!r||r.type!=='petty_cash_request')return;
   r.formPayload=Object.assign({},r.formPayload||{},{
@@ -5074,7 +5471,6 @@ window.submitNR=async function(){
   var note=(el('nr-desc')||{}).value||'';
   var desc=(purpose?(purpose+(note?'：'+note:'')):note);
   var travelInfo=null;
-  var welfareInfo=null;
   var refundInfo=null;
   var purchaseInfo=null;
   var hrInfo=null;
@@ -5084,13 +5480,6 @@ window.submitNR=async function(){
     if(travelInfo.overLimit&&travelInfo.overLimit.length){alert('差旅費用不可超過管理辦法上限，請先修正：\n'+travelInfo.overLimit.map(function(r){return r.label+' '+fmt(r.amount)+' / 上限 '+fmt(r.limit);}).join('\n'));return;}
     if(travelInfo.missingEvidence&&travelInfo.missingEvidence.length){alert('除膳什費外，填寫申請金額的差旅項目都需要上傳憑據：\n'+travelInfo.missingEvidence.map(function(r){return r.label;}).join('、'));return;}
     desc=(note?note+'\n\n':'')+travelInfo.summary;
-  }
-  if(S.nrType==='welfare_request'){
-    welfareInfo=collectWelfareInfo();
-    if(welfareInfo.requiredMissing.length){alert('請填寫福利申請金額與事件／發生日');return;}
-    if(el('nr-amt')&&!el('nr-amt').value&&welfareInfo.amount)el('nr-amt').value=welfareInfo.amount;
-    if(welfareInfo.amount)amt=parseFloat(welfareInfo.amount||'0');
-    desc=(note?note+'\n\n':'')+welfareInfo.summary;
   }
   if(S.nrType==='refund_request'){
     refundInfo=collectRefundInfo();
@@ -5132,7 +5521,7 @@ window.submitNR=async function(){
   var appName=((el('nr-app')||{}).value||'').trim()||(S.user?S.user.n:'');
   if(!appName){alert('請填寫申請人姓名');return;}
   if(!amt&&S.nrType!=='purchase_request'){alert('請填寫申請金額');return;}
-  if(desc.length<5){alert(S.nrType==='travel_request'?'請填寫差旅申請資料':S.nrType==='welfare_request'?'請填寫福利申請資料':S.nrType==='refund_request'?'請填寫退費申請資料':S.nrType==='purchase_request'?'請填寫採購申請資料':S.nrType==='hr_expense_request'?'請填寫人事費用申請資料':'請填寫目的或申請說明（至少5字）');return;}
+  if(desc.length<5){alert(S.nrType==='travel_request'?'請填寫差旅申請資料':S.nrType==='refund_request'?'請填寫退費申請資料':S.nrType==='purchase_request'?'請填寫採購申請資料':S.nrType==='hr_expense_request'?'請填寫人事費用申請資料':'請填寫目的或申請說明（至少5字）');return;}
   if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.payee){alert('請填寫收款人');return;}
   if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.bankName){alert('請填寫銀行');return;}
   if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.bankBranch){alert('請填寫分行');return;}
@@ -5175,10 +5564,6 @@ window.submitNR=async function(){
     if(travelBundle)attachments.unshift(travelBundle);
     attachments.unshift(travelExpenseSheetAttachment(travelInfo,{no:no,app:appName,entity:ent.full||ent.s,department:dc+' '+dept.n,amount:amt}));
     attachments.unshift(travelExcelAttachment(travelInfo,{no:no,app:appName,entity:ent.full||ent.s,department:dc+' '+dept.n,amount:amt}));
-  }else if(S.nrType==='welfare_request'){
-    var welfareBundle=await receiptBundleAttachment(attachments,{no:no,typeLabel:tL,app:appName});
-    if(welfareBundle)attachments.unshift(welfareBundle);
-    attachments.unshift(welfareExcelAttachment(welfareInfo,{no:no,app:appName,entity:ent.full||ent.s,department:dc+' '+dept.n}));
   }else if(S.nrType==='refund_request'){
     var refundBundle=await receiptBundleAttachment(attachments,{no:no,typeLabel:tL,app:appName});
     if(refundBundle)attachments.unshift(refundBundle);
@@ -5215,7 +5600,8 @@ window.submitNR=async function(){
     files:attachments,
     passbookFiles:passbookAttachments,
     steps:steps,voucherId:'',
-    formPayload:{applicantProfile:applicantProfile,expenseEntity:eid,expenseDepartment:dc,lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:passbookAttachments,travelInfo:travelInfo||null,welfareInfo:welfareInfo||null,refundInfo:refundInfo||null,purchaseInfo:purchaseInfo||null,hrInfo:hrInfo||null}};
+    dataEnv:activeDataEnvironment(),
+    formPayload:{applicantProfile:applicantProfile,expenseEntity:eid,expenseDepartment:dc,dataEnvironment:activeDataEnvironment(),receiptType:S.nrRec||'',paymentType:S.nrPay||'',lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:passbookAttachments,travelInfo:travelInfo||null,refundInfo:refundInfo||null,purchaseInfo:purchaseInfo||null,hrInfo:hrInfo||null}};
   if(S.nrType==='petty_cash_request'){
     normalizePettyAccounting(newReq);
     newReq.formPayload=Object.assign({},newReq.formPayload||{},{
@@ -5254,16 +5640,18 @@ window.submitNR=async function(){
     });
   }
   var firstStep=nextStep||{};
-  var newNotif={id:'n_'+Date.now(),type:'approval',title:'新申請待'+(firstStep.r||'簽核'),body:S.user.n+'的'+tL+'（'+fmt(amt)+'），附'+uploadCount+'個憑據',time:'剛才',read:false,reqId:newReq.id};
+  var newNotif={id:'n_'+Date.now(),type:'approval',title:'新申請待'+(firstStep.r||'簽核'),body:S.user.n+'的'+tL+'（'+fmt(amt)+'），附'+uploadCount+'個憑據',time:'剛才',read:false,reqId:newReq.id,dataEnv:activeDataEnvironment()};
   REQS.unshift(newReq);
   NOTIFS.unshift(newNotif);
   var reqInsert=await dbInsert('expense_requests',reqDbRow(newReq));
   if(!reqInsert||!reqInsert.ok){
-    REQS=REQS.filter(function(r){return r.id!==newReq.id;});
-    NOTIFS=NOTIFS.filter(function(n){return n.id!==newNotif.id;});
     var msg=reqInsert&&reqInsert.error?(reqInsert.error.message||JSON.stringify(reqInsert.error)):'未知原因';
-    alert('申請單沒有成功寫入 Supabase，所以不會出現在簽核管理。請先處理後端權限或欄位問題：'+msg);
-    buildNR();buildDash();buildExp();renderNotifs();
+    newReq.syncError=msg;
+    newReq.formPayload=Object.assign({},newReq.formPayload||{},{syncError:msg,syncFailedAt:new Date().toISOString()});
+    saveLocalAppState();
+    buildAll();renderNotifs();
+    openApprovalTab('mine');
+    alert('申請單已先保留在本機簽核管理，但尚未成功寫入 Supabase，下一位簽核者若使用其他裝置可能暫時看不到。後端錯誤：'+msg);
     return;
   }
   await dbInsert('notifications',notifDbRow(newNotif));
@@ -5457,7 +5845,7 @@ async function returnPreviousRequestWithFields(rid,noteId,fileId,reopenDetail){
     if(!ok){alert('退回失敗：找不到上一關');return false;}
     saveLocalAppState();
     var active=activeStep(r)||{};
-    var notif={id:'n_'+Date.now(),type:'approval',title:'申請單已退回上一關',body:r.no+' 已退回到「'+(stepTitle(active)||active.r||'上一關')+'」，請補充或重新檢核。',time:'剛才',read:false,reqId:r.id};
+    var notif={id:'n_'+Date.now(),type:'approval',title:'申請單已退回上一關',body:r.no+' 已退回到「'+(stepTitle(active)||active.r||'上一關')+'」，請補充或重新檢核。',time:'剛才',read:false,reqId:r.id,dataEnv:activeDataEnvironment()};
     NOTIFS.unshift(notif);
     var upd=await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps,form_payload:r.formPayload||{}});
     await dbInsert('notifications',notifDbRow(notif));
@@ -5487,7 +5875,10 @@ window.doConfirmPay=async function(rid){
     if(!p.files.some(attachmentIsExcel)){alert('請上傳即時 Excel 明細表檔案（Excel 或 CSV）。');return;}
   }
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'approval_step');
-  if(r.type==='advance_request')r.actualFiles=normalizeFiles(r.actualFiles||[]).concat(p.files||[]);
+  if(r.type==='advance_request'){
+    r.actualFiles=normalizeFiles(r.actualFiles||[]).concat(p.files||[]);
+    r.formPayload=Object.assign({},r.formPayload||{},{advanceFinalFiles:r.actualFiles,advanceFinalEvidenceSubmittedAt:new Date().toISOString(),advanceFinalEvidenceSubmittedBy:S.user?S.user.n:''});
+  }
   approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
   await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps,actual_files:r.actualFiles||[],form_payload:r.formPayload||{}});buildAll();openDetail(rid);
 };
@@ -5496,13 +5887,20 @@ window.doConfirmVoucher=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
   if(!canActRequest(r)){alert('目前不是您的入帳步驟');return;}
   if(requestPostingLocked(r)||requestLedgerRowsExist(r)){alert('此申請單已完成或已鎖定入帳，不能重複切傳票。');return;}
+  if(!ensureOpenPostingPeriod(r.eid,todayIso(),'付款傳票入帳'))return;
   var lockKey='request-ledger:'+rid;
   if(POSTING_IN_FLIGHT[lockKey]){alert('此申請單正在入帳中，請勿重複送出。');return;}
   if(r.type==='purchase_request'&&!purchaseFinalAmount(r)){alert('採購申請需先由總務填寫最終實際支出並上傳發票憑據');return;}
+  var purchaseReady=purchaseReadyForFinalAccounting(r);
+  if(!purchaseReady.ok){alert(purchaseReady.msg);return;}
+  var pettyReady=pettyReadyForFinalAccounting(r);
+  if(!pettyReady.ok){alert(pettyReady.msg);return;}
   // 正式流水號由 Supabase voucher_serials 產生；本機模式用現有 VOUCHERS fallback。
   var vid=await nextVoucherNo('V',todayIso());
   var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
   if(r.type==='advance_request'){
+    var advanceReady=advanceReadyForFinalAccounting(r);
+    if(!advanceReady.ok){alert(advanceReady.msg);return;}
     var finalAmt=num((el('advance-final-amt')||{}).value);
     if(!finalAmt){alert('請填寫最後實際支出金額，作為三表最後入帳調整依據。');return;}
     var finalAcct=accountByCode((el('advance-final-dr')||{}).value||advanceDefaultFinalDebitCode());
@@ -5572,12 +5970,18 @@ window.doConfirmVoucher=async function(rid){
   if(r.type==='advance_request'){
     var originalAdvance=advanceOriginalAmount(r);
     var advanceDiff=entryAmt-originalAdvance;
-    voucherEntries.push({t:'dr',ac:r.dr,an:r.drN,dept:r.dc,amt:entryAmt});
+    var advanceSplit=requestNetTaxSplit(r,entryAmt);
+    var advanceDebit=advanceSplit.tax>0?advanceSplit.net:entryAmt;
+    if(advanceDebit>0)voucherEntries.push({t:'dr',ac:r.dr,an:r.drN,dept:r.dc,amt:advanceDebit});
+    if(advanceSplit.tax>0)voucherEntries.push({t:'dr',ac:'1144',an:'進項稅額',dept:r.dc,amt:advanceSplit.tax});
     if(advanceDiff<0)voucherEntries.push({t:'dr',ac:'1112',an:'銀行存款-預支退回',dept:r.dc,amt:Math.abs(advanceDiff)});
     voucherEntries.push({t:'cr',ac:'1191',an:'暫付款',dept:r.dc,amt:originalAdvance});
     if(advanceDiff>0)voucherEntries.push({t:'cr',ac:'1112',an:'銀行存款-預支補匯',dept:r.dc,amt:advanceDiff});
   }else{
-    voucherEntries.push({t:'dr',ac:r.dr,an:r.drN,dept:r.dc,amt:entryAmt});
+    var split=requestNetTaxSplit(r,entryAmt);
+    var debitAmt=split.tax>0?split.net:entryAmt;
+    if(debitAmt>0)voucherEntries.push({t:'dr',ac:r.dr,an:r.drN,dept:r.dc,amt:debitAmt});
+    if(split.tax>0)voucherEntries.push({t:'dr',ac:'1144',an:'進項稅額',dept:r.dc,amt:split.tax});
     if(bankFee>0){
       voucherEntries.push({t:'dr',ac:'6290',an:'手續費',dept:r.dc,amt:bankFee});
     }
@@ -5589,16 +5993,16 @@ window.doConfirmVoucher=async function(rid){
     id:vid,no:vid,reqId:rid,eid:r.eid,entS:gE(r.eid).s,date:todaySlash(),
     desc:r.tL+' — '+r.app+' （'+r.no+'）',
     entries:voucherEntries,
-    total:creditAmount,creator:'系統自動',posted:true,postedAt:postedTs,postingLockedAt:postedTs
+    total:creditAmount,creator:'系統自動',posted:true,postedAt:postedTs,postingLockedAt:postedTs,dataEnv:activeDataEnvironment()
   };
   VOUCHERS.unshift(newVoucher);
   // 同步寫入分類帳
   voucherEntries.forEach(function(e,i){
-    LEDGER.unshift({date:todaySlash(),desc:r.tL+' — '+r.app,eid:r.eid,dc:r.dc,dr:e.t==='dr'?e.amt:0,cr:e.t==='cr'?e.amt:0,ac:e.ac,an:e.an,ref:r.no,postingKey:ledgerPostingKey('expense:'+r.no+':'+(i+1)+':'+e.ac+':'+e.t),sourceType:'expense_request',sourceId:r.id,sourceNo:r.no,voucherNo:newVoucher.no});
+    LEDGER.unshift({date:todaySlash(),desc:r.tL+' — '+r.app,eid:r.eid,dc:r.dc,dr:e.t==='dr'?e.amt:0,cr:e.t==='cr'?e.amt:0,ac:e.ac,an:e.an,ref:r.no,postingKey:ledgerPostingKey('expense:'+r.no+':'+(i+1)+':'+e.ac+':'+e.t),sourceType:'expense_request',sourceId:r.id,sourceNo:r.no,voucherNo:newVoucher.no,dataEnv:activeDataEnvironment()});
   });
   // 通知
   var feeText=bankFee>0?'，另切銀行手續費 '+fmt(bankFee):'';
-  var newNotif={id:'n_'+Date.now(),type:'system',title:'傳票 '+vid+' 已自動生成',body:r.no+' 完成所有簽核，Dr '+r.dr+' / Cr '+r.cr+feeText+'，傳票已寫入帳冊',time:'剛才',read:false};
+  var newNotif={id:'n_'+Date.now(),type:'system',title:'傳票 '+vid+' 已自動生成',body:r.no+' 完成所有簽核，Dr '+r.dr+' / Cr '+r.cr+feeText+'，傳票已寫入帳冊',time:'剛才',read:false,dataEnv:activeDataEnvironment()};
   NOTIFS.unshift(newNotif);
   var rpc=null;
   try{
@@ -5630,7 +6034,7 @@ window.doConfirmVoucher=async function(rid){
   if(!rpc||rpc.missing){
     await dbUpdate('expense_requests',rid,{amount:r.amt,estimated_amount:r.estimatedAmt||null,actual_amount:r.actualAmt||null,status:r.status,step:r.step,steps:r.steps,voucher_id:r.voucherId,debit_account:r.dr,debit_account_name:r.drN,credit_account:r.cr,credit_account_name:r.crN,fee_bearer:r.feeBearer||requestFeeBearer(r)||null,bank_fee_amount:bankFee,form_payload:Object.assign({},r.formPayload||{},{ledgerPostedAt:r.ledgerPostedAt,postingLockedAt:r.postingLockedAt}),ledger_posted_at:r.ledgerPostedAt,posting_locked_at:r.postingLockedAt});
     await dbInsert('vouchers',voucherDbRow(newVoucher));
-    await Promise.all(voucherEntries.map(function(e,i){return dbInsert('ledger_entries',{entry_date:todayIso(),description:r.tL+' — '+r.app,entity_id:r.eid,department_code:r.dc,debit:e.t==='dr'?e.amt:0,credit:e.t==='cr'?e.amt:0,account_code:e.ac,account_name:e.an,reference_no:r.no,posting_key:ledgerPostingKey('expense:'+r.no+':'+(i+1)+':'+e.ac+':'+e.t),source_type:'expense_request',source_id:r.id,source_no:r.no,voucher_no:newVoucher.no});}));
+    await Promise.all(voucherEntries.map(function(e,i){return dbInsert('ledger_entries',{entry_date:todayIso(),description:r.tL+' — '+r.app,entity_id:r.eid,department_code:r.dc,debit:e.t==='dr'?e.amt:0,credit:e.t==='cr'?e.amt:0,account_code:e.ac,account_name:e.an,reference_no:r.no,posting_key:ledgerPostingKey('expense:'+r.no+':'+(i+1)+':'+e.ac+':'+e.t),source_type:'expense_request',source_id:r.id,source_no:r.no,voucher_no:newVoucher.no,data_environment:activeDataEnvironment()});}));
   }
   await dbInsert('notifications',notifDbRow(newNotif));
   delete POSTING_IN_FLIGHT[lockKey];
@@ -5674,7 +6078,7 @@ function requestPrimaryFilesHtml(r){
 window.downloadPassbookAttachment=function(reqId,idx){
   var r=REQS.find(function(x){return x.id===reqId;});if(!r)return;
   var files=normalizeFiles(r.passbookFiles||((r.formPayload||{}).passbookFiles)||[]);
-  downloadFileMeta(files[idx]);
+  downloadFileMeta(files[idx],{type:'expense_requests',record:r});
 };
 function buildApprovals(){
   if(!S.user)return;
@@ -5995,7 +6399,7 @@ window.submitProcurementActual=async function(rid){
   r.formPayload=Object.assign({},r.formPayload||{},{
     purchaseActual:{
       actualAmount:actual,
-      files:p.files,
+      files:r.actualFiles,
       stage:'procurement_actual_receipt',
       submittedBy:S.user?S.user.n:'',
       submittedAt:new Date().toISOString()
@@ -6040,7 +6444,7 @@ window.apprReturnPreviousInv=async function(id){
     if(!ok){alert('退回失敗：找不到上一關');return;}
     saveLocalAppState();
     var active=activeStep(i)||{};
-    var notif={id:'n_'+Date.now(),type:'approval',title:'發票申請已退回上一關',body:i.no+' 已退回到「'+(stepTitle(active)||active.r||'上一關')+'」。',time:'剛才',read:false,reqId:i.id};
+    var notif={id:'n_'+Date.now(),type:'approval',title:'發票申請已退回上一關',body:i.no+' 已退回到「'+(stepTitle(active)||active.r||'上一關')+'」。',time:'剛才',read:false,reqId:i.id,dataEnv:activeDataEnvironment()};
     NOTIFS.unshift(notif);
     var upd=await dbUpdate('invoices',id,{approval_status:i.approvalStatus,approval_step:i.approvalStep,steps:i.steps,revenue_posted:!!i.revenuePosted,revenue_posted_at:invoiceRevenuePostedAt(i)||null,cash_receipt_posted_at:invoiceCashPostedAt(i)||null,posting_locked_at:i.postingLockedAt||null});
     await dbInsert('notifications',notifDbRow(notif));
@@ -6160,12 +6564,116 @@ function ensureComplianceFilters(){
   var ce=el('comp-ent');if(ce&&!ce.options.length)ce.innerHTML=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.s+'</option>';}).join('');
 }
 function sourceDocsForPeriod(eid,period){
-  return REQS.filter(function(r){return inEntity(eid,r,'req')&&inPeriod(r.date,period)&&(normalizeFiles(r.files).length||normalizeFiles(r.passbookFiles).length||normalizeFiles(r.actualFiles).length);});
+  return REQS.filter(function(r){return inActiveDataEnvironment(r)&&inEntity(eid,r,'req')&&inPeriod(r.date,period)&&(normalizeFiles(r.files).length||normalizeFiles(r.passbookFiles).length||normalizeFiles(r.actualFiles).length);});
 }
 function vouchersForPeriod(eid,period){
-  return VOUCHERS.filter(function(v){return (!eid||v.eid===eid)&&inPeriod(v.date,period);});
+  return VOUCHERS.filter(function(v){return inActiveDataEnvironment(v)&&(!eid||v.eid===eid)&&inPeriod(v.date,period);});
 }
 function ledgerForVoucher(v){return LEDGER.filter(function(l){return l.ref===(v&&v.no)||l.ref===(v&&v.reqId);});}
+function backupReadableSummary(s){
+  s=s||{};
+  return '申請 '+(s.requests||0)+'、發票 '+(s.invoices||0)+'、傳票 '+(s.vouchers||0)+'、分類帳 '+(s.ledger||0)+'、繳費 '+(s.bills||0)+'、人員 '+(s.users||0);
+}
+function buildBackupPackage(){
+  return {
+    schema:'module_finance_backup',
+    version:1,
+    app:'module-finance',
+    createdAt:new Date().toISOString(),
+    dataEnvironment:activeDataEnvironment(),
+    dataEnvironmentLabel:dataEnvLabel(),
+    actor:S.user?{id:S.user.id,name:S.user.n,email:S.user.email,role:S.user.role}:{},
+    note:'此備份包不包含 Supabase Auth 密碼、Storage 原始檔二進位，只保存附件路徑、簽核紀錄與分類帳資料。',
+    data:{
+      users:(USERS||[]).map(function(u){var x=Object.assign({},u);delete x.pw;return x;}),
+      settings:currentSystemSettings(),
+      requests:(REQS||[]).filter(inActiveDataEnvironment).map(sanitizeLocalReq),
+      invoices:(INVS||[]).filter(inActiveDataEnvironment),
+      vouchers:(VOUCHERS||[]).filter(inActiveDataEnvironment),
+      ledger:(LEDGER||[]).filter(inActiveDataEnvironment),
+      bills:(BILLS||[]).filter(inActiveDataEnvironment),
+      notifications:(NOTIFS||[]).filter(inActiveDataEnvironment),
+      periodCloses:(PERIOD_CLOSES||[]).filter(inActiveDataEnvironment),
+      archives:(ARCHIVES||[]).filter(inActiveDataEnvironment),
+      annualReviews:(ANNUAL_REVIEWS||[]).filter(inActiveDataEnvironment),
+      auditLogs:(AUDIT_LOGS||[]).filter(inActiveDataEnvironment)
+    }
+  };
+}
+window.downloadBackupPackage=async function(){
+  if(!isFinance()){alert('只有會計、行政部門主任或執行長可以下載備份包');return;}
+  var pkg=buildBackupPackage();
+  var text=JSON.stringify(pkg,null,2),hash=await sha256Text(text),summary=backupSummary(pkg);
+  pkg.fileHash=hash;
+  text=JSON.stringify(pkg,null,2);
+  var fn='module_finance_'+activeDataEnvironment()+'_backup_'+new Date().toISOString().slice(0,10)+'.json';
+  downloadTextFile(text,fn,'application/json;charset=utf-8');
+  await recordBackupEvent('backup','completed','下載備份包：'+backupReadableSummary(summary),summary,hash,fn);
+  buildCompliance();
+};
+window.backupFileChange=function(inp){
+  var file=inp.files&&inp.files[0];if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(){
+    try{
+      var pkg=JSON.parse(String(reader.result||'{}'));
+      if(pkg.schema!=='module_finance_backup'||!pkg.data){alert('這不是有效的會計系統備份包');return;}
+      S.restorePackage=pkg;S.restoreFileName=file.name;renderBackupRestorePreview(pkg,file.name);
+    }catch(err){alert('備份包讀取失敗：'+(err.message||err));}
+    inp.value='';
+  };
+  reader.onerror=function(){alert('備份包讀取失敗，請重新選擇檔案');inp.value='';};
+  reader.readAsText(file,'utf-8');
+};
+function renderBackupRestorePreview(pkg,fileName){
+  var s=backupSummary(pkg),env=pkg.dataEnvironment||'production',warn=env!==activeDataEnvironment();
+  var box=el('backup-box');if(!box)return;
+  box.innerHTML='<div style="border:1px solid '+(warn?'#f0b0b0':'#efd7b8')+';background:'+(warn?'#fff1f1':'#fff8ed')+';border-radius:9px;padding:9px;margin-bottom:9px;font-size:11px;color:#6a5840;line-height:1.7">'
+    +'<strong style="color:#334155">已讀取備份包：</strong>'+escAttr(fileName||'backup.json')+'<br>'
+    +'來源環境：'+dataEnvLabel(env)+'；目前環境：'+dataEnvLabel()+(warn?' <span class="badge b-rej">環境不同</span>':' <span class="badge b-ok">環境一致</span>')+'<br>'
+    +'內容：'+backupReadableSummary(s)+'<br>'
+    +'SHA-256：<span style="font-family:monospace">'+escAttr(pkg.fileHash||'尚未提供')+'</span>'
+    +'</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn-p" onclick="restoreBackupPackage()">確認還原到目前環境</button><button class="btn-s" onclick="cancelBackupRestore()">取消</button></div>';
+}
+window.cancelBackupRestore=function(){S.restorePackage=null;S.restoreFileName='';buildCompliance();};
+function restoreRows(rows,mapper){
+  return (Array.isArray(rows)?rows:[]).map(function(r){var x=mapper?mapper(r):Object.assign({},r);x.dataEnv=activeDataEnvironment();return x;});
+}
+window.restoreBackupPackage=async function(){
+  if(!isFinance()){alert('只有會計、行政部門主任或執行長可以還原備份包');return;}
+  var pkg=S.restorePackage;if(!pkg||!pkg.data){alert('請先上傳備份包');return;}
+  var phrase=activeDataEnvironment()===DATA_ENV_PRODUCTION?'還原正式資料':'還原測試資料';
+  var typed=prompt('還原會覆蓋目前畫面中的 '+dataEnvLabel()+'。若要繼續，請輸入：「'+phrase+'」');
+  if(typed!==phrase)return;
+  var d=pkg.data||{};
+  if(d.settings){
+    ENTS=Array.isArray(d.settings.entities)?d.settings.entities:ENTS;
+    DEPTS=Array.isArray(d.settings.departments)?d.settings.departments:DEPTS;
+    ACCTS=Array.isArray(d.settings.accounts)?d.settings.accounts:ACCTS;
+    BANK_TRANSFER_FEES=Object.assign({},d.settings.bank_transfer_fees||BANK_TRANSFER_FEES);
+    ROLE_PERMISSIONS=Object.assign(defaultRolePermissions(),d.settings.role_permissions||ROLE_PERMISSIONS);
+  }
+  if(Array.isArray(d.users)&&d.users.length)USERS=d.users.map(mapUser);
+  REQS=restoreRows(d.requests,mapReq);
+  INVS=restoreRows(d.invoices,mapInv);
+  VOUCHERS=restoreRows(d.vouchers,mapVoucher);
+  LEDGER=restoreRows(d.ledger,mapLedger);
+  BILLS=restoreRows(d.bills,mapBill);
+  NOTIFS=restoreRows(d.notifications,mapNotif);
+  PERIOD_CLOSES=restoreRows(d.periodCloses,mapPeriodClose);
+  ARCHIVES=restoreRows(d.archives,mapComplianceArchive);
+  ANNUAL_REVIEWS=restoreRows(d.annualReviews,mapAnnualReview);
+  AUDIT_LOGS=restoreRows(d.auditLogs,mapComplianceAudit);
+  saveLocalAppState();
+  saveComplianceStore('period_closes',PERIOD_CLOSES);
+  saveComplianceStore('archives',ARCHIVES);
+  saveComplianceStore('annual_reviews',ANNUAL_REVIEWS);
+  saveComplianceStore('audit_logs',AUDIT_LOGS);
+  var summary=backupSummary(pkg);
+  await recordBackupEvent('restore','completed','還原備份包：'+backupReadableSummary(summary),summary,pkg.fileHash||'',S.restoreFileName||'');
+  S.restorePackage=null;S.restoreFileName='';
+  initFilters();buildAll();alert('還原完成。若要同步正式 Supabase 遠端資料，請再由資料庫管理端套用完整還原流程。');
+};
 window.buildCompliance=function buildCompliance(){
   ensureComplianceFilters();
   var eid=compEntity(),period=compPeriod(),closed=periodClosed(eid,period),e=gE(eid);
@@ -6185,55 +6693,67 @@ window.buildCompliance=function buildCompliance(){
   el('lock-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">已入帳傳票 '+locked+' / '+vs.length+' 張鎖定。鎖定資料不可覆寫，系統僅允許沖銷與調整。</div>'+vs.slice(0,6).map(function(v){return'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0e6d6"><span style="font-size:11px">'+v.no+'</span><span class="badge '+(voucherLocked(v)?'b-ok':'b-gray')+'">'+(voucherLocked(v)?'鎖定':'未鎖定')+'</span></div>';}).join('');
   el('doc-map-box').innerHTML=(vs.slice(0,8).map(function(v){var req=REQS.find(function(r){return r.voucherId===v.id||r.no===v.reqId;});var count=req?normalizeFiles(req.files).length+normalizeFiles(req.passbookFiles).length+normalizeFiles(req.actualFiles).length:0;return'<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f0e6d6"><div><div style="font-size:12px;font-weight:650;color:#334155">'+v.no+'</div><div style="font-size:10px;color:#94a3b8">'+(req?req.no+' · '+req.tL:'未找到對應申請')+'</div></div><span class="badge '+(count?'b-ok':'b-rej')+'">'+count+' 份憑證</span></div>';}).join('')||'<div style="font-size:12px;color:#94a3b8">本期尚無傳票</div>');
   el('annual-review-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">執行長或授權負責人需確認年度財報、關帳紀錄、憑證對應表與 audit log 後通過。</div><div style="margin-top:8px">'+(review?'<span class="badge b-ok">已由 '+review.by+' 於 '+String(review.time).slice(0,10)+' 審核</span>':'<span class="badge b-wait">尚未審核</span>')+'</div>';
+  if(el('backup-box')&&!S.restorePackage){
+    el('backup-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">備份包包含目前資料環境的申請、發票、傳票、分類帳、繳費、系統設定與合規紀錄。還原前會要求輸入確認文字，並留下 audit log。</div>'
+      +'<div style="margin-top:8px">'+(BACKUP_EVENTS||[]).slice(0,5).map(function(b){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #f0e6d6"><div><div style="font-size:11px;font-weight:650;color:#334155">'+(b.action==='restore'?'還原':'備份')+' · '+(b.status||'completed')+'</div><div style="font-size:10px;color:#94a3b8">'+String(b.time||'').slice(0,19).replace('T',' ')+' · '+(b.by||'—')+' · '+backupReadableSummary(b.summary)+'</div></div><span class="badge '+(b.action==='restore'?'b-purp':'b-blue')+'">'+dataEnvLabel(b.dataEnv)+'</span></div>';}).join('')+'</div>';
+  }
 }
 window.closeAccountingPeriod=async function(){
   var eid=compEntity(),period=compPeriod();
+  if(!isFinance()){alert('只有會計、行政部門主任或執行長可以關帳');return;}
   if(periodClosed(eid,period)){alert('此期間已關帳');return;}
-  if(!confirm('確定關帳 '+gE(eid).s+' '+period+'？關帳後已入帳資料只能用沖銷或調整處理。'))return;
-  var row={id:'close_'+Date.now(),eid:eid,period:period,status:'closed',by:S.user?S.user.n:'系統',time:new Date().toISOString()};
+  var tb=periodTrialBalanceStatus(eid,period);
+  if(!tb.ok){alert('此期間借貸不平，不能關帳。借方 '+fmt(tb.debit)+'，貸方 '+fmt(tb.credit)+'，差額 '+fmt(tb.diff));return;}
+  var openReq=REQS.filter(function(r){return inEntity(eid,r,'req')&&inPeriod(r.date,period)&&isReqOpen(r);}).length;
+  var openInv=INVS.filter(function(i){return inEntity(eid,i,'inv')&&inPeriod(i.date,period)&&!invoiceRevenuePostedAt(i)&&!hasInvoiceRevenueLedger(i);}).length;
+  var note='傳票 '+tb.rows+' 筆，借方 '+fmt(tb.debit)+' / 貸方 '+fmt(tb.credit)+'；未結申請 '+openReq+' 張；未認列發票 '+openInv+' 張';
+  if((openReq||openInv)&&!confirm('此期間仍有未完成資料：未結申請 '+openReq+' 張、未認列發票 '+openInv+' 張。確定仍要關帳嗎？'))return;
+  if(!confirm('確定關帳 '+gE(eid).s+' '+period+'？關帳後此月份不能再直接新增、修改或刪除入帳資料，只能在未關帳月份建立沖銷或調整傳票。'))return;
+  var row={id:'close_'+Date.now(),eid:eid,period:period,status:'closed',by:S.user?S.user.n:'系統',time:new Date().toISOString(),note:note,dataEnv:activeDataEnvironment()};
   PERIOD_CLOSES.push(row);
   saveComplianceStore('period_closes',PERIOD_CLOSES);
-  await upsertComplianceRemote('period_closes',{id:row.id,entity_id:eid,period:period,status:'closed',closed_by:row.by,closed_at:row.time});
-  await auditLog('會計期間關帳',gE(eid).s+' '+period,'鎖定已入帳資料');buildCompliance();
+  await upsertComplianceRemote('period_closes',{id:row.id,entity_id:eid,period:period,status:'closed',closed_by:row.by,closed_at:row.time,note:row.note,data_environment:row.dataEnv});
+  await auditLog('會計期間關帳',gE(eid).s+' '+period,note,{eid:eid,period:period});buildCompliance();
 };
 window.createAdjustmentVoucher=async function(){
   var id=(el('adj-voucher')||{}).value,v=VOUCHERS.find(function(x){return x.id===id;});if(!v){alert('請先選擇傳票');return;}
   var type=(el('adj-type')||{}).value||'reversal',reason=((el('adj-reason')||{}).value||'').trim(),amount=num((el('adj-amount')||{}).value)||v.total;
   if(!reason){alert('請填寫原因');return;}
   if(!voucherLocked(v)){alert('原傳票尚未鎖定，不需要建立沖銷或調整傳票');return;}
+  if(!ensureOpenPostingPeriod(v.eid,todayIso(),type==='reversal'?'沖銷傳票建立':'調整傳票建立'))return;
   var kind=type==='reversal'?'RV':'ADJ';
   var no=await nextVoucherNo(kind,todayIso());
   var entries=v.entries.map(function(e){var ratio=v.total?amount/v.total:1;return {t:e.t==='dr'?'cr':'dr',ac:e.ac,an:e.an,dept:e.dept,amt:Math.round(num(e.amt)*ratio)};});
   var ts=new Date().toISOString();
-  var nv={id:no,no:no,reqId:v.reqId,eid:v.eid,entS:v.entS,date:todaySlash(),desc:(type==='reversal'?'沖銷 ':'調整 ')+v.no+' — '+reason,entries:entries,total:amount,creator:S.user?S.user.n:'系統',posted:true,postedAt:ts,postingLockedAt:ts,adjusts:v.no,adjustmentType:type};
+  var nv={id:no,no:no,reqId:v.reqId,eid:v.eid,entS:v.entS,date:todaySlash(),desc:(type==='reversal'?'沖銷 ':'調整 ')+v.no+' — '+reason,entries:entries,total:amount,creator:S.user?S.user.n:'系統',posted:true,postedAt:ts,postingLockedAt:ts,adjusts:v.no,adjustmentType:type,dataEnv:activeDataEnvironment()};
   VOUCHERS.unshift(nv);
-  entries.forEach(function(e,i){LEDGER.unshift({date:todaySlash(),desc:nv.desc,eid:nv.eid,dc:e.dept||'',dr:e.t==='dr'?e.amt:0,cr:e.t==='cr'?e.amt:0,ac:e.ac,an:e.an,ref:nv.no});});
+  entries.forEach(function(e,i){LEDGER.unshift({date:todaySlash(),desc:nv.desc,eid:nv.eid,dc:e.dept||'',dr:e.t==='dr'?e.amt:0,cr:e.t==='cr'?e.amt:0,ac:e.ac,an:e.an,ref:nv.no,postingKey:ledgerPostingKey('voucher:'+nv.no+':'+(i+1)+':'+e.ac+':'+e.t),sourceType:'adjustment_voucher',sourceId:nv.id,sourceNo:nv.no,voucherNo:nv.no,dataEnv:activeDataEnvironment()});});
   await dbInsert('vouchers',voucherDbRow(nv));
-  await Promise.all(entries.map(function(e,i){return dbInsert('ledger_entries',{entry_date:todayIso(),description:nv.desc,entity_id:nv.eid,department_code:e.dept||'',debit:e.t==='dr'?e.amt:0,credit:e.t==='cr'?e.amt:0,account_code:e.ac,account_name:e.an,reference_no:nv.no,posting_key:ledgerPostingKey('voucher:'+nv.no+':'+(i+1)+':'+e.ac+':'+e.t),source_type:'adjustment_voucher',source_id:nv.id,source_no:nv.no,voucher_no:nv.no});}));
-  await auditLog(type==='reversal'?'建立沖銷傳票':'建立調整傳票',nv.no,'原傳票 '+v.no+'；原因：'+reason);renderVouchers();buildCompliance();
+  await Promise.all(entries.map(function(e,i){return dbInsert('ledger_entries',{entry_date:todayIso(),description:nv.desc,entity_id:nv.eid,department_code:e.dept||'',debit:e.t==='dr'?e.amt:0,credit:e.t==='cr'?e.amt:0,account_code:e.ac,account_name:e.an,reference_no:nv.no,posting_key:ledgerPostingKey('voucher:'+nv.no+':'+(i+1)+':'+e.ac+':'+e.t),source_type:'adjustment_voucher',source_id:nv.id,source_no:nv.no,voucher_no:nv.no,data_environment:activeDataEnvironment()});}));
+  await auditLog(type==='reversal'?'建立沖銷傳票':'建立調整傳票',nv.no,'原傳票 '+v.no+'；原因：'+reason,{eid:nv.eid,period:accountingPeriodOf(todayIso())});renderVouchers();buildCompliance();
 };
 window.archivePeriodDocuments=async function(){
   var eid=compEntity(),period=compPeriod(),docs=sourceDocsForPeriod(eid,period);
-  var row={id:'arc_'+Date.now(),eid:eid,period:period,docs:docs.length,fileCount:docs.reduce(function(s,r){return s+normalizeFiles(r.files).length+normalizeFiles(r.passbookFiles).length+normalizeFiles(r.actualFiles).length;},0),by:S.user?S.user.n:'系統',time:new Date().toISOString(),retainDocsUntil:(Number(period.slice(0,4))+10)+'-12-31',retainBooksUntil:(Number(period.slice(0,4))+10)+'-12-31'};
+  var row={id:'arc_'+Date.now(),eid:eid,period:period,docs:docs.length,fileCount:docs.reduce(function(s,r){return s+normalizeFiles(r.files).length+normalizeFiles(r.passbookFiles).length+normalizeFiles(r.actualFiles).length;},0),by:S.user?S.user.n:'系統',time:new Date().toISOString(),retainDocsUntil:(Number(period.slice(0,4))+10)+'-12-31',retainBooksUntil:(Number(period.slice(0,4))+10)+'-12-31',dataEnv:activeDataEnvironment()};
   ARCHIVES.push(row);
   saveComplianceStore('archives',ARCHIVES);
-  await upsertComplianceRemote('compliance_archives',{id:row.id,entity_id:eid,period:period,docs_count:row.docs,file_count:row.fileCount,archived_by:row.by,archived_at:row.time,retain_docs_until:row.retainDocsUntil,retain_books_until:row.retainBooksUntil});
-  await auditLog('憑證封存',gE(eid).s+' '+period,'封存 '+docs.length+' 張申請單');buildCompliance();
+  await upsertComplianceRemote('compliance_archives',{id:row.id,entity_id:eid,period:period,docs_count:row.docs,file_count:row.fileCount,archived_by:row.by,archived_at:row.time,retain_docs_until:row.retainDocsUntil,retain_books_until:row.retainBooksUntil,data_environment:row.dataEnv});
+  await auditLog('憑證封存',gE(eid).s+' '+period,'封存 '+docs.length+' 張申請單',{eid:eid,period:period});buildCompliance();
 };
 window.exportAnnualPackage=async function(){
   var eid=compEntity(),period=compPeriod(),e=gE(eid),vs=vouchersForPeriod(eid,period),sum=financeSummary(eid,period),bs=balanceRows(eid,period);
   var csv='年度財報與合規匯出\\n法人,'+e.full+'\\n期間,'+period+'\\n匯出時間,'+new Date().toISOString()+'\\n\\n損益摘要\\n收入,'+sum.revenue+'\\n支出,'+sum.expense+'\\n淨利,'+sum.net+'\\n\\n資產負債\\n資產,'+bs.assetTotal+'\\n負債,'+bs.liabTotal+'\\n權益,'+bs.equityTotal+'\\n\\n傳票清單\\n傳票,日期,摘要,金額,調整來源\\n'+vs.map(function(v){return [v.no,v.date,'"'+String(v.desc).replace(/"/g,'""')+'"',v.total,v.adjusts||''].join(',');}).join('\\n')+'\\n\\nAudit Log\\n時間,人員,動作,標的,說明\\n'+AUDIT_LOGS.map(function(a){return [a.time,a.user,a.action,a.target,'"'+String(a.detail).replace(/"/g,'""')+'"'].join(',');}).join('\\n');
-  dlCSV(csv,'annual_compliance_'+e.id+'_'+period+'.csv');await auditLog('年度財報匯出',e.s+' '+period,'下載合規年度包');buildCompliance();
+  dlCSV(csv,'annual_compliance_'+e.id+'_'+period+'.csv');await auditLog('年度財報匯出',e.s+' '+period,'下載合規年度包',{eid:eid,period:period});buildCompliance();
 };
 window.approveAnnualReview=async function(){
   if(!S.user||S.user.role!=='ceo'){alert('年度審核建議由執行長帳號執行');return;}
   var eid=compEntity(),period=compPeriod();
   ANNUAL_REVIEWS=ANNUAL_REVIEWS.filter(function(r){return !(r.eid===eid&&r.period===period);});
-  var row={id:'rev_'+Date.now(),eid:eid,period:period,status:'approved',by:S.user.n,time:new Date().toISOString()};
+  var row={id:'rev_'+Date.now(),eid:eid,period:period,status:'approved',by:S.user.n,time:new Date().toISOString(),dataEnv:activeDataEnvironment()};
   ANNUAL_REVIEWS.unshift(row);
   saveComplianceStore('annual_reviews',ANNUAL_REVIEWS);
-  await upsertComplianceRemote('annual_reviews',{id:row.id,entity_id:eid,period:period,status:'approved',reviewed_by:row.by,reviewed_at:row.time});
-  await auditLog('執行長年度審核',gE(eid).s+' '+period,'年度財報與合規包通過');buildCompliance();
+  await upsertComplianceRemote('annual_reviews',{id:row.id,entity_id:eid,period:period,status:'approved',reviewed_by:row.by,reviewed_at:row.time,data_environment:row.dataEnv});
+  await auditLog('執行長年度審核',gE(eid).s+' '+period,'年度財報與合規包通過',{eid:eid,period:period});buildCompliance();
 };
 
 // ══ 開立發票 ══
@@ -6325,7 +6845,7 @@ window.issueInv=async function(){
   var steps=[applicantSubmitStep(appUser,meta.name)].concat(buildInvoiceApprovalSteps(appUser));
   var nextStep=steps.find(function(s){return !s.a;})||null;
   var invDate=((el('inv-date')||{}).value||todayIso()).replace(/-/g,'/');
-  var inv={id:'i_'+Date.now(),no:no,eid:eid,en:gE(eid).s,dc:meta.dc,buyer:buyer,taxId:(el('inv-taxid')||{}).value||'',applicant:meta.name,applicantId:appUser.id,amt:amt,tax:tax,total:amt+tax,date:invDate,status:'unpaid',approvalStatus:nextStep?nextStep.status:'completed',approvalStep:nextStep?2:8,steps:steps,desc:(el('inv-desc')||{}).value||'',receiptFiles:[]};
+  var inv={id:'i_'+Date.now(),no:no,eid:eid,en:gE(eid).s,dc:meta.dc,buyer:buyer,taxId:(el('inv-taxid')||{}).value||'',applicant:meta.name,applicantId:appUser.id,amt:amt,tax:tax,total:amt+tax,date:invDate,status:'unpaid',approvalStatus:nextStep?nextStep.status:'completed',approvalStep:nextStep?2:8,steps:steps,desc:(el('inv-desc')||{}).value||'',receiptFiles:[],dataEnv:activeDataEnvironment()};
   INVS.unshift(inv);
   await dbInsert('invoices',invoiceDbRow(inv));
   renderInvTable();['inv-buyer','inv-amt','inv-desc','inv-total'].forEach(function(id){var e=el(id);if(e)e.value='';});
@@ -6415,7 +6935,7 @@ window.issueBatch=async function(){
     var tax=Math.round(amt*rate);
     var steps=[applicantSubmitStep(appUser,meta.name)].concat(buildInvoiceApprovalSteps(appUser));
     var nextStep=steps.find(function(s){return !s.a;})||null;
-    return{id:'i_'+Date.now()+'_'+Math.random().toString(36).slice(2),no:no,eid:eid,en:en,dc:meta.dc,buyer:r.buyer,applicant:meta.name,applicantId:appUser.id,batchId:batchId,taxId:r.taxid,amt:amt,tax:tax,total:amt+tax,date:today,status:'unpaid',approvalStatus:nextStep?nextStep.status:'completed',approvalStep:nextStep?2:8,steps:steps,desc:r.desc,receiptFiles:[]};
+    return{id:'i_'+Date.now()+'_'+Math.random().toString(36).slice(2),no:no,eid:eid,en:en,dc:meta.dc,buyer:r.buyer,applicant:meta.name,applicantId:appUser.id,batchId:batchId,taxId:r.taxid,amt:amt,tax:tax,total:amt+tax,date:today,status:'unpaid',approvalStatus:nextStep?nextStep.status:'completed',approvalStep:nextStep?2:8,steps:steps,desc:r.desc,receiptFiles:[],dataEnv:activeDataEnvironment()};
   });
   rows.forEach(function(inv){INVS.unshift(inv);});
   await Promise.all(rows.map(function(inv){return dbInsert('invoices',invoiceDbRow(inv));}));
@@ -6456,7 +6976,7 @@ function renderBBTable(){
   el('bb-tbody').innerHTML=BB_ROWS.map(function(r,i){return'<tr><td style="font-size:11px;color:#94a3b8">'+(i+1)+'</td><td><span class="ep" style="font-size:9px">'+r.entL.slice(0,6)+'</span></td><td><span class="badge '+(iK[r.ik]||'b-gray')+'">'+r.item+'</span></td><td style="font-weight:500">'+fmt(r.amt)+'</td><td>'+r.due+'</td><td>'+r.method+'</td><td style="font-size:11px;color:#94a3b8">'+r.note+'</td></tr>';}).join('')||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8">請先上傳 CSV</td></tr>';
 }
 window.submitBillBatch=async function(){
-  var rows=BB_ROWS.map(function(r){return{id:'b_'+Date.now()+'_'+Math.random().toString(36).slice(2),item:r.item,ik:r.ik,eid:r.eid,entL:r.entL,amt:r.amt,due:r.due,method:r.method,note:r.note,status:'unpaid'};});
+  var rows=BB_ROWS.map(function(r){return{id:'b_'+Date.now()+'_'+Math.random().toString(36).slice(2),item:r.item,ik:r.ik,eid:r.eid,entL:r.entL,amt:r.amt,due:r.due,method:r.method,note:r.note,status:'unpaid',dataEnv:activeDataEnvironment()};});
   rows.forEach(function(b){BILLS.unshift(b);});
   await Promise.all(rows.map(function(b){return dbInsert('bills',billDbRow(b));}));
   document.getElementById('m-add-bill').style.display='none';BB_ROWS=[];buildBills();
@@ -6471,7 +6991,7 @@ window.switchBillTab=function(tab,btn){
   el('bill-single-form').style.display=tab==='single'?'block':'none';
   el('bill-batch-form').style.display=tab==='batch'?'block':'none';
 };
-window.submitBill=async function(){var item=(el('b-item')||{}).value;var amt=parseFloat((el('b-amt')||{}).value||'0');if(!item||!amt){alert('請選擇費用項目並填寫金額');return;}var iL={labor:'勞保費',health:'健保費',pension:'勞退提撥',tax:'營業稅',rent:'租金',other:'其他'};var eid=(el('b-ent2')||{}).value||'E1';var bill={id:'b_'+Date.now(),item:iL[item]||item,ik:item,eid:eid,entL:gE(eid).full,amt:amt,due:(el('b-due')||{}).value?(el('b-due').value.replace(/-/g,'/')):todaySlash(),method:(el('b-method')||{}).value||'銀行轉帳',note:(el('b-note')||{}).value||'',status:'unpaid'};BILLS.unshift(bill);await dbInsert('bills',billDbRow(bill));document.getElementById('m-add-bill').style.display='none';buildBills();};
+window.submitBill=async function(){var item=(el('b-item')||{}).value;var amt=parseFloat((el('b-amt')||{}).value||'0');if(!item||!amt){alert('請選擇費用項目並填寫金額');return;}var iL={labor:'勞保費',health:'健保費',pension:'勞退提撥',tax:'營業稅',rent:'租金',other:'其他'};var eid=(el('b-ent2')||{}).value||'E1';var bill={id:'b_'+Date.now(),item:iL[item]||item,ik:item,eid:eid,entL:gE(eid).full,amt:amt,due:(el('b-due')||{}).value?(el('b-due').value.replace(/-/g,'/')):todaySlash(),method:(el('b-method')||{}).value||'銀行轉帳',note:(el('b-note')||{}).value||'',status:'unpaid',dataEnv:activeDataEnvironment()};BILLS.unshift(bill);await dbInsert('bills',billDbRow(bill));document.getElementById('m-add-bill').style.display='none';buildBills();};
 
 // ══ 收款情形（僅會計/執行長）══
 window.buildRecv=function buildRecv(){
@@ -6533,9 +7053,9 @@ function recvInvoiceRowHtml(i,RECV){
 // ══ 股東往來 / 資本額 ══
 function shareholderTxnMeta(type){
   var map={
-    capital:{label:'股東出資 / 增資',dr:'1112',drN:'銀行存款',cr:'3110',crN:'實收資本',cash:'籌資活動現金流入'},
-    loan_in:{label:'股東借款給公司',dr:'1112',drN:'銀行存款',cr:'2192',crN:'股東往來',cash:'籌資活動現金流入'},
-    loan_repay:{label:'公司償還股東借款',dr:'2192',drN:'股東往來',cr:'1112',crN:'銀行存款',cash:'籌資活動現金流出'}
+    capital:{label:'股東出資 / 增資',dr:'1112',drN:'銀行存款',cr:'3110',crN:'實收資本',cash:'籌資活動現金流入',rule:'列入股東權益，不列收入，不進損益表。'},
+    loan_in:{label:'股東借款給公司',dr:'1112',drN:'銀行存款',cr:'2192',crN:'股東往來',cash:'籌資活動現金流入',rule:'列入負債，不列收入，到償還時沖減股東往來。'},
+    loan_repay:{label:'公司償還股東借款',dr:'2192',drN:'股東往來',cr:'1112',crN:'銀行存款',cash:'籌資活動現金流出',rule:'沖減股東往來負債，不列費用，不進損益表。'}
   };
   return map[type]||map.capital;
 }
@@ -6553,10 +7073,10 @@ window.updateShareholderPreview=function(){
   if(!box)return;
   box.innerHTML='<div style="font-size:11px;color:#8b7358;margin-bottom:5px">入帳分錄預覽</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><div style="background:#eaf8d8;border:1px solid #b0e090;border-radius:8px;padding:8px"><div style="font-size:10px;color:#1a5010">借方</div><strong>'+m.dr+' '+m.drN+'</strong><div style="font-size:11px;color:#1a5010;margin-top:2px">'+fmt(amt)+'</div></div><div style="background:#fde8e8;border:1px solid #f0b0b0;border-radius:8px;padding:8px"><div style="font-size:10px;color:#8a1010">貸方</div><strong>'+m.cr+' '+m.crN+'</strong><div style="font-size:11px;color:#8a1010;margin-top:2px">'+fmt(amt)+'</div></div></div>'
-    +'<div style="font-size:10px;color:#8b7358;margin-top:7px">三表呈現：銀行存款會影響資產負債表；'+(type==='capital'?'實收資本會列入股東權益。':'股東往來會列入負債。')+'現金流量表列為'+m.cash+'。</div>';
+    +'<div style="font-size:10px;color:#8b7358;margin-top:7px">三表呈現：銀行存款會影響資產負債表；'+m.rule+' 現金流量表列為'+m.cash+'。</div>';
 };
 function shareholderVoucherRows(v){
-  return (v.entries||[]).map(function(e,i){return {entry_date:v.date.replace(/\//g,'-'),description:v.desc,entity_id:v.eid,department_code:e.dept||'',debit:e.t==='dr'?e.amt:0,credit:e.t==='cr'?e.amt:0,account_code:e.ac,account_name:e.an,reference_no:v.no,posting_key:ledgerPostingKey('shareholder:'+v.no+':'+(i+1)+':'+e.ac+':'+e.t),source_type:'shareholder_transaction',source_id:v.id,source_no:v.no,voucher_no:v.no};});
+  return (v.entries||[]).map(function(e,i){return {entry_date:v.date.replace(/\//g,'-'),description:v.desc,entity_id:v.eid,department_code:e.dept||'',debit:e.t==='dr'?e.amt:0,credit:e.t==='cr'?e.amt:0,account_code:e.ac,account_name:e.an,reference_no:v.no,posting_key:ledgerPostingKey('shareholder:'+v.no+':'+(i+1)+':'+e.ac+':'+e.t),source_type:'shareholder_transaction',source_id:v.id,source_no:v.no,voucher_no:v.no,data_environment:v.dataEnv||activeDataEnvironment()};});
 }
 window.submitShareholderTxn=async function(){
   if(!canAccessPage('shareholder')){alert('只有執行長、行政部門主任、會計可以操作');return;}
@@ -6569,15 +7089,16 @@ window.submitShareholderTxn=async function(){
   POSTING_IN_FLIGHT.shareholder=true;
   var vid=await nextVoucherNo('CAP',date.replace(/\//g,'-'));
   var no='TXN-'+vid;
+  if(type==='capital'&&note.length<4){alert('股東出資 / 增資請填寫備註，例：董事會決議、增資款、股東往來轉增資等依據。');return;}
   var desc=m.label+' — '+name+(bank?' · '+bank:'')+(note?' · '+note:'');
   var entries=[{t:'dr',ac:m.dr,an:m.drN,dept:dc,amt:amt},{t:'cr',ac:m.cr,an:m.crN,dept:dc,amt:amt}];
   var ts=new Date().toISOString();
-  var voucher={id:vid,no:vid,reqId:no,eid:eid,entS:gE(eid).s,date:date,desc:desc,entries:entries,total:amt,creator:S.user?S.user.n:'系統',posted:true,postedAt:ts,postingLockedAt:ts};
+  var voucher={id:vid,no:vid,reqId:no,eid:eid,entS:gE(eid).s,date:date,desc:desc,entries:entries,total:amt,creator:S.user?S.user.n:'系統',posted:true,postedAt:ts,postingLockedAt:ts,sourceType:'shareholder_transaction',shareholderType:type,shareholderName:name,bankInfo:bank,accountingRule:m.rule,cashFlowClass:m.cash,dataEnv:activeDataEnvironment()};
   VOUCHERS.unshift(voucher);
-  entries.forEach(function(e){LEDGER.unshift({date:date,desc:desc,eid:eid,dc:dc,dr:e.t==='dr'?amt:0,cr:e.t==='cr'?amt:0,ac:e.ac,an:e.an,ref:no});});
+  entries.forEach(function(e,i){LEDGER.unshift({date:date,desc:desc,eid:eid,dc:dc,dr:e.t==='dr'?amt:0,cr:e.t==='cr'?amt:0,ac:e.ac,an:e.an,ref:no,postingKey:ledgerPostingKey('shareholder:'+vid+':'+(i+1)+':'+e.ac+':'+e.t),sourceType:'shareholder_transaction',sourceId:vid,sourceNo:no,voucherNo:vid,dataEnv:activeDataEnvironment()});});
   await dbInsert('vouchers',voucherDbRow(voucher));
   await Promise.all(shareholderVoucherRows(voucher).map(function(row){return dbInsert('ledger_entries',row);}));
-  NOTIFS.unshift({id:'n_'+Date.now(),type:'system',title:'股東往來已入帳',body:m.label+' '+fmt(amt)+' 已寫入 '+gE(eid).s+' 分類帳',time:'剛才',read:false});
+  NOTIFS.unshift({id:'n_'+Date.now(),type:'system',title:'股東往來已入帳',body:m.label+' '+fmt(amt)+' 已寫入 '+gE(eid).s+' 分類帳',time:'剛才',read:false,dataEnv:activeDataEnvironment()});
   await dbInsert('notifications',notifDbRow(NOTIFS[0]));
   ['sh-name','sh-amt','sh-bank','sh-note'].forEach(function(id){var x=el(id);if(x)x.value='';});
   delete POSTING_IN_FLIGHT.shareholder;
@@ -6596,7 +7117,7 @@ window.openRecvBatch=function(batchId){
   el('recv-detail').innerHTML='<div style="padding:7px 12px;border-bottom:1px solid #f0e6d6"><button class="btn-g" onclick="renderRecvDetail()">← 返回整批列表</button></div>'+items.map(function(i){return recvInvoiceRowHtml(i,RECV);}).join('');
 };
 window.submitReceiptReview=async function(id,inp,noteId){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;if(!S.user||S.user.role!=='accountant'){alert('只有會計可以送出收款複核');return;}var files=[];if(typeof inp==='string')files=await readStepFiles(inp);else if(inp&&inp.files&&inp.files.length)files=await Promise.all(Array.from(inp.files).map(fileToAttachment));if(!files.length){alert('請先上傳收款證明');return;}try{files=await uploadAttachmentsToSupabase(files,{recordType:'invoices',recordNo:inv.no,kind:'receipt_proof',date:todayIso(),entityId:inv.eid,departmentCode:inv.dc});}catch(uploadErr){console.error(uploadErr);alert('收款證明上傳到 Supabase Storage 失敗，請確認 Storage 設定後再送出。');return;}inv.status='pending_receipt_review';inv.receiptSubmittedAt=new Date().toISOString();inv.receiptSubmittedBy=S.user.n;inv.receiptFiles=(inv.receiptFiles||[]).concat(files);var note=noteId&&el(noteId)?el(noteId).value:'';inv.receiptNote=note;await dbUpdate('invoices',id,{status:inv.status});await dbUpdate('invoices',id,{receipt_files:inv.receiptFiles,receipt_submitted_at:inv.receiptSubmittedAt,receipt_submitted_by:inv.receiptSubmittedBy,receipt_note:note});buildRecv();buildApprovals();closeAppr();};
-window.approveReceiptReview=async function(id){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;if(!S.user||S.user.role!=='admin_director'){alert('只有行政部門主任可以複核收款');return;}var note=(el('receipt-review-note')||{}).value||'';if(invoiceCashPostedAt(inv)||hasInvoiceCashLedger(inv)){alert('此發票收款已入帳，不能重複複核。');return;}inv.status='paid';inv.paidAt=new Date().toISOString();await postInvoiceCashReceipt(inv);await dbUpdate('invoices',id,{status:'paid',paid_at:inv.paidAt,receipt_reviewed_at:inv.paidAt,receipt_reviewed_by:S.user.n,receipt_review_note:note,cash_receipt_posted_at:invoiceCashPostedAt(inv)||null,posting_locked_at:inv.postingLockedAt||null});buildRecv();buildDash();buildReports();buildApprovals();closeAppr();};
+window.approveReceiptReview=async function(id){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;if(!S.user||S.user.role!=='admin_director'){alert('只有行政部門主任可以複核收款');return;}var note=(el('receipt-review-note')||{}).value||'';if(invoiceCashPostedAt(inv)||hasInvoiceCashLedger(inv)){alert('此發票收款已入帳，不能重複複核。');return;}var prevStatus=inv.status,prevPaidAt=inv.paidAt;inv.status='paid';inv.paidAt=new Date().toISOString();var posted=await postInvoiceCashReceipt(inv);if(!posted){inv.status=prevStatus;inv.paidAt=prevPaidAt;return;}await dbUpdate('invoices',id,{status:'paid',paid_at:inv.paidAt,receipt_reviewed_at:inv.paidAt,receipt_reviewed_by:S.user.n,receipt_review_note:note,cash_receipt_posted_at:invoiceCashPostedAt(inv)||null,posting_locked_at:inv.postingLockedAt||null});buildRecv();buildDash();buildReports();buildApprovals();closeAppr();};
 window.returnReceiptReview=async function(id){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;if(!S.user||S.user.role!=='admin_director'){alert('只有行政部門主任可以退回');return;}var note=(el('receipt-review-note')||{}).value||'';inv.status='unpaid';await dbUpdate('invoices',id,{status:'unpaid',receipt_reviewed_at:new Date().toISOString(),receipt_reviewed_by:S.user.n,receipt_review_note:note});buildRecv();buildApprovals();closeAppr();};
 
 // ══ 三表 ══
@@ -6605,10 +7126,41 @@ window.buildReports=function buildReports(){
   var eid=(el('rpt-ent')||{}).value||'E1';var month=(el('rpt-month')||{}).value||todayMonth();
   var e=ENTS.find(function(x){return x.id===eid;})||ENTS[0];
   el('rpt-sub').textContent=e.full+' · '+month.replace(/-/,'年').replace(/(\d{2})$/,'$1月');
-  buildTaxReport(month,eid);buildBS(month,eid);buildPL(month,eid);buildCF(month,eid);
+  buildTaxReport(month,eid);buildTrialBalance(month,eid);buildBS(month,eid);buildPL(month,eid);buildCF(month,eid);
   var oldTrend=el('rpt-trend');if(oldTrend)oldTrend.style.display='none';
   if(!S.rptTrendRange)S.rptTrendRange='3m';
   buildComboChart(eid,e,S.rptTrendRange);
+}
+function buildTrialBalance(period,eid){
+  var t=trialBalanceStatus(eid,period),kpis=el('trial-kpis'),body=el('trial-body'),alertBox=el('trial-alert'),issueBox=el('trial-issues');
+  var failed=t.checks.filter(function(c){return !c.pass;}).length;
+  if(kpis){
+    kpis.innerHTML=[
+      {l:'整體狀態',v:t.ok?'通過':'需檢查',c:t.ok?'#2a9040':'#8a1010'},
+      {l:'本期分錄',v:t.periodRows+' 筆',c:'#1e293b'},
+      {l:'本期借貸差額',v:fmt(t.periodDebit-t.periodCredit),c:Math.abs(t.periodDebit-t.periodCredit)<0.5?'#2a9040':'#8a1010'},
+      {l:'異常項目',v:failed+' 項',c:failed?'#8a1010':'#2a9040'}
+    ].map(function(x){return'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">'+x.l+'</div><div style="font-size:15px;font-weight:650;color:'+x.c+'">'+x.v+'</div></div>';}).join('');
+  }
+  if(alertBox){
+    alertBox.innerHTML='<div style="border-radius:9px;padding:9px 11px;background:'+(t.ok?'#e6f4d8':'#fde8e8')+';border:1px solid '+(t.ok?'#b0e090':'#f0b0b0')+';color:'+(t.ok?'#1a5010':'#8a1010')+';font-size:12px;line-height:1.6">'+(t.ok?'三表試算平衡通過。':'三表試算平衡有差異，請依下方異常項目追溯來源。')+' 資料來源：'+sourceText(t.source)+'。</div>';
+  }
+  if(body){
+    body.innerHTML=t.checks.map(function(c){
+      var col=c.pass?'#2a9040':'#8a1010';
+      return'<tr><td style="font-weight:650;color:#334155">'+c.name+'</td><td><span class="badge '+(c.pass?'b-ok':'b-rej')+'">'+(c.pass?'通過':'異常')+'</span></td><td style="text-align:right;font-family:monospace;color:'+col+'">'+fmt(c.diff)+'</td><td style="font-size:11px;color:#64748b;line-height:1.5">'+c.desc+'</td></tr>';
+    }).join('');
+  }
+  if(issueBox){
+    if(!t.issues.length){
+      issueBox.innerHTML='<div style="font-size:11px;color:#64748b;background:var(--warm);border:1px solid #f0e0c8;border-radius:8px;padding:8px">未發現來源缺漏、格式異常或重複 posting key。</div>';
+    }else{
+      issueBox.innerHTML='<div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:6px">異常來源追溯</div><div style="overflow-x:auto"><table><thead><tr><th>異常</th><th>日期</th><th>科目</th><th>摘要</th><th style="text-align:right">借方</th><th style="text-align:right">貸方</th><th>來源</th></tr></thead><tbody>'+t.issues.map(function(x){
+        var r=x.row||{};
+        return'<tr><td><span class="badge b-rej">'+x.kind+'</span><div style="font-size:10px;color:#94a3b8">'+x.msg+'</div></td><td>'+normDate(r.date)+'</td><td>'+(r.ac||'')+' '+(r.an||'')+'</td><td>'+String(r.desc||'').slice(0,42)+'</td><td style="text-align:right;font-family:monospace">'+fmt(r.dr||0)+'</td><td style="text-align:right;font-family:monospace">'+fmt(r.cr||0)+'</td><td>'+(r.ref||r.voucherNo||r.postingKey||'—')+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+    }
+  }
 }
 // 三表趨勢 Tab 切換
 window.setRptTrendTab=function(range,btn){
@@ -6813,7 +7365,7 @@ window.exportLedger=function(){
 window.exportReports=function(){
   var eid=(el('rpt-ent')||{}).value||'E1';var month=(el('rpt-month')||{}).value||todayMonth();
   var e=ENTS.find(function(x){return x.id===eid;})||ENTS[0];
-  var b=balanceRows(eid,month),revRows=revenueRows(eid,month),expRows=expenseRows(eid,month),cf=cashFlow(eid,month);
+  var b=balanceRows(eid,month),revRows=revenueRows(eid,month),expRows=expenseRows(eid,month),cf=cashFlow(eid,month),tb=trialBalanceStatus(eid,month);
   var csv='歲悅長照集團 三表匯出\n法人,'+e.full+'\n期間,'+month+'\n資料來源,'+sourceText((hasLedger(eid,month)||ledgerRowsToPeriodEnd(eid,month).length)?'ledger':'empty')+'\n生成日期,'+new Date().toISOString().slice(0,10)+'\n\n';
   csv+='【資產負債表】\n項目,金額\n';
   b.assets.forEach(function(r){csv+=r.n+','+Math.round(r.v)+'\n';});
@@ -6827,6 +7379,12 @@ window.exportReports=function(){
   csv+='本期損益,'+Math.round(totalRev-totalExp)+','+(totalRev?((totalRev-totalExp)/totalRev*100).toFixed(1):'0.0')+'%\n';
   csv+='\n【現金流量表】\n項目,金額\n';
   csv+='營業流入,'+Math.round(cf.opIn)+'\n營業流出,'+Math.round(cf.opOut)+'\n投資活動,'+Math.round(cf.inv)+'\n籌資活動,'+Math.round(cf.fin)+'\n本期現金淨變動,'+Math.round(cf.net)+'\n期末現金,'+Math.round(cf.end)+'\n';
+  csv+='\n【三表試算平衡】\n檢查項目,結果,差額,說明\n';
+  tb.checks.forEach(function(c){csv+=[c.name,c.pass?'通過':'異常',Math.round(c.diff),'"'+String(c.desc).replace(/"/g,'""')+'"'].join(',')+'\n';});
+  if(tb.issues.length){
+    csv+='\n【試算異常來源】\n異常,日期,科目,摘要,借方,貸方,來源\n';
+    tb.issues.forEach(function(x){var r=x.row||{};csv+=[x.kind,normDate(r.date),(r.ac||'')+' '+(r.an||''),'"'+String(r.desc||'').replace(/"/g,'""')+'"',Math.round(r.dr||0),Math.round(r.cr||0),r.ref||r.voucherNo||r.postingKey||''].join(',')+'\n';});
+  }
   csv+='\n【三表來源追溯】\n日期,法人,部門,科目,摘要,借方,貸方,來源單號,Posting Key\n';
   ledgerRows(eid,month).forEach(function(r){csv+=[r.date,e.s,r.dc,(r.ac||'')+' '+(r.an||''),'"'+String(r.desc||'').replace(/"/g,'""')+'"',Math.round(r.dr||0),Math.round(r.cr||0),r.ref||'',r.postingKey||''].join(',')+'\n';});
   dlCSV(csv,e.s+'_三表_'+month+'.csv');
@@ -6908,19 +7466,86 @@ window.filterAccSide=function(s,btn){accSide=s;document.querySelectorAll('#pg-ac
 
 // ══ 系統設定：後台資料與前台共用 ══
 function cloneSettingValue(value){return JSON.parse(JSON.stringify(value));}
+function settingsVersionStoreKey(){return complianceStoreKey('settings_versions');}
+function settingsTargetLabel(key){
+  return {entities:'法人資訊',departments:'部門資訊',accounts:'會計科目',bank_transfer_fees:'手續費金額',role_permissions:'層級權限'}[key]||key||'系統設定';
+}
+function nextSettingsVersionNo(){
+  var ymd=todayIso().replace(/-/g,''),prefix='SET-'+ymd+'-';
+  var max=(SETTINGS_VERSIONS||[]).reduce(function(m,v){
+    var n=String(v.versionNo||'').indexOf(prefix)===0?parseInt(String(v.versionNo).slice(prefix.length),10):0;
+    return Math.max(m,isFinite(n)?n:0);
+  },0)+1;
+  return prefix+String(max).padStart(4,'0');
+}
+function settingsSnapshotWith(key,value){
+  var snap=currentSystemSettings();
+  if(key)snap[key]=cloneSettingValue(value);
+  return cloneSettingValue(snap);
+}
+async function createSettingVersion(key,value,meta){
+  meta=meta||{};
+  var versionNo=nextSettingsVersionNo();
+  var row={
+    id:'sv_'+Date.now()+'_'+Math.random().toString(36).slice(2),
+    versionNo:versionNo,
+    target:key||'all',
+    summary:meta.summary||('更新 '+settingsTargetLabel(key)),
+    snapshot:settingsSnapshotWith(key,value),
+    changeRequestId:meta.changeRequestId||'',
+    createdBy:meta.createdBy||(S.user?S.user.n:'系統'),
+    approvedBy:meta.approvedBy||(S.user?S.user.n:''),
+    createdAt:new Date().toISOString(),
+    dataEnv:activeDataEnvironment()
+  };
+  SETTINGS_VERSIONS.unshift(row);
+  safeJsonSet(settingsVersionStoreKey(),SETTINGS_VERSIONS);
+  await dbInsert('system_setting_versions',{id:row.id,version_no:row.versionNo,target:row.target,summary:row.summary,snapshot:row.snapshot,change_request_id:row.changeRequestId||null,created_by:row.createdBy,approved_by:row.approvedBy,created_at:row.createdAt,data_environment:row.dataEnv});
+  await auditLog('系統設定版本建立',row.versionNo,row.summary,{period:todayMonth()});
+  return row;
+}
+function accountChangeDiff(before,after){
+  before=before||[];after=after||[];
+  var byCode={},nextByCode={},changes=[];
+  before.forEach(function(a){byCode[String(a.c)]=a;});
+  after.forEach(function(a){nextByCode[String(a.c)]=a;});
+  after.forEach(function(a){
+    var old=byCode[String(a.c)];
+    if(!old){changes.push({type:'新增',code:a.c,name:a.n,detail:'新增 '+a.c+' '+a.n});return;}
+    var fields=[];
+    ['n','s','d','on'].forEach(function(k){if(String(old[k])!==String(a[k]))fields.push(k+': '+(old[k]==null?'':old[k])+' -> '+(a[k]==null?'':a[k]));});
+    if(fields.length)changes.push({type:'修改',code:a.c,name:a.n,detail:a.c+' '+fields.join('；')});
+  });
+  before.forEach(function(a){if(!nextByCode[String(a.c)])changes.push({type:'刪除',code:a.c,name:a.n,detail:'刪除 '+a.c+' '+a.n});});
+  return changes;
+}
+function accountChangeSummaryText(changes){
+  changes=changes||[];
+  var add=changes.filter(function(c){return c.type==='新增';}).length;
+  var edit=changes.filter(function(c){return c.type==='修改';}).length;
+  var del=changes.filter(function(c){return c.type==='刪除';}).length;
+  return '新增 '+add+'、修改 '+edit+'、刪除/停用 '+del;
+}
 async function saveSetting(key,value,opts){
   opts=opts||{};
   value=cloneSettingValue(value);
-  if(S.user&&S.user.role==='admin_director'){
+  if(S.user&&S.user.role!=='ceo'){
     var pending=(SYSTEM_SETTINGS.pending_settings_changes||[]).filter(function(c){return c&&c.status==='pending';});
-    pending.push({id:'pc_'+Date.now()+'_'+Math.random().toString(36).slice(2),target:key,value:value,status:'pending',submittedBy:S.user.n,submittedByEmail:S.user.email,time:new Date().toISOString()});
+    var changes=key==='accounts'?accountChangeDiff((SETTINGS_ORIGINAL&&SETTINGS_ORIGINAL.accounts)||(SYSTEM_SETTINGS.accounts||ACCTS),value):[];
+    var reason=key==='accounts'?(((el('acct-change-reason')||{}).value||'').trim()):'';
+    if(key==='accounts'&&!changes.length){alert('會計科目沒有異動，不需要送審');return false;}
+    if(key==='accounts'&&!reason){alert('請填寫會計科目異動原因');return false;}
+    pending.push({id:'pc_'+Date.now()+'_'+Math.random().toString(36).slice(2),target:key,value:value,status:'pending',changeType:key==='accounts'?'accounting_account_change':'system_setting_change',reason:reason,changes:changes,summary:key==='accounts'?accountChangeSummaryText(changes):'',submittedBy:S.user.n,submittedByEmail:S.user.email,time:new Date().toISOString(),dataEnv:activeDataEnvironment()});
     SYSTEM_SETTINGS.pending_settings_changes=pending;
     await dbUpsert('system_settings',{key:'pending_settings_changes',value:pending,updated_at:new Date().toISOString(),updated_by:S.user.email});
-    if(!opts.silent)alert('已送出系統設定異動，待執行長檢核通過後才會正式生效。');
+    if(key==='accounts')await dbInsert('account_change_requests',{id:pending[pending.length-1].id,status:'pending',reason:reason,change_summary:pending[pending.length-1].summary,changes:changes,proposed_accounts:value,submitted_by:S.user.n,submitted_by_email:S.user.email,submitted_at:pending[pending.length-1].time,data_environment:activeDataEnvironment()});
+    if(!opts.silent)alert(key==='accounts'?'會計科目異動已送執行長核准，核准前不會生效。':'已送出系統設定異動，待執行長檢核通過後才會正式生效。');
     return false;
   }
   SYSTEM_SETTINGS[key]=value;
   await dbUpsert('system_settings',{key:key,value:value,updated_at:new Date().toISOString(),updated_by:S.user?S.user.email:null});
+  await createSettingVersion(key,value,{summary:'執行長直接套用 '+settingsTargetLabel(key),approvedBy:S.user?S.user.n:''});
+  if(key==='accounts')await auditLog('會計科目異動核准','會計科目','執行長直接套用會計科目設定',{period:todayMonth()});
   return true;
 }
 async function saveSettingsKeys(keys){
@@ -6960,13 +7585,38 @@ function restoreOfficialSettings(){
   applySettingsState(official);
 }
 window.buildSettings=function buildSettings(){
-  if(!canManageSettings()){el('pg-settings').innerHTML='<div class="card" style="padding:28px;text-align:center;color:#94a3b8">此功能僅開放執行長與行政部門主任管理。</div>';return;}
+  if(!canManageSettings()){el('pg-settings').innerHTML='<div class="card" style="padding:28px;text-align:center;color:#94a3b8">此功能僅開放執行長、行政部門主任與會計管理。</div>';return;}
+  if(S.user&&S.user.role==='accountant'&&SETTINGS_TAB!=='accounts')SETTINGS_TAB='accounts';
   var eb=el('settings-edit-btn'),cb=el('settings-cancel-btn');
   if(eb)eb.textContent=SETTINGS_EDIT?'編輯中':'啟動編輯';
   if(cb)cb.style.display=SETTINGS_EDIT?'inline-flex':'none';
   document.querySelectorAll('#pg-settings .settings-write').forEach(function(node){node.style.display=SETTINGS_EDIT?(/DIV/.test(node.tagName)?'flex':'inline-flex'):'none';});
   document.querySelectorAll('#pg-settings .settings-action-head').forEach(function(node){node.style.display=SETTINGS_EDIT?'':'none';});
-  renderPendingSettings();renderSettingEntities();renderSettingDepts();renderSettingAccts();renderSettingFees();renderSettingPermissions();applySettingsTab();
+  renderPendingSettings();renderSettingVersions();renderSettingEntities();renderSettingDepts();renderSettingAccts();renderSettingFees();renderSettingPermissions();applySettingsTab();
+  if(S.user&&S.user.role==='accountant'){
+    document.querySelectorAll('#settings-tabs .tb').forEach(function(b){b.style.display=(b.textContent||'').indexOf('會計科目')>-1?'':'none';});
+    document.querySelectorAll('#pg-settings button[onclick="saveAllSettings()"]').forEach(function(b){b.style.display='none';});
+    var note=el('settings-sync-note');if(note)note.textContent='會計可提出會計科目異動申請；送出後需執行長核准才會生效，正式帳務不會直接被前端改寫。';
+  }
+};
+function renderSettingVersions(){
+  var box=el('settings-version-wrap');if(!box)return;
+  var rows=(SETTINGS_VERSIONS&&SETTINGS_VERSIONS.length?SETTINGS_VERSIONS:(safeJsonGet(settingsVersionStoreKey(),[])||[])).filter(inActiveDataEnvironment).slice(0,8);
+  if(!rows.length){
+    box.innerHTML='<div class="chd"><span class="cht">系統設定版本紀錄</span><span style="font-size:10px;color:#94a3b8">尚無版本</span></div><div style="padding:12px;font-size:12px;color:#64748b">正式設定核准或直接套用後，系統會在這裡保存版本快照。</div>';
+    return;
+  }
+  box.innerHTML='<div class="chd"><span class="cht">系統設定版本紀錄</span><button class="btn-g" style="font-size:10px;padding:3px 8px" onclick="exportSettingVersions()">匯出版本</button></div><div style="padding:10px">'+rows.map(function(v){return'<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f0e6d6"><div style="min-width:0"><div style="font-size:12px;font-weight:650;color:#334155">'+escAttr(v.versionNo)+' · '+settingsTargetLabel(v.target)+'</div><div style="font-size:10px;color:#94a3b8">'+String(v.createdAt||'').slice(0,19).replace('T',' ')+' · 建立：'+escAttr(v.createdBy||'—')+' · 核准：'+escAttr(v.approvedBy||'—')+'</div><div style="font-size:11px;color:#6a5840;margin-top:3px">'+escAttr(v.summary||'')+'</div></div><button class="btn-s" style="font-size:10px;padding:3px 8px;align-self:center" onclick="downloadSettingVersion(\''+v.id+'\')">下載</button></div>';}).join('')+'</div>';
+}
+window.downloadSettingVersion=function(id){
+  var v=(SETTINGS_VERSIONS||[]).find(function(x){return x.id===id;});
+  if(!v){alert('找不到版本資料');return;}
+  downloadTextFile(JSON.stringify(v,null,2),'settings_'+(v.versionNo||v.id)+'.json','application/json;charset=utf-8');
+};
+window.exportSettingVersions=function(){
+  var csv='版本號,資料環境,異動範圍,摘要,建立人,核准人,建立時間,異動單\n';
+  (SETTINGS_VERSIONS||[]).filter(inActiveDataEnvironment).forEach(function(v){csv+=[v.versionNo,dataEnvLabel(v.dataEnv),settingsTargetLabel(v.target),v.summary||'',v.createdBy||'',v.approvedBy||'',v.createdAt||'',v.changeRequestId||''].map(csvCell).join(',')+'\n';});
+  dlCSV(csv,'settings_versions_'+activeDataEnvironment()+'_'+todayIso()+'.csv');
 };
 window.settingsTab=function(tab,btn){SETTINGS_TAB=tab;applySettingsTab();};
 function applySettingsTab(){
@@ -6995,7 +7645,7 @@ function renderPendingSettings(){
   if(!pending.length||!S.user||S.user.role!=='ceo'){box.style.display='none';box.innerHTML='';return;}
   box.style.display='block';
   var labels={entities:'法人資訊',departments:'部門資訊',accounts:'會計科目',bank_transfer_fees:'手續費金額',role_permissions:'層級權限'};
-  box.innerHTML='<div class="chd"><span class="cht">待執行長檢核的系統設定</span><span style="font-size:10px;color:#94a3b8">'+pending.length+' 筆</span></div><div style="padding:10px">'+pending.map(function(c){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #f0e6d6"><div><div style="font-size:12px;font-weight:650;color:#334155">'+(labels[c.target]||c.target)+'</div><div style="font-size:10px;color:#94a3b8">送出人：'+(c.submittedBy||'—')+' · '+String(c.time||'').slice(0,16).replace('T',' ')+'</div></div><div style="display:flex;gap:5px"><button class="btn-p" onclick="approvePendingSetting(\''+c.id+'\')">通過</button><button class="btn-s" onclick="rejectPendingSetting(\''+c.id+'\')">退回</button></div></div>';}).join('')+'</div>';
+  box.innerHTML='<div class="chd"><span class="cht">待執行長檢核的系統設定</span><span style="font-size:10px;color:#94a3b8">'+pending.length+' 筆</span></div><div style="padding:10px">'+pending.map(function(c){var isAcct=c.target==='accounts';return'<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f0e6d6"><div style="min-width:0"><div style="font-size:12px;font-weight:650;color:#334155">'+(labels[c.target]||c.target)+(isAcct?' <span class="badge b-purp">科目異動</span>':'')+'</div><div style="font-size:10px;color:#94a3b8">送出人：'+(c.submittedBy||'—')+' · '+String(c.time||'').slice(0,16).replace('T',' ')+'</div>'+(isAcct?'<div style="font-size:11px;color:#6a5840;line-height:1.6;margin-top:4px">原因：'+escAttr(c.reason||'—')+'<br>摘要：'+escAttr(c.summary||accountChangeSummaryText(c.changes||[]))+'</div><div style="font-size:10px;color:#94a3b8;margin-top:3px">'+(c.changes||[]).slice(0,4).map(function(x){return escAttr(x.detail||'');}).join('<br>')+((c.changes||[]).length>4?'<br>…':'')+'</div>':'')+'</div><div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-p" onclick="approvePendingSetting(\''+c.id+'\')">通過</button><button class="btn-s" onclick="rejectPendingSetting(\''+c.id+'\')">退回</button></div></div>';}).join('')+'</div>';
 }
 window.approvePendingSetting=async function(id){
   if(!S.user||S.user.role!=='ceo'){alert('只有執行長可以核准系統設定異動');return;}
@@ -7004,6 +7654,10 @@ window.approvePendingSetting=async function(id){
   await dbUpsert('system_settings',{key:item.target,value:item.value,updated_at:new Date().toISOString(),updated_by:S.user.email});
   item.status='approved';item.reviewedBy=S.user.n;item.reviewedAt=new Date().toISOString();
   await dbUpsert('system_settings',{key:'pending_settings_changes',value:(SYSTEM_SETTINGS.pending_settings_changes||[]),updated_at:new Date().toISOString(),updated_by:S.user.email});
+  SYSTEM_SETTINGS[item.target]=cloneSettingValue(item.value);
+  await createSettingVersion(item.target,item.value,{summary:(item.target==='accounts'?accountChangeSummaryText(item.changes||[]):'核准 '+settingsTargetLabel(item.target)),changeRequestId:item.id,createdBy:item.submittedBy||'',approvedBy:S.user.n});
+  if(item.target==='accounts')await dbUpdate('account_change_requests',item.id,{status:'approved',reviewed_by:S.user.n,reviewed_by_email:S.user.email,reviewed_at:item.reviewedAt});
+  if(item.target==='accounts')await auditLog('會計科目異動核准','會計科目',accountChangeSummaryText(item.changes||[])+'；原因：'+(item.reason||''),{period:todayMonth()});
   await loadRemoteData();buildSettings();alert('已核准並套用系統設定異動');
 };
 window.rejectPendingSetting=async function(id){
@@ -7011,6 +7665,8 @@ window.rejectPendingSetting=async function(id){
   var item=(SYSTEM_SETTINGS.pending_settings_changes||[]).find(function(c){return c.id===id;});if(!item)return;
   item.status='rejected';item.reviewedBy=S.user.n;item.reviewedAt=new Date().toISOString();
   await dbUpsert('system_settings',{key:'pending_settings_changes',value:(SYSTEM_SETTINGS.pending_settings_changes||[]),updated_at:new Date().toISOString(),updated_by:S.user.email});
+  if(item.target==='accounts')await dbUpdate('account_change_requests',item.id,{status:'rejected',reviewed_by:S.user.n,reviewed_by_email:S.user.email,reviewed_at:item.reviewedAt});
+  if(item.target==='accounts')await auditLog('會計科目異動退回','會計科目',accountChangeSummaryText(item.changes||[])+'；原因：'+(item.reason||''),{period:todayMonth()});
   buildSettings();alert('已退回系統設定異動');
 };
 function renderSettingEntities(){
@@ -7355,7 +8011,7 @@ function deprecatedEstimatedBS(f, eid){
         {n:'2122 應付薪資',v:apSal},
         {n:'2128 應付費用-勞健退',v:apFee},
         {n:'2135 其他應付款',v:apOth},
-        {n:'2161 銷項稅額',v:taxOut},
+        {n:'2134 銷項稅額',v:taxOut},
       ], apSal+apFee+apOth+taxOut, '　負債合計')+
       '<tr><td colspan="2" style="background:#fdf6e8;font-weight:500;color:#a08060;font-size:11px">股東權益</td></tr>'+
       rowHTML([

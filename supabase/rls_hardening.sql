@@ -218,10 +218,6 @@ as $$
       and p_request.department_code = public.current_finance_department()
     )
     or (
-      public.current_finance_role() = 'hr'
-      and p_request.type = 'welfare_request'
-    )
-    or (
       public.current_finance_role() = 'general_affairs'
       and p_request.type = 'purchase_request'
     )

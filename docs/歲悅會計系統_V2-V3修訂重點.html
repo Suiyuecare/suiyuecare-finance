@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>歲悅會計系統 V2-V3 修訂重點</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","Microsoft JhengHei",Arial,sans-serif;margin:0;background:#fff8ed;color:#1f2937;line-height:1.75}
+    .page{max-width:860px;margin:0 auto;padding:44px 36px 56px}
+    .brand{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+    .mark{width:46px;height:46px;border-radius:14px;background:#f59e0b;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900}
+    .eyebrow{font-size:12px;letter-spacing:.12em;color:#b45309;font-weight:800}
+    h1{font-size:30px;line-height:1.25;margin:6px 0 8px;color:#172033}
+    .sub{font-size:14px;color:#64748b;margin-bottom:28px}
+    .card{background:#fff;border:1px solid #f0d7b8;border-radius:14px;padding:20px 22px;margin:16px 0;box-shadow:0 16px 40px rgba(146,79,12,.08)}
+    h2{font-size:18px;margin:0 0 10px;color:#7c3f00}
+    ul{margin:0;padding-left:22px}
+    li{margin:6px 0}
+    table{width:100%;border-collapse:collapse;margin-top:10px;background:#fff}
+    th,td{border:1px solid #efd7b8;padding:10px 12px;text-align:left;vertical-align:top}
+    th{background:#fff3de;color:#7c3f00;font-size:13px}
+    td{font-size:13px}
+    .footer{margin-top:28px;font-size:12px;color:#94a3b8}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="brand">
+      <div class="mark">V3</div>
+      <div>
+        <div class="eyebrow">SUIYUE CARE GROUP · FINANCE OS</div>
+        <h1>歲悅會計系統 V2 → V3 修訂重點</h1>
+        <div class="sub">本文件整理 V3 相較 V2 的主要修訂方向，供教育訓練、測試回饋與正式上線前檢核使用。</div>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2>一、流程穩定性</h2>
+      <ul>
+        <li>強化暫存、送出簽核、抽單取消、退回上一關與加簽流程。</li>
+        <li>申請送出後會先保留本機備援，降低 Supabase 暫時寫入失敗時畫面消失的風險。</li>
+        <li>正式登入與測試登入都會先載入本機備援資料，再進行遠端同步。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>二、附件與憑據</h2>
+      <ul>
+        <li>強化主管檢核附件下載，若 Supabase signed URL 失敗，會改用備援下載連結。</li>
+        <li>附件依申請單號、資料環境、法人、部門、日期與檔案類型歸檔。</li>
+        <li>支援憑據照片彙整、即時 Excel 明細、存摺封面等不同附件類型分開保存。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>三、報表與稅務</h2>
+      <ul>
+        <li>三表改以正式分類帳為主要資料來源，並提供來源追溯。</li>
+        <li>發票收入拆分未稅收入與銷項稅額，支出入帳拆分費用與進項稅額。</li>
+        <li>新增進項營業稅、銷項營業稅與可折抵稅額檢視，避免同一單號重複計算。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>四、會計合規</h2>
+      <ul>
+        <li>新增月結鎖帳、傳票沖銷 / 調整、三表試算平衡與 audit log 匯出。</li>
+        <li>傳票使用正式流水號，過帳後不可直接修改，只能透過沖銷或調整處理。</li>
+        <li>會計科目與系統設定異動加入版本紀錄與核准概念。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>五、收入與股東往來</h2>
+      <ul>
+        <li>收入申請整合股東往來、開立發票、申請繳費單與收款情形。</li>
+        <li>股東出資 / 增資、股東借款與償還股東借款分別對應正式會計科目。</li>
+        <li>股東往來不列收入或費用，依性質進入資產負債表與現金流量表。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>六、V2 與 V3 差異摘要</h2>
+      <table>
+        <thead><tr><th>項目</th><th>V2</th><th>V3</th></tr></thead>
+        <tbody>
+          <tr><td>簽核流程</td><td>已有基本簽核</td><td>補強暫存、抽單、退回上一關、加簽與本機備援</td></tr>
+          <tr><td>附件下載</td><td>依原本連結下載</td><td>增加 Storage 權限與備援下載策略</td></tr>
+          <tr><td>三表</td><td>逐步串接正式資料</td><td>以正式分類帳為核心，支援來源追溯與試算平衡</td></tr>
+          <tr><td>營業稅</td><td>可顯示稅額</td><td>正式拆分進項稅額與銷項稅額，降低重複計算風險</td></tr>
+          <tr><td>合規控管</td><td>基礎後台設定</td><td>加入鎖帳、沖銷調整、audit log、版本紀錄與設定核准</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="footer">文件版本：Finance OS V3 · 產生日期：2026-05-18</div>
+  </main>
+</body>
+</html>
