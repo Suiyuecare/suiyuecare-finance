@@ -9,7 +9,6 @@ create type application_type as enum (
   'advance_request',
   'petty_cash_request',
   'travel_request',
-  'welfare_request',
   'purchase_request',
   'refund_request',
   'hr_expense_request'
@@ -211,19 +210,6 @@ create table travel_request_details (
   check (end_datetime >= start_datetime)
 );
 
-create table welfare_request_details (
-  application_id uuid primary key references applications(id) on delete cascade,
-  welfare_type text not null,
-  reason text not null,
-  event_date date not null,
-  eligibility_status text,
-  employee_start_date date,
-  seniority_months int check (seniority_months is null or seniority_months >= 0),
-  employee_bank_account_id uuid,
-  include_in_payroll boolean not null default false,
-  is_withholding_required boolean not null default false
-);
-
 create table purchase_request_details (
   application_id uuid primary key references applications(id) on delete cascade,
   purchase_type text not null,
@@ -287,4 +273,3 @@ create table hr_expense_request_details (
 create index idx_applications_filters on applications(application_type, status, applicant_id, department_id, created_at, amount);
 create index idx_approval_steps_pending on approval_steps(approver_id, approver_role, status);
 create index idx_audit_logs_application on audit_logs(application_id, created_at);
-

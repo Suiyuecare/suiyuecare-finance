@@ -9,7 +9,6 @@ const APPLICATION_TYPES: Array<{ value: ApplicationType; label: string; hint: st
   { value: 'advance_request', label: '預支申請', hint: '員工先預支款項，之後核銷' },
   { value: 'petty_cash_request', label: '零用金申請', hint: '部門或據點小額零用金' },
   { value: 'travel_request', label: '差旅申請', hint: '因公出差前核准，可連動預支與報銷' },
-  { value: 'welfare_request', label: '福利申請', hint: '福利、津貼、補助或非薪資性給付' },
   { value: 'purchase_request', label: '採購申請', hint: '購買物品、設備、服務、軟體或工程' },
   { value: 'refund_request', label: '退費申請', hint: '退還已收款項給客戶、學員或案家' },
   { value: 'hr_expense_request', label: '人事費用申請', hint: '薪資、獎金、講師費、兼職費等' },
@@ -231,8 +230,6 @@ function TypeSpecificFields(props: {
       return <FieldSet title="零用金申請"><Field label="零用金據點 ID"><input onChange={(e) => set('pettyCashLocationId', e.target.value)} /></Field><Field label="申請類型"><select onChange={(e) => set('requestType', e.target.value)}><option value="new">新申請</option><option value="replenish">補足</option><option value="close">結清</option><option value="adjust_limit">調整額度</option></select></Field><Field label="申請金額"><input type="number" min={0} onChange={(e) => set('requestedAmount', Number(e.target.value))} /></Field><Field label="保管人 ID"><input onChange={(e) => set('custodianId', e.target.value)} /></Field><Field label="用途範圍"><textarea onChange={(e) => set('usageScope', e.target.value)} /></Field><DetailHint text="petty_cash_expense_items：支出日期、類別、金額、收據號碼、說明、附件" /></FieldSet>;
     case 'travel_request':
       return <FieldSet title="差旅申請"><Field label="差旅類型"><select onChange={(e) => set('travelType', e.target.value)}><option value="domestic">國內</option><option value="international">國外</option><option value="cross_county">跨縣市</option><option value="same_day">當日往返</option></select></Field><Field label="目的"><input onChange={(e) => set('purpose', e.target.value)} /></Field><Field label="目的地"><input onChange={(e) => set('destination', e.target.value)} /></Field><Field label="開始時間"><input type="datetime-local" onChange={(e) => set('startDatetime', e.target.value)} /></Field><Field label="結束時間"><input type="datetime-local" onChange={(e) => set('endDatetime', e.target.value)} /></Field><Check label="需要住宿" onChange={(v) => set('requiresAccommodation', v)} /><Check label="需要預支" onChange={(v) => set('requiresAdvance', v)} /></FieldSet>;
-    case 'welfare_request':
-      return <FieldSet title="福利申請"><Field label="福利類型"><input onChange={(e) => set('welfareType', e.target.value)} /></Field><Field label="事由"><textarea onChange={(e) => set('reason', e.target.value)} /></Field><Field label="事件日期"><input type="date" onChange={(e) => set('eventDate', e.target.value)} /></Field><Field label="年資月數"><input type="number" min={0} onChange={(e) => set('seniorityMonths', Number(e.target.value))} /></Field><Check label="併入薪資" onChange={(v) => set('includeInPayroll', v)} /><Check label="是否扣繳" onChange={(v) => set('isWithholdingRequired', v)} /></FieldSet>;
     case 'purchase_request':
       return <FieldSet title="採購申請"><Field label="採購類型"><input onChange={(e) => set('purchaseType', e.target.value)} /></Field><Field label="需求原因"><textarea onChange={(e) => set('reason', e.target.value)} /></Field><Check label="固定資產" onChange={(v) => set('isFixedAsset', v)} /><Check label="急件" onChange={(v) => set('isUrgent', v)} /><Field label="需求日期"><input type="date" onChange={(e) => set('requiredDate', e.target.value)} /></Field><Field label="預算來源"><input onChange={(e) => set('budgetSource', e.target.value)} /></Field>{props.requiresQuotation && <div className="notice">金額超過門檻，已標記需要比價。</div>}<DetailHint text="purchase_items：品名、規格、數量、單價、小計、用途、使用地點" /></FieldSet>;
     case 'refund_request':
@@ -314,4 +311,3 @@ em{font-style:normal;color:#dc2626;font-size:12px}
 .empty{padding:24px;text-align:center;color:#94a3b8}
 .row{padding:12px;border-bottom:1px solid #eef2f7}
 `;
-

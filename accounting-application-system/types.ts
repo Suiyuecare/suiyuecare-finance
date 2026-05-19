@@ -4,7 +4,6 @@ export type ApplicationType =
   | 'advance_request'
   | 'petty_cash_request'
   | 'travel_request'
-  | 'welfare_request'
   | 'purchase_request'
   | 'refund_request'
   | 'hr_expense_request';
@@ -209,18 +208,6 @@ export type ApplicationSpecificPayload =
       substituteEmployeeId?: string;
     }
   | {
-      applicationType: 'welfare_request';
-      welfareType: string;
-      reason: string;
-      eventDate: string;
-      eligibilityStatus?: string;
-      employeeStartDate?: string;
-      seniorityMonths?: number;
-      employeeBankAccountId?: string;
-      includeInPayroll: boolean;
-      isWithholdingRequired: boolean;
-    }
-  | {
       applicationType: 'purchase_request';
       purchaseType: string;
       reason: string;
@@ -288,4 +275,3 @@ export interface ApplicationDetail extends ApplicationBase {
   accountingEntries: AccountingEntry[];
   auditLogs: AuditLog[];
 }
-

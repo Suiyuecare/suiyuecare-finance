@@ -2,12 +2,12 @@
 -- Apply after module_finance_production_schema.sql, rls_hardening.sql, and compliance_and_drafts.sql.
 --
 -- File path format used by index.html:
---   <record_type>/<YYYY>/<MM>/<entity_id>/<department_code>/<record_no>/<file_kind>/<file>
+--   <record_type>/<data_environment>/<YYYY>/<MM>/<entity_id>/<department_code>/<record_no>/<file_kind>/<file>
 -- Examples:
---   draft_requests/2026/05/E1/A1101/draft_123/draft_file/file.png
---   expense_requests/2026/05/E1/A1101/EXP-2026-0001/request_files/file.xls
---   expense_requests/2026/05/E1/A1101/EXP-2026-0001/passbook/file.png
---   invoices/2026/05/E1/A1101/AA-123456/receipt_proof/file.pdf
+--   draft_requests/production/2026/05/E1/A1101/draft_123/draft_file/file.png
+--   expense_requests/production/2026/05/E1/A1101/EXP-2026-0001/request_files/file.xls
+--   expense_requests/production/2026/05/E1/A1101/EXP-2026-0001/passbook/file.png
+--   invoices/production/2026/05/E1/A1101/AA-123456/receipt_proof/file.pdf
 --
 -- Archive rule:
 --   - Year/month are based on the form/request/invoice date, not upload time.
@@ -63,6 +63,7 @@ create table if not exists public.file_attachments (
   archive_path text,
   retention_policy text not null default 'finance_supporting_docs_10y',
   retention_until date,
+  data_environment text not null default 'production',
   uploaded_at timestamptz not null default now()
 );
 
@@ -76,6 +77,7 @@ begin
   alter table public.file_attachments add column if not exists archive_path text;
   alter table public.file_attachments add column if not exists retention_policy text not null default 'finance_supporting_docs_10y';
   alter table public.file_attachments add column if not exists retention_until date;
+  alter table public.file_attachments add column if not exists data_environment text not null default 'production';
 
   if exists (
     select 1
@@ -175,7 +177,7 @@ using (
       and exists (
         select 1
         from public.draft_requests d
-        where d.id in ((storage.foldername(name))[3], (storage.foldername(name))[6])
+        where d.id in ((storage.foldername(name))[3], (storage.foldername(name))[6], (storage.foldername(name))[7])
           and (
             lower(d.owner_email) = lower(auth.jwt() ->> 'email')
             or d.owner_id = public.current_finance_user_id()
@@ -188,7 +190,7 @@ using (
       and exists (
         select 1
         from public.expense_requests r
-        where r.no in ((storage.foldername(name))[3], (storage.foldername(name))[6])
+        where r.no in ((storage.foldername(name))[3], (storage.foldername(name))[6], (storage.foldername(name))[7])
           and public.can_read_expense_request(r)
       )
     )
@@ -197,9 +199,13 @@ using (
       and exists (
         select 1
         from public.invoices i
-        where i.no in ((storage.foldername(name))[3], (storage.foldername(name))[6])
+        where i.no in ((storage.foldername(name))[3], (storage.foldername(name))[6], (storage.foldername(name))[7])
           and public.can_read_invoice(i)
       )
+    )
+    or (
+      (storage.foldername(name))[1] = 'vouchers'
+      and public.is_finance_accounting()
     )
   )
 );

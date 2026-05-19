@@ -86,7 +86,7 @@ create or replace function public.assert_accounting_actor()
 returns void
 language plpgsql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
 begin
@@ -102,7 +102,7 @@ create or replace function public.next_voucher_no(
 )
 returns text
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare
@@ -146,7 +146,7 @@ create or replace function public.finalize_expense_request(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare
@@ -283,7 +283,7 @@ create or replace function public.post_invoice_revenue(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare
@@ -349,7 +349,7 @@ create or replace function public.post_invoice_cash_receipt(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare
@@ -424,6 +424,7 @@ revoke all on function public.post_invoice_revenue(text) from public, anon;
 revoke all on function public.post_invoice_cash_receipt(text,timestamptz,text,text) from public, anon;
 
 grant execute on function public.next_voucher_no(text,date) to authenticated;
+grant execute on function public.assert_accounting_actor() to authenticated;
 grant execute on function public.finalize_expense_request(text,text,int,jsonb,numeric,numeric,text,text,text,jsonb,numeric,text,date,jsonb) to authenticated;
 grant execute on function public.post_invoice_revenue(text) to authenticated;
 grant execute on function public.post_invoice_cash_receipt(text,timestamptz,text,text) to authenticated;

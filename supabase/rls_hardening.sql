@@ -15,7 +15,7 @@ create or replace function public.current_finance_user()
 returns public.finance_users
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select fu
@@ -29,7 +29,7 @@ create or replace function public.current_finance_user_id()
 returns text
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select (public.current_finance_user()).id
@@ -39,7 +39,7 @@ create or replace function public.current_finance_user_name()
 returns text
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select (public.current_finance_user()).name
@@ -49,7 +49,7 @@ create or replace function public.current_finance_role()
 returns text
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select (public.current_finance_user()).role
@@ -59,7 +59,7 @@ create or replace function public.current_finance_department()
 returns text
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select (public.current_finance_user()).department_code
@@ -69,7 +69,7 @@ create or replace function public.current_finance_entity()
 returns text
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select (public.current_finance_user()).entity_id
@@ -79,7 +79,7 @@ create or replace function public.is_finance_admin()
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select coalesce(public.current_finance_role() in ('ceo','admin_director'), false)
@@ -89,7 +89,7 @@ create or replace function public.is_finance_accounting()
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select coalesce(public.current_finance_role() in ('ceo','admin_director','accountant'), false)
@@ -99,7 +99,7 @@ create or replace function public.is_finance_hr()
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select coalesce(public.current_finance_role() in ('ceo','admin_director','hr'), false)
@@ -109,7 +109,7 @@ create or replace function public.is_finance_general_affairs()
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select coalesce(public.current_finance_role() in ('ceo','admin_director','general_affairs'), false)
@@ -119,7 +119,7 @@ create or replace function public.json_steps_include_current_user(steps jsonb)
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select exists (
@@ -134,7 +134,7 @@ create or replace function public.json_steps_role_matches(steps jsonb)
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select exists (
@@ -149,7 +149,7 @@ create or replace function public.json_active_step_matches_current_user(steps js
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   with step_rows as (
@@ -178,7 +178,7 @@ create or replace function public.is_expense_request_owner(p_request public.expe
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select
@@ -193,7 +193,7 @@ create or replace function public.is_invoice_owner(p_invoice public.invoices)
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select
@@ -205,7 +205,7 @@ create or replace function public.can_read_expense_request(p_request public.expe
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select
@@ -227,7 +227,7 @@ create or replace function public.can_update_expense_request(p_request public.ex
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select
@@ -248,7 +248,7 @@ create or replace function public.can_read_invoice(p_invoice public.invoices)
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select
@@ -266,7 +266,7 @@ create or replace function public.can_update_invoice(p_invoice public.invoices)
 returns boolean
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select
@@ -275,25 +275,25 @@ as $$
     or public.is_invoice_owner(p_invoice)
 $$;
 
-revoke all on function public.current_finance_user() from public, anon;
-revoke all on function public.current_finance_user_id() from public, anon;
-revoke all on function public.current_finance_user_name() from public, anon;
-revoke all on function public.current_finance_role() from public, anon;
-revoke all on function public.current_finance_department() from public, anon;
-revoke all on function public.current_finance_entity() from public, anon;
-revoke all on function public.is_finance_admin() from public, anon;
-revoke all on function public.is_finance_accounting() from public, anon;
-revoke all on function public.is_finance_hr() from public, anon;
-revoke all on function public.is_finance_general_affairs() from public, anon;
-revoke all on function public.json_steps_include_current_user(jsonb) from public, anon;
-revoke all on function public.json_steps_role_matches(jsonb) from public, anon;
-revoke all on function public.json_active_step_matches_current_user(jsonb) from public, anon;
-revoke all on function public.is_expense_request_owner(public.expense_requests) from public, anon;
-revoke all on function public.is_invoice_owner(public.invoices) from public, anon;
-revoke all on function public.can_read_expense_request(public.expense_requests) from public, anon;
-revoke all on function public.can_update_expense_request(public.expense_requests) from public, anon;
-revoke all on function public.can_read_invoice(public.invoices) from public, anon;
-revoke all on function public.can_update_invoice(public.invoices) from public, anon;
+revoke all on function public.current_finance_user() from public, anon, authenticated;
+revoke all on function public.current_finance_user_id() from public, anon, authenticated;
+revoke all on function public.current_finance_user_name() from public, anon, authenticated;
+revoke all on function public.current_finance_role() from public, anon, authenticated;
+revoke all on function public.current_finance_department() from public, anon, authenticated;
+revoke all on function public.current_finance_entity() from public, anon, authenticated;
+revoke all on function public.is_finance_admin() from public, anon, authenticated;
+revoke all on function public.is_finance_accounting() from public, anon, authenticated;
+revoke all on function public.is_finance_hr() from public, anon, authenticated;
+revoke all on function public.is_finance_general_affairs() from public, anon, authenticated;
+revoke all on function public.json_steps_include_current_user(jsonb) from public, anon, authenticated;
+revoke all on function public.json_steps_role_matches(jsonb) from public, anon, authenticated;
+revoke all on function public.json_active_step_matches_current_user(jsonb) from public, anon, authenticated;
+revoke all on function public.is_expense_request_owner(public.expense_requests) from public, anon, authenticated;
+revoke all on function public.is_invoice_owner(public.invoices) from public, anon, authenticated;
+revoke all on function public.can_read_expense_request(public.expense_requests) from public, anon, authenticated;
+revoke all on function public.can_update_expense_request(public.expense_requests) from public, anon, authenticated;
+revoke all on function public.can_read_invoice(public.invoices) from public, anon, authenticated;
+revoke all on function public.can_update_invoice(public.invoices) from public, anon, authenticated;
 
 grant execute on function public.current_finance_user() to authenticated;
 grant execute on function public.current_finance_user_id() to authenticated;

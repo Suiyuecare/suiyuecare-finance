@@ -172,7 +172,7 @@ create or replace function public.finalize_expense_request(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare
@@ -313,7 +313,7 @@ create or replace function public.post_invoice_revenue(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare
@@ -381,7 +381,7 @@ create or replace function public.post_invoice_cash_receipt(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare

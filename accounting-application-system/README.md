@@ -16,10 +16,9 @@ This folder contains a ready-to-adapt architecture package for an internal accou
 3. `advance_request`: 預支申請
 4. `petty_cash_request`: 零用金申請
 5. `travel_request`: 差旅申請
-6. `welfare_request`: 福利申請
-7. `purchase_request`: 採購申請
-8. `refund_request`: 退費申請
-9. `hr_expense_request`: 人事費用申請
+6. `purchase_request`: 採購申請
+7. `refund_request`: 退費申請
+8. `hr_expense_request`: 人事費用申請
 
 ## Validation Rules
 
@@ -40,4 +39,3 @@ This folder contains a ready-to-adapt architecture package for an internal accou
 5. Replace placeholder data with API calls.
 6. Connect file upload to Supabase Storage or your internal object storage.
 7. Add role-based access control to approval, payment, HR and accounting actions.
-
