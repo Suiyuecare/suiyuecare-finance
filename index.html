@@ -307,15 +307,19 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
   .entry-row{grid-template-columns:70px minmax(160px,1fr) 86px 86px;min-width:520px}
 }
 @media(max-width:760px){
-  #login-screen{flex-direction:column;overflow-y:auto}
-  .login-left{width:100%;min-height:auto;padding:28px 22px 24px}
-  .login-right{width:100%;padding:24px 20px 30px;align-items:flex-start}
-  .login-mark{grid-template-columns:58px 1fr;gap:12px;margin-bottom:22px}
-  .login-brand{width:58px;height:58px;border-radius:16px}
-  .login-title{font-size:22px}
-  .login-points{gap:6px}
-  .version-note,.manual-download{margin-top:12px}
-  .version-note ul{font-size:10.5px;line-height:1.55}
+  #login-screen{flex-direction:column;overflow-y:auto;background:#fbfaf8}
+  .login-left{width:100%;min-height:auto;padding:24px 20px 18px;overflow:visible;display:block}
+  .login-left>div:last-child{display:none}
+  .login-right{width:100%;padding:22px 20px 30px;align-items:flex-start;border-radius:22px 22px 0 0;margin-top:0;position:relative;z-index:2}
+  .login-mark{grid-template-columns:56px 1fr;gap:12px;margin-bottom:18px}
+  .login-brand{width:56px;height:56px;border-radius:16px}
+  .login-title{font-size:22px;margin-bottom:10px}
+  .login-points{gap:5px;font-size:12px;line-height:1.48}
+  .login-point::before{margin-top:6px}
+  .version-note,.manual-download{margin-top:10px}
+  .version-note{padding:10px 11px}
+  .version-note-head{margin-bottom:6px}
+  .version-note ul{font-size:10.5px;line-height:1.5}
   .module-hub{overflow-y:auto}
   .hub-top{height:auto;min-height:62px;padding:10px 14px;gap:10px;align-items:flex-start;flex-wrap:wrap}
   .hub-top>div:last-child{width:100%;justify-content:space-between;gap:8px}
@@ -341,6 +345,15 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
   .sc{padding:9px 10px}
   .chd{gap:8px}
   .chd>div{width:100%;justify-content:flex-start!important}
+  .login-left{padding:22px 20px 16px}
+  .login-mark{margin-bottom:16px}
+  .login-mark>div:last-child>div:first-child{font-size:17px!important}
+  .login-mark>div:last-child>div:last-child{font-size:10px!important}
+  .login-title{font-size:21px}
+  .login-points{font-size:11.5px;gap:4px}
+  .version-note-title{font-size:11px}
+  .version-note-badge{font-size:9px;padding:2px 7px}
+  .version-note ul{font-size:10px;line-height:1.45}
   .manual-download{padding:10px 11px}
   .hub-manual{height:30px;padding:0 9px;font-size:11px}
   .badge,.ep,.dt{font-size:9px}
