@@ -290,6 +290,10 @@ declare
   inv public.invoices%rowtype;
   post_date date;
   post_amount numeric;
+  output_tax numeric;
+  revenue_amount numeric;
+  revenue_account_code text;
+  revenue_account_name text;
   post_entity text;
   post_dept text;
 begin
@@ -322,12 +326,34 @@ begin
     raise exception 'Invalid invoice revenue amount';
   end if;
 
+  output_tax := least(post_amount, greatest(0, coalesce(inv.tax, 0)));
+  revenue_amount := post_amount - output_tax;
+  revenue_account_code := case
+    when coalesce(inv.department_code, '') in ('B1102','B1103','B1104')
+      or coalesce(inv.description, '') || coalesce(inv.buyer, '') ~ '失智' then '4106'
+    when coalesce(inv.description, '') || coalesce(inv.buyer, '') ~ '補助|政府' then '4104'
+    when coalesce(inv.description, '') || coalesce(inv.buyer, '') ~ '課程|訓練' then '4103'
+    when coalesce(inv.description, '') || coalesce(inv.buyer, '') ~ '活動' then '4102'
+    else '4101'
+  end;
+  revenue_account_name := case revenue_account_code
+    when '4106' then '失智據點服務收入'
+    when '4104' then '政府補助款收入'
+    when '4103' then '課程收入'
+    when '4102' then '活動收入'
+    else '長照收入'
+  end;
+
   insert into public.ledger_entries (
     entry_date, description, entity_id, department_code, debit, credit, account_code, account_name, reference_no, posting_key, source_type, source_id, source_no
   )
-  values
-    (post_date, '發票開立應收 — ' || coalesce(inv.buyer, ''), post_entity, post_dept, post_amount, 0, '1123', '應收帳款', inv.no, 'invoice:' || inv.no || ':revenue:ar', 'invoice', inv.id::text, inv.no),
-    (post_date, '發票收入 — ' || coalesce(inv.buyer, ''), post_entity, post_dept, 0, post_amount, '4100', '已開立發票收入', inv.no, 'invoice:' || inv.no || ':revenue:income', 'invoice', inv.id::text, inv.no)
+  select * from (
+    values
+      (post_date, '發票開立應收 — ' || coalesce(inv.buyer, ''), post_entity, post_dept, post_amount, 0::numeric, '1123', '應收帳款', inv.no, 'invoice:' || inv.no || ':revenue:ar', 'invoice', inv.id::text, inv.no),
+      (post_date, '發票收入 — ' || coalesce(inv.buyer, ''), post_entity, post_dept, 0::numeric, revenue_amount, revenue_account_code, revenue_account_name, inv.no, 'invoice:' || inv.no || ':revenue:income', 'invoice', inv.id::text, inv.no),
+      (post_date, '發票銷項稅額 — ' || coalesce(inv.buyer, ''), post_entity, post_dept, 0::numeric, output_tax, '2134', '銷項稅額', inv.no, 'invoice:' || inv.no || ':revenue:output_tax', 'invoice', inv.id::text, inv.no)
+  ) as rows(entry_date, description, entity_id, department_code, debit, credit, account_code, account_name, reference_no, posting_key, source_type, source_id, source_no)
+  where debit <> 0 or credit <> 0
   on conflict (posting_key) do nothing;
 
   update public.invoices

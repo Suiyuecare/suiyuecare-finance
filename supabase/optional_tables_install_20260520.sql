@@ -1,5 +1,64 @@
--- 備份與還原紀錄
--- 目的：記錄每次備份包下載與還原動作，讓正式上線後可追蹤誰在何時做了備份/還原。
+-- Optional production tables install bundle
+-- Covers tables used by the front-end health checks:
+-- 1. system_setting_versions
+-- 2. backup_restore_events
+
+create table if not exists public.system_setting_versions (
+  id text primary key,
+  version_no text not null,
+  target text not null,
+  summary text,
+  snapshot jsonb not null default '{}'::jsonb,
+  change_request_id text,
+  created_by text,
+  approved_by text,
+  data_environment text not null default 'production' check (data_environment in ('production', 'test')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.system_setting_versions enable row level security;
+alter table public.system_setting_versions force row level security;
+
+create unique index if not exists idx_system_setting_versions_env_no
+  on public.system_setting_versions(data_environment, version_no);
+
+create index if not exists idx_system_setting_versions_env_created
+  on public.system_setting_versions(data_environment, created_at desc);
+
+create index if not exists idx_system_setting_versions_target
+  on public.system_setting_versions(target, created_at desc);
+
+grant select, insert on public.system_setting_versions to authenticated;
+
+drop policy if exists system_setting_versions_read on public.system_setting_versions;
+create policy system_setting_versions_read
+on public.system_setting_versions
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.finance_users fu
+    where lower(fu.email) = lower(auth.jwt() ->> 'email')
+      and fu.active = true
+      and fu.role in ('accountant', 'admin_director', 'ceo')
+  )
+);
+
+drop policy if exists system_setting_versions_insert on public.system_setting_versions;
+create policy system_setting_versions_insert
+on public.system_setting_versions
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.finance_users fu
+    where lower(fu.email) = lower(auth.jwt() ->> 'email')
+      and fu.active = true
+      and fu.role = 'ceo'
+  )
+);
 
 create table if not exists public.backup_restore_events (
   id text primary key,
@@ -78,8 +137,3 @@ with check (
       and fu.role in ('accountant', 'admin_director', 'ceo')
   )
 );
-
--- 說明：
--- 1. 前端備份包保存業務資料 JSON 與附件路徑，不保存 Supabase Auth 密碼。
--- 2. Supabase 專案層級完整備份仍建議用官方 PITR / scheduled backups / pg_dump 管理。
--- 3. 正式還原前，請先在 test data_environment 還原檢查，再進 production。

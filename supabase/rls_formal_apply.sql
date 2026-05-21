@@ -228,6 +228,7 @@ where n.nspname = 'public'
     'ledger_entries',
     'module_audit_logs',
     'draft_requests',
+    'application_accounting_lines',
     'period_closes',
     'compliance_archives',
     'annual_reviews',

@@ -21,6 +21,7 @@ begin
     'bills',
     'notifications',
     'draft_requests',
+    'application_accounting_lines',
     'file_attachments',
     'period_closes',
     'compliance_archives',
