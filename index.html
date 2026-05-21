@@ -3127,7 +3127,8 @@ async function enterByEmail(email){
 }
 function oauthRedirectUrl(){
   if(location.protocol==='file:')return PRODUCTION_APP_URL;
-  return location.origin+location.pathname;
+  if(location.hostname==='localhost'||location.hostname==='127.0.0.1')return location.origin+location.pathname;
+  return PRODUCTION_APP_URL;
 }
 function oauthSetupHint(){
   return 'Google 登入設定請確認：1. Google Cloud OAuth「已授權重新導向 URI」必須包含 '+SUPABASE_URL+'/auth/v1/callback；2. Supabase Auth URL Configuration 的 Site URL / Redirect URLs 必須包含 '+PRODUCTION_APP_URL+'；3. Vercel 正式網址與目前網址一致。';
