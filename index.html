@@ -282,6 +282,12 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
 @media(max-width:900px){
   body{padding:0;min-height:100dvh}
   .app{height:100dvh;border-radius:0;border:none;box-shadow:none;flex-direction:column}
+  #login-screen{flex-direction:column;overflow-y:auto;background:#fbfaf8}
+  .login-left{width:100%;min-height:auto;padding:30px 28px 22px;overflow:visible;display:block}
+  .login-left>div:last-child{display:none}
+  .login-right{width:100%;padding:26px 28px 34px;align-items:flex-start;border-radius:24px 24px 0 0;margin-top:0;position:relative;z-index:2}
+  .login-right>div{max-width:520px!important;margin:0 auto}
+  .login-mark{margin-bottom:22px}
   .sb{width:100%;height:auto;max-height:172px;flex:none;border-right:none;border-bottom:1px solid rgba(255,255,255,.08)}
   .sb-logo{padding:10px 12px}
   .brand-logo{width:34px;height:34px;border-radius:10px}
@@ -310,10 +316,10 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
   .entry-row{grid-template-columns:70px minmax(160px,1fr) 86px 86px;min-width:520px}
 }
 @media(max-width:760px){
-  #login-screen{flex-direction:column;overflow-y:auto;background:#fbfaf8}
   .login-left{width:100%;min-height:auto;padding:24px 20px 18px;overflow:visible;display:block}
   .login-left>div:last-child{display:none}
   .login-right{width:100%;padding:22px 20px 30px;align-items:flex-start;border-radius:22px 22px 0 0;margin-top:0;position:relative;z-index:2}
+  .login-right>div{max-width:320px!important;margin:0 auto}
   .login-mark{grid-template-columns:56px 1fr;gap:12px;margin-bottom:18px}
   .login-brand{width:56px;height:56px;border-radius:16px}
   .login-title{font-size:22px;margin-bottom:10px}
