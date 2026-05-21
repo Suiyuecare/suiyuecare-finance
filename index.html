@@ -149,6 +149,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .login-right{flex:1;display:flex;align-items:center;justify-content:center;background:var(--cream);padding:36px}
 .google-btn{width:100%;padding:10px;border-radius:9px;border:1px solid #e0d0b8;background:#fff;font-size:13px;font-weight:500;color:#334155;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;margin-bottom:14px}
 .google-btn:hover{border-color:var(--br);background:var(--brxxl)}
+.oauth-webview-warning{display:none;background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:9px 10px;margin:0 0 12px;color:#7c3f00;font-size:11px;line-height:1.55}
+.oauth-webview-warning strong{display:block;color:#5c3800;font-size:12px;margin-bottom:3px}
+.oauth-webview-warning button{margin-top:7px;border:1px solid #dfc9b1;background:#fff;border-radius:7px;padding:5px 8px;color:#7c3f00;font-size:11px;font-weight:750;cursor:pointer}
 .divider{display:flex;align-items:center;gap:9px;margin:10px 0;color:#94a3b8;font-size:11px}
 .divider::before,.divider::after{content:'';flex:1;height:1px;background:#e0d0b8}
 
@@ -1024,6 +1027,11 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
         <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
         使用 Google 帳號快速登入
       </button>
+      <div class="oauth-webview-warning" id="oauth-webview-warning">
+        <strong>手機 App 內建瀏覽器無法使用 Google 登入</strong>
+        Google 會封鎖 LINE、Facebook、Instagram 等 App 內建瀏覽器的 OAuth 登入。請用 Safari 或 Chrome 開啟正式網址後再登入。
+        <button type="button" onclick="copyOfficialUrl()">複製正式網址</button>
+      </div>
       <div class="divider">或使用帳號密碼</div>
       <div class="fg"><label class="fl">電子郵件</label><input type="email" id="login-email" placeholder="your@suiyuecare.com" value="6@suiyuecare.com"></div>
       <div class="fg"><label class="fl">密碼</label><input type="password" id="login-pw" placeholder="請輸入密碼" value=""></div>
@@ -3133,6 +3141,36 @@ function oauthRedirectUrl(){
 function oauthSetupHint(){
   return 'Google 登入設定請確認：1. Google Cloud OAuth「已授權重新導向 URI」必須包含 '+SUPABASE_URL+'/auth/v1/callback；2. Supabase Auth URL Configuration 的 Site URL / Redirect URLs 必須包含 '+PRODUCTION_APP_URL+'；3. Vercel 正式網址與目前網址一致。';
 }
+function isOAuthBlockedUserAgent(){
+  var ua=navigator.userAgent||'';
+  var inApp=/(Line|FBAN|FBAV|FB_IAB|Instagram|MicroMessenger|Twitter|LinkedInApp|Pinterest|TikTok|Bytedance|Snapchat|KAKAOTALK|NAVER|wv|WebView)/i.test(ua);
+  var ios=/iPad|iPhone|iPod/i.test(ua);
+  var isKnownBrowser=/(Safari|CriOS|FxiOS|EdgiOS|OPiOS)/i.test(ua);
+  var isSafari=/Safari/i.test(ua)&&!/CriOS|FxiOS|EdgiOS|OPiOS|Line|FBAN|FBAV|Instagram|MicroMessenger/i.test(ua);
+  return inApp||(ios&&!isSafari&&!isKnownBrowser);
+}
+function oauthWebviewMessage(){
+  return '目前是在手機 App 內建瀏覽器中開啟。Google 會封鎖這種 OAuth 登入方式（403 disallowed_useragent）。請點右上角或右下角選單，選「在 Safari 開啟」或「在 Chrome 開啟」，網址請使用：'+PRODUCTION_APP_URL;
+}
+window.copyOfficialUrl=function(){
+  var url=PRODUCTION_APP_URL;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){alert('已複製正式網址：'+url);}).catch(function(){prompt('請複製正式網址',url);});
+  }else{
+    prompt('請複製正式網址',url);
+  }
+};
+function updateOAuthWebviewNotice(){
+  var box=el('oauth-webview-warning'),btn=document.querySelector('.google-btn');
+  if(!box||!btn)return;
+  if(isOAuthBlockedUserAgent()){
+    box.style.display='block';
+    btn.title='請先用 Safari 或 Chrome 開啟正式網址後再使用 Google 登入';
+  }else{
+    box.style.display='none';
+    btn.title='';
+  }
+}
 window.quickLogin=function(role){
   if(!allowDemoLogin()){alert('正式環境已停用測試快捷登入，請使用 Google 或 Supabase Auth 帳號登入。');return;}
   var map={employee:USERS[0],section_chief:USERS[1],dept_manager:USERS[2],ceo:USERS[3],admin_director:USERS[4],accountant:USERS[5],hr:USERS[6],general_affairs:USERS[7]};
@@ -3142,6 +3180,11 @@ window.quickLogin=function(role){
 };
 window.googleLogin=async function(){
   var envSel=el('login-data-env');if(envSel)setDataEnvironment(envSel.value);
+  if(isOAuthBlockedUserAgent()){
+    updateOAuthWebviewNotice();
+    alert(oauthWebviewMessage());
+    return;
+  }
   var client=getSb();
   if(!client){
     alert('Google 登入前，請先填入 Supabase anon public key，並在 Supabase 後台啟用 Google Provider。Google client secret 不可以放在 HTML。'+oauthSetupHint());
@@ -9117,6 +9160,7 @@ window.buildPL = buildPL;
 window.buildCF = buildCF;
 window.renderLedger = renderLedger;
 setDemoLoginVisibility();
+updateOAuthWebviewNotice();
 handleOAuthReturn();
 
 })();
