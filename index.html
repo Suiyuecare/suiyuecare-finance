@@ -1118,7 +1118,7 @@ var DEPTS=[
   {c:'A1000',n:'歲悅股份有限公司',eid:'E1',lv:0},
   {c:'A1100',n:'行政部',eid:'E1',lv:1},{c:'A1101',n:'會計課',eid:'E1',lv:2},{c:'A1102',n:'人資課',eid:'E1',lv:2},{c:'A1103',n:'行政總務課',eid:'E1',lv:2},
   {c:'A1200',n:'教學品管部',eid:'E1',lv:1},{c:'A1201',n:'教學課',eid:'E1',lv:2},{c:'A1202',n:'品管課',eid:'E1',lv:2},
-  {c:'B1000',n:'歲悅居家長照機構',eid:'E5',lv:0},
+  {c:'B1000',n:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',eid:'E5',lv:0},
   {c:'B1100',n:'長照部',eid:'E5',lv:1},{c:'B1101',n:'居家照顧課',eid:'E5',lv:2},{c:'B1102',n:'士林失智據點課',eid:'E5',lv:2,shared:true},{c:'B1103',n:'大同失智據點課',eid:'E5',lv:2,shared:true},{c:'B1104',n:'信義失智據點課',eid:'E5',lv:2,shared:true},
   {c:'B1300',n:'移工培訓部',eid:'E5',lv:1},{c:'B1301',n:'數位學習課',eid:'E5',lv:2},{c:'B1302',n:'高雄到宅訓練課',eid:'E5',lv:2},{c:'B1303',n:'台北到宅訓練課',eid:'E5',lv:2},{c:'B1304',n:'台北集中訓練課',eid:'E5',lv:2},
   {c:'C1000',n:'樂齡歲悅股份有限公司',eid:'E2',lv:0},{c:'C1100',n:'萬華日照中心',eid:'E2',lv:1},
@@ -1126,12 +1126,12 @@ var DEPTS=[
   {c:'E1000',n:'大齡好好投資有限公司',eid:'E4',lv:1},
 ];
 var ENTS=[
-  {id:'E1',s:'歲悅股份',full:'歲悅股份有限公司',taxId:'60792234',address:'110臺北市信義區基隆路一段364巷6號1樓',color:'#ea880c'},
+  {id:'E1',s:'歲悅股份有限公司',full:'歲悅股份有限公司',taxId:'60792234',address:'110臺北市信義區基隆路一段364巷6號1樓',color:'#ea880c'},
   {id:'E2',s:'樂齡歲悅股份有限公司',full:'樂齡歲悅股份有限公司',taxId:'60541552',address:'110臺北市信義區基隆路一段364巷6號1樓',color:'#2a9040'},
   {id:'E3',s:'移站式股份有限公司',full:'移站式股份有限公司',taxId:'',color:'#1a4080'},
   {id:'E4',s:'大齡好好投資有限公司',full:'大齡好好投資有限公司',taxId:'',color:'#4a2890'},
-  {id:'E5',s:'歲悅居家長照機構',full:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',taxId:'00602175',address:'111臺北市士林區社子街63巷21弄2號1樓',color:'#0a5040'},
-  {id:'E6',s:'歲悅萬華長照',full:'樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構',taxId:'00667423',address:'108臺北市萬華區康定路43號2樓',color:'#8a1010'},
+  {id:'E5',s:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',full:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',taxId:'00602175',address:'111臺北市士林區社子街63巷21弄2號1樓',color:'#0a5040'},
+  {id:'E6',s:'樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構',full:'樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構',taxId:'00667423',address:'108臺北市萬華區康定路43號2樓',color:'#8a1010'},
 ];
 var DEMO_PASSWORD='5j04284fu06';
 var USERS=[
@@ -8064,7 +8064,7 @@ window.exportVoucherCSV=function(){
 
 // ══ 科目 ══
 var accSide='';
-window.renderAccounts=function renderAccounts(){var series=[['A系 — 歲悅股份',DEPTS.filter(function(d){return d.c.charAt(0)==='A';})],['B系 — 歲悅居家長照',DEPTS.filter(function(d){return d.c.charAt(0)==='B';})],['C / D / E 系',DEPTS.filter(function(d){return'CDE'.indexOf(d.c.charAt(0))>-1;})]];el('dept-arch').innerHTML=series.map(function(s){return'<div style="background:var(--warm);border-radius:8px;padding:9px;border:1px solid #f0dfc8"><div style="font-size:11px;font-weight:500;color:var(--brtxt);margin-bottom:6px">'+s[0]+'</div>'+s[1].map(function(d){return'<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;padding-left:'+(d.lv*11)+'px"><span class="dt" style="flex-shrink:0">'+d.c+'</span><span style="font-size:11px;color:#334155">'+d.n+'</span></div>';}).join('')+'</div>';}).join('');filterAccs();}
+window.renderAccounts=function renderAccounts(){var series=[['A系 — 歲悅股份有限公司',DEPTS.filter(function(d){return d.c.charAt(0)==='A';})],['B系 — 歲悅股份有限公司附設臺北市私立歲悅居家長照機構',DEPTS.filter(function(d){return d.c.charAt(0)==='B';})],['C / D / E 系',DEPTS.filter(function(d){return'CDE'.indexOf(d.c.charAt(0))>-1;})]];el('dept-arch').innerHTML=series.map(function(s){return'<div style="background:var(--warm);border-radius:8px;padding:9px;border:1px solid #f0dfc8"><div style="font-size:11px;font-weight:500;color:var(--brtxt);margin-bottom:6px">'+s[0]+'</div>'+s[1].map(function(d){return'<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;padding-left:'+(d.lv*11)+'px"><span class="dt" style="flex-shrink:0">'+d.c+'</span><span style="font-size:11px;color:#334155">'+d.n+'</span></div>';}).join('')+'</div>';}).join('');filterAccs();}
 function accountDeptScopeLabel(scope){
   if(!scope||scope==='all')return {bg:'#f0ece6',c:'#6a5840',l:'全部'};
   var dC={'A系':{bg:'#e0eeff',c:'#1a4080',l:'A系'},'B系':{bg:'#e6f4d8',c:'#1a5010',l:'B系'},'C系':{bg:'#ede8ff',c:'#4a2890',l:'C系'}};
