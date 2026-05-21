@@ -8,3 +8,4 @@ supabase/.temp/
 *client_secret*.json
 *.pem
 __pycache__/
+.vercel
