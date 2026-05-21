@@ -485,7 +485,18 @@ html,body{overflow-x:hidden}
   html,body{width:100%;max-width:100%;overflow-x:hidden!important}
   .app{width:100%!important;max-width:100%!important;overflow:hidden!important;flex-direction:column!important}
   .main,.content,.pg{max-width:100%;overflow-x:hidden!important}
-  .sb{width:100%!important;flex:0 0 auto!important;border-right:none!important}
+  .app-enter-ready .sb{animation:none!important;transform:none!important}
+  .sb{position:fixed!important;left:0!important;top:0!important;z-index:990!important;width:0!important;height:100dvh!important;max-height:none!important;min-height:100dvh!important;flex:0 0 0!important;border:none!important;overflow:visible!important;background:transparent!important;transform:none!important;pointer-events:none!important}
+  .sb-logo,.sb-bot{display:none!important}
+  nav{
+    display:flex!important;position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;z-index:999!important;
+    width:100vw!important;height:64px!important;max-height:64px!important;padding:7px 8px calc(7px + env(safe-area-inset-bottom))!important;
+    overflow-x:auto!important;overflow-y:hidden!important;background:rgba(23,27,36,.98)!important;border-top:1px solid rgba(255,255,255,.08)!important;
+    border-bottom:none!important;box-shadow:0 -12px 32px rgba(25,16,8,.18)!important;backdrop-filter:blur(14px)!important;scroll-snap-type:x mandatory!important
+  }
+  nav{pointer-events:auto!important}
+  nav .ns{display:none!important}
+  nav .ni{width:auto!important;min-width:72px!important;min-height:48px!important;flex:0 0 auto!important;display:flex!important;justify-content:center!important;align-items:center!important;flex-direction:column!important;gap:3px!important;margin:0!important;padding:5px 8px!important;border-radius:12px!important;font-size:10px!important;text-align:center!important;line-height:1.1!important;scroll-snap-align:start!important}
   .card,.sc,.nr-info-panel,.upload-zone,.flow-panel,.approval-card{max-width:100%;overflow:hidden}
   .content div[style*="overflow-x:auto"],
   .content div[style*="overflow:auto"]{max-width:100%!important}
