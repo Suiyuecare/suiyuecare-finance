@@ -453,6 +453,49 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
   .modal,.modal-lg{width:100vw!important;max-height:88dvh;border-radius:18px 18px 0 0;border-left:none;border-right:none;border-bottom:none}
   #submit-confirm-body .g2{grid-template-columns:1fr!important}
 }
+/* Final responsive shell rules: tablet keeps the left menu; phone uses a bottom menu without page-wide horizontal scroll. */
+html,body{overflow-x:hidden}
+@media(min-width:761px) and (max-width:900px){
+  .app{flex-direction:row!important;overflow:hidden!important}
+  #login-screen{flex-direction:column!important}
+  .sb{
+    width:196px!important;height:100%!important;max-height:none!important;flex:0 0 196px!important;
+    border-right:1px solid rgba(255,255,255,.06)!important;border-bottom:none!important
+  }
+  .sb-logo{padding:12px 11px!important}
+  nav{
+    display:block!important;position:static!important;height:auto!important;padding:8px!important;
+    overflow-x:hidden!important;overflow-y:auto!important;scroll-snap-type:none!important;
+    background:transparent!important;border-top:none!important;box-shadow:none!important;backdrop-filter:none!important
+  }
+  .ns{display:block!important}
+  .ni{
+    width:100%!important;min-width:0!important;min-height:0!important;display:flex!important;flex-direction:row!important;
+    justify-content:flex-start!important;gap:8px!important;margin:0 0 3px!important;padding:8px!important;
+    border-radius:9px!important;text-align:left!important;font-size:11px!important;line-height:1.2!important;scroll-snap-align:none!important
+  }
+  .ni .dot{display:block!important}
+  .ni .cnt{position:static!important;transform:none!important;margin-left:auto!important}
+  .sb-bot{display:flex!important}
+  .main{min-width:0!important;overflow:hidden!important}
+  .content{overflow-x:hidden!important}
+  .card{max-width:100%;overflow:hidden}
+}
+@media(max-width:760px){
+  html,body{width:100%;max-width:100%;overflow-x:hidden!important}
+  .app{width:100%!important;max-width:100%!important;overflow:hidden!important;flex-direction:column!important}
+  .main,.content,.pg{max-width:100%;overflow-x:hidden!important}
+  .sb{width:100%!important;flex:0 0 auto!important;border-right:none!important}
+  .card,.sc,.nr-info-panel,.upload-zone,.flow-panel,.approval-card{max-width:100%;overflow:hidden}
+  .content div[style*="overflow-x:auto"],
+  .content div[style*="overflow:auto"]{max-width:100%!important}
+  .content table{width:100%!important;min-width:0!important;table-layout:auto!important}
+  .content th,.content td{white-space:normal!important;word-break:break-word}
+  .sheet-full-scroll,.hr-sheet-scroll{max-width:100%!important;overflow-x:hidden!important}
+  .sheet-full-scroll table,.hr-sheet-scroll table{width:100%!important;min-width:0!important}
+  .entry-row{min-width:0!important;grid-template-columns:58px minmax(0,1fr) 64px 64px!important}
+  .type-title,.type-desc,.cht,#page-title{word-break:break-word}
+}
 </style>
 </head>
 <body>
