@@ -1,6 +1,7 @@
--- Petty cash initial funding is not an expense reimbursement and should not
--- create a formal voucher / ledger entry for balance sheet or P&L reporting.
--- It is shown only as a cash-flow event when the CEO disbursement step passes.
+-- Standard petty cash accounting.
+-- Initial funding: Dr 1111 petty cash / Cr 1112 bank, no P&L.
+-- Reimbursement: Dr expense / Cr 1111 petty cash, then Dr 1111 / Cr 1112
+-- to replenish the approved amount. This prevents duplicate expense booking.
 
 begin;
 
@@ -11,7 +12,7 @@ alter table public.expense_requests
   check (
     type <> 'petty_cash_request'
     or coalesce(petty_mode, 'general') <> 'initial'
-    or coalesce(debit_account, '') in ('CF01','1191','')
+    or coalesce(debit_account, '') in ('1111','')
   )
   not valid;
 
@@ -25,22 +26,22 @@ begin
     new.petty_mode := coalesce(nullif(new.petty_mode, ''), 'general');
 
     if new.petty_mode = 'initial' then
-      new.debit_account := 'CF01';
-      new.debit_account_name := '零用金初次撥款-僅現金流控管';
+      new.debit_account := '1111';
+      new.debit_account_name := '零用金';
+      new.credit_account := '1112';
+      new.credit_account_name := '銀行存款';
       new.actual_amount := null;
-      new.voucher_id := null;
-      new.ledger_posted_at := null;
       new.form_payload := coalesce(new.form_payload, '{}'::jsonb)
         || jsonb_build_object(
-          'pettyAccountingTreatment', 'cash_flow_only_no_voucher_no_bs_pl',
+          'pettyAccountingTreatment', 'initial_fund_asset_no_expense',
           'pettyExpenseRecognized', false,
-          'voucherSuppressed', true,
-          'voucherSuppressedReason', '零用金初次申請為公司墊付備用金，不產生正式傳票與分類帳分錄，只保留執行長放款現金流事件。'
+          'pettyAccountingRule', 'Dr 1111 零用金 / Cr 1112 銀行存款；不進損益表'
         );
     else
       new.form_payload := coalesce(new.form_payload, '{}'::jsonb)
         || jsonb_build_object(
-          'pettyAccountingTreatment', 'reimbursement_expense_once'
+          'pettyAccountingTreatment', 'reimbursement_expense_then_replenish',
+          'pettyAccountingRule', '依憑據 Dr 費用 / Cr 1111 零用金，再補足 Dr 1111 / Cr 1112，費用只認列一次'
         );
     end if;
   end if;
