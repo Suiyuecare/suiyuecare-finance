@@ -1,5 +1,5 @@
 -- Petty cash must not be accidentally recognized as a normal expense twice.
--- Initial petty cash funding is an asset / temporary-payment control event.
+-- Initial petty cash funding is a company advance / cash-flow-only control event.
 -- General petty cash reimbursement is recognized as expense once, at final accounting.
 
 do $$
@@ -25,7 +25,7 @@ begin
       check (
         type <> 'petty_cash_request'
         or coalesce(petty_mode, 'general') <> 'initial'
-        or left(coalesce(debit_account, ''), 1) = '1'
+        or coalesce(debit_account, '') in ('CF01','1191','')
       )
       not valid;
   end if;
@@ -41,13 +41,17 @@ begin
     new.petty_mode := coalesce(nullif(new.petty_mode, ''), 'general');
 
     if new.petty_mode = 'initial' then
-      new.debit_account := '1191';
-      new.debit_account_name := '暫付款-零用金初次申請';
+      new.debit_account := 'CF01';
+      new.debit_account_name := '零用金初次撥款-僅現金流控管';
       new.actual_amount := null;
+      new.voucher_id := null;
+      new.ledger_posted_at := null;
       new.form_payload := coalesce(new.form_payload, '{}'::jsonb)
         || jsonb_build_object(
-          'pettyAccountingTreatment', 'initial_fund_non_expense',
-          'pettyExpenseRecognized', false
+          'pettyAccountingTreatment', 'cash_flow_only_no_voucher_no_bs_pl',
+          'pettyExpenseRecognized', false,
+          'voucherSuppressed', true,
+          'voucherSuppressedReason', '零用金初次申請為公司墊付備用金，不產生正式傳票與分類帳分錄，只保留執行長放款現金流事件。'
         );
     else
       new.form_payload := coalesce(new.form_payload, '{}'::jsonb)

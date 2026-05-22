@@ -1304,7 +1304,7 @@ var AMAP={
   'petty_cash_request_invoice_bank':{dr:'6030',drN:'零用金支出-發票',cr:'1112',crN:'銀行存款'},
   'petty_cash_request_receipt_petty':{dr:'6031',drN:'零用金支出-收據',cr:'1111',crN:'零用金'},
   'petty_cash_request_invoice_petty':{dr:'6030',drN:'零用金支出-發票',cr:'1111',crN:'零用金'},
-  'petty_cash_request_form_bank':{dr:'1191',drN:'暫付款-零用金初次申請',cr:'1112',crN:'銀行存款'},
+  'petty_cash_request_form_bank':{dr:'CF01',drN:'零用金初次撥款-僅現金流控管',cr:'1112',crN:'銀行存款'},
   'travel_request_invoice_bank':{dr:'6040',drN:'差旅費-發票',cr:'1112',crN:'銀行存款'},
   'travel_request_receipt_bank':{dr:'6041',drN:'差旅費-收據',cr:'1112',crN:'銀行存款'},
   'travel_request_none_bank':{dr:'6041',drN:'差旅費-待補憑證',cr:'1112',crN:'銀行存款'},
@@ -4488,7 +4488,7 @@ function renderLazyExpensePage(){
   var payOpts=NR_PAY.map(function(p){return'<option value="'+p.id+'" '+(S.nrPay===p.id?'selected':'')+'>'+p.l+'</option>';}).join('');
   var pettyMode=(S.pettyMode||'general');
   var pettyModeHtml=S.nrType==='petty_cash_request'
-    ?'<div class="fg"><label class="fl">零用金申請類型 *</label><select id="petty-mode" onchange="pettyModeChanged(this.value)"><option value="initial" '+(pettyMode==='initial'?'selected':'')+'>初次申請</option><option value="general" '+(pettyMode!=='initial'?'selected':'')+'>一般申請</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">初次申請只填申請金額，不需憑據；會計科目列為 1191 暫付款，現金流量表顯示銀行流出。一般申請則補足上月不足，憑據正常認列支出。</div></div>'
+    ?'<div class="fg"><label class="fl">零用金申請類型 *</label><select id="petty-mode" onchange="pettyModeChanged(this.value)"><option value="initial" '+(pettyMode==='initial'?'selected':'')+'>初次申請</option><option value="general" '+(pettyMode!=='initial'?'selected':'')+'>一般申請</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">初次申請只填申請金額，不需憑據；此筆視為公司墊付備用金，只在執行長放款後列現金流，不進資產負債表與損益表。一般申請則補足上月不足，憑據正常認列支出。</div></div>'
     :'';
   var advanceTemplateHtml='';
   c.innerHTML=
@@ -5930,8 +5930,8 @@ function normalizePettyAccounting(r){
     pettyAccountingTreatment:pettyIsInitial(r)?'initial_fund_non_expense':'reimbursement_expense_once'
   });
   if(pettyIsInitial(r)){
-    r.dr='1191';
-    r.drN='暫付款-零用金初次申請';
+    r.dr='CF01';
+    r.drN='零用金初次撥款-僅現金流控管';
     r.cr='1112';
     r.crN='銀行存款';
     r.actualAmt=0;
@@ -5946,7 +5946,7 @@ function pettyAccountingHtml(r){
   return'<div style="margin-top:8px;background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:8px;font-size:11px;color:#6a5840;line-height:1.6">'
     +'<strong style="color:#334155">零用金入帳規則</strong><br>'
     +(initial
-      ?'初次申請只建立零用金/暫付款控管：Dr 1191 暫付款-零用金初次申請 / Cr 1112 銀行存款。這筆不會進損益表，避免被當成一般費用。'
+      ?'初次申請是公司先墊付零用金備用額度，不要求憑據報銷，也不切正式費用或資產負債表傳票；執行長放款後只在現金流量表列示銀行流出。'
       :'一般申請依本次憑據只認列一次費用；現金流量表反映補款，損益表只吃最後核准的零用金支出分錄。')
     +'</div>';
 }
@@ -6297,8 +6297,8 @@ window.submitNR=async function(){
     S.pettyMode=((el('petty-mode')||{}).value)||S.pettyMode||'general';
     if(S.pettyMode==='initial'){
       S.nrRec='form';
-      if(!desc)desc='零用金初次申請，列入暫付款掛帳，待後續核銷。';
-      desc=(desc||'零用金初次申請')+'\n\n會計處理：初次申請只列 1191 暫付款/零用金控管，不列一般費用，避免重複認列。';
+      if(!desc)desc='零用金初次申請，作為公司墊付備用金額度。';
+      desc=(desc||'零用金初次申請')+'\n\n會計處理：初次申請不需憑據報銷，不切正式費用或資產負債表傳票；執行長放款後只在現金流量表列銀行流出。';
     }else if(S.nrRec==='form'){
       S.nrRec='receipt';
     }
@@ -6711,8 +6711,6 @@ window.doConfirmVoucher=async function(rid){
   if(!purchaseReady.ok){alert(purchaseReady.msg);return;}
   var pettyReady=pettyReadyForFinalAccounting(r);
   if(!pettyReady.ok){alert(pettyReady.msg);return;}
-  // 正式流水號由 Supabase voucher_serials 產生；本機模式用現有 VOUCHERS fallback。
-  var vid=await nextVoucherNo('V',todayIso());
   var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
   if(hasVisibleAccountingInputs('appr-acct-line'))collectAccountingLinesFromDom(r,'appr-acct-line');
   else if(hasVisibleAccountingInputs('detail-acct-line'))collectAccountingLinesFromDom(r,'detail-acct-line');
@@ -6752,6 +6750,32 @@ window.doConfirmVoucher=async function(rid){
     buildAll();openDetail(rid);return;
   }
   var postedTs=new Date().toISOString();
+  if(pettyIsInitial(r)){
+    normalizePettyAccounting(r);
+    var pettyAmount=num(r.amt||r.amount);
+    r.actualAmt=0;
+    r.status='completed';
+    r.step=8;
+    r.postingLockedAt=postedTs;
+    r.formPayload=Object.assign({},r.formPayload||{},{
+      pettyCashAmount:pettyAmount,
+      pettyExpenseRecognized:false,
+      pettyFinalizedAt:postedTs,
+      pettyAccountingStage:'initial_fund_cash_flow_only',
+      pettyAccountingTreatment:'cash_flow_only_no_voucher_no_bs_pl',
+      ledgerPostedAt:'',
+      voucherSuppressed:true,
+      voucherSuppressedReason:'零用金初次申請為公司墊付備用金，不產生正式傳票與分類帳分錄，只保留執行長放款現金流事件。'
+    });
+    var pettyNotif={id:'n_'+Date.now(),type:'system',title:'零用金初次申請已完成',body:r.no+' 已完成簽核；此筆為公司墊付備用金，只列現金流，不切正式傳票，不進資產負債表或損益表。',time:'剛才',read:false,dataEnv:activeDataEnvironment()};
+    NOTIFS.unshift(pettyNotif);
+    await dbUpdate('expense_requests',rid,{amount:r.amt,estimated_amount:r.estimatedAmt||null,actual_amount:0,status:r.status,step:r.step,steps:r.steps,voucher_id:null,debit_account:r.dr,debit_account_name:r.drN,credit_account:r.cr,credit_account_name:r.crN,form_payload:r.formPayload||{},ledger_posted_at:null,posting_locked_at:r.postingLockedAt});
+    await dbInsert('notifications',notifDbRow(pettyNotif));
+    delete POSTING_IN_FLIGHT[lockKey];
+    buildAll();openDetail(rid);return;
+  }
+  // 正式流水號由 Supabase voucher_serials 產生；本機模式用現有 VOUCHERS fallback。
+  var vid=await nextVoucherNo('V',todayIso());
   r.voucherId=vid;r.status='completed';r.step=8;r.ledgerPostedAt=postedTs;r.postingLockedAt=postedTs;
   var entryAmt=purchaseFinalAmount(r);
   if(r.type==='purchase_request'){
