@@ -100,6 +100,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .flow-label{font-size:12px;font-weight:500;color:#334155}
 .flow-sub{font-size:11px;color:#94a3b8;margin-top:1px}
 .flow-badge{display:inline-flex;padding:1px 6px;border-radius:99px;font-size:10px;font-weight:500;background:var(--brxxl);color:var(--brtxt);border:1px solid var(--brxl);margin-top:2px}
+.step-feedback{display:inline-block;margin-top:5px;padding:5px 8px;border:1.5px solid #d97706;border-radius:6px;background:#fff;color:#1f2937!important;font-size:11px;font-weight:650;line-height:1.55;box-shadow:0 1px 0 rgba(217,119,6,.08)}
 /* 傳票 */
 .voucher-card{border:1px solid #e0d0b8;border-radius:10px;background:#fff;padding:13px;margin-bottom:9px;cursor:pointer;transition:border-color .15s}
 .voucher-card:hover{border-color:var(--br)}
@@ -2149,6 +2150,11 @@ function stepAttachmentHtml(files){
     var ext=(f.t||fileExt(f.n)).toUpperCase();
     return'<button type="button" onclick="event.stopPropagation();downloadStepAttachment('+key+')" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#fff;border:1px solid #e0d0b8;border-radius:5px;padding:2px 6px;font-size:10px;color:#334155;cursor:pointer"><span style="color:var(--brtxt);font-weight:650">'+ext+'</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(f.n||'附件')+'</span><span style="color:#7c3f00;font-weight:650">下載</span></button>';
   }).join('')+'</div>';
+}
+function stepFeedbackHtml(comment){
+  comment=String(comment||'').trim();
+  if(!comment)return'';
+  return'<div class="step-feedback">'+escAttr(comment)+'</div>';
 }
 async function readStepFiles(inputId){
   var inp=el(inputId);
@@ -7165,7 +7171,7 @@ function showApprD(r){
     var done=s.a==='approved';var rej=s.a&&!done;
     var bg=done?'#eaf8d8':rej?'#fde8e8':'var(--warm)';
     var db=done?'#2a9040':rej?'#c02020':i===r.steps.filter(function(x){return x.a;}).length?'var(--br)':'#e0d0b8';
-    return'<div style="display:flex;gap:7px;padding:6px;border-radius:6px;background:'+bg+';margin-bottom:4px"><div style="width:18px;height:18px;border-radius:50%;background:'+db+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0">'+(done?'OK':rej?'NO':i+1)+'</div><div style="font-size:11px;font-weight:500;color:#334155;flex:1">'+stepTitle(s)+(s.n?' — '+s.n:'')+(s.t?' <span style="font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+'<div style="font-size:10px;font-weight:400;color:#94a3b8;margin-top:1px;line-height:1.45">'+stepPurpose(s)+'</div>'+stepAttachmentHtml(s.files)+(s.c?'<span style="font-size:10px;color:#94a3b8">'+s.c+'</span>':'')+'</div></div>';
+    return'<div style="display:flex;gap:7px;padding:6px;border-radius:6px;background:'+bg+';margin-bottom:4px"><div style="width:18px;height:18px;border-radius:50%;background:'+db+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0">'+(done?'OK':rej?'NO':i+1)+'</div><div style="font-size:11px;font-weight:500;color:#334155;flex:1">'+stepTitle(s)+(s.n?' — '+s.n:'')+(s.t?' <span style="font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+'<div style="font-size:10px;font-weight:400;color:#94a3b8;margin-top:1px;line-height:1.45">'+stepPurpose(s)+'</div>'+stepAttachmentHtml(s.files)+stepFeedbackHtml(s.c)+'</div></div>';
   }).join('');
   var actH='';
   var fieldsH=approvalActionFields('appr-c','appr-files','appr-add-user');
@@ -7206,7 +7212,7 @@ function showInvApprD(i){
     var done=s.a==='approved';var rej=s.a&&!done;
     var bg=done?'#eaf8d8':rej?'#fde8e8':'var(--warm)';
     var db=done?'#2a9040':rej?'#c02020':idx===(i.steps||[]).filter(function(x){return x.a;}).length?'var(--br)':'#e0d0b8';
-    return'<div style="display:flex;gap:7px;padding:6px;border-radius:6px;background:'+bg+';margin-bottom:4px"><div style="width:18px;height:18px;border-radius:50%;background:'+db+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0">'+(done?'OK':rej?'NO':idx+1)+'</div><div style="font-size:11px;font-weight:500;color:#334155;flex:1">'+stepTitle(s)+(s.n?' — '+s.n:'')+(s.t?' <span style="font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+'<div style="font-size:10px;font-weight:400;color:#94a3b8;margin-top:1px;line-height:1.45">'+stepPurpose(s)+'</div>'+stepAttachmentHtml(s.files)+(s.c?'<span style="font-size:10px;color:#94a3b8">'+s.c+'</span>':'')+'</div></div>';
+    return'<div style="display:flex;gap:7px;padding:6px;border-radius:6px;background:'+bg+';margin-bottom:4px"><div style="width:18px;height:18px;border-radius:50%;background:'+db+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0">'+(done?'OK':rej?'NO':idx+1)+'</div><div style="font-size:11px;font-weight:500;color:#334155;flex:1">'+stepTitle(s)+(s.n?' — '+s.n:'')+(s.t?' <span style="font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+'<div style="font-size:10px;font-weight:400;color:#94a3b8;margin-top:1px;line-height:1.45">'+stepPurpose(s)+'</div>'+stepAttachmentHtml(s.files)+stepFeedbackHtml(s.c)+'</div></div>';
   }).join('');
   var invFieldsH=approvalActionFields('inv-appr-c','inv-appr-files','inv-appr-add-user');
   var cur=activeStep(i);
