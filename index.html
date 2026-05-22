@@ -1846,12 +1846,17 @@ function fileToAttachment(file){
   });
 }
 function safeStorageName(name){
-  var ext=fileExt(name);
-  var base=String(name||'file').replace(/\.[^.]+$/,'').replace(/[^\w\u4e00-\u9fa5.-]+/g,'_').slice(0,48)||'file';
+  var ext=fileExt(name).replace(/[^a-z0-9]/gi,'').toLowerCase()||'bin';
+  var raw=String(name||'file').replace(/\.[^.]+$/,'');
+  var base=raw.normalize?raw.normalize('NFKD'):raw;
+  base=base.replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,48)||'file';
   return base+'.'+ext;
 }
 function safeStorageSegment(v,fallback){
-  return String(v||fallback||'unknown').replace(/[^\w\u4e00-\u9fa5.-]+/g,'_').slice(0,64)||String(fallback||'unknown');
+  var raw=String(v||fallback||'unknown');
+  var base=raw.normalize?raw.normalize('NFKD'):raw;
+  base=base.replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,64);
+  return base||String(fallback||'unknown').replace(/[^a-zA-Z0-9._-]+/g,'_')||'unknown';
 }
 function archiveDateParts(date){
   var raw=String(date||todayIso()).replace(/\//g,'-');
