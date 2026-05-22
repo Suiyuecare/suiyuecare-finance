@@ -971,13 +971,17 @@ html,body{overflow-x:hidden}
       </div>
     </div>
     <div id="org-readonly-notice" style="display:none;padding:8px 13px;border-radius:8px;background:#f0ece6;border:1px solid #e0d0b8;font-size:12px;color:#6a5840;margin-bottom:10px">此頁僅開放執行長、人資、行政部門主任維護。</div>
-    <div class="g2">
-      <div class="card"><div class="chd"><span class="cht">組織圖</span><span id="org-summary" style="font-size:11px;color:#94a3b8"></span></div><div id="org-chart-view" style="padding:13px;overflow:auto"></div></div>
-      <div class="card"><div class="chd"><span class="cht">簽核辨識規則</span></div><div style="padding:13px;font-size:12px;color:#475569;line-height:1.7">
+    <div class="card">
+      <div class="chd"><span class="cht">組織圖</span><span id="org-summary" style="font-size:11px;color:#94a3b8"></span></div>
+      <div id="org-chart-view" style="padding:13px;overflow:auto;width:100%;min-height:360px"></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="chd"><span class="cht">簽核辨識規則</span></div>
+      <div style="padding:13px;font-size:12px;color:#475569;line-height:1.7">
         <div style="margin-bottom:8px"><strong style="color:#334155">第一優先：</strong>讀取本頁設定的「直屬主管」。</div>
         <div style="margin-bottom:8px"><strong style="color:#334155">第二優先：</strong>若沒有設定，依角色層級自動尋找課長、部門主管、行政部門主任或執行長。</div>
         <div><strong style="color:#334155">部門主管關卡：</strong>系統會往上尋找第一位部門主管；若與上一關同一人，會自動跳過避免重複簽核。</div>
-      </div></div>
+      </div>
     </div>
     <div class="card" style="margin-top:12px"><div class="chd"><span class="cht">人員主管設定</span></div><div style="overflow-x:auto"><table><thead><tr><th>人員</th><th>公司別</th><th>部門</th><th>層級</th><th>直屬主管</th></tr></thead><tbody id="org-editor"></tbody></table></div></div>
   </div>
