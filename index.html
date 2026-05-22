@@ -1855,8 +1855,13 @@ function safeStorageName(name){
 function safeStorageSegment(v,fallback){
   var raw=String(v||fallback||'unknown');
   var base=raw.normalize?raw.normalize('NFKD'):raw;
-  base=base.replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,64);
+  base=base.replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_').replace(/_+/g,'_').replace(/^_+|_+$/g,'').slice(0,64);
   return base||String(fallback||'unknown').replace(/[^a-zA-Z0-9._-]+/g,'_')||'unknown';
+}
+function safeStoragePath(path){
+  return String(path||'').split('/').filter(Boolean).map(function(seg,i){
+    return safeStorageSegment(seg,i===0?'attachments':'file');
+  }).join('/');
 }
 function archiveDateParts(date){
   var raw=String(date||todayIso()).replace(/\//g,'-');
@@ -1928,9 +1933,13 @@ async function uploadAttachmentToSupabase(att,ctx){
   var recordNo=archive.recordNo;
   var kind=archive.kind;
   var name=safeStorageName(att.n||att.name||'attachment');
-  var path=[recordType,archive.dataEnvironment,archive.year,archive.month,archive.entityId,archive.departmentCode,recordNo,kind,Date.now()+'_'+Math.random().toString(36).slice(2)+'_'+name].join('/');
+  var path=safeStoragePath([recordType,archive.dataEnvironment,archive.year,archive.month,archive.entityId,archive.departmentCode,recordNo,kind,Date.now()+'_'+Math.random().toString(36).slice(2)+'_'+name].join('/'));
   var blob=dataUrlToBlob(att.url,att.mime||att.type);
   var up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:blob.type||att.mime||'application/octet-stream',upsert:false});
+  if(up.error&&/invalid.?key/i.test(up.error.message||up.error.error||'')){
+    path=safeStoragePath(path);
+    up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:blob.type||att.mime||'application/octet-stream',upsert:false});
+  }
   if(up.error&&/mime|not allowed|unsupported/i.test(up.error.message||'')){
     blob=new Blob([await blob.arrayBuffer()],{type:'application/octet-stream'});
     up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:'application/octet-stream',upsert:false});
