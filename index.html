@@ -1515,6 +1515,7 @@ var AUDIT_LOGS=[];
 var ARCHIVES=[];
 var ANNUAL_REVIEWS=[];
 var BACKUP_EVENTS=[];
+var PAYEE_BANK_ACCOUNTS=[];
 var BANK_TRANSFER_FEE=15;
 var BANK_TRANSFER_FEES={};
 var SYSTEM_SETTINGS={};
@@ -2628,6 +2629,19 @@ function mapComplianceArchive(r){return {id:r.id,eid:r.entity_id,period:r.period
 function mapAnnualReview(r){return {id:r.id,eid:r.entity_id,period:r.period,status:r.status||'approved',by:r.reviewed_by||'',time:r.reviewed_at||'',note:r.note||'',dataEnv:rowDataEnvironment(r)};}
 function mapComplianceAudit(r){return {id:r.id,time:r.created_at,user:r.actor_name||'',role:r.actor_role||'',action:r.action,target:r.target||'',detail:r.detail||'',eid:r.entity_id||'',period:r.period||'',dataEnv:rowDataEnvironment(r)};}
 function mapBackupEvent(r){return {id:r.id,action:r.action||'backup',status:r.status||'completed',fileName:r.file_name||r.fileName||'',hash:r.file_hash||r.hash||'',summary:r.summary||{},by:r.actor_name||r.by||'',time:r.created_at||r.time||'',note:r.note||'',dataEnv:rowDataEnvironment(r)};}
+function normalizeBankNo(v){return String(v||'').replace(/\s+/g,'').replace(/-/g,'').trim();}
+function normalizePayeeKey(v){return String(v||'').trim().toLowerCase().replace(/\s+/g,'');}
+function payeeBankKey(payee,bankName,bankBranch,bankNo){return [normalizePayeeKey(payee),normalizePayeeKey(bankName),normalizePayeeKey(bankBranch),normalizeBankNo(bankNo)].join('|');}
+function simpleHash(str){var h=2166136261;str=String(str||'');for(var i=0;i<str.length;i++){h^=str.charCodeAt(i);h+=(h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24);}return (h>>>0).toString(36);}
+function payeeAccountIdFromInfo(info){return 'pba_'+simpleHash(payeeBankKey(info.payee,info.bankName,info.bankBranch,info.bankNo));}
+function mapPayeeBankAccount(r){
+  var payload=r.payload||{};
+  var payee=r.payee||'',bankName=r.bankName||r.bank_name||'',bankBranch=r.bankBranch||r.bank_branch||'',bankNo=r.bankNo||r.bank_no||'';
+  return {id:r.id,payee:payee,bankType:r.bankType||r.bank_type||payload.bankType||'',bankName:bankName,bankBranch:bankBranch,bankNo:bankNo,accountKey:r.accountKey||r.account_key||payeeBankKey(payee,bankName,bankBranch,bankNo),passbookFiles:normalizeFiles(r.passbookFiles||r.passbook_files||payload.passbookFiles||[]),note:r.note||'',useCount:num(r.useCount||r.use_count),lastUsedAt:r.lastUsedAt||r.last_used_at||'',active:r.active!==false,dataEnv:rowDataEnvironment(r)};
+}
+function payeeAccountDbRow(a){
+  return {id:a.id,payee:a.payee,bank_type:a.bankType||'',bank_name:a.bankName,bank_branch:a.bankBranch,bank_no:a.bankNo,account_key:a.accountKey||payeeBankKey(a.payee,a.bankName,a.bankBranch,a.bankNo),passbook_files:a.passbookFiles||[],note:a.note||'',use_count:num(a.useCount),last_used_at:a.lastUsedAt||new Date().toISOString(),active:a.active!==false,data_environment:a.dataEnv||activeDataEnvironment()};
+}
 function mapSettingVersion(r){return {id:r.id,versionNo:r.version_no||r.versionNo||r.id,target:r.target||'',summary:r.summary||'',snapshot:r.snapshot||{},changeRequestId:r.change_request_id||r.changeRequestId||'',createdBy:r.created_by||r.createdBy||'',approvedBy:r.approved_by||r.approvedBy||'',createdAt:r.created_at||r.createdAt||'',dataEnv:rowDataEnvironment(r)};}
 function normalizeSettingValue(v){
   if(typeof v==='string'){try{return JSON.parse(v);}catch(e){return v;}}
@@ -2693,7 +2707,8 @@ async function loadRemoteData(){
     loadOptionalTable(client,'annual_reviews','reviewed_at',false),
     loadOptionalTable(client,'compliance_audit_logs','created_at',false),
     loadOptionalTable(client,'backup_restore_events','created_at',false),
-    loadOptionalTable(client,'system_setting_versions','created_at',false)
+    loadOptionalTable(client,'system_setting_versions','created_at',false),
+    loadOptionalTable(client,'payee_bank_accounts','last_used_at',false)
   ];
   var res=await Promise.all(jobs);
   var err=res.find(function(r){return r.error;});
@@ -2713,6 +2728,7 @@ async function loadRemoteData(){
   if(Array.isArray(res[12]))AUDIT_LOGS=res[12].map(mapComplianceAudit).filter(inActiveDataEnvironment);
   if(Array.isArray(res[13]))BACKUP_EVENTS=res[13].map(mapBackupEvent).filter(inActiveDataEnvironment);
   if(Array.isArray(res[14]))SETTINGS_VERSIONS=res[14].map(mapSettingVersion).filter(inActiveDataEnvironment);
+  if(Array.isArray(res[15]))PAYEE_BANK_ACCOUNTS=res[15].map(mapPayeeBankAccount).filter(inActiveDataEnvironment).filter(function(a){return a.active!==false;});
   lastSyncAt=new Date().toISOString();
   return true;
 }
@@ -2745,7 +2761,7 @@ function startRealtime(){
   var client=getSb();
   if(!client||realtimeChannel)return;
   realtimeChannel=client.channel('module-finance-live');
-  ['expense_requests','invoices','ledger_entries','bills','vouchers','notifications','finance_users','system_settings','draft_requests','period_closes','compliance_archives','annual_reviews','compliance_audit_logs','backup_restore_events','system_setting_versions'].forEach(function(table){
+  ['expense_requests','invoices','ledger_entries','bills','vouchers','notifications','finance_users','system_settings','draft_requests','period_closes','compliance_archives','annual_reviews','compliance_audit_logs','backup_restore_events','system_setting_versions','payee_bank_accounts'].forEach(function(table){
     realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:table},function(){refreshRemoteData(table);});
   });
   realtimeChannel.subscribe(function(status){
@@ -3248,7 +3264,8 @@ function saveLocalAppState(){
       vouchers:VOUCHERS||[],
       ledger:LEDGER||[],
       invoices:INVS||[],
-      bills:BILLS||[]
+      bills:BILLS||[],
+      payeeBankAccounts:PAYEE_BANK_ACCOUNTS||[]
     };
     safeJsonSet(localAppStateKey(),state);
   }catch(err){
@@ -3267,6 +3284,7 @@ function loadLocalAppState(){
     if(Array.isArray(state.ledger))LEDGER=state.ledger.map(mapLedger);
     if(Array.isArray(state.invoices))INVS=state.invoices.map(mapInv);
     if(Array.isArray(state.bills))BILLS=state.bills.map(mapBill);
+    if(Array.isArray(state.payeeBankAccounts))PAYEE_BANK_ACCOUNTS=state.payeeBankAccounts.map(mapPayeeBankAccount).filter(function(a){return a.active!==false;});
   }catch(err){
     console.warn('local app state load failed',err);
   }
@@ -4567,7 +4585,7 @@ function renderNR(){
     }
   }else if(S.nrStep===3){
     if(!S.nrPay)S.nrPay='bank';
-    var aoHtml=(isFinance()&&S.nrType!=='travel_request'&&S.nrType!=='purchase_request')?'<div style="background:var(--warm);border-radius:7px;padding:8px;margin-bottom:8px;border:1px solid #f0e0c8"><div style="font-size:11px;font-weight:650;color:var(--brtxt);margin-bottom:5px">會計覆蓋科目（選填）</div><div class="fr2"><div><label class="fl">借方</label><select id="nr-dr" style="font-size:11px"><option value="">自動</option>'+ACCTS.filter(function(a){return a.s==='debit';}).map(function(a){return'<option value="'+a.c+'">'+a.c+' '+a.n+'</option>';}).join('')+'</select></div><div><label class="fl">貸方</label><select id="nr-cr" style="font-size:11px"><option value="">自動</option>'+ACCTS.filter(function(a){return a.s==='credit';}).map(function(a){return'<option value="'+a.c+'">'+a.c+' '+a.n+'</option>';}).join('')+'</select></div></div></div>':"";
+    var aoHtml=(isFinance()&&S.nrType!=='travel_request'&&S.nrType!=='purchase_request'&&S.nrType!=='hr_expense_request')?'<div style="background:var(--warm);border-radius:7px;padding:8px;margin-bottom:8px;border:1px solid #f0e0c8"><div style="font-size:11px;font-weight:650;color:var(--brtxt);margin-bottom:5px">會計覆蓋科目（選填）</div><div class="fr2"><div><label class="fl">借方</label><select id="nr-dr" style="font-size:11px"><option value="">自動</option>'+ACCTS.filter(function(a){return a.s==='debit';}).map(function(a){return'<option value="'+a.c+'">'+a.c+' '+a.n+'</option>';}).join('')+'</select></div><div><label class="fl">貸方</label><select id="nr-cr" style="font-size:11px"><option value="">自動</option>'+ACCTS.filter(function(a){return a.s==='credit';}).map(function(a){return'<option value="'+a.c+'">'+a.c+' '+a.n+'</option>';}).join('')+'</select></div></div></div>':"";
     var userOpts=USERS.filter(function(u){return u.active;}).map(function(u){return'<option value="'+u.n+'" data-init="'+u.init+'">'+u.n+' （'+u.rL+'·'+u.dc+'）</option>';}).join('')+'<option value="__custom">自行輸入</option>';
     var defApp=S.user?S.user.n:'';
     var lazyHtml=S.nrType==='expense_reimbursement'?'<div class="card" style="height:100%"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><button class="btn-g" onclick="lazyAnalyze()">OpenAI 解析憑據</button></div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">先上傳一張或多張發票/憑據，再按解析。表格可直接修改，送出後會自動產生 CSV 電子檔，連同照片一起簽核。</div><div id="lazy-status" style="font-size:11px;color:#94a3b8;margin-bottom:8px">'+(S.lazyBusy?'辨識中…':'等待上傳憑據')+'</div>'+lazyProgressHtml()+'<div id="lazy-sheet"></div></div></div>':'';
@@ -5353,8 +5371,10 @@ function receiptUploadPanelHtml(opt){
   opt=opt||{};
   var isPayroll=opt.kind==='payroll';
   var ocrBtn=opt.ocr?'<button class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button>':'';
+  var payrollTemplates=isPayroll?'<div style="background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:9px;margin-bottom:8px"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:6px">範本下載與上傳</div><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">請先下載適用範本填寫完成，再於本區上傳薪資表、人事費用支出表或勞務報酬單。9A/9B 勞報單請一併上傳勞務報酬單。</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/hr_expense_template.xlsx\',\'人事費用支出.xlsx\')">下載人事費用支出 Excel</button><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/labor_service_fee.docx\',\'勞務報酬單.docx\')">下載勞務報酬單 Word</button></div></div>':'';
   return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%">'
     +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:650;color:#334155">'+(isPayroll?'上傳薪資表 / 人事附件':'上傳憑據')+'</div>'+ocrBtn+'</div>'
+    +payrollTemplates
     +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">'+(isPayroll?'UPLOAD PAYROLL':'UPLOAD RECEIPTS')+'</div><div style="font-size:13px;font-weight:650;color:#334155;margin-bottom:3px">'+(isPayroll?'點擊或拖放薪資表、人事費用支出表或勞務報酬單':'點擊或拖放發票 / 收據 / PDF')+'</div><div style="font-size:11px;color:#94a3b8;line-height:1.5">'+(isPayroll?'Excel、PDF、Word、圖片皆可；9A、9B 勞務報酬單需附勞務報酬單':'可一次上傳多張 JPG、PNG、PDF、Word、Excel；建議一張發票拍成一張照片，多張發票請分開拍後一次上傳。')+'</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" '+(isPayroll?'':'capture="environment"')+' onchange="nrFileChange(this)"></div>'
     +(isPayroll?'':'<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #f0c987;color:#7c3f00;font-size:11px;line-height:1.55">提醒：請不要把很多張發票拍成同一張照片，OCR 可能只辨識到其中一張。</div>')
     +'<div id="nr-flist" style="margin-top:7px">'+nrFileListHtml(180)+'</div>'
@@ -5389,11 +5409,55 @@ function passbookUploadPanelHtml(){
     +'<div class="fg" style="margin:0"><label class="fl">存摺封面（選填）</label><input type="file" id="nr-passbook-file" accept="image/*,.pdf" capture="environment" onchange="passbookFileChange(this)" style="font-size:11px;width:100%"><div id="nr-passbook-status" style="font-size:10px;color:#8b7358;margin-top:5px">可上傳存摺封面，系統會嘗試自動帶入 2-3 匯款資訊的收款人、銀行、分行與帳號。</div></div>'
   +'</div>';
 }
+function payeeAccountLabel(a){
+  var last=String(a.bankNo||'').slice(-5);
+  return (a.payee||'未命名收款人')+'｜'+(a.bankName||'未填銀行')+(a.bankBranch?' '+a.bankBranch:'')+(last?'｜尾號 '+last:'');
+}
+function payeeAccountOptionsHtml(){
+  var current=((el('nr-payee')||{}).value||'').trim();
+  var rows=(PAYEE_BANK_ACCOUNTS||[]).filter(function(a){return a.active!==false;});
+  if(current){
+    var key=normalizePayeeKey(current);
+    rows.sort(function(a,b){
+      var am=normalizePayeeKey(a.payee)===key?0:1,bm=normalizePayeeKey(b.payee)===key?0:1;
+      return am-bm||String(b.lastUsedAt||'').localeCompare(String(a.lastUsedAt||''));
+    });
+  }else rows.sort(function(a,b){return String(b.lastUsedAt||'').localeCompare(String(a.lastUsedAt||''));});
+  return '<option value="">選擇既有收款帳戶（沒有則送出後自動建立）</option>'+rows.slice(0,80).map(function(a){return'<option value="'+escAttr(a.id)+'">'+escAttr(payeeAccountLabel(a))+'</option>';}).join('');
+}
+function refreshPayeeAccountSelect(){
+  var sel=el('nr-payee-account');if(sel)sel.innerHTML=payeeAccountOptionsHtml();
+}
+window.applyPayeeBankAccount=function(id){
+  var a=(PAYEE_BANK_ACCOUNTS||[]).find(function(x){return x.id===id;});
+  if(!a)return;
+  if(el('nr-payee'))el('nr-payee').value=a.payee||'';
+  if(el('nr-bank-name'))el('nr-bank-name').value=a.bankName||'';
+  if(el('nr-bank-branch'))el('nr-bank-branch').value=a.bankBranch||'';
+  if(el('nr-bank-no'))el('nr-bank-no').value=a.bankNo||'';
+  var type=el('nr-bank-type');if(type)type.value=isMegaBankRecipient({bankName:a.bankName,bankAcc:a.bankNo})?'mega':'other';
+  updateBankTypeUI();refreshPayeeAccountSelect();
+};
+async function rememberPayeeBankAccount(pay,passbookFiles){
+  if(!pay||!pay.payee||!pay.bankName||!pay.bankBranch||!pay.bankNo)return null;
+  var key=payeeBankKey(pay.payee,pay.bankName,pay.bankBranch,pay.bankNo);
+  var existing=(PAYEE_BANK_ACCOUNTS||[]).find(function(a){return a.accountKey===key;});
+  var files=normalizeFiles(passbookFiles||[]);
+  var row=existing||{id:payeeAccountIdFromInfo(pay),payee:pay.payee,bankType:pay.bankType,bankName:pay.bankName,bankBranch:pay.bankBranch,bankNo:pay.bankNo,accountKey:key,passbookFiles:[],useCount:0,active:true,dataEnv:activeDataEnvironment()};
+  row.payee=pay.payee;row.bankType=pay.bankType;row.bankName=pay.bankName;row.bankBranch=pay.bankBranch;row.bankNo=pay.bankNo;row.accountKey=key;row.lastUsedAt=new Date().toISOString();row.useCount=num(row.useCount)+1;
+  if(files.length&&!normalizeFiles(row.passbookFiles).length)row.passbookFiles=files;
+  if(!existing)PAYEE_BANK_ACCOUNTS.unshift(row);
+  refreshPayeeAccountSelect();
+  saveLocalAppStateSoon();
+  await dbUpsert('payee_bank_accounts',payeeAccountDbRow(row));
+  return row;
+}
 function paymentFieldsHtml(){
   return'<div style="background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:9px;margin-bottom:8px">'
     +'<div class="fr2"><div class="fg"><label class="fl">付款方式 *</label><select id="nr-pay-form" onchange="S.nrPay=this.value;updNRAcct()"><option value="bank" selected>銀行轉帳</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">備註：公司是兆豐銀行；收款銀行也是兆豐時不列手續費分錄</div></div><div class="fg"><label class="fl">總金額 *</label><input type="number" id="nr-amt" placeholder="0"></div></div>'
     +'<div class="fg"><label class="fl">手續費</label><select id="nr-fee-bearer" onchange="syncLazyBankFeeRow(true)"><option value="己方支出">己方支出</option><option value="對方支出">對方支出</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">己方支出且非兆豐收款銀行時，系統會依公司別設定自動切 Dr 6290 手續費，並在即時 Excel 增加免憑證明細</div></div>'
-    +'<div class="fg"><label class="fl">收款人 *</label><input id="nr-payee" placeholder="收款人姓名或公司名稱"></div>'
+    +'<div class="fg"><label class="fl">常用匯款資料</label><select id="nr-payee-account" onchange="applyPayeeBankAccount(this.value)" style="font-size:11px">'+payeeAccountOptionsHtml()+'</select><div style="font-size:10px;color:#8b7358;margin-top:3px">曾匯款過的收款人會自動建檔；同一人若有多個帳戶，選單會顯示銀行與帳號尾碼方便辨識。</div></div>'
+    +'<div class="fg"><label class="fl">收款人 *</label><input id="nr-payee" placeholder="收款人姓名或公司名稱" oninput="refreshPayeeAccountSelect()"></div>'
     +'<div class="fg"><label class="fl">銀行類別 *</label><select id="nr-bank-type" onchange="bankTypeChanged()"><option value="mega">兆豐銀行</option><option value="other">非兆豐銀行</option></select><div style="font-size:10px;color:#8b7358;margin-top:3px">選擇非兆豐銀行且手續費為己方支出時，系統會多列公司設定的匯款手續費（預設 15 元）。</div></div>'
     +'<div class="fr3" id="nr-bank-detail"><div class="fg"><label class="fl">銀行資訊 *</label><input id="nr-bank-name" placeholder="例：玉山銀行 / 017 兆豐銀行" oninput="bankNameChanged()"></div><div class="fg"><label class="fl">分行 *</label><input id="nr-bank-branch" required placeholder="例：南京東路分行"></div><div class="fg"><label class="fl">帳號 *</label><input id="nr-bank-no" placeholder="例：808-678-000000"></div></div>'
     +'<div class="fg"><label class="fl">預計匯款日 *</label><input type="date" id="nr-paydate" value="'+todayIso()+'"></div>'
@@ -5439,7 +5503,7 @@ function applyPassbookInfo(data){
   if(accountNo&&el('nr-bank-no'))el('nr-bank-no').value=accountNo;
   var type=el('nr-bank-type');
   if(type)type.value=isMegaBankRecipient({bankName:bankName,bankAcc:accountNo})?'mega':'other';
-  updateBankTypeUI();
+  updateBankTypeUI();refreshPayeeAccountSelect();
 }
 window.passbookFileChange=async function(inp){
   var file=inp&&inp.files&&inp.files[0];if(!file)return;
@@ -6117,7 +6181,6 @@ function hrExpenseFieldsHtml(){
   return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">人事費用申請資料</span></div><div style="padding:11px">'
     +'<div class="fg"><label class="fl">人事支出項目 *</label><select id="hr-item-select" onchange="hrSetItem(this.value)">'+opts+'</select></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">費用月份 / 薪資月份</label><input type="month" id="hr-period" value="'+todayMonth()+'"></div><div class="fg"><label class="fl">勞務期間</label><input id="hr-labor-period" placeholder="接案人員填寫，例：2026/05/01-05/31"></div></div>'
-    +'<div style="background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:9px;margin-bottom:8px"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:6px">範本下載與上傳</div><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">請下載適用範本填寫後，在上方「2-1. 上傳附件」區塊上傳薪資表、人事費用支出表或勞務報酬單。9A/9B 勞報單請一併上傳勞務報酬單。</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/hr_expense_template.xlsx\',\'人事費用支出.xlsx\')">下載人事費用支出 Excel</button><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/labor_service_fee.docx\',\'勞務報酬單.docx\')">下載勞務報酬單 Word</button></div></div>'
     +contractorHint
     +'</div></div>';
 }
@@ -6506,6 +6569,9 @@ window.submitNR=async function(){
     buildAll();renderNotifs();
     alert('送出失敗：正式環境未成功寫入 Supabase，因此不會建立本機假申請單。請排除後端錯誤後再送出。\n\n後端錯誤：'+msg);
     return;
+  }
+  if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'){
+    await rememberPayeeBankAccount(pay,passbookAttachments);
   }
   await persistAccountingLinesRemote(newReq);
   await dbInsert('notifications',notifDbRow(newNotif));
@@ -7239,6 +7305,7 @@ window.submitProcurementPaymentInfo=async function(rid){
     }
   });
   approveActiveStep(r,'approved',p.comment||('總務填寫預估付款資料 '+fmt(info.amount)),p.files,p.addUid);
+  await rememberPayeeBankAccount(info,[]);
   await dbUpdate('expense_requests',rid,{
     amount:r.amt,
     estimated_amount:r.estimatedAmt,
