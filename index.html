@@ -661,7 +661,7 @@ html,body{overflow-x:hidden}
         <div class="tb-bar" style="margin-bottom:7px">
           <button class="tb on" onclick="apprTab('p',this)">待我簽核<span id="ac2" style="font-size:9px;background:var(--br);color:#fff;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
           <button class="tb" onclick="apprTab('h',this)">歷史記錄</button>
-          <button class="tb" onclick="apprTab('mine',this)">我的簽核<span id="my-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
+          <button class="tb" onclick="apprTab('mine',this)">我的申請<span id="my-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
           <button class="tb" onclick="apprTab('drafts',this)">暫存表單<span id="draft-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
         </div>
         <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column" id="appr-list"></div>
@@ -6366,7 +6366,7 @@ function showSubmitConfirm(meta){
           +submitConfirmRow('抽單規則','執行長放款前可由申請人抽單取消；已到執行長放款或後續關卡後不可抽單。')
         +'</div></div>'
       +'</div>'
-      +'<div style="margin-top:11px;border-radius:10px;border:1px solid #d7ead0;background:#f3fbec;padding:10px;color:#1a5010;font-size:12px;line-height:1.7">員工提醒：送出後您可以在「簽核管理 > 我的簽核」查看進度；若主管退回，系統會顯示需要補充的內容與附件。</div>';
+      +'<div style="margin-top:11px;border-radius:10px;border:1px solid #d7ead0;background:#f3fbec;padding:10px;color:#1a5010;font-size:12px;line-height:1.7">員工提醒：送出後您可以在「簽核管理 > 我的申請」查看進度；若主管退回，系統會顯示需要補充的內容與附件。</div>';
     m.style.display='flex';
   });
 }
@@ -6596,10 +6596,10 @@ window.submitNR=async function(){
   var ok=el('nr-ok');
   if(ok){
     ok.style.display='block';
-    ok.textContent='申請單 '+no+' 已送出，已切到「簽核管理 > 我的簽核」供確認。';
+    ok.textContent='申請單 '+no+' 已送出，已切到「簽核管理 > 我的申請」供確認。';
     setTimeout(function(){ok.style.display='none';},5000);
   }
-  alert('申請單 '+no+' 已送出。\n目前送到：'+requestNextStepLabel(nextStep)+'\n您可在「簽核管理 > 我的簽核」查看進度；執行長放款前可抽單取消。');
+  alert('申請單 '+no+' 已送出。\n目前送到：'+requestNextStepLabel(nextStep)+'\n您可在「簽核管理 > 我的申請」查看進度；執行長放款前可抽單取消。');
   }catch(err){
     console.error('submit request failed',err);
     alert('送出簽核失敗：'+(err&&err.message?err.message:'請稍後再試。請開啟瀏覽器 Console 執行 debugApprovalLinks() 或截圖錯誤訊息給我。'));
@@ -6665,7 +6665,7 @@ window.withdrawRequest=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});
   if(!r)return;
   if(!canWithdrawRequest(r)){alert('這張單已進入執行長放款或後續關卡，不能抽單。');return;}
-  if(!confirm('確定要抽單並刪除這張申請？刪除後不會再出現在我的簽核。'))return;
+  if(!confirm('確定要抽單並刪除這張申請？刪除後不會再出現在我的申請。'))return;
   var reason='申請人自行抽單';
   try{
   S.withdrawBusy=true;
