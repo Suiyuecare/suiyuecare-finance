@@ -185,7 +185,12 @@ for insert
 to authenticated
 with check (
   bucket_id = 'finance-attachments'
-  and public.current_finance_user_id() is not null
+  and exists (
+    select 1
+    from public.finance_users fu
+    where lower(fu.email) = lower(auth.jwt() ->> 'email')
+      and fu.active = true
+  )
   and (storage.foldername(name))[1] in ('draft_requests','expense_requests','invoices','vouchers')
 );
 

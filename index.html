@@ -112,6 +112,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .upload-zone:hover,.upload-zone.drag{border-color:var(--br);background:var(--brxxl)}
 .upload-zone.filled{border-color:#2a9040;background:#eaf8d8}
 .file-chip{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #e0d0b8;border-radius:6px;padding:2px 7px;font-size:11px;margin:2px 3px;color:#334155}
+.leave-guard-copy{font-size:13px;color:#334155;line-height:1.7}
+.leave-guard-actions{padding:12px;border-top:1px solid #f0e0c8;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.leave-guard-actions .btn-p{box-shadow:0 10px 22px rgba(234,136,12,.24);font-weight:750}
 .prog-wrap{height:5px;background:var(--warm);border-radius:99px;overflow:hidden;margin:5px 0}
 .prog-fill{height:100%;border-radius:99px;background:var(--br);transition:width .12s}
 .tb-bar{display:flex;border-bottom:1px solid #f0e6d6}
@@ -1692,6 +1695,41 @@ function getSb(){
   if(!sb)sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
   return sb;
 }
+async function currentSupabaseSession(){
+  var client=getSb();if(!client||!client.auth)return null;
+  try{
+    var res=await client.auth.getSession();
+    return res&&res.data?res.data.session:null;
+  }catch(e){
+    return null;
+  }
+}
+async function ensureSupabaseStorageReady(){
+  if(!hasSupabase()||S.demoLogin)return {ok:false,reason:'demo_or_unconfigured'};
+  var sess=await currentSupabaseSession();
+  if(!sess||!sess.access_token){
+    return {ok:false,reason:'missing_auth_session',message:'目前沒有 Supabase Auth 登入狀態。正式送出含附件的申請時，請先使用 Google 登入或 Supabase 帳密登入，不能只用本機測試登入。'};
+  }
+  var email=((sess.user||{}).email||'').toLowerCase();
+  if(S.user&&S.user.email&&email&&email!==String(S.user.email).toLowerCase()){
+    return {ok:false,reason:'auth_email_mismatch',message:'目前 Supabase Auth 帳號是 '+email+'，但系統內登入者是 '+S.user.email+'。請登出後重新登入同一個帳號再送出。'};
+  }
+  return {ok:true,session:sess};
+}
+function formatStorageUploadError(err){
+  var msg=(err&&(err.message||err.error_description||err.error))?String(err.message||err.error_description||err.error):String(err||'未知錯誤');
+  var lower=msg.toLowerCase();
+  if(lower.indexOf('row-level security')>-1||lower.indexOf('rls')>-1){
+    return 'Supabase Storage RLS 擋住上傳：'+msg+'。請確認登入帳號已在 finance_users 啟用，且 finance-attachments 的 INSERT policy 允許 authenticated 使用者上傳。';
+  }
+  if(lower.indexOf('mime')>-1||lower.indexOf('not allowed')>-1){
+    return '附件檔案格式被 Storage bucket 限制擋下：'+msg+'。請改傳 PDF/JPG/PNG/XLSX/DOCX，或把此 MIME type 加到 finance-attachments bucket。';
+  }
+  if(lower.indexOf('bucket')>-1&&lower.indexOf('not')>-1){
+    return '找不到 finance-attachments bucket：'+msg+'。請確認 Supabase Storage bucket 已建立。';
+  }
+  return msg;
+}
 function allowDemoLogin(){
   var host=String(location.hostname||'');
   var q=new URLSearchParams(location.search||'');
@@ -1869,6 +1907,12 @@ async function uploadAttachmentToSupabase(att,ctx){
   att=normalizeFileMeta(att);
   if(!hasSupabase()||S.demoLogin||!att.url||att.path)return att;
   if(!/^data:/i.test(att.url))return att;
+  var ready=await ensureSupabaseStorageReady();
+  if(!ready.ok){
+    var e=new Error(ready.message||'Supabase Storage 尚未就緒');
+    e.reason=ready.reason;
+    throw e;
+  }
   var client=getSb();if(!client)return att;
   var archive=attachmentArchiveContext(Object.assign({},ctx||{},{kind:(ctx&&ctx.kind)||att.kind||'attachments'}));
   var recordType=archive.recordType;
@@ -1878,6 +1922,10 @@ async function uploadAttachmentToSupabase(att,ctx){
   var path=[recordType,archive.dataEnvironment,archive.year,archive.month,archive.entityId,archive.departmentCode,recordNo,kind,Date.now()+'_'+Math.random().toString(36).slice(2)+'_'+name].join('/');
   var blob=dataUrlToBlob(att.url,att.mime||att.type);
   var up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:blob.type||att.mime||'application/octet-stream',upsert:false});
+  if(up.error&&/mime|not allowed|unsupported/i.test(up.error.message||'')){
+    blob=new Blob([await blob.arrayBuffer()],{type:'application/octet-stream'});
+    up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:'application/octet-stream',upsert:false});
+  }
   if(up.error)throw up.error;
   try{
     var metaRow={
@@ -3513,6 +3561,17 @@ window.openLazyExpense=function(btn){
   renderNR();
 };
 window.nav=function(id,btn){
+  return guardedNav(id,btn);
+};
+async function guardedNav(id,btn){
+  if(shouldPromptUnsavedNewReq(id)){
+    var choice=await confirmLeaveNewReq();
+    if(choice==='stay')return;
+    if(choice==='save'){
+      var saved=await nrSaveDraft();
+      if(!saved)return;
+    }
+  }
   if(!canAccessPage(id)){alert('您的角色沒有此功能權限');id='dashboard';btn=null;}
   if(id!=='detail')S.prev=S.page;S.page=id;
   document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on');});
@@ -3535,6 +3594,37 @@ window.nav=function(id,btn){
   if(id==='orgchart')buildOrgChart();
   syncMobileNavSelect();
   enhanceLongSelects(document);
+}
+function shouldPromptUnsavedNewReq(nextId){
+  if(S.nrSubmitting||S.nrSavingDraft)return false;
+  if(S.page!=='newreq'||nextId==='newreq'||nextId==='detail')return false;
+  if(!S.nrType&&!S.lazyMode&&!S.nrDraftId&&!((S.nrFiles||[]).length)&&!S.nrPassbookFile)return false;
+  return true;
+}
+function ensureLeaveGuardModal(){
+  var id='m-leave-guard',m=el(id);
+  if(m)return m;
+  m=document.createElement('div');
+  m.id=id;
+  m.className='modal-bg';
+  m.style.display='none';
+  m.innerHTML='<div class="modal" style="max-width:520px"><div class="chd" style="background:var(--brxxl)"><span class="cht">離開前是否暫存？</span><button onclick="resolveLeaveGuard(\'stay\')" style="background:none;border:none;cursor:pointer;font-size:22px;color:#c0a080;line-height:1;padding:0 4px">&#215;</button></div><div style="padding:15px"><div class="leave-guard-copy">如果轉到其他頁面，現在填寫中的申請內容可能會消失。建議先暫存，之後可到「簽核管理 → 暫存表單」或「放款申請 → 暫存欄位」繼續編輯。</div></div><div class="leave-guard-actions"><button class="btn-s" onclick="resolveLeaveGuard(\'leave\')">不暫存，直接離開</button><button class="btn-s" onclick="resolveLeaveGuard(\'stay\')">留在本頁</button><button class="btn-p" onclick="resolveLeaveGuard(\'save\')">是，暫存後離開</button></div></div>';
+  document.body.appendChild(m);
+  return m;
+}
+function confirmLeaveNewReq(){
+  return new Promise(function(resolve){
+    var m=ensureLeaveGuardModal();
+    window.__leaveGuardResolve=function(choice){
+      m.style.display='none';
+      window.__leaveGuardResolve=null;
+      resolve(choice||'stay');
+    };
+    m.style.display='flex';
+  });
+}
+window.resolveLeaveGuard=function(choice){
+  if(window.__leaveGuardResolve)window.__leaveGuardResolve(choice);
 };
 window.goBack=function(){nav(S.prev,null);};
 window.newReqBack=function(){
@@ -4785,10 +4875,10 @@ function applyNRFormState(state){
   renderNRFList();updNRAcct();
 }
 window.nrSaveDraft=async function(){
-  if(S.nrSavingDraft)return;
+  if(S.nrSavingDraft)return false;
   S.nrSavingDraft=true;
   try{
-    if(!S.nrType){alert('請先選擇申請類型，再進行暫存。');return;}
+    if(!S.nrType){alert('請先選擇申請類型，再進行暫存。');return false;}
     if(S.nrType==='travel_request')syncTravelRows();
     if(S.nrType==='purchase_request')applyPurchaseSummary(false);
     if(S.nrType==='hr_expense_request')applyHrSummary(false);
@@ -4818,7 +4908,7 @@ window.nrSaveDraft=async function(){
     if(!localSaved&&!remoteSaved){
       var msg=(localErr&&localErr.message?localErr.message:'本機儲存失敗')+(remoteErr&&remoteErr.message?'；Supabase：'+remoteErr.message:'');
       alert('暫存失敗：'+msg+'\n請改用 http://127.0.0.1:8765/index.html 開啟，或先清除舊草稿後再試。');
-      return;
+      return false;
     }
     renderDrafts();
     updateDraftCounters();
@@ -4826,9 +4916,11 @@ window.nrSaveDraft=async function(){
     var ok=el('nr-ok');
     if(ok){ok.style.display='block';ok.textContent='草稿已暫存，已留在目前表單頁面，可繼續編輯。';setTimeout(function(){ok.style.display='none';},3500);}
     else alert('草稿已暫存');
+    return true;
   }catch(err){
     console.error('draft save failed',err);
     alert('暫存失敗：'+(err&&err.message?err.message:'請稍後再試'));
+    return false;
   }finally{
     S.nrSavingDraft=false;
   }
@@ -6297,7 +6389,7 @@ window.submitNR=async function(){
     passbookAttachments=await uploadAttachmentsToSupabase(passbookAttachments,{recordType:'expense_requests',recordNo:no,kind:'passbook',date:((el('nr-date')||{}).value||todayIso()),entityId:eid,departmentCode:dc});
   }catch(uploadErr){
     console.error(uploadErr);
-    alert('附件上傳到 Supabase Storage 失敗，請確認 finance-attachments bucket 與 Storage RLS 已建立後再送出。');
+    alert('附件上傳到 Supabase Storage 失敗：\n\n'+formatStorageUploadError(uploadErr)+'\n\n這張單子尚未送出，請修正後再送出，避免主管收不到附件。');
     return;
   }
   uploadCount=attachments.length+passbookAttachments.length;
@@ -7913,7 +8005,7 @@ window.openRecvBatch=function(batchId){
   el('recv-list-title').textContent=batchId.replace('batch_','批次 ')+' · 個別發票';
   el('recv-detail').innerHTML='<div style="padding:7px 12px;border-bottom:1px solid #f0e6d6"><button class="btn-g" onclick="renderRecvDetail()">← 返回整批列表</button></div>'+items.map(function(i){return recvInvoiceRowHtml(i,RECV);}).join('');
 };
-window.submitReceiptReview=async function(id,inp,noteId){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;if(!S.user||S.user.role!=='accountant'){alert('只有會計可以送出收款複核');return;}var files=[];if(typeof inp==='string')files=await readStepFiles(inp);else if(inp&&inp.files&&inp.files.length)files=await Promise.all(Array.from(inp.files).map(fileToAttachment));if(!files.length){alert('請先上傳收款證明');return;}try{files=await uploadAttachmentsToSupabase(files,{recordType:'invoices',recordNo:inv.no,kind:'receipt_proof',date:todayIso(),entityId:inv.eid,departmentCode:inv.dc});}catch(uploadErr){console.error(uploadErr);alert('收款證明上傳到 Supabase Storage 失敗，請確認 Storage 設定後再送出。');return;}inv.status='pending_receipt_review';inv.receiptSubmittedAt=new Date().toISOString();inv.receiptSubmittedBy=S.user.n;inv.receiptFiles=(inv.receiptFiles||[]).concat(files);var note=noteId&&el(noteId)?el(noteId).value:'';inv.receiptNote=note;await dbUpdate('invoices',id,{status:inv.status});await dbUpdate('invoices',id,{receipt_files:inv.receiptFiles,receipt_submitted_at:inv.receiptSubmittedAt,receipt_submitted_by:inv.receiptSubmittedBy,receipt_note:note});buildRecv();buildApprovals();closeAppr();};
+window.submitReceiptReview=async function(id,inp,noteId){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;if(!S.user||S.user.role!=='accountant'){alert('只有會計可以送出收款複核');return;}var files=[];if(typeof inp==='string')files=await readStepFiles(inp);else if(inp&&inp.files&&inp.files.length)files=await Promise.all(Array.from(inp.files).map(fileToAttachment));if(!files.length){alert('請先上傳收款證明');return;}try{files=await uploadAttachmentsToSupabase(files,{recordType:'invoices',recordNo:inv.no,kind:'receipt_proof',date:todayIso(),entityId:inv.eid,departmentCode:inv.dc});}catch(uploadErr){console.error(uploadErr);alert('收款證明上傳到 Supabase Storage 失敗：\n\n'+formatStorageUploadError(uploadErr));return;}inv.status='pending_receipt_review';inv.receiptSubmittedAt=new Date().toISOString();inv.receiptSubmittedBy=S.user.n;inv.receiptFiles=(inv.receiptFiles||[]).concat(files);var note=noteId&&el(noteId)?el(noteId).value:'';inv.receiptNote=note;await dbUpdate('invoices',id,{status:inv.status});await dbUpdate('invoices',id,{receipt_files:inv.receiptFiles,receipt_submitted_at:inv.receiptSubmittedAt,receipt_submitted_by:inv.receiptSubmittedBy,receipt_note:note});buildRecv();buildApprovals();closeAppr();};
 window.approveReceiptReview=async function(id){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;if(!S.user||S.user.role!=='admin_director'){alert('只有行政部門主任可以複核收款');return;}var note=(el('receipt-review-note')||{}).value||'';if(invoiceCashPostedAt(inv)||hasInvoiceCashLedger(inv)){alert('此發票收款已入帳，不能重複複核。');return;}var prevStatus=inv.status,prevPaidAt=inv.paidAt;inv.status='paid';inv.paidAt=new Date().toISOString();var posted=await postInvoiceCashReceipt(inv);if(!posted){inv.status=prevStatus;inv.paidAt=prevPaidAt;return;}await dbUpdate('invoices',id,{status:'paid',paid_at:inv.paidAt,receipt_reviewed_at:inv.paidAt,receipt_reviewed_by:S.user.n,receipt_review_note:note,cash_receipt_posted_at:invoiceCashPostedAt(inv)||null,posting_locked_at:inv.postingLockedAt||null});buildRecv();buildDash();buildReports();buildApprovals();closeAppr();};
 window.returnReceiptReview=async function(id){var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;if(!S.user||S.user.role!=='admin_director'){alert('只有行政部門主任可以退回');return;}var note=(el('receipt-review-note')||{}).value||'';inv.status='unpaid';await dbUpdate('invoices',id,{status:'unpaid',receipt_reviewed_at:new Date().toISOString(),receipt_reviewed_by:S.user.n,receipt_review_note:note});buildRecv();buildApprovals();closeAppr();};
 
