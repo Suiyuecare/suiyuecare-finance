@@ -1244,7 +1244,7 @@ var DEPTS=[
   {c:'A1200',n:'教學品管部',eid:'E1',lv:1},{c:'A1201',n:'教學課',eid:'E1',lv:2},{c:'A1202',n:'品管課',eid:'E1',lv:2},
   {c:'B1000',n:'歲悅股份有限公司附設臺北市私立歲悅居家長照機構',eid:'E5',lv:0},
   {c:'B1100',n:'長照部',eid:'E5',lv:1},{c:'B1101',n:'居家照顧課',eid:'E5',lv:2},{c:'B1102',n:'士林失智據點課',eid:'E5',lv:2,shared:true},{c:'B1103',n:'大同失智據點課',eid:'E5',lv:2,shared:true},{c:'B1104',n:'信義失智據點課',eid:'E5',lv:2,shared:true},
-  {c:'B1300',n:'移工培訓部',eid:'E5',lv:1},{c:'B1301',n:'數位學習課',eid:'E5',lv:2},{c:'B1302',n:'高雄到宅訓練課',eid:'E5',lv:2},{c:'B1303',n:'台北到宅訓練課',eid:'E5',lv:2},{c:'B1304',n:'台北集中訓練課',eid:'E5',lv:2},
+  {c:'B1300',n:'移工培訓部',eid:'E5',lv:1},{c:'B1301',n:'數位學習課',eid:'E5',lv:2},{c:'B1302',n:'高雄到宅訓練課',eid:'E5',lv:2},{c:'B1303',n:'臺北到宅訓練課',eid:'E5',lv:2},{c:'B1304',n:'台北集中訓練課',eid:'E5',lv:2},
   {c:'C1000',n:'樂齡歲悅股份有限公司',eid:'E2',lv:0},{c:'C1100',n:'萬華日照中心',eid:'E2',lv:1},
   {c:'D1000',n:'移站式股份有限公司',eid:'E3',lv:1},
   {c:'E1000',n:'大齡好好投資有限公司',eid:'E4',lv:1},
@@ -2156,7 +2156,7 @@ async function readStepFiles(inputId){
   return Promise.all(Array.from(inp.files).map(fileToAttachment));
 }
 function approverSelectHtml(id){
-  var opts='<option value="">不加簽</option>'+USERS.filter(function(u){return u.active!==false;}).map(function(u){
+  var opts='<option value="">不加簽</option>'+activeUniqueUsers().map(function(u){
     return'<option value="'+u.id+'">'+u.n+'（'+(u.rL||RL[u.role]||u.role)+'）</option>';
   }).join('');
   return'<label class="fl">加簽給指定員工（選填）</label><select id="'+id+'" style="margin-bottom:7px;font-size:12px">'+opts+'</select><div style="font-size:10px;color:#94a3b8;margin:-3px 0 7px">選擇後會先核准本關，再把該員工排為下一關加簽。</div>';
@@ -2931,6 +2931,21 @@ function applyRolePermissions(){
 }
 function firstUserByRole(role){
   return USERS.find(function(u){return u.role===role&&u.active;})||null;
+}
+function activeUniqueUsers(){
+  var groups={};
+  USERS.filter(function(u){return u.active!==false;}).forEach(function(u){
+    var key=[String(u.n||'').trim(),u.role||''].join('|').toLowerCase();
+    if(!groups[key])groups[key]=[];
+    groups[key].push(u);
+  });
+  return Object.keys(groups).map(function(k){
+    return groups[k].slice().sort(function(a,b){
+      var ad=/^\d+@suiyuecare\.com$/i.test(a.email||'')?1:0;
+      var bd=/^\d+@suiyuecare\.com$/i.test(b.email||'')?1:0;
+      return ad-bd||String(a.email||'').localeCompare(String(b.email||''));
+    })[0];
+  }).sort(function(a,b){return String(a.n||'').localeCompare(String(b.n||''),'zh-Hant');});
 }
 function directSupervisorRole(role){
   return {employee:'section_chief',section_chief:'dept_manager',dept_manager:'admin_director',accountant:'admin_director',hr:'admin_director',admin_director:'ceo'}[role]||null;
@@ -5625,7 +5640,7 @@ function ensureTravelRows(){
 }
 function travelPeopleOptionsHtml(){
   if(!S.travelPeople||!S.travelPeople.length)S.travelPeople=S.user?[S.user.id]:[];
-  return USERS.filter(function(u){return u.active;}).map(function(u){
+  return activeUniqueUsers().map(function(u){
     var checked=S.travelPeople.indexOf(u.id)>-1;
     return'<option value="'+u.id+'" '+(checked?'selected':'')+'>'+u.n+'（'+u.rL+' · '+u.dc+'）</option>';
   }).join('');
@@ -5638,7 +5653,7 @@ function renderTravelPeople(){
   if(!S.travelPeople||!S.travelPeople.length)S.travelPeople=S.user?[S.user.id]:[];
   var summary=el('tr-people-summary');if(summary)summary.textContent=travelPeopleSummary();
   var box=el('tr-people-box');if(!box)return;
-  box.innerHTML=USERS.filter(function(u){return u.active;}).map(function(u){
+  box.innerHTML=activeUniqueUsers().map(function(u){
     var checked=S.travelPeople.indexOf(u.id)>-1;
     return'<label style="display:flex;gap:6px;align-items:center;padding:7px;border-radius:7px;font-size:11px;color:#334155;cursor:pointer"><input type="checkbox" '+(checked?'checked':'')+' onchange="travelPersonToggle(\''+u.id+'\',this.checked)"> <span style="font-weight:650">'+u.n+'</span><span style="color:#94a3b8">'+u.rL+' · '+u.dc+'</span></label>';
   }).join('');
@@ -8955,7 +8970,7 @@ window.submitAddUser=async function(){
 // ══ 組織圖與簽核主管關係 ══
 function orgSupervisorOptions(userId,selected){
   var opts='<option value="">無（最高層或暫不指定）</option>';
-  opts+=USERS.filter(function(u){return u.active!==false&&u.id!==userId;}).map(function(u){
+  opts+=activeUniqueUsers().filter(function(u){return u.id!==userId;}).map(function(u){
     return'<option value="'+u.id+'" '+(selected===u.id?'selected':'')+'>'+u.n+'（'+(u.rL||RL[u.role]||u.role)+'｜'+(gD(u.dc).n||u.dc)+'）</option>';
   }).join('');
   return opts;
