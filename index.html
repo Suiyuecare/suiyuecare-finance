@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ea880c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="歲悅財務">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="application-name" content="歲悅財務">
+<meta name="msapplication-TileColor" content="#ea880c">
+<meta name="msapplication-TileImage" content="assets/pwa/icon-192.png">
 <title>歲悅長照集團 · 財務管理系統 V3</title>
 <script>
 (function(){
@@ -14,6 +22,13 @@
 })();
 </script>
 <link rel="icon" type="image/png" href="assets/suiyue-logo-transparent.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/pwa/apple-touch-icon.png">
+<link rel="apple-touch-startup-image" href="assets/pwa/splash-iphone-390x844.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="assets/pwa/splash-iphone-393x852.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="assets/pwa/splash-iphone-430x932.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="assets/pwa/splash-ipad-768x1024.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+<link rel="apple-touch-startup-image" href="assets/pwa/splash-ipad-1024x1366.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
 :root{--br:#ea880c;--brd:#c97008;--brl:#f5c060;--brxl:#fde8bc;--brxxl:#fff8ed;--brtxt:#5c3800;--cream:#fdf8f2;--warm:#f8f0e4}
@@ -9705,6 +9720,15 @@ updateOAuthWebviewNotice();
 handleOAuthReturn();
 
 })();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('/sw.js').catch(function(err){
+      console.warn('Service worker registration failed', err);
+    });
+  });
+}
 </script>
 </body>
 </html>
