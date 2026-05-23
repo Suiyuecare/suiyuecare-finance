@@ -1198,6 +1198,10 @@ html,body{overflow-x:hidden}
         <span>系統教學簡報</span>
         <strong>下載</strong>
       </a>
+      <a class="manual-download" href="privacy.html" target="_blank" rel="noopener">
+        <span>隱私權政策</span>
+        <strong>查看</strong>
+      </a>
     </div>
     <div style="position:relative;z-index:1;font-size:11px;color:rgba(255,255,255,.68);letter-spacing:.08em">FINANCE OS · 2026</div>
   </div>
@@ -1253,6 +1257,7 @@ html,body{overflow-x:hidden}
         <div id="hub-user-role" style="font-size:11px;color:#7a8699;margin-top:2px">已登入</div>
       </div>
       <a class="hub-manual" href="docs/歲悅會計系統_V2-V3修訂重點.html" download>V2-V3 修訂重點</a>
+      <a class="hub-manual" href="privacy.html" target="_blank" rel="noopener">隱私權政策</a>
       <a class="hub-manual" href="docs/歲悅會計系統教育訓練手冊_橘色版.docx" download>教育訓練手冊</a>
       <button class="btn-s" onclick="showLogin()">登出</button>
     </div>
@@ -3633,6 +3638,9 @@ async function handleOAuthReturn(){
 }
 function doEnter(u){
   S.user=u;
+  S.page='dashboard';
+  S.prev='dashboard';
+  S.aT='p';
   loadLocalAppState();
   el('sb-av').textContent=u.init;el('sb-name').textContent=u.n;
   el('sb-role').textContent=u.rL+' · '+u.dc;el('top-info').textContent=u.n+' · '+u.rL+' · '+dataEnvLabel();

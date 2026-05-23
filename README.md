@@ -54,3 +54,7 @@ pnpm run cap:open:android
 - iOS 專案使用 Swift Package Manager，不需要 CocoaPods。
 - 原生 App icon 與 splash source 檔在 `resources/`。
 - iOS 編譯需要完整 Xcode；Android 編譯需要 Android Studio / JDK。
+- 隱私權政策頁在 `privacy.html`，正式網址為 `https://finance.suiyuecare.com/privacy.html`。
+- 上架審核資料草稿在 `docs/app_store_review_notes.md`。
+- 行動版打包與送審流程在 `docs/mobile_release_runbook.md`。
+- 手機截圖草稿在 `docs/app-store-screenshots/`。

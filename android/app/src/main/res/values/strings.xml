@@ -4,4 +4,5 @@
     <string name="title_activity_main">歲悅財務</string>
     <string name="package_name">com.suiyuecare.finance</string>
     <string name="custom_url_scheme">com.suiyuecare.finance</string>
+    <string name="camera_permission_reason">用於拍攝發票、收據、存摺封面與簽核附件。</string>
 </resources>

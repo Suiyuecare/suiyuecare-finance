@@ -4,7 +4,7 @@
   "private": true,
   "description": "歲悅長照集團財務管理系統 V3",
   "scripts": {
-    "build": "rm -rf www && mkdir -p www && cp index.html manifest.webmanifest sw.js www/ && cp -R assets docs www/",
+    "build": "rm -rf www && mkdir -p www && cp index.html privacy.html manifest.webmanifest sw.js www/ && cp -R assets docs www/",
     "cap:sync": "pnpm build && cap sync",
     "cap:open:ios": "pnpm cap:sync && cap open ios",
     "cap:open:android": "pnpm cap:sync && cap open android"
