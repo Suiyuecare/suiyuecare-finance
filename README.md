@@ -34,3 +34,23 @@
 - 數據資料完整：發票批次、收款附件、簽核附件、傳票、分類帳與 audit log 都要保存。
 - 資料統整最強：儀表板、收款情形、三表、分類帳共用同一批資料來源，優先採用已入帳分錄。
 - 即時：Supabase Realtime 開啟後，使用者不用重新整理即可看到最新待辦與財務數字。
+
+## 手機 App 專案
+
+本 repo 已建立 Capacitor iOS / Android 專案。
+
+常用指令：
+
+```bash
+pnpm install
+pnpm run cap:sync
+pnpm run cap:open:ios
+pnpm run cap:open:android
+```
+
+注意事項：
+
+- Web 打包輸出在 `www/`，執行 `pnpm run cap:sync` 時會重新複製 `index.html`、`assets/`、`docs/`、PWA 檔案到原生專案。
+- iOS 專案使用 Swift Package Manager，不需要 CocoaPods。
+- 原生 App icon 與 splash source 檔在 `resources/`。
+- iOS 編譯需要完整 Xcode；Android 編譯需要 Android Studio / JDK。

@@ -9,3 +9,5 @@ supabase/.temp/
 *.pem
 __pycache__/
 .vercel
+node_modules/
+www/

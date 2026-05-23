@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">歲悅財務</string>
+    <string name="title_activity_main">歲悅財務</string>
+    <string name="package_name">com.suiyuecare.finance</string>
+    <string name="custom_url_scheme">com.suiyuecare.finance</string>
+</resources>
