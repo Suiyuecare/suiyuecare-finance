@@ -13,7 +13,7 @@
    `supabase/compliance_and_drafts.sql`
 3. 在 Supabase Authentication 建立員工帳號，Email 需與 `finance_users.email` 一致。
 4. 在 `index.html` 填入 `SUPABASE_ANON_KEY`。只能放 anon public key，不能放 service role key。
-5. 若要使用 Google 登入，在 Supabase Auth Providers 啟用 Google；Google Cloud OAuth「已授權重新導向 URI」需加入 `https://udtlppnrugmtzhigdsxo.supabase.co/auth/v1/callback`，Supabase Auth URL Configuration 的 Site URL / Redirect URLs 需加入 `https://finance.suiyuecare.com`。
+5. 若要使用 Google 登入，在 Supabase Auth Providers 啟用 Google；Google Cloud OAuth「已授權重新導向 URI」需加入 `https://udtlppnrugmtzhigdsxo.supabase.co/auth/v1/callback`。Supabase Auth URL Configuration 的 Site URL 設為 `https://finance.suiyuecare.com`，Redirect URLs 需加入 `https://finance.suiyuecare.com/` 與 App 回跳網址 `com.suiyuecare.finance://oauth-callback`。
 6. 若要使用 OpenAI 發票辨識，部署 `supabase/functions/parse-invoice-openai`，並在 Supabase Edge Function secrets 設定 `OPENAI_API_KEY`。
 
 ## 核心資料流

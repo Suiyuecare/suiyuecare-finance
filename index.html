@@ -1797,6 +1797,7 @@ var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 var OPENAI_INVOICE_OCR_ENDPOINT=SUPABASE_URL+'/functions/v1/parse-invoice-openai';
 var SUPABASE_ATTACHMENT_BUCKET='finance-attachments';
 var PRODUCTION_APP_URL='https://finance.suiyuecare.com/';
+var NATIVE_OAUTH_REDIRECT_URL='com.suiyuecare.finance://oauth-callback';
 var sb=null;
 var realtimeChannel=null;
 var syncTimer=null;
@@ -1812,6 +1813,16 @@ function getSb(){
   if(!hasSupabase())return null;
   if(!sb)sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
   return sb;
+}
+function capacitorPlugin(name){
+  return window.Capacitor&&window.Capacitor.Plugins?window.Capacitor.Plugins[name]:null;
+}
+function isCapacitorNativeApp(){
+  try{
+    return !!(window.Capacitor&&typeof window.Capacitor.isNativePlatform==='function'&&window.Capacitor.isNativePlatform());
+  }catch(e){
+    return false;
+  }
 }
 async function currentSupabaseSession(){
   var client=getSb();if(!client||!client.auth)return null;
@@ -3478,12 +3489,13 @@ async function enterByEmail(email){
   return true;
 }
 function oauthRedirectUrl(){
+  if(isCapacitorNativeApp())return NATIVE_OAUTH_REDIRECT_URL;
   if(location.protocol==='file:')return PRODUCTION_APP_URL;
   if(location.hostname==='localhost'||location.hostname==='127.0.0.1')return location.origin+location.pathname;
   return PRODUCTION_APP_URL;
 }
 function oauthSetupHint(){
-  return 'Google 登入設定請確認：1. Google Cloud OAuth「已授權重新導向 URI」必須包含 '+SUPABASE_URL+'/auth/v1/callback；2. Supabase Auth URL Configuration 的 Site URL / Redirect URLs 必須包含 '+PRODUCTION_APP_URL+'；3. Vercel 正式網址與目前網址一致。';
+  return 'Google 登入設定請確認：1. Google Cloud OAuth「已授權重新導向 URI」必須包含 '+SUPABASE_URL+'/auth/v1/callback；2. Supabase Auth URL Configuration 的 Site URL / Redirect URLs 必須包含 '+PRODUCTION_APP_URL+' 與 '+NATIVE_OAUTH_REDIRECT_URL+'；3. Vercel 正式網址與目前網址一致。';
 }
 function isOAuthBlockedUserAgent(){
   var ua=navigator.userAgent||'';
@@ -3494,6 +3506,7 @@ function isOAuthBlockedUserAgent(){
   return inApp||(ios&&!isSafari&&!isKnownBrowser);
 }
 function oauthWebviewMessage(){
+  if(isCapacitorNativeApp())return 'App 版會使用系統瀏覽器開啟 Google 登入，完成後會自動回到歲悅財務。若沒有回來，請確認 Supabase Redirect URLs 已加入 '+NATIVE_OAUTH_REDIRECT_URL+'。';
   return '目前是在手機 App 內建瀏覽器中開啟。Google 會封鎖這種 OAuth 登入方式（403 disallowed_useragent）。請點右上角或右下角選單，選「在 Safari 開啟」或「在 Chrome 開啟」，網址請使用：'+PRODUCTION_APP_URL;
 }
 window.copyOfficialUrl=function(){
@@ -3507,7 +3520,7 @@ window.copyOfficialUrl=function(){
 function updateOAuthWebviewNotice(){
   var box=el('oauth-webview-warning'),btn=document.querySelector('.google-btn');
   if(!box||!btn)return;
-  if(isOAuthBlockedUserAgent()){
+  if(isOAuthBlockedUserAgent()&&!isCapacitorNativeApp()){
     box.style.display='block';
     btn.title='請先用 Safari 或 Chrome 開啟正式網址後再使用 Google 登入';
   }else{
@@ -3524,7 +3537,7 @@ window.quickLogin=function(role){
 };
 window.googleLogin=async function(){
   var envSel=el('login-data-env');if(envSel)setDataEnvironment(envSel.value);
-  if(isOAuthBlockedUserAgent()){
+  if(isOAuthBlockedUserAgent()&&!isCapacitorNativeApp()){
     updateOAuthWebviewNotice();
     alert(oauthWebviewMessage());
     return;
@@ -3535,31 +3548,88 @@ window.googleLogin=async function(){
     return;
   }
   var err=el('login-err');if(err){err.style.display='none';err.textContent='';}
+  var nativeApp=isCapacitorNativeApp();
   var res=await client.auth.signInWithOAuth({
     provider:'google',
     options:{
       redirectTo:oauthRedirectUrl(),
+      skipBrowserRedirect:nativeApp,
       queryParams:{access_type:'offline',prompt:'select_account'}
     }
   });
   if(res.error&&err){err.style.display='block';err.textContent='Google 登入啟動失敗：'+res.error.message+'。'+oauthSetupHint();}
+  if(nativeApp&&!res.error&&res.data&&res.data.url){
+    var Browser=capacitorPlugin('Browser');
+    if(Browser&&Browser.open){
+      await Browser.open({url:res.data.url,windowName:'_blank',presentationStyle:'fullscreen'});
+    }else{
+      location.href=res.data.url;
+    }
+  }
 };
-async function handleOAuthReturn(){
+async function completeOAuthFromUrl(rawUrl,cleanBrowserUrl){
   var client=getSb();
-  if(!client)return;
-  var hashParams=new URLSearchParams(String(location.hash||'').replace(/^#/,''));
-  var queryParams=new URLSearchParams(String(location.search||'').replace(/^\?/,''));
+  if(!client||!rawUrl)return false;
+  var url;
+  try{url=new URL(rawUrl);}catch(e){return false;}
+  var hashParams=new URLSearchParams(String(url.hash||'').replace(/^#/,''));
+  var queryParams=new URLSearchParams(String(url.search||'').replace(/^\?/,''));
   var oauthError=hashParams.get('error_description')||queryParams.get('error_description')||hashParams.get('error')||queryParams.get('error');
   if(oauthError){
     var login=el('login-screen');if(login)login.style.display='flex';
     var err=el('login-err');
     if(err){err.style.display='block';err.textContent='Google 登入失敗：'+oauthError+'。'+oauthSetupHint();}
-    return;
+    return true;
   }
-  var sess=await client.auth.getSession();
-  if(sess.error||!sess.data||!sess.data.session)return;
-  var email=(sess.data.session.user||{}).email;
-  if(email)await enterByEmail(email);
+  var code=queryParams.get('code');
+  var accessToken=hashParams.get('access_token')||queryParams.get('access_token');
+  var refreshToken=hashParams.get('refresh_token')||queryParams.get('refresh_token');
+  try{
+    if(code&&client.auth.exchangeCodeForSession){
+      var exchanged=await client.auth.exchangeCodeForSession(code);
+      if(exchanged.error)throw exchanged.error;
+    }else if(accessToken&&refreshToken&&client.auth.setSession){
+      var set=await client.auth.setSession({access_token:accessToken,refresh_token:refreshToken});
+      if(set.error)throw set.error;
+    }else{
+      var existing=await client.auth.getSession();
+      if(!existing||!existing.data||!existing.data.session)return false;
+    }
+    var sess=await client.auth.getSession();
+    if(sess.error||!sess.data||!sess.data.session)return false;
+    var email=(sess.data.session.user||{}).email;
+    if(email)await enterByEmail(email);
+    if(cleanBrowserUrl&&history.replaceState){
+      history.replaceState(null,document.title,location.pathname);
+    }
+    var Browser=capacitorPlugin('Browser');
+    if(Browser&&Browser.close){try{await Browser.close();}catch(e){}}
+    return true;
+  }catch(e){
+    var errBox=el('login-err');
+    if(errBox){errBox.style.display='block';errBox.textContent='Google 登入回傳處理失敗：'+(e&&e.message?e.message:e)+'。'+oauthSetupHint();}
+    return true;
+  }
+}
+function initCapacitorOAuthRedirect(){
+  if(!isCapacitorNativeApp())return;
+  var App=capacitorPlugin('App');
+  if(!App||!App.addListener)return;
+  App.addListener('appUrlOpen',function(event){
+    var url=event&&event.url?event.url:'';
+    if(url.indexOf(NATIVE_OAUTH_REDIRECT_URL)===0){
+      completeOAuthFromUrl(url,false);
+    }
+  });
+  if(App.getLaunchUrl){
+    App.getLaunchUrl().then(function(res){
+      var url=res&&res.url?res.url:'';
+      if(url.indexOf(NATIVE_OAUTH_REDIRECT_URL)===0)completeOAuthFromUrl(url,false);
+    }).catch(function(){});
+  }
+}
+async function handleOAuthReturn(){
+  await completeOAuthFromUrl(location.href,true);
 }
 function doEnter(u){
   S.user=u;
@@ -9717,6 +9787,7 @@ window.buildCF = buildCF;
 window.renderLedger = renderLedger;
 setDemoLoginVisibility();
 updateOAuthWebviewNotice();
+initCapacitorOAuthRedirect();
 handleOAuthReturn();
 
 })();
