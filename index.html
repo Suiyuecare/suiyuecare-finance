@@ -51,6 +51,10 @@ nav::-webkit-scrollbar{width:3px}nav::-webkit-scrollbar-thumb{background:#2d3f55
 .cht{font-size:13px;font-weight:500;color:#334155}
 .sc{background:var(--warm);border-radius:10px;padding:10px 12px;border:1px solid #f0dfc8}
 .g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.detail-full-row{grid-column:1/-1;min-width:0}
+.detail-full-row>.card{width:100%;margin-top:0!important}
+.detail-info-card,.detail-progress-card{min-width:0;align-self:start}
+.detail-progress-card{max-height:72vh;overflow:auto}
 .g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:12px}
 table{width:100%;border-collapse:collapse;font-size:12px}
@@ -545,6 +549,9 @@ html,body{overflow-x:hidden}
   #appr-inner{height:auto!important;max-height:none!important;overflow:visible!important}
   #appr-empty{min-height:160px!important}
   #detail-body{display:grid!important;grid-template-columns:1fr!important}
+  #detail-body .detail-full-row{grid-column:1!important}
+  #detail-body .detail-info-card>div:nth-child(2){grid-template-columns:1fr!important}
+  #detail-body .detail-progress-card{max-height:none}
   .modal-bg{padding-top:12px}
   table.mobile-card-table{display:block!important;width:100%!important;min-width:0!important;border-collapse:separate!important}
   table.mobile-card-table thead{display:none!important}
@@ -6838,18 +6845,15 @@ window.openDetail=function(rid){
       var bg=s.done?'#eaf8d8':s.rej?'#fde8e8':s.cur?'var(--brxxl)':'var(--warm)';
       var dc=s.done?'#1a5010':s.rej?'#8a1010':s.cur?'var(--brtxt)':'#94a3b8';
       var db=s.done?'#2a9040':s.rej?'#c02020':s.cur?'var(--br)':'#e0d0b8';
-      return'<div class="tl-item"><div class="tl-dot" style="background:'+db+';color:'+(s.done||s.rej||s.cur?'#fff':'#b09070')+';border:1px solid '+(s.cur?'var(--br)':'#e0d0b8')+'">'+(s.done?'OK':s.rej?'NO':i+1)+'</div><div style="flex:1;padding-top:2px"><div style="font-size:12px;font-weight:500;color:'+dc+'">'+s.label+(s.n?' — '+s.n:'')+(s.t?' <span style="font-size:10px;font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+(s.cur?' <span class="badge b-wait" style="font-size:9px;margin-left:4px">進行中</span>':'')+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px;line-height:1.5">'+(s.purpose||'建立申請並送出簽核流程。')+'</div>'+stepAttachmentHtml(s.files)+(s.c?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.c+'</div>':'')+'</div></div>';
+      return'<div class="tl-item"><div class="tl-dot" style="background:'+db+';color:'+(s.done||s.rej||s.cur?'#fff':'#b09070')+';border:1px solid '+(s.cur?'var(--br)':'#e0d0b8')+'">'+(s.done?'OK':s.rej?'NO':i+1)+'</div><div style="flex:1;padding-top:2px"><div style="font-size:12px;font-weight:500;color:'+dc+'">'+s.label+(s.n?' — '+s.n:'')+(s.t?' <span style="font-size:10px;font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+(s.cur?' <span class="badge b-wait" style="font-size:9px;margin-left:4px">進行中</span>':'')+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px;line-height:1.5">'+(s.purpose||'建立申請並送出簽核流程。')+'</div>'+stepAttachmentHtml(s.files)+stepFeedbackHtml(s.c)+'</div></div>';
     }).join('');
   var lineAccountingCard=isFinance()?accountingLinesHtml(r,canActRequest(r)&&curStep&&(curStep.rk==='accountant'||curStep.rk==='accountant_final'),'明細列入帳科目','detail-acct-line'):'';
   var accountingCard=isFinance()
     ?'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById(\''+r.voucherId+'\')">'+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+r.dr+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+r.drN+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+r.cr+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+r.crN+'</div></div></div>'+(feeAmt?'<div style="font-size:11px;color:#6a5840;margin-top:6px;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:6px">己方支出手續費會自動增加：Dr 6290 手續費 '+fmt(feeAmt)+'，Cr '+r.cr+' 銀行存款合計 '+fmt(r.amt+feeAmt)+'。</div>':'')+'<div style="font-size:11px;color:#94a3b8;margin-top:6px">提醒：數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
     :'<div class="card" style="padding:12px;background:#fff8ed;border-color:#efd7b8"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:5px">會計處理</div><div style="font-size:11px;color:#8b7358;line-height:1.7">這張單完成簽核後，會計會確認憑據與金流並由系統處理入帳。您不用填寫會計科目、分錄或傳票，只需要追蹤簽核狀態與補齊附件。</div></div>';
-  el('detail-body').innerHTML=
-    '<div style="display:flex;flex-direction:column;gap:10px">'
-    +'<div class="card"><div class="chd"><span class="cht">申請資訊</span></div><div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+cells+'</div><div style="padding:0 12px 12px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;border:1px solid #f0e0c8">'+r.desc+'</div>'+purchaseAmountCompareHtml(r)+advanceTwoEventHtml(r)+pettyAccountingHtml(r)+filesHtml+'</div></div>'
-    +accountingCard
-    +lineAccountingCard
-    +'<div class="card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">步驟 '+((r.steps||[]).filter(function(s){return s.a;}).length+1)+'/'+((r.steps||[]).length||8)+'</span></div><div style="padding:12px">'+tl+'</div></div>';
+  var infoCard='<div class="card detail-info-card"><div class="chd"><span class="cht">申請資訊</span></div><div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+cells+'</div><div style="padding:0 12px 12px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;border:1px solid #f0e0c8">'+r.desc+'</div>'+purchaseAmountCompareHtml(r)+advanceTwoEventHtml(r)+pettyAccountingHtml(r)+filesHtml+'</div></div>';
+  var progressCard='<div class="card detail-progress-card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">步驟 '+((r.steps||[]).filter(function(s){return s.a;}).length+1)+'/'+((r.steps||[]).length||8)+'</span></div><div style="padding:12px">'+tl+'</div></div>';
+  el('detail-body').innerHTML=infoCard+progressCard+'<div class="detail-full-row">'+accountingCard+'</div>'+(lineAccountingCard?'<div class="detail-full-row">'+lineAccountingCard+'</div>':'');
 };
 
 window.doApprove=async function(rid){
