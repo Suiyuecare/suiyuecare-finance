@@ -76,7 +76,7 @@ export function MobileBottomNav() {
   const visibleItems = roleMobileItems[currentUser.role].filter((item) => canAny(currentUser.role, item.permissions));
 
   return (
-    <nav aria-label="手機主要導覽" className="fixed inset-x-0 bottom-0 z-40 border-t border-[#ead8c2] bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom)+8px)] pt-2 shadow-[0_-10px_30px_rgba(52,36,18,0.08)] backdrop-blur lg:hidden">
+    <nav aria-label="手機主要導覽" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#171b24]/96 px-2 pb-[calc(env(safe-area-inset-bottom)+8px)] pt-2 shadow-[0_-12px_32px_rgba(25,16,8,0.18)] backdrop-blur lg:hidden">
       <div className="mx-auto grid max-w-md grid-cols-5 gap-1.5">
         {visibleItems.map((item) => {
           const active = isNavigationItemActive(pathname, item.href);
@@ -86,11 +86,11 @@ export function MobileBottomNav() {
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-bold text-slate-500 transition active:scale-[0.98] active:bg-[#fff7ed]",
-                active && "bg-[#fff3de] text-[#8a4b06] ring-1 ring-[#f0c987]",
+                "flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-bold text-slate-300 transition active:scale-[0.98] active:bg-white/10",
+                active && "bg-[#8a4b06] text-white ring-1 ring-[#d97706]",
               )}
             >
-              <span className={cn("rounded-lg p-1", active && "bg-white/70")}>
+              <span className={cn("rounded-lg border border-white/10 p-1 text-[#f6b35d]", active && "border-[#d97706] bg-[#d97706] text-white")}>
                 <item.icon className="h-4 w-4" />
               </span>
               <span className="max-w-full truncate px-0.5">{item.title}</span>

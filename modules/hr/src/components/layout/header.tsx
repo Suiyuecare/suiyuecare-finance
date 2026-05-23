@@ -146,8 +146,8 @@ export function Header() {
           </Button>
           <SuiyueLogo className="h-9 w-9 shrink-0 p-0.5 lg:hidden" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-bold text-[#172033]">人資管理系統</div>
-            <div className="truncate text-xs text-slate-500">歲悅長照集團 · {isAuthenticated ? currentUser.roleLabel : "請先登入"}</div>
+            <div className="truncate text-sm font-bold text-[#172033]">歲悅長照集團 · 人資管理系統 V3</div>
+            <div className="truncate text-xs text-slate-500">HR OS · 即時同步 · {isAuthenticated ? currentUser.roleLabel : "請先登入"}</div>
           </div>
         <form
           className="hidden w-80 items-center gap-2 rounded-md border border-[#dfc9b1] bg-[#fffaf4] px-3 md:flex"
@@ -209,12 +209,12 @@ export function Header() {
             aria-label="手機功能選單"
             className="absolute left-0 top-0 flex h-full w-[min(94vw,390px)] flex-col bg-[#fbfaf8] text-slate-900 shadow-2xl"
           >
-            <div className="border-b border-[#ead8c2] bg-gradient-to-b from-[#1f2430] to-[#171b24] p-4 text-white">
+            <div className="finance-sidebar border-b border-[#ead8c2] p-4 text-white">
               <div className="mb-4 flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <SuiyueLogo className="h-10 w-10 shrink-0 border-white/70 bg-[#fff3de] p-0.5" />
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-bold">人資管理系統</div>
+                  <div className="truncate text-sm font-bold">歲悅長照集團</div>
                   <div className="truncate text-[11px] text-slate-400">{isAuthenticated ? `${currentUser.name} · ${getRoleLabel(currentUser.role)}` : "請先登入"}</div>
                 </div>
               </div>

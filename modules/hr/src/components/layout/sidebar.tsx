@@ -16,13 +16,13 @@ export function Sidebar() {
   const visibleNavigationGroups = isAuthenticated ? getVisibleNavigation(currentUser.role) : [];
 
   return (
-    <aside className="hidden w-[212px] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-[#1f2430] to-[#171b24] px-[14px] py-[16px] text-white lg:flex">
+    <aside className="finance-sidebar hidden w-[212px] shrink-0 flex-col border-r border-white/10 px-[14px] py-[16px] text-white lg:flex">
       <div className="mb-4 flex items-center gap-3 border-b border-white/10 pb-4">
         <SuiyueLogo className="h-[42px] w-[42px] shrink-0 border-white/70 bg-[#fff3de] p-0.5 shadow-[0_8px_24px_rgba(0,0,0,0.22)]" />
         <div className="min-w-0">
-          <div className="truncate text-sm font-bold text-white">人資管理系統</div>
+          <div className="truncate text-sm font-bold text-white">歲悅長照集團</div>
           <div className="truncate text-[10px] tracking-[0.12em] text-slate-400">
-            {isAuthenticated ? getRoleLabel(currentUser.role) : "請先登入"}
+            HR OS V3 · {isAuthenticated ? getRoleLabel(currentUser.role) : "請先登入"}
           </div>
         </div>
       </div>
@@ -41,8 +41,8 @@ export function Sidebar() {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 rounded-[9px] px-3 py-2 text-[12px] text-slate-300 transition hover:bg-white/10 hover:text-white",
-                      isActive && "bg-[linear-gradient(90deg,rgba(217,119,6,0.28),rgba(217,119,6,0.08))] font-semibold text-white shadow-sm ring-1 ring-white/5",
+                      "finance-sidebar-item flex items-center gap-3 rounded-[9px] px-3 py-2 text-[12px] transition hover:bg-white/10 hover:text-white",
+                      isActive && "finance-sidebar-item-active font-semibold",
                     )}
                   >
                     <span className={cn(

@@ -28,6 +28,7 @@
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
+    "@next/eslint-plugin-next": "15.5.18",
     "@next/swc-wasm-nodejs": "15.5.18",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",

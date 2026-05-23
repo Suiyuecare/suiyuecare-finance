@@ -59,8 +59,8 @@ const modules = [
 export default function ModulesPage() {
   return (
     <main className="min-h-screen bg-[#eee7de] p-0 sm:p-4">
-      <section className="suiyue-system-shell mx-auto min-h-screen max-w-[1200px] overflow-hidden bg-[#fbfaf8] sm:min-h-[calc(100vh-2rem)] sm:rounded-[18px]">
-        <header className="flex h-[66px] items-center justify-between border-b border-[#ead8c2] bg-white/80 px-4 backdrop-blur sm:px-6">
+      <section className="finance-shell-card mx-auto min-h-screen max-w-[1200px] overflow-hidden sm:min-h-[calc(100vh-2rem)] sm:rounded-[18px]">
+        <header className="finance-topbar flex h-[66px] items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <SuiyueLogo className="h-10 w-10 p-0.5" />
             <div>
@@ -77,7 +77,7 @@ export default function ModulesPage() {
 
         <div className="bg-[linear-gradient(180deg,#fffaf4_0%,#f7efe5_100%)] px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
           <div className="max-w-3xl">
-            <div className="mb-3 inline-flex rounded-full border border-[#f0c987] bg-white px-3 py-1 text-xs font-black tracking-[0.14em] text-[#8a4b06]">
+            <div className="finance-kicker mb-3 inline-flex rounded-full border border-[#f0c987] bg-white px-3 py-1">
               SUIYUE CARE GROUP
             </div>
             <h1 className="text-[26px] font-black leading-tight text-[#172033] sm:text-[34px]">選擇今天要處理的系統</h1>
@@ -90,13 +90,13 @@ export default function ModulesPage() {
           <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {modules.map((module) => {
               const card = (
-                <Card className="h-full rounded-[14px] border-[#ead8c2] bg-white shadow-[0_16px_40px_rgba(52,36,18,0.06)] transition hover:-translate-y-0.5 hover:border-[#d97706] hover:shadow-[0_22px_60px_rgba(52,36,18,0.11)]">
+                <Card className="finance-module-card h-full">
                   <CardContent className="flex h-full min-h-[210px] flex-col p-5 sm:p-6">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-[14px] border border-[#f0c987] bg-[#fff7ed] text-[#b45309]">
+                    <div className="finance-module-icon flex h-14 w-14 items-center justify-center rounded-[14px]">
                       <module.icon className="h-6 w-6" />
                     </div>
                     <div className="mt-6 flex items-center justify-between gap-3">
-                      <h2 className="text-xl font-black text-[#172033]">{module.name}</h2>
+                      <h2 className="finance-card-title text-xl">{module.name}</h2>
                       <Badge variant={module.name === "人資系統" ? "default" : "secondary"}>
                         {module.status}
                       </Badge>

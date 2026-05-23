@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "歲悅長照集團 HRIS",
-  description: "長照產業專用雲端人資管理系統",
+  title: "歲悅長照集團 · 人資管理系統 V3",
+  description: "歲悅長照集團營運系統的人資模組，與會計系統共用帳號、組織與權限資料。",
 };
 
 export default function RootLayout({

@@ -39,6 +39,9 @@ importers:
         specifier: ^2.6.0
         version: 2.6.1
     devDependencies:
+      '@next/eslint-plugin-next':
+        specifier: 15.5.18
+        version: 15.5.18
       '@next/swc-wasm-nodejs':
         specifier: 15.5.18
         version: 15.5.18
