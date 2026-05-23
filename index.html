@@ -5652,6 +5652,7 @@ function payeeAccountOptionsHtml(){
 function refreshPayeeAccountSelect(){
   var sel=el('nr-payee-account');if(sel)sel.innerHTML=payeeAccountOptionsHtml();
 }
+window.refreshPayeeAccountSelect=refreshPayeeAccountSelect;
 window.applyPayeeBankAccount=function(id){
   var a=(PAYEE_BANK_ACCOUNTS||[]).find(function(x){return x.id===id;});
   if(!a)return;

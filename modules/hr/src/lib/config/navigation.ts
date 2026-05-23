@@ -14,6 +14,7 @@ import {
   Landmark,
   LockKeyhole,
   NotebookText,
+  ServerCog,
   Settings2,
   ShieldAlert,
   ShieldCheck,
@@ -66,6 +67,7 @@ export const navigationGroups: NavigationGroup[] = [
       { title: "假別管理", href: "/attendance/leave-types", icon: CalendarDays, permissions: ["attendance:manage"] },
       { title: "薪資結算", href: "/payroll/closing", icon: ClipboardCheck, permissions: ["payroll:manage"] },
       { title: "薪資清冊", href: "/payroll/roster", icon: Landmark, permissions: ["payroll:manage"] },
+      { title: "薪資設定", href: "/payroll/employee-settings", icon: Settings2, permissions: ["payroll:manage"] },
     ],
   },
   {
@@ -83,6 +85,7 @@ export const navigationGroups: NavigationGroup[] = [
     label: "設定",
     items: [
       { title: "系統設定", href: "/settings", icon: Settings2, permissions: ["system:settings"] },
+      { title: "上線營運中心", href: "/operations", icon: ServerCog, permissions: ["system:settings"] },
       { title: "資安與權限", href: "/security", icon: ShieldAlert, permissions: ["system:settings"] },
     ],
   },
