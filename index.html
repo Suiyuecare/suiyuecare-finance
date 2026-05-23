@@ -520,6 +520,48 @@ html,body{overflow-x:hidden}
   .entry-row{min-width:0!important;grid-template-columns:58px minmax(0,1fr) 64px 64px!important}
   .type-title,.type-desc,.cht,#page-title{word-break:break-word}
 }
+/* Phone layout pass: convert dense desktop views into readable single-column mobile screens. */
+@media(max-width:760px){
+  .content{height:100%;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
+  .ph{font-size:18px;line-height:1.25}
+  .ps{font-size:12px;line-height:1.6}
+  #dash-finance-head{display:block!important}
+  #dash-finance-head .btn-g{margin-top:8px;width:100%;justify-content:center}
+  #dash-finance-banner{padding:12px!important;border-radius:14px!important}
+  #dash-finance-banner>div:last-child,
+  #entity-cards,
+  #dash-dist-wrap>div,
+  #recv-kpis,
+  #recv-trend,
+  #trial-kpis,
+  #tax-kpis{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+  #entity-cards-wrap .sc{min-width:0!important}
+  .approval-shell{display:grid!important;grid-template-columns:1fr!important;height:auto!important;gap:10px!important}
+  #pg-approvals .tb-bar{position:sticky;top:48px;z-index:40;background:#fbfaf8;border:1px solid #ead8c2;border-radius:12px;padding:4px;margin-bottom:8px;box-shadow:0 8px 20px rgba(52,36,18,.06)}
+  #pg-approvals .tb{min-height:38px;border-radius:9px;border-bottom:none;padding:7px 10px}
+  #pg-approvals .tb.on{background:#fff3de;color:#7c3f00}
+  #appr-list{max-height:38dvh;overflow-y:auto;border:1px solid #ead8c2;border-radius:12px;padding:6px;background:#fffaf4}
+  #appr-panel{min-height:44dvh}
+  #appr-inner{height:auto!important;max-height:none!important;overflow:visible!important}
+  #appr-empty{min-height:160px!important}
+  #detail-body{display:grid!important;grid-template-columns:1fr!important}
+  .modal-bg{padding-top:12px}
+  table.mobile-card-table{display:block!important;width:100%!important;min-width:0!important;border-collapse:separate!important}
+  table.mobile-card-table thead{display:none!important}
+  table.mobile-card-table tbody{display:block!important}
+  table.mobile-card-table tbody:empty::after{content:'目前沒有資料';display:block;text-align:center;color:#94a3b8;font-size:12px;padding:24px 8px;border:1.5px dashed #ead8c2;border-radius:12px;background:#fff}
+  table.mobile-card-table tr{display:block!important;background:#fff;border:1px solid #ead8c2;border-radius:12px;margin:0 0 10px;padding:6px 8px;box-shadow:0 8px 18px rgba(52,36,18,.05)}
+  table.mobile-card-table tr:hover td{background:transparent!important}
+  table.mobile-card-table td{display:grid!important;grid-template-columns:104px minmax(0,1fr);gap:8px;align-items:start;border-bottom:1px solid #f1e5d6!important;padding:8px 2px!important;white-space:normal!important;word-break:break-word!important}
+  table.mobile-card-table td:last-child{border-bottom:none!important}
+  table.mobile-card-table td::before{content:attr(data-label);font-size:11px;font-weight:750;color:#8b7358;line-height:1.45}
+  table.mobile-card-table td:empty::after{content:'—';color:#94a3b8}
+  .sheet-full-scroll,.hr-sheet-scroll,.lazy-sheet-scroll{overflow-x:auto!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
+  .sheet-full-scroll table,.hr-sheet-scroll table{width:max-content!important;min-width:760px!important}
+  #lazy-sheet table{width:100%!important;min-width:0!important}
+  #hr-expense-sheet table{width:max-content!important;min-width:980px!important}
+  .sheet-full-scroll::after,.hr-sheet-scroll::after{content:'左右滑動查看完整明細';display:block;position:sticky;left:0;bottom:0;background:#fff8ed;border-top:1px solid #f0c987;color:#7c3f00;font-size:11px;font-weight:750;padding:7px 9px}
+}
 </style>
 </head>
 <body>
@@ -657,7 +699,7 @@ html,body{overflow-x:hidden}
   <!-- 簽核管理 -->
   <div class="pg" id="pg-approvals">
     <div style="margin-bottom:12px"><div class="ph">簽核管理</div><div class="ps" id="appr-sub">全集團待簽核 0 筆</div></div>
-    <div style="display:grid;grid-template-columns:256px 1fr;gap:10px;height:600px">
+    <div class="approval-shell" style="display:grid;grid-template-columns:256px 1fr;gap:10px;height:600px">
       <div style="display:flex;flex-direction:column">
         <div class="tb-bar" style="margin-bottom:7px">
           <button class="tb on" onclick="apprTab('p',this)">待簽核<span id="ac2" style="font-size:9px;background:var(--br);color:#fff;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
@@ -1621,6 +1663,39 @@ function filterSearchableSelect(sel,q){
   sel.innerHTML=rows.map(function(o){return'<option value="'+escAttr(o.value)+'" '+(o.disabled?'disabled':'')+'>'+escAttr(o.text)+'</option>';}).join('');
   if(rows.some(function(o){return o.value===current&&!o.disabled;}))sel.value=current;
   else if(rows.some(function(o){return !o.disabled;}))sel.value=rows.find(function(o){return !o.disabled;}).value;
+}
+function shouldEnhanceMobileTable(table){
+  if(!table)return false;
+  if(table.closest('#lazy-sheet')||table.closest('#hr-expense-sheet'))return false;
+  if(table.closest('.sheet-full-scroll')||table.closest('.hr-sheet-scroll'))return false;
+  return !!table.querySelector('thead th');
+}
+function enhanceMobileTables(root){
+  root=root||document;
+  Array.from(root.querySelectorAll('table')).forEach(function(table){
+    if(!shouldEnhanceMobileTable(table))return;
+    var labels=Array.from(table.querySelectorAll('thead th')).map(function(th){return (th.textContent||'').trim()||'欄位';});
+    Array.from(table.querySelectorAll('tbody tr')).forEach(function(tr){
+      Array.from(tr.children).forEach(function(td,i){
+        if(!td.getAttribute('data-label'))td.setAttribute('data-label',labels[i]||'欄位');
+      });
+    });
+    table.classList.add('mobile-card-table');
+    table.dataset.mobileEnhanced='1';
+  });
+}
+var MOBILE_ENHANCE_TIMER=null;
+var MOBILE_ENHANCE_OBSERVER_STARTED=false;
+function scheduleMobileEnhance(root){
+  if(MOBILE_ENHANCE_TIMER)clearTimeout(MOBILE_ENHANCE_TIMER);
+  MOBILE_ENHANCE_TIMER=setTimeout(function(){enhanceMobileTables(root||document);},60);
+}
+function startMobileEnhancer(){
+  if(MOBILE_ENHANCE_OBSERVER_STARTED||!window.MutationObserver)return;
+  var target=el('main-content')||document.querySelector('.content');
+  if(!target)return;
+  MOBILE_ENHANCE_OBSERVER_STARTED=true;
+  new MutationObserver(function(){scheduleMobileEnhance(target);}).observe(target,{childList:true,subtree:true});
 }
 
 var S={user:null,page:'dashboard',prev:'dashboard',nT:'all',aT:'p',bF:'all',accSide:'',
@@ -3651,6 +3726,8 @@ async function guardedNav(id,btn){
   if(id==='orgchart')buildOrgChart();
   syncMobileNavSelect();
   enhanceLongSelects(document);
+  enhanceMobileTables(document);
+  startMobileEnhancer();
 }
 function shouldPromptUnsavedNewReq(nextId){
   if(S.nrSubmitting||S.nrSavingDraft)return false;
@@ -3699,6 +3776,8 @@ function buildAll(){
   if(S.page==='compliance')buildCompliance();
   syncMobileNavSelect();
   enhanceLongSelects(document);
+  enhanceMobileTables(document);
+  startMobileEnhancer();
 }
 
 // ══ 真實財務資料計算 ══
