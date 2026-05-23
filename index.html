@@ -556,6 +556,21 @@ html,body{overflow-x:hidden}
   table.mobile-card-table td:last-child{border-bottom:none!important}
   table.mobile-card-table td::before{content:attr(data-label);font-size:11px;font-weight:750;color:#8b7358;line-height:1.45}
   table.mobile-card-table td:empty::after{content:'—';color:#94a3b8}
+  table.mobile-card-table td,
+  table.mobile-card-table td *{max-width:100%!important;min-width:0!important;overflow:visible!important;text-overflow:clip!important;white-space:normal!important;writing-mode:horizontal-tb!important;word-break:normal!important;overflow-wrap:anywhere!important;line-height:1.55!important}
+  table.mobile-card-table td .badge,
+  table.mobile-card-table td .ep,
+  table.mobile-card-table td .dt{display:inline-flex!important;width:max-content!important;max-width:100%!important}
+  .module-hub{overflow-x:hidden!important}
+  .hub-top{display:grid!important;grid-template-columns:1fr!important;height:150px!important;min-height:150px!important;align-items:start!important;padding-bottom:12px!important;overflow:visible!important}
+  .hub-brand{min-width:0!important}
+  .hub-top>div:last-child{display:grid!important;grid-template-columns:1fr 1fr!important;width:100%!important;gap:8px!important;align-items:stretch!important}
+  .hub-top>div:last-child>div:first-child{grid-column:1/-1!important;text-align:left!important;min-width:0!important}
+  .hub-top .hub-manual,
+  .hub-top .btn-s{width:100%!important;min-height:38px!important}
+  .hub-top .btn-s{grid-column:1/-1!important}
+  .hub-main{padding-top:18px!important}
+  .hub-kicker{margin-top:0!important;clear:both}
   .sheet-full-scroll,.hr-sheet-scroll,.lazy-sheet-scroll{overflow-x:auto!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
   .sheet-full-scroll table,.hr-sheet-scroll table{width:max-content!important;min-width:760px!important}
   #lazy-sheet table{width:100%!important;min-width:0!important}
