@@ -1276,14 +1276,14 @@ html,body{overflow-x:hidden}
         </div>
         <div class="module-action">等待正式串接 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
-      <button class="module-card is-muted" onclick="enterPendingModule('hr')">
+      <button class="module-card is-primary" onclick="enterHrModule()">
         <div>
           <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0M18 5l2 2 3-4"/></svg></div>
           <div class="module-meta">HUMAN RESOURCE</div>
           <div class="module-name">人資系統</div>
-          <p class="module-copy">員工資料、福利、薪資與人事審核作業。</p>
+          <p class="module-copy">員工資料、假勤、薪資、簽核、組織與法遵作業。</p>
         </div>
-        <div class="module-action">等待正式串接 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+        <div class="module-action">進入人資工作台 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
       <button class="module-card is-primary" onclick="enterFinanceModule()">
         <div>
@@ -3695,6 +3695,15 @@ window.enterFinanceModule=function(){
     subtitle:'ACCOUNTING MODULE',
     label:'FINANCE OS · ACCOUNTING MODULE',
     onEnter:openFinanceWorkspace
+  });
+};
+window.enterHrModule=function(){
+  if(!S.user){window.showLogin();return;}
+  playModuleIntro({
+    title:'人資系統',
+    subtitle:'HUMAN RESOURCE MODULE',
+    label:'HR OS · HUMAN RESOURCE MODULE',
+    onEnter:function(){window.location.href='https://hr.suiyuecare.com/modules';}
   });
 };
 function openFinanceWorkspace(){

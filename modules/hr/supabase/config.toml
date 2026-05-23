@@ -1,0 +1,15 @@
+project_id = "aruncclorusswpfnpgsn"
+
+[api]
+enabled = true
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3001"
+additional_redirect_urls = ["http://127.0.0.1:3001/login", "http://localhost:3001/login"]
+
+[db]
+major_version = 17

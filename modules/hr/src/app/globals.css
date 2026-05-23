@@ -1,0 +1,323 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 34 36% 96%;
+    --foreground: 219 30% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 217 24% 18%;
+    --primary: 32 95% 44%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 34 53% 93%;
+    --secondary-foreground: 217 24% 18%;
+    --muted: 34 53% 93%;
+    --muted-foreground: 29 17% 47%;
+    --accent: 32 100% 96%;
+    --accent-foreground: 30 100% 24%;
+    --destructive: 358 63% 39%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 32 42% 84%;
+    --input: 32 42% 84%;
+    --ring: 32 95% 44%;
+    --radius: 0.5rem;
+    --suiyue-orange: #d97706;
+    --suiyue-orange-dark: #b45309;
+    --suiyue-orange-light: #f2a93b;
+    --suiyue-orange-soft: #fff7ed;
+    --suiyue-orange-line: #ead8c2;
+    --suiyue-cream: #fbfaf8;
+    --suiyue-warm: #f6efe6;
+    --suiyue-ink: #172033;
+    --suiyue-sidebar: #1f2430;
+    --suiyue-sidebar-dark: #171b24;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    min-height: 100%;
+  }
+
+  body {
+    @apply min-h-screen bg-background text-foreground antialiased;
+    background: #eee7de;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+
+  table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+}
+
+@layer components {
+  .suiyue-page {
+    background:
+      linear-gradient(180deg, #fbfaf8 0%, #f7f1ea 100%);
+  }
+
+  .suiyue-panel {
+    border-color: rgba(217, 119, 6, 0.16);
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(52, 36, 18, 0.05);
+  }
+
+  .suiyue-section-head {
+    border-color: #f0dfcd;
+    background: #fffaf4;
+  }
+
+  .suiyue-system-shell {
+    border: 1px solid rgba(217, 119, 6, 0.18);
+    background: #fbfaf8;
+    box-shadow: 0 28px 80px rgba(48, 30, 10, 0.18);
+  }
+
+  .suiyue-scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-card-list {
+    display: none;
+  }
+
+  .mobile-record-card {
+    border: 1px solid #ead8c2;
+    border-radius: 0.75rem;
+    background: #ffffff;
+    box-shadow: 0 8px 18px rgba(52, 36, 18, 0.05);
+  }
+
+  .mobile-card-row {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-top: 1px solid #f0dfcd;
+    padding-top: 0.75rem;
+  }
+
+  .mobile-card-label {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #7a6a57;
+  }
+
+  .mobile-card-value {
+    min-width: 0;
+    text-align: right;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #172033;
+  }
+}
+
+@media (max-width: 767px) {
+  html {
+    scroll-padding-top: 72px;
+  }
+
+  body {
+    background: #fbfaf8;
+    overscroll-behavior-y: none;
+  }
+
+  h1 {
+    line-height: 1.2;
+  }
+
+  .suiyue-page {
+    font-size: 15px;
+    background: #fbfaf8;
+  }
+
+  .suiyue-page > div {
+    min-width: 0;
+  }
+
+  .suiyue-system-shell {
+    border: 0;
+    box-shadow: none;
+  }
+
+  .suiyue-page section,
+  .suiyue-page article,
+  .suiyue-page form,
+  .suiyue-page [class*="grid"],
+  .suiyue-page [class*="flex"] {
+    min-width: 0;
+  }
+
+  .suiyue-page [class*="grid"] > *,
+  .suiyue-page [class*="flex"] > * {
+    min-width: 0;
+  }
+
+  .suiyue-page [class*="min-w-"] {
+    max-width: 100%;
+  }
+
+  .suiyue-page .overflow-x-auto [class*="min-w-"],
+  .suiyue-page .suiyue-scroll-x [class*="min-w-"],
+  .suiyue-page .desktop-data-table [class*="min-w-"] {
+    max-width: none;
+  }
+
+  .suiyue-page table {
+    min-width: 760px;
+  }
+
+  .suiyue-page table th,
+  .suiyue-page table td {
+    white-space: nowrap;
+  }
+
+  .suiyue-page input,
+  .suiyue-page select,
+  .suiyue-page textarea {
+    min-height: 44px;
+    max-width: 100%;
+    font-size: 16px;
+  }
+
+  .suiyue-page button,
+  .suiyue-page a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .suiyue-page button,
+  .suiyue-page a[role="button"] {
+    min-height: 44px;
+  }
+
+  .suiyue-page p,
+  .suiyue-page h1,
+  .suiyue-page h2,
+  .suiyue-page h3,
+  .suiyue-page span,
+  .suiyue-page td,
+  .suiyue-page th {
+    overflow-wrap: anywhere;
+  }
+
+  .suiyue-page .grid {
+    min-width: 0;
+  }
+
+  .suiyue-page .overflow-x-auto,
+  .suiyue-page .suiyue-scroll-x {
+    margin-left: -0.75rem;
+    margin-right: -0.75rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    scrollbar-width: thin;
+  }
+
+  .suiyue-page [class*="rounded-"] {
+    scroll-margin-top: 76px;
+  }
+
+  .suiyue-page [class*="shadow"] {
+    box-shadow: 0 8px 18px rgba(52, 36, 18, 0.05);
+  }
+
+  .suiyue-page h1 {
+    font-size: 1.375rem;
+  }
+
+  .suiyue-page h2 {
+    font-size: 1rem;
+  }
+
+  .suiyue-page .mobile-card-list {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .suiyue-page .desktop-data-table {
+    display: none;
+  }
+
+  .suiyue-page .mobile-record-card {
+    padding: 0.875rem;
+  }
+
+  .suiyue-page .mobile-record-card button,
+  .suiyue-page .mobile-record-card a {
+    min-height: 44px;
+  }
+
+  .suiyue-page .mobile-card-row:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+  }
+}
+
+.text-\[\#2563eb\],
+.text-blue-600,
+.text-blue-700,
+.text-cyan-600,
+.text-cyan-700,
+.text-violet-600,
+.text-violet-700 {
+  color: #b45309 !important;
+}
+
+.text-violet-800,
+.text-violet-900,
+.text-violet-950,
+.text-cyan-800,
+.text-cyan-900,
+.text-blue-800,
+.text-blue-900 {
+  color: #7c3f00 !important;
+}
+
+.bg-\[\#2563eb\],
+.bg-blue-600,
+.bg-cyan-600,
+.bg-violet-600 {
+  background-color: #d97706 !important;
+}
+
+.hover\:bg-\[\#1d4ed8\]:hover,
+.hover\:bg-blue-700:hover,
+.hover\:bg-cyan-700:hover,
+.hover\:bg-violet-700:hover {
+  background-color: #b45309 !important;
+}
+
+.bg-blue-50,
+.bg-cyan-50,
+.bg-violet-50 {
+  background-color: #fff7ed !important;
+}
+
+.border-blue-200,
+.border-cyan-200,
+.border-violet-200,
+.hover\:border-\[\#2563eb\]:hover {
+  border-color: #f0c987 !important;
+}
+
+.focus\:border-\[\#2563eb\]:focus {
+  border-color: #d97706 !important;
+}
+
+.focus-visible\:ring-\[\#2563eb\]:focus-visible {
+  --tw-ring-color: rgba(217, 119, 6, 0.22) !important;
+}
