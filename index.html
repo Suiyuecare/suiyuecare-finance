@@ -1076,14 +1076,15 @@ html,body{overflow-x:hidden}
   <!-- 通知 -->
   <div class="pg" id="pg-notif"><div style="display:flex;justify-content:space-between;margin-bottom:12px"><div><div class="ph">通知中心</div><div class="ps" id="notif-sub">0 則未讀</div></div><button class="btn-g" onclick="markAllRead()">全部標為已讀</button></div><div class="card"><div class="tb-bar" style="padding:0 4px"><button class="tb on" onclick="notifTab('all',this)">全部</button><button class="tb" onclick="notifTab('unread',this)">未讀</button><button class="tb" onclick="notifTab('approval',this)">簽核</button><button class="tb" onclick="notifTab('system',this)">系統</button></div><div id="notif-list"></div></div></div>
 
-  <!-- 人員管理（FIX 5：僅會計/執行長可編輯）-->
+  <!-- 人員管理（執行長 / 行政部門主任 / 人資可編輯）-->
   <div class="pg" id="pg-users">
     <div style="display:flex;justify-content:space-between;margin-bottom:12px">
       <div><div class="ph">人員管理</div><div class="ps" id="user-sub">共 0 位</div></div>
       <div id="user-add-wrap"></div>
     </div>
-    <div id="user-readonly-notice" style="display:none;padding:8px 13px;border-radius:8px;background:#f0ece6;border:1px solid #e0d0b8;font-size:12px;color:#6a5840;margin-bottom:10px">權限提醒：您的角色為唯讀，僅會計與執行長可新增或編輯人員</div>
+    <div id="user-readonly-notice" style="display:none;padding:8px 13px;border-radius:8px;background:#f0ece6;border:1px solid #e0d0b8;font-size:12px;color:#6a5840;margin-bottom:10px">權限提醒：您的角色為唯讀，僅執行長、行政部門主任與人資可新增或編輯人員。</div>
       <div style="display:flex;gap:7px;margin-bottom:10px"><input type="text" id="uq" placeholder="搜尋名字、公司、部門、Email…" oninput="filterUsers()" style="width:220px;flex:none"><select id="urf" onchange="filterUsers()" style="width:auto"><option value="">全部角色</option><option value="employee">一般員工</option><option value="section_chief">課長</option><option value="dept_manager">部門主管</option><option value="admin_director">行政主任</option><option value="general_affairs">總務</option><option value="hr">人資</option><option value="accountant">會計</option><option value="ceo">執行長</option></select></div>
+    <div id="user-health"></div>
     <div class="card" id="user-wrap"></div>
   </div>
 
@@ -1687,7 +1688,7 @@ function defaultRolePermissions(){
     dept_manager:common.slice(),
     admin_director:PERMISSION_PAGES.slice(),
     general_affairs:common.slice(),
-    hr:common.concat(['orgchart']),
+    hr:common.concat(['users','orgchart']),
     accountant:finance.slice(),
     ceo:PERMISSION_PAGES.slice()
   };
@@ -3087,13 +3088,14 @@ async function callAccountingRpc(name,args){
 function gD(c){return DEPTS.find(function(d){return d.c===c;})||{c:c,n:c,lv:2};}
 function gE(id){return ENTS.find(function(e){return e.id===id;})||ENTS[0];}
 function isFinance(){return S.user&&['accountant','ceo','admin_director'].indexOf(S.user.role)>-1;}
-function canManageUsers(){return S.user&&['ceo','admin_director'].indexOf(S.user.role)>-1;}
+function canManageUsers(){return S.user&&['ceo','admin_director','hr'].indexOf(S.user.role)>-1;}
 function canManageOrgChart(){return S.user&&['ceo','hr','admin_director'].indexOf(S.user.role)>-1;}
 function canManageSettings(){return S.user&&['ceo','admin_director','accountant'].indexOf(S.user.role)>-1;}
 function canAccessPage(id){
   if(id==='detail')return true;
   if(!S.user)return false;
   if(['shareholder','invoices','bills','recv'].indexOf(id)>-1)return ['ceo','admin_director','accountant'].indexOf(S.user.role)>-1;
+  if(id==='users')return canManageUsers();
   if(id==='orgchart')return canManageOrgChart();
   if(id==='settings')return canManageSettings();
   var allowed=ROLE_PERMISSIONS[S.user.role]||defaultRolePermissions()[S.user.role]||[];
@@ -9135,9 +9137,51 @@ window.renderNotifs=function renderNotifs(){var data=S.nT==='unread'?NOTIFS.filt
 window.markNotifRead=async function(id){var n=NOTIFS.find(function(x){return x.id===id;});if(n)n.read=true;await dbUpdate('notifications',id,{read:true});renderNotifs();buildDash();};
 window.markAllRead=async function(){NOTIFS.forEach(function(n){n.read=true;});var client=getSb();if(client)await client.from('notifications').update({read:true}).eq('read',false);renderNotifs();buildDash();};
 
-// ══ FIX 5：人員管理（僅執行長 / 行政部門主任可編輯）══
+// ══ 人員管理（執行長 / 行政部門主任 / 人資可編輯）══
 window.buildUsers=function buildUsers(){renderUsers();}
 window.filterUsers=function(){renderUsers();};
+function hrPersonnelIssues(){
+  var deptMap={};DEPTS.forEach(function(d){deptMap[d.c]=true;});
+  var active=USERS.filter(function(u){return u.active!==false;});
+  var inactive=USERS.filter(function(u){return u.active===false;});
+  var emailMap={};
+  active.forEach(function(u){
+    var mail=String(u.email||'').trim().toLowerCase();
+    if(mail){(emailMap[mail]=emailMap[mail]||[]).push(u);}
+  });
+  return {
+    active:active,
+    inactive:inactive,
+    missingProfile:active.filter(function(u){return !String(u.n||'').trim()||!String(u.email||'').trim();}),
+    invalidDept:active.filter(function(u){return !u.dc||!deptMap[u.dc];}),
+    missingSupervisor:active.filter(function(u){
+      if(u.role==='ceo')return false;
+      var row=orgRowForUser(u.id);
+      return !row||!row.supervisorId;
+    }),
+    duplicateEmails:Object.keys(emailMap).filter(function(k){return emailMap[k].length>1;}).map(function(k){return emailMap[k];})
+  };
+}
+function renderUsersHealth(){
+  var box=el('user-health');if(!box)return;
+  var h=hrPersonnelIssues();
+  var duplicateCount=h.duplicateEmails.reduce(function(sum,rows){return sum+rows.length;},0);
+  var cards=[
+    {t:'啟用人員',v:h.active.length,cls:'b-ok',note:'可登入與參與簽核'},
+    {t:'缺直屬主管',v:h.missingSupervisor.length,cls:h.missingSupervisor.length?'b-wait':'b-ok',note:'會影響主管關卡'},
+    {t:'部門異常',v:h.invalidDept.length,cls:h.invalidDept.length?'b-bad':'b-ok',note:'會影響三表歸屬'},
+    {t:'重複 Email',v:duplicateCount,cls:duplicateCount?'b-bad':'b-ok',note:'會影響登入識別'}
+  ];
+  var issueLines=[];
+  if(h.missingSupervisor.length)issueLines.push('缺直屬主管：'+h.missingSupervisor.slice(0,5).map(function(u){return u.n;}).join('、')+(h.missingSupervisor.length>5?' 等':''));
+  if(h.invalidDept.length)issueLines.push('部門異常：'+h.invalidDept.slice(0,5).map(function(u){return u.n+'（'+(u.dc||'未填')+'）';}).join('、')+(h.invalidDept.length>5?' 等':''));
+  if(h.duplicateEmails.length)issueLines.push('重複 Email：'+h.duplicateEmails.slice(0,3).map(function(rows){return rows[0].email+'（'+rows.map(function(u){return u.n;}).join('、')+'）';}).join('；'));
+  if(h.missingProfile.length)issueLines.push('資料不完整：'+h.missingProfile.slice(0,5).map(function(u){return u.n||u.email||u.id;}).join('、')+(h.missingProfile.length>5?' 等':''));
+  box.innerHTML='<div class="grid three" style="margin-bottom:10px">'
+    +cards.map(function(c){return'<div class="card" style="padding:12px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><div style="font-size:11px;color:#8a6a3b;font-weight:800">'+c.t+'</div><div style="font-size:24px;font-weight:900;color:#1f2a44;margin-top:4px">'+c.v+'</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+c.note+'</div></div><span class="badge '+c.cls+'">'+(c.v?'待處理':'正常')+'</span></div></div>';}).join('')
+    +'</div>'
+    +(issueLines.length?'<div class="card" style="padding:12px;margin-bottom:10px;border-color:#f0c982;background:#fffaf2"><div style="font-size:12px;font-weight:900;color:#7a3b00;margin-bottom:6px">人資資料檢核提醒</div><div style="font-size:12px;color:#334155;line-height:1.7">'+issueLines.map(function(x){return'<div>'+esc(x)+'</div>';}).join('')+'</div><div style="font-size:11px;color:#94a3b8;margin-top:6px">請優先補齊主管與部門，避免簽核找不到下一關或報表歸屬錯誤。</div></div>':'');
+}
 function renderUsers(){
   var q=el('uq')?el('uq').value.toLowerCase():'';var rf=(el('urf')||{}).value||'';
   var data=USERS.filter(function(u){
@@ -9150,6 +9194,7 @@ function renderUsers(){
   var canEdit=canManageUsers();
   var aw=el('user-add-wrap');if(aw)aw.innerHTML=canEdit?'<button class="btn-p" onclick="openAddUser()">+ 新增人員</button>':'';
   var notice=el('user-readonly-notice');if(notice)notice.style.display=canEdit?'none':'block';
+  renderUsersHealth();
   el('user-wrap').innerHTML='<div style="overflow-x:auto"><table><thead><tr><th>名字</th><th>公司別</th><th>部門</th><th>層級</th><th>Email</th><th>狀態</th><th>操作</th></tr></thead><tbody>'
     +(data.map(function(u){
       var d=gD(u.dc),ent=gE(u.eid||entityOfDept(u.dc)||'E1');
@@ -9163,7 +9208,7 @@ function renderUsers(){
     }).join('')||'<tr><td colspan="7" style="padding:28px;text-align:center;color:#94a3b8;font-size:12px">找不到使用者</td></tr>')
     +'</tbody></table></div>';
 }
-window.toggleU=async function(id){if(!canManageUsers()){alert('此功能僅開放給執行長與行政部門主任');return;}var u=USERS.find(function(x){return x.id===id;});if(u){u.active=!u.active;await dbUpdate('finance_users',id,{active:u.active});renderUsers();}};
+window.toggleU=async function(id){if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return;}var u=USERS.find(function(x){return x.id===id;});if(u){u.active=!u.active;await dbUpdate('finance_users',id,{active:u.active});renderUsers();}};
 function primeUserModal(title,submitText){
   var ue=el('uent');if(ue)ue.innerHTML=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.s+'</option>';}).join('');
   if(el('user-modal-title'))el('user-modal-title').textContent=title;
@@ -9171,7 +9216,7 @@ function primeUserModal(title,submitText){
   if(el('add-err')){el('add-err').style.display='none';el('add-err').textContent='';}
 }
 window.openAddUser=function(){
-  if(!canManageUsers()){alert('此功能僅開放給執行長與行政部門主任');return;}
+  if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return;}
   USER_EDIT_ID='';
   primeUserModal('新增人員','建立帳號');
   if(el('un'))el('un').value='';
@@ -9184,7 +9229,7 @@ window.openAddUser=function(){
   openModal('m-add-user');
 };
 window.openEditU=function(id){
-  if(!canManageUsers()){alert('此功能僅開放給執行長與行政部門主任');return;}
+  if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return;}
   var u=USERS.find(function(x){return x.id===id;});if(!u)return;
   USER_EDIT_ID=id;
   primeUserModal('編輯人員','儲存變更');
@@ -9199,7 +9244,7 @@ window.openEditU=function(id){
   openModal('m-add-user');
 };
 window.submitAddUser=async function(){
-  if(!canManageUsers()){alert('此功能僅開放給執行長與行政部門主任');return;}
+  if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return;}
   var n=el('un')?el('un').value.trim():'';var email=el('ue')?el('ue').value.trim():'';
   var err=el('add-err');
   if(!n||!email){err.style.display='block';err.textContent='請填寫姓名與 Email';return;}
