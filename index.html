@@ -974,22 +974,6 @@ html,body{overflow-x:hidden}
       </div>
     </div>
     <div id="rpt-trend" style="display:none;margin-bottom:12px"></div>
-    <div class="card" style="margin-bottom:12px">
-      <div class="chd"><span class="cht">營業稅檢視</span><span id="tax-source-note" style="font-size:10px;color:#94a3b8">依正式分錄與申請 / 發票資料彙總</span></div>
-      <div style="padding:12px">
-        <div class="g4" id="tax-kpis" style="margin-bottom:10px"></div>
-        <div style="overflow-x:auto"><table><thead><tr><th>項目</th><th>資料來源</th><th style="text-align:right">金額</th><th>說明</th></tr></thead><tbody id="tax-body"></tbody></table></div>
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:12px">
-      <div class="chd"><span class="cht">三表試算平衡</span><span id="trial-source-note" style="font-size:10px;color:#94a3b8">只檢查正式分類帳，不含暫估資料</span></div>
-      <div style="padding:12px">
-        <div class="g4" id="trial-kpis" style="margin-bottom:10px"></div>
-        <div id="trial-alert" style="margin-bottom:10px"></div>
-        <div style="overflow-x:auto"><table><thead><tr><th>檢查項目</th><th>結果</th><th style="text-align:right">差額</th><th>說明</th></tr></thead><tbody id="trial-body"></tbody></table></div>
-        <div id="trial-issues" style="margin-top:10px"></div>
-      </div>
-    </div>
     <div class="rtab-bar"><button class="rtab on" onclick="rptTab('bs',this)">資產負債表</button><button class="rtab" onclick="rptTab('pl',this)">損益表</button><button class="rtab" onclick="rptTab('cf',this)">現金流量表</button></div>
     <div id="rpt-bs"><div class="g4" id="bs-kpis"></div><div class="g2"><div class="card"><div class="chd"><span class="cht">資產</span></div><table><tbody id="bs-asset"></tbody></table></div><div class="card"><div class="chd"><span class="cht">負債及股東權益</span></div><table><tbody id="bs-liab"></tbody></table></div></div><div id="bs-chk" style="margin-top:9px;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:500;text-align:center"></div></div>
     <div id="rpt-pl" style="display:none"><div class="g4" id="pl-kpis"></div><div class="g2"><div class="card"><div class="chd"><span class="cht">損益明細</span></div><table><thead><tr><th>項目</th><th style="text-align:right">金額</th><th style="text-align:right">佔收入%</th><th style="width:80px">視覺</th><th style="width:82px">傳票</th></tr></thead><tbody id="pl-body"></tbody></table></div><div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:10px;color:#334155">費用結構（佔費用%）</div><div id="pl-chart"></div><div style="font-size:11px;color:#94a3b8;margin-top:7px;padding-top:7px;border-top:1px solid #f0e6d6" id="pl-summary"></div></div></div></div>
@@ -1014,6 +998,22 @@ html,body{overflow-x:hidden}
         </div>
       </div>
       <div id="rpt-combo-chart" style="position:relative;overflow:hidden"></div>
+    </div>
+    <div class="card" style="margin-top:12px;margin-bottom:12px">
+      <div class="chd"><span class="cht">三表試算平衡</span><span id="trial-source-note" style="font-size:10px;color:#94a3b8">只檢查正式分類帳，不含暫估資料</span></div>
+      <div style="padding:12px">
+        <div class="g4" id="trial-kpis" style="margin-bottom:10px"></div>
+        <div id="trial-alert" style="margin-bottom:10px"></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>檢查項目</th><th>結果</th><th style="text-align:right">差額</th><th>說明</th></tr></thead><tbody id="trial-body"></tbody></table></div>
+        <div id="trial-issues" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="chd"><span class="cht">營業稅檢視</span><span id="tax-source-note" style="font-size:10px;color:#94a3b8">依正式分錄與申請 / 發票資料彙總</span></div>
+      <div style="padding:12px">
+        <div class="g4" id="tax-kpis" style="margin-bottom:10px"></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>項目</th><th>資料來源</th><th style="text-align:right">金額</th><th>說明</th></tr></thead><tbody id="tax-body"></tbody></table></div>
+      </div>
     </div>
   </div>
 
