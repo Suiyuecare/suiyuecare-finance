@@ -5,8 +5,8 @@ import { SuiyueLogo } from "@/components/brand/suiyue-logo";
 const tools = [
   {
     title: "PDF 編輯器",
-    href: "/toolbox/pdf-editor",
-    description: "上傳 PDF 後進行合併、拆分、旋轉、加簽名、加浮水印與壓縮。",
+    href: "/pdf-tools/index.html",
+    description: "開啟你原本製作的 PDF 工具網站，支援合併、壓縮、轉檔、簽名、OCR 與翻譯等工具。",
     icon: FilePenLine,
     status: "可使用",
   },
@@ -54,7 +54,7 @@ export default function ToolboxPage() {
               <p className="text-sm font-bold uppercase tracking-[0.14em] text-white/80">TOOLBOX</p>
               <h1 className="mt-2 text-3xl font-black sm:text-4xl">工具箱</h1>
               <p className="mt-3 max-w-3xl text-sm font-medium leading-6 text-white/88 sm:text-base">
-                將 PDF 編輯與附件整理工具獨立集中管理；這裡不是人資系統頁面，不會出現在 HR 側欄。
+                這裡集中放置各式各樣的行政工具。第一個工具是 PDF 編輯器，點入後會開啟完整 PDF 工具網站。
               </p>
             </div>
           </section>
