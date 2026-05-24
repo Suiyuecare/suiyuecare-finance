@@ -490,29 +490,15 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
   .nr-submit-actions .nr-submit-hint{grid-column:1/-1;font-size:11px!important}
   .nr-submit-actions button{width:100%;min-width:0!important}
   .sheet-full-scroll{max-height:64dvh!important;-webkit-overflow-scrolling:touch}
-  #lazy-sheet .lazy-sheet-scroll{max-height:none!important;overflow:visible!important;border:none!important;background:transparent!important}
-  #lazy-sheet table{min-width:0!important;border-collapse:separate;border-spacing:0 8px}
-  #lazy-sheet thead{display:none}
-  #lazy-sheet tbody,#lazy-sheet tr{display:block}
-  #lazy-sheet tr{background:#fff;border:1px solid #ead8c2;border-radius:12px;overflow:hidden;margin-bottom:10px;box-shadow:0 8px 18px rgba(52,36,18,.05)}
-  #lazy-sheet td{display:grid!important;grid-template-columns:92px minmax(0,1fr);gap:8px;align-items:center;border:none!important;border-bottom:1px solid #f1e5d6!important;padding:8px!important;min-height:42px}
-  #lazy-sheet td:last-child{border-bottom:none!important}
-  #lazy-sheet td::before{font-size:11px;color:#8b7358;font-weight:750}
-  #lazy-sheet td:nth-child(1)::before{content:'項次'}
-  #lazy-sheet td:nth-child(2)::before{content:'發票號碼'}
-  #lazy-sheet td:nth-child(3)::before{content:'發票日期'}
-  #lazy-sheet td:nth-child(4)::before{content:'買方統編'}
-  #lazy-sheet td:nth-child(5)::before{content:'賣方統編'}
-  #lazy-sheet td:nth-child(6)::before{content:'品項'}
-  #lazy-sheet td:nth-child(7)::before{content:'數量'}
-  #lazy-sheet td:nth-child(8)::before{content:'單位'}
-  #lazy-sheet td:nth-child(9)::before{content:'單價'}
-  #lazy-sheet td:nth-child(10)::before{content:'未稅'}
-  #lazy-sheet td:nth-child(11)::before{content:'營業稅'}
-  #lazy-sheet td:nth-child(12)::before{content:'含稅'}
-  #lazy-sheet td:nth-child(13)::before{content:'來源'}
-  #lazy-sheet td:nth-child(14)::before{content:'操作'}
-  #lazy-sheet table input{min-height:36px!important;font-size:14px!important;border:1px solid #ead8c2!important;border-radius:8px!important;background:#fff!important}
+  #lazy-sheet .lazy-sheet-scroll{max-height:64dvh!important;overflow:auto!important;border:1px solid #e8dcc8!important;background:#fff!important}
+  #lazy-sheet table{min-width:1200px!important;width:100%!important;border-collapse:collapse!important;border-spacing:0!important}
+  #lazy-sheet thead{display:table-header-group!important}
+  #lazy-sheet tbody{display:table-row-group!important}
+  #lazy-sheet tr{display:table-row!important;background:#fff!important;border:none!important;border-radius:0!important;box-shadow:none!important;margin:0!important;overflow:visible!important}
+  #lazy-sheet th{display:table-cell!important;white-space:nowrap}
+  #lazy-sheet td{display:table-cell!important;border:1px solid #e8dcc8!important;padding:0!important;min-height:0!important;vertical-align:middle!important}
+  #lazy-sheet td::before{content:none!important}
+  #lazy-sheet table input{min-height:34px!important;font-size:14px!important;border:none!important;border-radius:0!important;background:transparent!important}
   #lazy-sheet>div:last-child{display:grid!important;grid-template-columns:1fr;gap:8px;align-items:stretch!important}
   #lazy-sheet>div:last-child button{width:100%}
   #lazy-sheet>div:last-child>div{margin-left:0!important;text-align:left!important;background:#fff8ed;border:1px solid #f0c987;border-radius:10px;padding:9px}
