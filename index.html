@@ -593,11 +593,9 @@ html,body{overflow-x:hidden}
   .hub-top .btn-s{grid-column:1/-1!important}
   .hub-main{padding-top:18px!important}
   .hub-kicker{margin-top:0!important;clear:both}
-  .sheet-full-scroll,.hr-sheet-scroll,.lazy-sheet-scroll{overflow-x:auto!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
-  .sheet-full-scroll table,.hr-sheet-scroll table{width:max-content!important;min-width:760px!important}
-  #lazy-sheet table{width:100%!important;min-width:0!important}
-  #hr-expense-sheet table{width:max-content!important;min-width:980px!important}
-  .sheet-full-scroll::after,.hr-sheet-scroll::after{content:'左右滑動查看完整明細';display:block;position:sticky;left:0;bottom:0;background:#fff8ed;border-top:1px solid #f0c987;color:#7c3f00;font-size:11px;font-weight:750;padding:7px 9px}
+  .sheet-full-scroll,.hr-sheet-scroll,.lazy-sheet-scroll{overflow-x:hidden!important;overflow-y:visible!important;-webkit-overflow-scrolling:touch}
+  .sheet-full-scroll table,.hr-sheet-scroll table,#lazy-sheet table,#hr-expense-sheet table{width:100%!important;min-width:0!important}
+  .sheet-full-scroll::after,.hr-sheet-scroll::after{content:none!important;display:none!important}
 }
 </style>
 </head>
@@ -1708,8 +1706,6 @@ function filterSearchableSelect(sel,q){
 }
 function shouldEnhanceMobileTable(table){
   if(!table)return false;
-  if(table.closest('#lazy-sheet')||table.closest('#hr-expense-sheet'))return false;
-  if(table.closest('.sheet-full-scroll')||table.closest('.hr-sheet-scroll'))return false;
   return !!table.querySelector('thead th');
 }
 function enhanceMobileTables(root){
