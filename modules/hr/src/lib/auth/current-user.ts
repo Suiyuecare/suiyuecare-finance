@@ -125,7 +125,7 @@ function clearQuickLoginStorage() {
 export function getQuickLoginUser(): CurrentUser | null {
   if (typeof window === "undefined") return null;
 
-  const raw = readQuickLoginStorage() ?? readQuickLoginCookie();
+  const raw = readQuickLoginCookie() ?? readQuickLoginStorage();
   if (!raw) return null;
 
   try {
