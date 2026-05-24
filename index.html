@@ -1382,32 +1382,32 @@ html,body{overflow-x:hidden}
         </div>
         <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
-      <button class="module-card is-primary" onclick="openExternalModule('https://edoc.suiyuecare.com')">
+      <button class="module-card is-muted" onclick="moduleNotice('document')">
         <div>
           <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5zM15 4v5h5M8 13h8M8 17h6"/></svg></div>
           <div class="module-meta">DOCUMENT</div>
           <div class="module-name">電子公文交換系統</div>
           <p class="module-copy">收文、發文、簽辦、歸檔與跨部門公文追蹤。</p>
         </div>
-        <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+        <div class="module-action">暫不開放 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
-      <button class="module-card is-primary" onclick="openExternalModule('https://pm.suiyuecare.com')">
+      <button class="module-card is-muted" onclick="moduleNotice('project')">
         <div>
           <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14M8 4v4M16 10v4M12 16v4"/></svg></div>
           <div class="module-meta">PROJECT</div>
           <div class="module-name">敏捷式專案管理</div>
           <p class="module-copy">任務看板、Sprint、負責人、期限與跨模組專案進度。</p>
         </div>
-        <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+        <div class="module-action">暫不開放 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
-      <button class="module-card is-primary" onclick="openExternalModule('https://hr.suiyuecare.com/toolbox')">
+      <button class="module-card is-muted" onclick="moduleNotice('toolbox')">
         <div>
           <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-3-3z"/></svg></div>
           <div class="module-meta">TOOLBOX</div>
           <div class="module-name">工具列</div>
           <p class="module-copy">PDF 編輯器、檔案整理與日常行政工具集中入口。</p>
         </div>
-        <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+        <div class="module-action">暫不開放 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
     </div>
     <div class="hub-note" id="hub-note"></div>
@@ -3881,8 +3881,15 @@ window.enterPendingModule=function(module){
 };
 window.moduleNotice=function(module){
   var note=el('hub-note');
-  var label=module==='business'?'業務系統':'人資系統';
-  if(note)note.textContent=label+'尚未接到這個會計入口。正式上線時可以把這張卡片導到對應模組或同一個 Vercel 專案路由。';
+  var labels={
+    business:'業務系統',
+    document:'電子公文交換系統',
+    project:'敏捷式專案管理',
+    toolbox:'工具列',
+    hr:'人資系統'
+  };
+  var label=labels[module]||'此功能';
+  if(note)note.textContent=label+'目前暫不開放，正式啟用後再提供入口。';
 };
 window.showLogin=function(){
   el('login-screen').style.display='flex';
