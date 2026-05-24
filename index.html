@@ -246,6 +246,9 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
 .sb-bot{padding:12px;border-top:1px solid rgba(255,255,255,.08)}
 .av{background:#fff2df;color:#8a4b06;font-weight:650}
 .topbar{height:54px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.92);backdrop-filter:blur(10px);padding:0 18px}
+.module-return-btn{background:#fff8ed;border:1px solid #ead8c2;border-radius:8px;cursor:pointer;padding:6px 9px;color:#7c3f00;font-size:11px;font-weight:750;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.module-return-btn:hover{border-color:#d97706;background:#fff3de}
+.module-return-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .content{padding:18px;background:linear-gradient(180deg,#fbfaf8 0%,#f7f1ea 100%)}
 .ph{font-size:17px;font-weight:650;color:var(--ink)}
 .ps{color:#7a8699}
@@ -364,6 +367,7 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
   .sb-bot{display:none}
   .main{min-height:0;flex:1}
   .topbar{height:auto;min-height:48px;padding:8px 12px;gap:8px;flex-wrap:wrap}
+  .module-return-btn{padding:6px 8px;font-size:10px}
   #page-title{min-width:160px}
   #top-info{width:100%;font-size:10px}
   .content{padding:12px}
@@ -721,6 +725,7 @@ html,body{overflow-x:hidden}
 <div class="main" id="main-wrap" style="display:none">
   <div class="topbar">
     <div style="font-size:13px;font-weight:500;color:#1e293b;flex:1" id="page-title">儀表板</div>
+    <button class="module-return-btn" onclick="returnToModuleHub()" type="button" aria-label="返回模組選單"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>返回模組</button>
     <button onclick="nav('notif',null)" style="background:#fff;border:1px solid #ead8c2;border-radius:8px;cursor:pointer;position:relative;padding:5px 7px;color:#7c3f00;display:inline-flex;align-items:center"><svg width="14" height="14" viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M6 17h12M8 17V9a4 4 0 0 1 8 0v8M10 20h4"/></svg><span id="n-badge" style="position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--br);border:1.5px solid #fff"></span></button>
     <select id="mobile-nav-select" class="mobile-nav-select" onchange="mobileNavChange(this.value)" aria-label="手機版頁面選單"></select>
     <span style="font-size:11px;color:#94a3b8" id="top-info">王會計師 · 會計</span>
@@ -3820,6 +3825,18 @@ window.enterHrModule=function(){
 window.openExternalModule=function(url){
   if(!S.user){window.showLogin();return;}
   window.location.href=url;
+};
+window.returnToModuleHub=async function(){
+  if(!S.user){window.showLogin();return;}
+  if(shouldPromptUnsavedNewReq('modulehub')){
+    var choice=await confirmLeaveNewReq();
+    if(choice==='stay')return;
+    if(choice==='save'){
+      var saved=await nrSaveDraft();
+      if(!saved)return;
+    }
+  }
+  showModuleHub();
 };
 function openFinanceWorkspace(){
   var login=el('login-screen'),hub=el('module-hub'),sidebar=el('sidebar'),main=el('main-wrap'),root=el('root');
