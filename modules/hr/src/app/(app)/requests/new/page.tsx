@@ -7,7 +7,7 @@ import { canAny } from "@/lib/auth/rbac";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { requestFormDefinitions } from "@/lib/requests/form-catalog";
 
-const attendanceFormIds = ["leave", "pre-overtime", "overtime", "punch", "remote"];
+const attendanceFormIds = ["leave", "pre-overtime", "punch", "remote"];
 const changeFormIds = ["position-change", "salary-change", "resignation", "new-hire"];
 const documentFormIds = ["document", "labor-health-insurance-certificate", "employment-certificate"];
 const businessFormIds = ["internal-approval", "meeting-minutes", "incident-report"];
@@ -15,7 +15,6 @@ const generalAffairsFormIds = ["equipment-request", "document-access-general", "
 const scenarioShortcuts = [
   { label: "我要請假", formId: "leave", hint: "特休、病假、家庭照顧假", icon: CalendarClock },
   { label: "我要預先申請加班", formId: "pre-overtime", hint: "事前核准加班", icon: Clock3 },
-  { label: "我要填加班單", formId: "overtime", hint: "實際加班、加班費或補休", icon: Clock3 },
   { label: "我忘記打卡", formId: "punch", hint: "補上班、補下班、修正時間", icon: Clock3 },
   { label: "我要居家辦公", formId: "remote", hint: "居家遠端辦公申請", icon: Home },
 ];
@@ -47,7 +46,7 @@ const generalAffairsShortcuts = [
 
 export default function NewRequestPage() {
   const currentUser = useCurrentUser();
-  const visibleForms = requestFormDefinitions.filter((form) => canAny(currentUser.role, form.permissions));
+  const visibleForms = requestFormDefinitions.filter((form) => !form.hiddenFromRequestMenu && canAny(currentUser.role, form.permissions));
   const attendanceForms = visibleForms.filter((form) => attendanceFormIds.includes(form.id));
   const changeForms = visibleForms.filter((form) => changeFormIds.includes(form.id));
   const documentForms = visibleForms.filter((form) => documentFormIds.includes(form.id));

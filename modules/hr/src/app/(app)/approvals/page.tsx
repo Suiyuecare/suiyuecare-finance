@@ -261,6 +261,9 @@ function advanceRequest(request: DemoWorkflowRequest, actorLabel: string, actorR
   const currentIndex = request.timeline.findIndex((step) => step.state === "current");
   const isApprovingProxyConsent = isLeaveProxyConsentStep(request);
   const isApprovingLeaveSupervisor = request.type === "請假" && request.currentStep === "申請人主管";
+  const isPreOvertimeFinalFlow =
+    request.formId === "pre-overtime" &&
+    ["待人資確認", "人資已確認，待申請人確認"].includes(request.details["加班轉正狀態"] ?? "");
   const nextTimeline = request.timeline.map((step, index) => {
     if (index === currentIndex) {
       return { ...step, state: "done" as const, actedAt: nowText(), comment: `${actorLabel}核准：${reason}` };
@@ -293,6 +296,13 @@ function advanceRequest(request: DemoWorkflowRequest, actorLabel: string, actorR
       ...request.details,
       ...(isApprovingProxyConsent ? { 職務代理同意狀態: "已同意", 代理同意時間: nowText() } : {}),
       ...(isApprovingLeaveSupervisor ? { 請假生效狀態: "已生效", 請假生效時間: nowText() } : {}),
+      ...(isPreOvertimeFinalFlow
+        ? {
+            加班轉正狀態: approved ? "已轉正" : "人資已確認，待申請人確認",
+            薪資補休計算狀態: approved ? "已納入薪資/補休計算" : "待申請人確認",
+            轉正核准時間: approved ? nowText() : request.details["轉正核准時間"] ?? "",
+          }
+        : {}),
     },
     auditLogs: [
       ...request.auditLogs,

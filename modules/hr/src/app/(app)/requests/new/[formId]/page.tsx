@@ -296,6 +296,30 @@ export default function RequestFormPage() {
   }
 
   const activeForm = form;
+  if (activeForm.hiddenFromRequestMenu) {
+    return (
+      <div className="space-y-5">
+        <Button asChild variant="outline">
+          <Link href="/requests/new">
+            <ArrowLeft className="h-4 w-4" />
+            返回表單申請
+          </Link>
+        </Button>
+        <Card>
+          <CardContent className="p-8 text-center">
+            <h1 className="text-xl font-black text-slate-900">請先送出預先加班單</h1>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
+              系統已取消直接填寫加班單。請先建立「預先加班單」，待預先單核准後，再到「表單追蹤」將該筆預先加班轉正，填入實際加班時數。
+            </p>
+            <Button asChild className="mt-5">
+              <Link href="/requests/new/pre-overtime">建立預先加班單</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const ActiveIcon = form.icon;
   const flow = getDefaultTimeline();
   const operationStatus: OperationStatus | undefined = isSubmitting
@@ -849,7 +873,7 @@ export default function RequestFormPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2 pt-5">
-              {requestFormDefinitions.filter((item) => item.id !== activeForm.id).map((item) => (
+              {requestFormDefinitions.filter((item) => !item.hiddenFromRequestMenu && item.id !== activeForm.id).map((item) => (
                 <Link
                   key={item.id}
                   href={`/requests/new/${item.id}`}

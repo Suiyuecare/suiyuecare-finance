@@ -121,6 +121,34 @@ function getIntegrationLabel(status?: DemoWorkflowRequest["integrationStatus"]) 
   return "等待連動";
 }
 
+function isPreOvertimeRequest(request: DemoWorkflowRequest) {
+  return request.formId === "pre-overtime" || request.formTitle === "預先加班單";
+}
+
+function isPreOvertimeReadyToFinalize(request: DemoWorkflowRequest, isMine: boolean) {
+  return (
+    isMine &&
+    isPreOvertimeRequest(request) &&
+    request.status === "已核准" &&
+    request.details["加班轉正狀態"] !== "待人資確認" &&
+    request.details["加班轉正狀態"] !== "已轉正" &&
+    request.details["加班轉正狀態"] !== "當天未加班故取消此單"
+  );
+}
+
+function buildPreOvertimeFinalizeTimeline() {
+  const now = new Date().toLocaleString("zh-TW", { hour12: false });
+
+  return [
+    { step: "申請人", ownerRole: "applicant" as const, ownerLabel: "申請人", state: "done" as const, actedAt: now, comment: "申請人填寫實際加班時數並送出轉正。" },
+    { step: "申請人主管", ownerRole: "supervisor" as const, ownerLabel: "申請人主管", state: "done" as const, comment: "預先加班階段已核准。" },
+    { step: "申請人部門主管", ownerRole: "supervisor" as const, ownerLabel: "申請人部門主管", state: "done" as const, comment: "預先加班階段已核准。" },
+    { step: "行政部門主任", ownerRole: "admin_director" as const, ownerLabel: "行政部門主任", state: "done" as const, comment: "預先加班階段已核准。" },
+    { step: "人資", ownerRole: "hr" as const, ownerLabel: "人資", state: "current" as const, comment: "確認實際加班時數、加班費或補休計算。" },
+    { step: "申請人確認", ownerRole: "applicant" as const, ownerLabel: "申請人", state: "pending" as const, comment: "人資確認後由申請人確認結果。" },
+  ];
+}
+
 function getMilestoneMeta(state: DemoWorkflowRequest["timeline"][number]["state"]) {
   if (state === "done") {
     return {
@@ -169,6 +197,16 @@ export default function RequestTrackingPage() {
   const [activeScope, setActiveScope] = useState<(typeof scopes)[number]>("我的表單");
   const [query, setQuery] = useState("");
   const [dataMessage, setDataMessage] = useState("");
+  const [finalizingRequestId, setFinalizingRequestId] = useState("");
+  const [finalizeValues, setFinalizeValues] = useState({
+    actualDate: "",
+    actualStartTime: "",
+    actualEndTime: "",
+    actualHours: "",
+    compensation: "加班費",
+    note: "",
+    cancelReason: "當天沒有實際加班，故取消此預先加班單。",
+  });
   const canViewCompanyForms = ["hr", "admin_director", "ceo"].includes(currentUser.role);
 
   useEffect(() => {
@@ -218,6 +256,80 @@ export default function RequestTrackingPage() {
   async function copyRequestId(id: string) {
     await navigator.clipboard.writeText(id);
     setDataMessage(`已複製表單編號：${id}`);
+  }
+
+  function startFinalizePreOvertime(request: DemoWorkflowRequest) {
+    setFinalizingRequestId(request.id);
+    setFinalizeValues({
+      actualDate: request.details["預計加班日期"] ?? "",
+      actualStartTime: request.details["預計開始時間"] ?? "",
+      actualEndTime: request.details["預計結束時間"] ?? "",
+      actualHours: request.details["預計加班時數"] ?? "",
+      compensation: request.details["補休或加班費"] || "加班費",
+      note: "",
+      cancelReason: "當天沒有實際加班，故取消此預先加班單。",
+    });
+  }
+
+  async function finalizePreOvertime(request: DemoWorkflowRequest) {
+    const hours = Number(finalizeValues.actualHours);
+    if (!finalizeValues.actualDate || !finalizeValues.actualStartTime || !finalizeValues.actualEndTime || !Number.isFinite(hours) || hours <= 0) {
+      setDataMessage("請先填寫實際加班日期、時間與大於 0 的實際時數。");
+      return;
+    }
+
+    await updateRequest(request.id, {
+      status: "待我簽核",
+      currentStep: "人資",
+      currentOwnerRole: "hr",
+      date: `${finalizeValues.actualDate} ${finalizeValues.actualStartTime}-${finalizeValues.actualEndTime}`,
+      details: {
+        ...request.details,
+        加班轉正狀態: "待人資確認",
+        實際加班日期: finalizeValues.actualDate,
+        實際開始時間: finalizeValues.actualStartTime,
+        實際結束時間: finalizeValues.actualEndTime,
+        實際加班時數: finalizeValues.actualHours,
+        轉正補償方式: finalizeValues.compensation,
+        轉正備註: finalizeValues.note,
+        薪資補休計算狀態: "人資通過後才計算",
+      },
+      integrationStatus: "pending",
+      integrationSummary: {
+        linkedModules: ["表單追蹤", "待簽核中心", "薪資結算", "補休餘額"],
+        nextAction: "人資確認實際加班與補償方式",
+        payrollCountingRule: "轉正通過後才計算加班費或補休時數",
+      },
+      revisionNo: (request.revisionNo ?? 1) + 1,
+      timeline: buildPreOvertimeFinalizeTimeline(),
+      lastActionAt: new Date().toLocaleString("zh-TW", { hour12: false }),
+    });
+    setFinalizingRequestId("");
+    setDataMessage("已送出預先加班轉正，下一關為人資確認；通過後才會計算加班費或補休。");
+  }
+
+  async function cancelPreOvertimeNoActualWork(request: DemoWorkflowRequest) {
+    await updateRequest(request.id, {
+      status: "已取消",
+      currentStep: "當天未加班取消",
+      currentOwnerRole: "done",
+      details: {
+        ...request.details,
+        加班轉正狀態: "當天未加班故取消此單",
+        未加班取消原因: finalizeValues.cancelReason || "當天沒有實際加班，故取消此預先加班單。",
+        薪資補休計算狀態: "不計算",
+      },
+      integrationStatus: "not_required",
+      integrationSummary: {
+        linkedModules: ["表單追蹤"],
+        nextAction: "已取消，不進薪資或補休",
+        payrollCountingRule: "未實際加班，不計算加班費或補休",
+      },
+      revisionNo: (request.revisionNo ?? 1) + 1,
+      lastActionAt: new Date().toLocaleString("zh-TW", { hour12: false }),
+    });
+    setFinalizingRequestId("");
+    setDataMessage("已將此預先加班單註記為當天未加班取消，不會進入薪資或補休計算。");
   }
 
   const scopedRequests = useMemo(() => {
@@ -467,6 +579,12 @@ export default function RequestTrackingPage() {
                     補件重送
                   </Button>
                 ) : null}
+                {isPreOvertimeReadyToFinalize(request, isMine) ? (
+                  <Button size="sm" onClick={() => startFinalizePreOvertime(request)}>
+                    <Clock3 className="h-4 w-4" />
+                    轉正加班
+                  </Button>
+                ) : null}
                 {["草稿", "待我簽核", "簽核中", "被退回"].includes(request.status) && isMine ? (
                   <Button size="sm" variant="outline" onClick={() => updateRequest(request.id, { status: "已取消", currentStep: "申請人取消", currentOwnerRole: "done", integrationStatus: "not_required" })}>
                     <XCircle className="h-4 w-4" />
@@ -475,6 +593,98 @@ export default function RequestTrackingPage() {
                 ) : null}
               </div>
             </div>
+            {isPreOvertimeReadyToFinalize(request, isMine) && finalizingRequestId === request.id ? (
+              <div className="mt-5 rounded-lg border border-[#f0c987] bg-[#fffaf4] p-4">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h3 className="font-black text-slate-950">預先加班轉正</h3>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      只有預先加班單核准後才可以轉正。請填實際加班時數，送出後交由人資確認，通過後才會計算加班費或補休。
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setFinalizingRequestId("")}>收合</Button>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <label className="text-sm font-bold text-slate-700">
+                    實際加班日期 *
+                    <input
+                      type="date"
+                      value={finalizeValues.actualDate}
+                      onChange={(event) => setFinalizeValues((current) => ({ ...current, actualDate: event.target.value }))}
+                      className="mt-2 h-10 w-full rounded-lg border border-[#dfc9b1] bg-white px-3 text-sm outline-none focus:border-[#d97706]"
+                    />
+                  </label>
+                  <label className="text-sm font-bold text-slate-700">
+                    實際開始時間 *
+                    <input
+                      type="time"
+                      value={finalizeValues.actualStartTime}
+                      onChange={(event) => setFinalizeValues((current) => ({ ...current, actualStartTime: event.target.value }))}
+                      className="mt-2 h-10 w-full rounded-lg border border-[#dfc9b1] bg-white px-3 text-sm outline-none focus:border-[#d97706]"
+                    />
+                  </label>
+                  <label className="text-sm font-bold text-slate-700">
+                    實際結束時間 *
+                    <input
+                      type="time"
+                      value={finalizeValues.actualEndTime}
+                      onChange={(event) => setFinalizeValues((current) => ({ ...current, actualEndTime: event.target.value }))}
+                      className="mt-2 h-10 w-full rounded-lg border border-[#dfc9b1] bg-white px-3 text-sm outline-none focus:border-[#d97706]"
+                    />
+                  </label>
+                  <label className="text-sm font-bold text-slate-700">
+                    實際加班時數 *
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={finalizeValues.actualHours}
+                      onChange={(event) => setFinalizeValues((current) => ({ ...current, actualHours: event.target.value }))}
+                      className="mt-2 h-10 w-full rounded-lg border border-[#dfc9b1] bg-white px-3 text-sm outline-none focus:border-[#d97706]"
+                      placeholder="例如：2"
+                    />
+                  </label>
+                  <label className="text-sm font-bold text-slate-700">
+                    轉正補償方式 *
+                    <select
+                      value={finalizeValues.compensation}
+                      onChange={(event) => setFinalizeValues((current) => ({ ...current, compensation: event.target.value }))}
+                      className="mt-2 h-10 w-full rounded-lg border border-[#dfc9b1] bg-white px-3 text-sm outline-none focus:border-[#d97706]"
+                    >
+                      <option>加班費</option>
+                      <option>補休</option>
+                    </select>
+                  </label>
+                  <label className="text-sm font-bold text-slate-700">
+                    轉正備註
+                    <input
+                      value={finalizeValues.note}
+                      onChange={(event) => setFinalizeValues((current) => ({ ...current, note: event.target.value }))}
+                      className="mt-2 h-10 w-full rounded-lg border border-[#dfc9b1] bg-white px-3 text-sm outline-none focus:border-[#d97706]"
+                      placeholder="補充實際處理內容"
+                    />
+                  </label>
+                </div>
+                <div className="mt-4 rounded-lg border border-rose-100 bg-white p-3">
+                  <label className="text-sm font-bold text-slate-700">
+                    若當天沒有實際加班，可註記取消原因
+                    <input
+                      value={finalizeValues.cancelReason}
+                      onChange={(event) => setFinalizeValues((current) => ({ ...current, cancelReason: event.target.value }))}
+                      className="mt-2 h-10 w-full rounded-lg border border-[#dfc9b1] bg-white px-3 text-sm outline-none focus:border-[#d97706]"
+                    />
+                  </label>
+                </div>
+                <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button size="sm" variant="outline" onClick={() => cancelPreOvertimeNoActualWork(request)}>
+                    當天未加班，取消此單
+                  </Button>
+                  <Button size="sm" onClick={() => finalizePreOvertime(request)}>
+                    送出轉正給人資
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_320px]">
               <div className="space-y-3">
                 <div className="rounded-lg border border-[#ead8c2] bg-white p-4">

@@ -48,6 +48,7 @@ export type RequestFormDefinition = {
   permissions: Permission[];
   fields: RequestField[];
   requiresAttachment?: boolean;
+  hiddenFromRequestMenu?: boolean;
 };
 
 export const requestFormDefinitions: RequestFormDefinition[] = [
@@ -85,7 +86,7 @@ export const requestFormDefinitions: RequestFormDefinition[] = [
     estimatedMinutes: 3,
     owner: "員工本人",
     attachmentHint: "可附主管指派紀錄、活動通知或工作排程。",
-    policyNotes: ["預先加班單核准後，實際加班仍需依打卡或加班單確認。", "系統會檢查每日工時、休息日/例假日與月加班上限。"],
+    policyNotes: ["預先加班單核准後，需在表單追蹤進行轉正，填寫實際加班時數。", "轉正通過後才會計算加班費或補休；若當天未加班，可直接註記取消，不進薪資或補休。"],
     icon: Clock3,
     permissions: ["request:create", "form:attendance:create"],
     fields: [
@@ -111,6 +112,7 @@ export const requestFormDefinitions: RequestFormDefinition[] = [
     policyNotes: ["系統會檢查每日工時、月加班上限與例假日出勤原因。", "核准後才可進入加班費或補休計算。"],
     icon: Clock3,
     permissions: ["request:create", "form:attendance:create"],
+    hiddenFromRequestMenu: true,
     fields: [
       { name: "加班日期", type: "date", required: true },
       { name: "開始時間", type: "time", required: true },

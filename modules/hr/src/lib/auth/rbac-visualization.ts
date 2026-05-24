@@ -161,7 +161,7 @@ const permissionCatalog: Record<Permission, Omit<PermissionMeta, "permission">> 
   "request:team:view": { label: "部門表單", description: "可查看管轄部門或據點的表單狀態。", group: "requests", risk: "敏感" },
   "request:approve": { label: "表單簽核", description: "可在流程關卡中核准、退回或駁回表單。", group: "requests", risk: "敏感" },
   "request:admin": { label: "表單管理", description: "可查看跨部門表單、補件與流程例外。", group: "requests", risk: "高敏感" },
-  "form:attendance:create": { label: "假勤類表單", description: "可建立請假、預先加班、加班、忘刷與遠端辦公申請。", group: "forms", risk: "一般" },
+  "form:attendance:create": { label: "假勤類表單", description: "可建立請假、預先加班、忘刷與遠端辦公申請；實際加班需由核准後的預先加班單轉正。", group: "forms", risk: "一般" },
   "form:change:create": { label: "異動類表單", description: "可建立職務調動、薪資異動、離職與新進人員表單。", group: "forms", risk: "高敏感" },
   "form:document:create": { label: "文件類表單", description: "可建立文件證明、勞健保證明與在職證明申請。", group: "forms", risk: "敏感" },
   "form:business:create": { label: "業務類表單", description: "可建立內部簽核、會議記錄與異常事件通報。", group: "forms", risk: "敏感" },
