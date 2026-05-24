@@ -845,12 +845,6 @@ export default function RequestFormPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-5">
-              <div className="mb-4 rounded-lg bg-[#fffaf4] p-3 text-xs text-slate-600">
-                成熟表單會保留每次操作、補件、附件與簽核意見；送出後可在表單追蹤查看完整軌跡。
-              </div>
-              <div className="mb-4 rounded-lg border border-[#f0c987] bg-[#fffaf4] p-3 text-xs leading-5 text-[#7c3f00]">
-                送出時會強制檢核勞基法與性別平等工作法底線；低於法規的申請不得送出，只能儲存草稿。
-              </div>
               <FinanceStyleApprovalFlow
                 compact
                 title="固定串簽流程"
