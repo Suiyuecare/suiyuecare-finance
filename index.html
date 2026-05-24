@@ -1386,14 +1386,14 @@ html,body{overflow-x:hidden}
         </div>
         <div class="module-action">暫不開放 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
-      <button class="module-card is-muted" onclick="moduleNotice('toolbox')">
+      <button class="module-card is-primary" onclick="enterToolboxModule()">
         <div>
           <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-3-3z"/></svg></div>
           <div class="module-meta">TOOLBOX</div>
           <div class="module-name">工具列</div>
           <p class="module-copy">PDF 編輯器、檔案整理與日常行政工具集中入口。</p>
         </div>
-        <div class="module-action">暫不開放 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+        <div class="module-action">進入工具列 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
     </div>
     <div class="hub-note" id="hub-note"></div>
@@ -3842,6 +3842,16 @@ window.enterHrModule=function(){
     subtitle:'HUMAN RESOURCE MODULE',
     label:'HR OS · HUMAN RESOURCE MODULE',
     onEnter:function(){window.location.href=HR_APP_URL;}
+  });
+};
+window.enterToolboxModule=function(){
+  if(!S.user){window.showLogin();return;}
+  writeHrSharedLogin();
+  playModuleIntro({
+    title:'工具列',
+    subtitle:'TOOLBOX MODULE',
+    label:'TOOLS · PDF EDITOR',
+    onEnter:function(){window.location.href='https://hr.suiyuecare.com/toolbox';}
   });
 };
 window.openExternalModule=function(url){

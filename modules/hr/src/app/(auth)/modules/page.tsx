@@ -48,7 +48,8 @@ const modules = [
   },
   {
     name: "工具列",
-    status: "暫不開放",
+    href: "/toolbox",
+    status: "可進入",
     icon: Wrench,
     copy: "PDF 編輯器、檔案整理與日常行政工具集中入口。",
   },
@@ -95,7 +96,7 @@ export default function ModulesPage() {
                     </div>
                     <div className="mt-6 flex items-center justify-between gap-3">
                       <h2 className="finance-card-title text-xl">{module.name}</h2>
-                      <Badge variant={module.name === "人資系統" ? "default" : "secondary"}>
+                      <Badge variant={module.href && module.name !== "會計系統" ? "default" : "secondary"}>
                         {module.status}
                       </Badge>
                     </div>
