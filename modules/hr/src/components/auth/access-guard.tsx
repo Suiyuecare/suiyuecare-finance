@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { KeyRound, LogIn, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { canAny, getRolePolicy } from "@/lib/auth/rbac";
+import { CENTRAL_AUTH_URL } from "@/lib/config/central-auth";
 import { dataScopeMeta, getMissingPermissions } from "@/lib/auth/rbac-visualization";
 import { getRoutePermissions } from "@/lib/auth/route-permissions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
@@ -32,11 +33,11 @@ export function AccessGuard({ children }: { children: React.ReactNode }) {
           </div>
           <h1 className="mt-5 text-2xl font-black text-slate-900">請先登入</h1>
           <p className="mt-3 text-sm leading-6 text-slate-500">
-            請先回登入頁選擇角色卡片，系統會依照該角色套用功能選單與資料權限。
+            請先回會計系統統一入口登入，再依照權限進入人資模組。
           </p>
           <div className="mt-6 flex justify-center">
             <Button asChild>
-              <Link href="/login">前往登入</Link>
+              <Link href={CENTRAL_AUTH_URL}>前往統一入口</Link>
             </Button>
           </div>
         </section>

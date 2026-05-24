@@ -11,6 +11,7 @@ import { SuiyueLogo } from "@/components/brand/suiyue-logo";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ModuleRoleBanner } from "@/features/auth/module-role-banner";
+import { CENTRAL_AUTH_URL } from "@/lib/config/central-auth";
 
 const modules = [
   {
@@ -67,7 +68,7 @@ export default function ModulesPage() {
               </div>
             </div>
           </div>
-          <Link className="text-sm font-semibold text-[#b45309]" href="/login">
+          <Link className="text-sm font-semibold text-[#b45309]" href={CENTRAL_AUTH_URL}>
             切換帳號
           </Link>
         </header>

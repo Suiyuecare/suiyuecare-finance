@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { getVisibleNavigation } from "@/lib/auth/menu";
 import { clearQuickLoginUser } from "@/lib/auth/current-user";
 import { canAny, getRoleLabel, type HrRole, type Permission } from "@/lib/auth/rbac";
+import { CENTRAL_AUTH_URL } from "@/lib/config/central-auth";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { isNavigationItemActive } from "@/lib/navigation/active-route";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -127,8 +128,7 @@ export function Header() {
     await supabase?.auth.signOut();
     clearQuickLoginUser();
     setMobileMenuOpen(false);
-    router.push("/login");
-    router.refresh();
+    window.location.assign(CENTRAL_AUTH_URL);
   }
 
   return (
@@ -172,7 +172,7 @@ export function Header() {
           </Button>
         ) : (
           <Button asChild variant="outline" className="bg-white">
-            <Link href="/login">登入</Link>
+            <Link href={CENTRAL_AUTH_URL}>登入</Link>
           </Button>
         )}
         <div className="hidden text-right sm:block">
