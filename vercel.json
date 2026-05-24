@@ -4,7 +4,7 @@
   "redirects": [
     {
       "source": "/hr",
-      "destination": "https://hr.suiyuecare.com/modules",
+      "destination": "https://hr.suiyuecare.com/dashboard",
       "permanent": false
     },
     {
