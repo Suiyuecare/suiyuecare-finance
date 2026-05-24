@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { KeyRound, LogIn, ShieldAlert } from "lucide-react";
+import { ArrowLeft, KeyRound, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { canAny, getRolePolicy } from "@/lib/auth/rbac";
 import { CENTRAL_AUTH_URL } from "@/lib/config/central-auth";
@@ -29,15 +29,15 @@ export function AccessGuard({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex min-h-[calc(100vh-120px)] max-w-2xl items-center justify-center">
         <section className="w-full rounded-lg border border-[#f0c987] bg-white p-8 text-center shadow-[0_18px_50px_rgba(52,36,18,0.08)]">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#fff3de] text-[#b45309]">
-            <LogIn className="h-7 w-7" />
+            <ArrowLeft className="h-7 w-7" />
           </div>
-          <h1 className="mt-5 text-2xl font-black text-slate-900">請先登入</h1>
+          <h1 className="mt-5 text-2xl font-black text-slate-900">請由 Finance 統一入口進入</h1>
           <p className="mt-3 text-sm leading-6 text-slate-500">
-            請先回會計系統統一入口登入，再依照權限進入人資模組。
+            人資系統不提供獨立登入口，請先回 Finance 選擇「人資系統」，系統會帶入同一組帳號與權限。
           </p>
           <div className="mt-6 flex justify-center">
             <Button asChild>
-              <Link href={CENTRAL_AUTH_URL}>前往統一入口</Link>
+              <Link href={CENTRAL_AUTH_URL}>回到 Finance 模組入口</Link>
             </Button>
           </div>
         </section>

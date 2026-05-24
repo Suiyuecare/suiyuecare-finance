@@ -147,7 +147,7 @@ export function Header() {
           <SuiyueLogo className="h-9 w-9 shrink-0 p-0.5 lg:hidden" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-bold text-[#172033]">歲悅長照集團 · 人資管理系統 V3</div>
-            <div className="truncate text-xs text-slate-500">HR OS · 即時同步 · {isAuthenticated ? currentUser.roleLabel : "請先登入"}</div>
+            <div className="truncate text-xs text-slate-500">HR OS · 即時同步 · {isAuthenticated ? currentUser.roleLabel : "請由 Finance 進入"}</div>
           </div>
         <form
           className="hidden w-80 items-center gap-2 rounded-md border border-[#dfc9b1] bg-[#fffaf4] px-3 md:flex"
@@ -172,12 +172,12 @@ export function Header() {
           </Button>
         ) : (
           <Button asChild variant="outline" className="bg-white">
-            <Link href={CENTRAL_AUTH_URL}>登入</Link>
+            <Link href={CENTRAL_AUTH_URL}>回 Finance</Link>
           </Button>
         )}
         <div className="hidden text-right sm:block">
-          <div className="text-sm font-bold text-slate-800">{isAuthenticated ? currentUser.name : "未登入"}</div>
-          <div className="text-xs text-slate-500">{isAuthenticated ? getRoleLabel(currentUser.role) : "請先登入"}</div>
+          <div className="text-sm font-bold text-slate-800">{isAuthenticated ? currentUser.name : "未帶入帳號"}</div>
+          <div className="text-xs text-slate-500">{isAuthenticated ? getRoleLabel(currentUser.role) : "Finance 入口"}</div>
         </div>
         {isAuthenticated ? (
           <Button
@@ -215,7 +215,7 @@ export function Header() {
                 <SuiyueLogo className="h-10 w-10 shrink-0 border-white/70 bg-[#fff3de] p-0.5" />
                 <div className="min-w-0">
                   <div className="truncate text-sm font-bold">歲悅長照集團</div>
-                  <div className="truncate text-[11px] text-slate-400">{isAuthenticated ? `${currentUser.name} · ${getRoleLabel(currentUser.role)}` : "請先登入"}</div>
+                  <div className="truncate text-[11px] text-slate-400">{isAuthenticated ? `${currentUser.name} · ${getRoleLabel(currentUser.role)}` : "請由 Finance 入口進入"}</div>
                 </div>
               </div>
               <Button variant="outline" size="icon" aria-label="關閉" className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => setMobileMenuOpen(false)}>
@@ -224,7 +224,7 @@ export function Header() {
             </div>
 
             <div className="rounded-md border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold text-white">
-              {isAuthenticated ? currentUser.email : "尚未登入 Supabase"}
+              {isAuthenticated ? currentUser.email : "尚未由 Finance 帶入帳號"}
             </div>
             </div>
 
@@ -247,7 +247,7 @@ export function Header() {
               <div className="mt-4 flex items-center justify-between gap-3">
                 <div className="text-sm font-black text-slate-900">常用工作</div>
                 <div className="rounded-full bg-[#fff3de] px-2.5 py-1 text-[11px] font-bold text-[#8a4b06]">
-                  {isAuthenticated ? getRoleLabel(currentUser.role) : "未登入"}
+                  {isAuthenticated ? getRoleLabel(currentUser.role) : "Finance 入口"}
                 </div>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2">

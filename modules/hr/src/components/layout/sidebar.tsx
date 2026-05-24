@@ -22,7 +22,7 @@ export function Sidebar() {
         <div className="min-w-0">
           <div className="truncate text-sm font-bold text-white">歲悅長照集團</div>
           <div className="truncate text-[10px] tracking-[0.12em] text-slate-400">
-            HR OS V3 · {isAuthenticated ? getRoleLabel(currentUser.role) : "請先登入"}
+            HR OS V3 · {isAuthenticated ? getRoleLabel(currentUser.role) : "Finance 入口"}
           </div>
         </div>
       </div>
