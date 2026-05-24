@@ -608,7 +608,6 @@ export default function RequestFormPage() {
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{activeForm.description}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-            <span className="rounded-full bg-[#fff3de] px-3 py-1 text-[#8a4b06]">{activeForm.estimatedMinutes} 分鐘</span>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">負責人：{activeForm.owner}</span>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">{draftMessage}</span>
           </div>

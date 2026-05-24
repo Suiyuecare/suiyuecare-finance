@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ArchiveX, ArrowRight, Building2, ClipboardList, FileClock, FileSearch, FileText, GitCompareArrows, HandCoins, LogOut, MailOpen, Package, Search, ShieldCheck, Stamp, TriangleAlert, UploadCloud, UserPlus, Wrench } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { canAny } from "@/lib/auth/rbac";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { requestFormDefinitions } from "@/lib/requests/form-catalog";
@@ -82,7 +81,6 @@ export default function NewRequestPage() {
                 <span className="rounded-lg bg-[#fff3de] p-2.5 text-[#b45309] transition group-hover:bg-[#d97706] group-hover:text-white">
                   <Icon className="h-5 w-5" />
                 </span>
-                <Badge variant="outline">{form.estimatedMinutes} 分鐘</Badge>
               </div>
               <div className="mt-4">
                 <h2 className="font-black text-slate-900">{form.title}</h2>
@@ -177,7 +175,6 @@ export default function NewRequestPage() {
                   <span className="rounded-lg bg-[#fff3de] p-2.5 text-[#b45309] transition group-hover:bg-[#d97706] group-hover:text-white">
                     <Icon className="h-5 w-5" />
                   </span>
-                  <Badge variant="outline">{form.estimatedMinutes} 分鐘</Badge>
                 </div>
                 <div className="mt-4">
                   <h2 className="font-black text-slate-900">{form.title}</h2>
@@ -244,7 +241,6 @@ export default function NewRequestPage() {
                   <span className="rounded-lg bg-[#fff3de] p-2.5 text-[#b45309] transition group-hover:bg-[#d97706] group-hover:text-white">
                     <Icon className="h-5 w-5" />
                   </span>
-                  <Badge variant="outline">{form.estimatedMinutes} 分鐘</Badge>
                 </div>
                 <div className="mt-4">
                   <h2 className="font-black text-slate-900">{form.title}</h2>
@@ -283,7 +279,6 @@ export default function NewRequestPage() {
                   <span className="rounded-lg bg-[#fff3de] p-2.5 text-[#b45309] transition group-hover:bg-[#d97706] group-hover:text-white">
                     <Icon className="h-5 w-5" />
                   </span>
-                  <Badge variant="outline">{form.estimatedMinutes} 分鐘</Badge>
                 </div>
                 <div className="mt-4">
                   <h2 className="font-black text-slate-900">{form.title}</h2>
@@ -350,7 +345,6 @@ export default function NewRequestPage() {
                   <span className="rounded-lg bg-[#fff3de] p-2.5 text-[#b45309] transition group-hover:bg-[#d97706] group-hover:text-white">
                     <Icon className="h-5 w-5" />
                   </span>
-                  <Badge variant="outline">{form.estimatedMinutes} 分鐘</Badge>
                 </div>
                 <div className="mt-4">
                   <h2 className="font-black text-slate-900">{form.title}</h2>
