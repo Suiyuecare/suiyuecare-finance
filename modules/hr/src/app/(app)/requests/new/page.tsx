@@ -28,7 +28,7 @@ export default function NewRequestPage() {
           <p className="text-sm font-bold tracking-[0.12em] text-[#b45309]">FORM APPLICATION</p>
           <h1 className="mt-1 text-2xl font-black text-slate-900">表單申請</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-            先選你現在要做的事。系統會帶你到對應表單，送出後自動進入表單追蹤與簽核中心。
+            請選擇要建立的表單，送出後自動進入表單追蹤與簽核中心。
           </p>
         </div>
         <div className="rounded-full border border-[#f0c987] bg-[#fff7ed] px-4 py-2 text-sm font-bold text-[#7c3f00]">
