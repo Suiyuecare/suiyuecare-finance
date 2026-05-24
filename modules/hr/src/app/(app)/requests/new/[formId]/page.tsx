@@ -318,6 +318,30 @@ export default function RequestFormPage() {
     ? leaveRules.find((item) => item.name === values["假別"] && item.enabled !== false)
     : undefined;
 
+  function clearFieldError(fieldName: string) {
+    setErrors((current) => {
+      if (!current[fieldName]) return current;
+      const next = { ...current };
+      delete next[fieldName];
+      return next;
+    });
+  }
+
+  function updateFieldValue(fieldName: string, value: string) {
+    setValues((current) => ({ ...current, [fieldName]: value }));
+    if (value.trim()) clearFieldError(fieldName);
+  }
+
+  function updateReason(value: string) {
+    setReason(value);
+    if (value.trim()) clearFieldError("reason");
+  }
+
+  function updateAttachments(fileNames: string[]) {
+    setAttachments(fileNames);
+    if (fileNames.length > 0) clearFieldError("attachments");
+  }
+
   function getLeaveRuleErrors() {
     const nextErrors: Record<string, string> = {};
     if (activeForm.id !== "leave") return nextErrors;
@@ -630,7 +654,7 @@ export default function RequestFormPage() {
                     {field.type === "select" ? (
                       <select
                         value={values[field.name] ?? ""}
-                        onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))}
+                        onChange={(event) => updateFieldValue(field.name, event.target.value)}
                         className="h-10 w-full rounded-md border border-[#dfc9b1] bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#d97706]/20"
                       >
                         <option value="">請選擇{field.name}</option>
@@ -640,7 +664,7 @@ export default function RequestFormPage() {
                       <Input
                         type={field.type ?? "text"}
                         value={values[field.name] ?? ""}
-                        onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))}
+                        onChange={(event) => updateFieldValue(field.name, event.target.value)}
                         placeholder={field.placeholder ?? `請輸入${field.name}`}
                       />
                     )}
@@ -657,7 +681,7 @@ export default function RequestFormPage() {
                   申請原因 <span className="text-rose-500">*</span>
                   <textarea
                     value={reason}
-                    onChange={(event) => setReason(event.target.value)}
+                    onChange={(event) => updateReason(event.target.value)}
                     className="min-h-32 w-full rounded-md border border-[#dfc9b1] bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#d97706]/20"
                     placeholder={getReasonPlaceholder(activeForm.id)}
                   />
@@ -677,7 +701,7 @@ export default function RequestFormPage() {
                     type="file"
                     multiple
                     className="mt-3 block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-[#d97706] file:px-3 file:py-2 file:text-sm file:font-bold file:text-white"
-                    onChange={(event) => setAttachments(Array.from(event.target.files ?? []).map((file) => file.name))}
+                    onChange={(event) => updateAttachments(Array.from(event.target.files ?? []).map((file) => file.name))}
                   />
                   <p className="mt-2 text-xs text-slate-500">{activeForm.attachmentHint}</p>
                   <p className="mt-2 text-xs text-slate-500">
