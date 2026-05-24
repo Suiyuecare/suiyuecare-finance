@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArchiveX, ArrowRight, Building2, ClipboardList, FileClock, FileSearch, FileText, GitCompareArrows, HandCoins, LogOut, MailOpen, Package, Search, ShieldCheck, Stamp, TriangleAlert, UploadCloud, UserPlus, Wrench } from "lucide-react";
+import { ArrowRight, ClipboardList, FileClock, FileText, GitCompareArrows, Package } from "lucide-react";
 import { canAny } from "@/lib/auth/rbac";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { requestFormDefinitions } from "@/lib/requests/form-catalog";
@@ -11,31 +11,6 @@ const changeFormIds = ["position-change", "salary-change", "resignation", "new-h
 const documentFormIds = ["document", "labor-health-insurance-certificate", "employment-certificate"];
 const businessFormIds = ["internal-approval", "meeting-minutes", "incident-report"];
 const generalAffairsFormIds = ["equipment-request", "document-access-general", "official-mail-receipt", "company-seal-request", "venue-rental", "equipment-repair", "asset-disposal"];
-const changeShortcuts = [
-  { label: "職務調動", formId: "position-change", hint: "部門、職稱、主管異動", icon: GitCompareArrows },
-  { label: "薪資異動", formId: "salary-change", hint: "本薪、津貼、投保級距", icon: HandCoins },
-  { label: "離職申請", formId: "resignation", hint: "離職日、交接、面談", icon: LogOut },
-  { label: "新進人員", formId: "new-hire", hint: "到職建檔與帳號開通", icon: UserPlus },
-];
-const documentShortcuts = [
-  { label: "文件證明申請單", formId: "document", hint: "通用證明與其他文件", icon: FileText },
-  { label: "勞健保證明申請單", formId: "labor-health-insurance-certificate", hint: "勞保、健保、投保證明", icon: FileText },
-  { label: "在職證明申請單", formId: "employment-certificate", hint: "在職與任職資料證明", icon: FileText },
-];
-const businessShortcuts = [
-  { label: "內部簽核", formId: "internal-approval", hint: "一般事項、採購、制度、專案", icon: ClipboardList },
-  { label: "會議記錄上傳", formId: "meeting-minutes", hint: "會議紀錄、決議與待辦", icon: UploadCloud },
-  { label: "異常事件通報", formId: "incident-report", hint: "營運、服務、資安或職安異常", icon: TriangleAlert },
-];
-const generalAffairsShortcuts = [
-  { label: "設備請領申請單", formId: "equipment-request", hint: "設備、耗材、工作用品", icon: Package },
-  { label: "各式文件調閱申請單（總務）", formId: "document-access-general", hint: "合約、憑證、歸檔文件", icon: FileSearch },
-  { label: "公文收件申請單", formId: "official-mail-receipt", hint: "公文、掛號、重要郵件", icon: MailOpen },
-  { label: "公司對外用印申請", formId: "company-seal-request", hint: "合約、正式文件用印", icon: Stamp },
-  { label: "公司場地租借", formId: "venue-rental", hint: "會議室、教室、活動場地", icon: Building2 },
-  { label: "設備維修申請書", formId: "equipment-repair", hint: "設備故障、維修、檢測", icon: Wrench },
-  { label: "財產報廢申請", formId: "asset-disposal", hint: "固定資產與用品報廢", icon: ArchiveX },
-];
 
 export default function NewRequestPage() {
   const currentUser = useCurrentUser();
@@ -45,7 +20,6 @@ export default function NewRequestPage() {
   const documentForms = visibleForms.filter((form) => documentFormIds.includes(form.id));
   const businessForms = visibleForms.filter((form) => businessFormIds.includes(form.id));
   const generalAffairsForms = visibleForms.filter((form) => generalAffairsFormIds.includes(form.id));
-  const visibleShortcutIds = new Set(visibleForms.map((form) => form.id));
 
   return (
     <div className="space-y-5">
@@ -100,62 +74,6 @@ export default function NewRequestPage() {
         </div>
       </section> : null}
 
-      {documentForms.length ? <section className="rounded-lg border border-[#ead8c2] bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center gap-2">
-          <Search className="h-5 w-5 text-[#b45309]" />
-          <h2 className="font-black text-slate-950">文件類：你現在想申請什麼？</h2>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {documentShortcuts.filter((shortcut) => visibleShortcutIds.has(shortcut.formId)).map((shortcut) => {
-            const Icon = shortcut.icon;
-            return (
-              <Link
-                key={shortcut.formId}
-                href={`/requests/new/${shortcut.formId}`}
-                className="rounded-lg border border-[#ead8c2] bg-[#fffaf4] p-4 transition hover:border-[#d97706] hover:bg-[#fff3de]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="rounded-lg bg-white p-2 text-[#b45309]">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <ArrowRight className="h-4 w-4 text-slate-400" />
-                </div>
-                <div className="mt-3 font-black text-slate-950">{shortcut.label}</div>
-                <div className="mt-1 text-xs text-slate-500">{shortcut.hint}</div>
-              </Link>
-            );
-          })}
-        </div>
-      </section> : null}
-
-      {businessForms.length ? <section className="rounded-lg border border-[#ead8c2] bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center gap-2">
-          <Search className="h-5 w-5 text-[#b45309]" />
-          <h2 className="font-black text-slate-950">業務類：你現在想處理什麼？</h2>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {businessShortcuts.filter((shortcut) => visibleShortcutIds.has(shortcut.formId)).map((shortcut) => {
-            const Icon = shortcut.icon;
-            return (
-              <Link
-                key={shortcut.formId}
-                href={`/requests/new/${shortcut.formId}`}
-                className="rounded-lg border border-[#ead8c2] bg-[#fffaf4] p-4 transition hover:border-[#d97706] hover:bg-[#fff3de]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="rounded-lg bg-white p-2 text-[#b45309]">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <ArrowRight className="h-4 w-4 text-slate-400" />
-                </div>
-                <div className="mt-3 font-black text-slate-950">{shortcut.label}</div>
-                <div className="mt-1 text-xs text-slate-500">{shortcut.hint}</div>
-              </Link>
-            );
-          })}
-        </div>
-      </section> : null}
-
       {businessForms.length ? <section>
         <div className="mb-3 flex items-center gap-2">
           <ClipboardList className="h-5 w-5 text-[#b45309]" />
@@ -188,34 +106,6 @@ export default function NewRequestPage() {
                   開始填寫
                   <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
                 </div>
-              </Link>
-            );
-          })}
-        </div>
-      </section> : null}
-
-      {generalAffairsForms.length ? <section className="rounded-lg border border-[#ead8c2] bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center gap-2">
-          <Search className="h-5 w-5 text-[#b45309]" />
-          <h2 className="font-black text-slate-950">總務類（採購/維修）：你現在想處理什麼？</h2>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {generalAffairsShortcuts.filter((shortcut) => visibleShortcutIds.has(shortcut.formId)).map((shortcut) => {
-            const Icon = shortcut.icon;
-            return (
-              <Link
-                key={shortcut.formId}
-                href={`/requests/new/${shortcut.formId}`}
-                className="rounded-lg border border-[#ead8c2] bg-[#fffaf4] p-4 transition hover:border-[#d97706] hover:bg-[#fff3de]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="rounded-lg bg-white p-2 text-[#b45309]">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <ArrowRight className="h-4 w-4 text-slate-400" />
-                </div>
-                <div className="mt-3 font-black text-slate-950">{shortcut.label}</div>
-                <div className="mt-1 text-xs text-slate-500">{shortcut.hint}</div>
               </Link>
             );
           })}
@@ -298,34 +188,6 @@ export default function NewRequestPage() {
         </div>
       </section> : null}
 
-      {changeForms.length ? <section className="rounded-lg border border-[#ead8c2] bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center gap-2">
-          <Search className="h-5 w-5 text-[#b45309]" />
-          <h2 className="font-black text-slate-950">異動類：你現在想做什麼？</h2>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {changeShortcuts.filter((shortcut) => visibleShortcutIds.has(shortcut.formId)).map((shortcut) => {
-            const Icon = shortcut.icon;
-            return (
-              <Link
-                key={shortcut.formId}
-                href={`/requests/new/${shortcut.formId}`}
-                className="rounded-lg border border-[#ead8c2] bg-[#fffaf4] p-4 transition hover:border-[#d97706] hover:bg-[#fff3de]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="rounded-lg bg-white p-2 text-[#b45309]">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <ArrowRight className="h-4 w-4 text-slate-400" />
-                </div>
-                <div className="mt-3 font-black text-slate-950">{shortcut.label}</div>
-                <div className="mt-1 text-xs text-slate-500">{shortcut.hint}</div>
-              </Link>
-            );
-          })}
-        </div>
-      </section> : null}
-
       {changeForms.length ? <section>
         <div className="mb-3 flex items-center gap-2">
           <GitCompareArrows className="h-5 w-5 text-[#b45309]" />
@@ -371,17 +233,6 @@ export default function NewRequestPage() {
         </section>
       ) : null}
 
-      <section className="rounded-lg border border-[#ead8c2] bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-[#b45309]" />
-          <h2 className="font-black text-slate-950">簽核提醒</h2>
-        </div>
-        <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
-          {["你只需要選表單、填必填、送出。", "固定流程：申請人主管 → 部門主管 → 行政主任 → 人資。", "退回補件會回到表單追蹤，不用重填。", "低於法規底線的申請會被系統擋下。"].map((item) => (
-            <div key={item} className="rounded-lg bg-[#fffaf4] px-3 py-2">{item}</div>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
