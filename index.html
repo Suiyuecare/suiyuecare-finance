@@ -714,6 +714,7 @@ html,body{overflow-x:hidden}
       </div>
     </div>
     <div id="dash-alert"></div>
+    <div id="ceo-decision-center"></div>
     <div style="margin-bottom:12px" id="entity-cards-wrap">
       <div style="font-size:13px;font-weight:500;color:#334155;margin-bottom:7px">各法人本月概況</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px" id="entity-cards"></div>
@@ -4694,7 +4695,7 @@ function dashAlertHtml(pm,period,eid){
 function buildDash(){
   if(!S.user)return;
   var financeView=isFinance();
-  ['dash-finance-banner','dash-alert','entity-cards-wrap','dash-dist-wrap'].forEach(function(id){var node=el(id);if(node)node.style.display=financeView?'':'none';});
+  ['dash-finance-banner','dash-alert','ceo-decision-center','entity-cards-wrap','dash-dist-wrap'].forEach(function(id){var node=el(id);if(node)node.style.display=financeView?'':'none';});
   var headTitle=document.querySelector('#pg-dashboard .ph');
   if(headTitle)headTitle.textContent=financeView?'儀表板（會計）':'我的工作台';
   var eid=(el('dash-ent')||{}).value||'all';
@@ -4724,6 +4725,7 @@ function buildDash(){
   el('appr-cnt').textContent=pm.length;el('ac2').textContent=pm.length;
   el('notif-cnt').textContent=unread;el('n-badge').style.display=unread?'block':'none';
   if(financeView)el('dash-alert').innerHTML=dashAlertHtml(pm,dashPeriod,eid);
+  var ceoBox=el('ceo-decision-center');if(ceoBox)ceoBox.innerHTML=financeView?ceoDecisionCenterHtml(dashPeriod,eid):'';
   // 法人概況卡（全體時顯示六張並可點擊篩選，個別時隱藏）
   var ecWrap=el('entity-cards-wrap');
   if(financeView&&eid==='all'){
@@ -6981,6 +6983,43 @@ function approvalManagerSummaryHtml(pm){
     +'<div class="card" style="padding:12px"><div style="font-size:11px;color:#8a6a3b;font-weight:800">需補確認</div><div style="font-size:24px;font-weight:900;color:'+(missing+returned?'#9a5a00':'#1f2a44')+';margin-top:4px">'+(missing+returned)+'</div><div style="font-size:11px;color:#94a3b8">缺附件或曾退回</div></div>'
     +'</div>';
 }
+function ceoPendingFundingRequests(){
+  return REQS.filter(function(r){
+    var s=activeStep(r);
+    return r.status==='pending_ceo'&&s&&s.rk==='ceo';
+  }).sort(function(a,b){return requestReviewAmount(b)-requestReviewAmount(a);});
+}
+function ceoCashImpactAmount(r){
+  return requestFundingBaseAmount(r)+requestBankFeeAmount(r);
+}
+function pendingSettingChangesCount(){
+  return (SYSTEM_SETTINGS.pending_settings_changes||[]).filter(function(c){return c&&c.status==='pending';}).length;
+}
+function ceoDecisionCenterHtml(period,eid){
+  if(!S.user||S.user.role!=='ceo')return'';
+  var funding=ceoPendingFundingRequests();
+  var fundingTotal=funding.reduce(function(s,r){return s+ceoCashImpactAmount(r);},0);
+  var high=funding.filter(function(r){return requestReviewAmount(r)>=50000;}).length;
+  var missing=funding.filter(function(r){return supervisorReviewIssues(r).some(function(x){return x.label==='缺附件';});}).length;
+  var settingCount=pendingSettingChangesCount();
+  var tax=taxSummary(eid,period);
+  var rows=funding.slice(0,4).map(function(r){
+    var e=gE(r.eid),d=gD(r.dc),issues=supervisorReviewIssues(r);
+    var flags=issues.slice(0,2).map(function(x){return'<span class="badge '+(x.level==='high'?'b-rej':'b-wait')+'" style="font-size:9px">'+escAttr(x.label)+'</span>';}).join(' ');
+    return'<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f0e6d6;align-items:flex-start"><div style="min-width:0"><div style="font-size:12px;font-weight:800;color:#334155">'+escAttr(r.no)+' '+flags+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">'+escAttr(r.app)+' · '+escAttr(e.s)+' · '+escAttr(r.dc+' '+(d.n||''))+'</div><div style="font-size:10px;color:#8b7358;margin-top:3px">放款後現金流出 '+fmt(ceoCashImpactAmount(r))+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:900;color:#8a1010">'+fmt(requestReviewAmount(r))+'</div><button class="btn-g" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="openDetail(\''+r.id+'\')">檢視</button></div></div>';
+  }).join('')||'<div style="font-size:12px;color:#94a3b8;padding:10px 0">目前沒有待執行長放款的申請。</div>';
+  return'<div class="card" style="margin-bottom:12px;border-color:#f0c982;background:#fffaf2">'
+    +'<div class="chd"><span class="cht">執行長決策中心</span><span style="font-size:11px;color:#a08060">'+monthLabel(period)+'</span></div>'
+    +'<div style="padding:12px"><div class="grid three" style="margin-bottom:10px">'
+    +'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">待我放款</div><div style="font-size:22px;font-weight:900;color:#1f2a44">'+funding.length+' 筆</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">預計現金流出 '+fmt(fundingTotal)+'</div></div>'
+    +'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">重大/缺件風險</div><div style="font-size:22px;font-weight:900;color:'+(high+missing?'#8a1010':'#1f2a44')+'">'+(high+missing)+' 件</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">高金額 '+high+' · 缺附件 '+missing+'</div></div>'
+    +'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">待核准設定</div><div style="font-size:22px;font-weight:900;color:'+(settingCount?'#9a5a00':'#1f2a44')+'">'+settingCount+' 筆</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">含會計科目、權限或系統設定</div></div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.8fr);gap:10px;align-items:start">'
+    +'<div><div style="font-size:12px;font-weight:800;color:#334155;margin-bottom:6px">待放款清單</div>'+rows+'</div>'
+    +'<div style="background:#fff;border:1px solid #ead8c2;border-radius:10px;padding:10px"><div style="font-size:12px;font-weight:800;color:#334155;margin-bottom:6px">老闆視角提醒</div><div style="font-size:11px;color:#6a5840;line-height:1.7">執行長核准後，現金流量表會先認列實際撥款；最後一關會計收到憑據後，才更新資產負債表與損益表，避免重複入帳。</div><div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.6">營業稅：'+(tax.payable>0?'本期應繳 '+fmt(tax.payable):(tax.credit>0?'尚可折抵 '+fmt(tax.credit):'互抵為 0'))+'</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px"><button class="btn-p" onclick="openApprovalTab(\'p\')">處理待簽核</button><button class="btn-g" onclick="nav(\'settings\',null)">檢核設定</button><button class="btn-g" onclick="nav(\'reports\',null)">看三表</button></div></div>'
+    +'</div></div></div>';
+}
 window.withdrawRequest=async function(rid){
   if(S.withdrawBusy)return;
   var r=REQS.find(function(x){return x.id===rid;});
@@ -7030,9 +7069,10 @@ window.openDetail=function(rid){
   var detailUpload='<div style="min-width:260px;max-width:420px;flex:1">'+approvalActionFields('appr-c','appr-files','appr-add-user')+'</div>';
   var advanceFinalAmtField=r.type==='advance_request'?advanceFinalAccountingHtml(r):'';
   var returnBtn=canActRequest(r)&&canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPrevious(\''+r.id+'\')">退回上一關</button>':'';
+  var approveLabel=curStep&&curStep.rk==='ceo'?'核准放款並更新現金流':'核准';
   if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request'&&curStep&&curStep.rk==='procurement_payment')acts.push(procurementPaymentActionHtml(r,false)+'<button class="btn-p" style="background:#0f766e" onclick="submitProcurementPaymentInfo(\''+r.id+'\')">送出總務付款資料</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
   else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request')acts.push('<div style="min-width:280px;max-width:520px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計銷帳與三表只會以這個實際金額入帳，預估金額只保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+approvalActionFields('proc-c','proc-files','proc-add-user')+'</div><button class="btn-p" style="background:#0f766e" onclick="submitProcurementActual(\''+r.id+'\')">提交憑據與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
-  else if(canActRequest(r)&&r.status!=='pending_applicant_confirm'&&r.status!=='pending_voucher')acts.push(detailUpload+'<button class="btn-p" onclick="doApprove(\''+r.id+'\')">核准</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">退件</button>');
+  else if(canActRequest(r)&&r.status!=='pending_applicant_confirm'&&r.status!=='pending_voucher')acts.push(detailUpload+'<button class="btn-p" onclick="doApprove(\''+r.id+'\')">'+approveLabel+'</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">退件</button>');
   if(r.status==='pending_applicant_confirm'&&canActRequest(r)){
     var applicantActionLabel=curStep&&curStep.rk==='applicant_revision'?'補件完成並重新送出':(r.type==='purchase_request'?'確認收到採購商品':r.type==='advance_request'?'提交最後憑據與 Excel 明細':'確認已撥款');
     acts.push((r.type==='advance_request'&&(!curStep||curStep.rk!=='applicant_revision')?'<div style="min-width:260px;max-width:460px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">請在此上傳最後實際花費的憑據照片或 PDF，以及即時 Excel 明細檔。兩種檔案都要上傳，會計才能核銷。</div>'+approvalActionFields('appr-c','appr-files','appr-add-user')+'</div>':detailUpload)+'<button class="btn-p" style="background:#1a7040" onclick="doConfirmPay(\''+r.id+'\')">'+applicantActionLabel+'</button>'+returnBtn);
@@ -7515,7 +7555,7 @@ function showApprD(r){
     else actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計最後會以此實際支出金額切傳票與認列三表，預估金額僅保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+approvalActionFields('proc-c','proc-files','proc-add-user')+'<button class="btn-p" style="width:100%;justify-content:center;background:#0f766e;margin-bottom:5px" onclick="submitProcurementActual(\''+r.id+'\')">提交憑據發票與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':'')+'</div>';
   }
   else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+advanceFinalAmtField+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080;margin-bottom:5px" onclick="doConfirmVoucher(\''+r.id+'\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn+'</div>';
-  else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">核准此申請</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">整批退件</button></div>';
+  else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+(cur.rk==='ceo'?'<div style="font-size:11px;color:#7a3b00;line-height:1.6;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px;margin-bottom:8px">按下核准後，系統會先在現金流量表認列撥款 '+fmt(ceoCashImpactAmount(r))+'；最後一關會計收到憑據後才更新資產負債表與損益表。</div>':'')+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">'+(cur.rk==='ceo'?'核准放款並更新現金流':'核准此申請')+'</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">整批退件</button></div>';
   if(!actH&&canWithdrawRequest(r))actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-top:6px">單子尚未進入執行長放款關卡，因此申請人可以抽單取消。</div></div>';
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:monospace;font-size:10px;color:#c0a080">'+r.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+r.app+' · '+e.s+'</div></div></div>'
