@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, FilePenLine, Files, RotateCw, Scissors, Stamp, UploadCloud } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Download, FilePenLine, Files, RotateCw, Scissors, Stamp, UploadCloud } from "lucide-react";
+import { SuiyueLogo } from "@/components/brand/suiyue-logo";
 
 const pdfTools = [
   { title: "合併 PDF", detail: "將多份 PDF 依排序合併成一份送簽檔案。", icon: Files },
@@ -18,16 +20,32 @@ export default function PdfEditorPage() {
   );
 
   return (
-    <div className="space-y-5">
-      <section className="overflow-hidden rounded-[16px] border border-[#ead8c2] bg-white shadow-[0_18px_45px_rgba(120,72,20,0.12)]">
-        <div className="bg-[linear-gradient(135deg,#c86b00_0%,#e47d00_48%,#f4a737_100%)] p-5 text-white sm:p-6">
-          <p className="text-sm font-bold uppercase tracking-[0.14em] text-white/80">PDF EDITOR</p>
-          <h1 className="mt-2 text-3xl font-black sm:text-4xl">PDF 編輯器</h1>
-          <p className="mt-3 max-w-3xl text-sm font-medium leading-6 text-white/88 sm:text-base">
-            先整理公文、人資或會計附件，再送簽或歸檔。此頁已預留合併、拆分、旋轉、簽章與壓縮的操作區。
-          </p>
-        </div>
-      </section>
+    <main className="min-h-screen bg-[#eee7de] p-0 text-slate-800 sm:p-4">
+      <section className="finance-shell-card mx-auto min-h-screen max-w-[1200px] overflow-hidden sm:min-h-[calc(100vh-2rem)] sm:rounded-[18px]">
+        <header className="finance-topbar flex min-h-[66px] items-center justify-between gap-3 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <SuiyueLogo className="h-10 w-10 shrink-0 p-0.5" />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-slate-800">歲悅長照集團</div>
+              <div className="truncate text-[10px] tracking-[0.16em] text-slate-500">TOOLBOX · PDF EDITOR</div>
+            </div>
+          </div>
+          <Link className="inline-flex items-center rounded-lg border border-[#ead8c2] bg-white px-3 py-2 text-sm font-black text-[#8a4b06]" href="/toolbox">
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            回工具箱
+          </Link>
+        </header>
+
+        <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+          <section className="overflow-hidden rounded-[16px] border border-[#ead8c2] bg-white shadow-[0_18px_45px_rgba(120,72,20,0.12)]">
+            <div className="bg-[linear-gradient(135deg,#c86b00_0%,#e47d00_48%,#f4a737_100%)] p-5 text-white sm:p-6">
+              <p className="text-sm font-bold uppercase tracking-[0.14em] text-white/80">PDF EDITOR</p>
+              <h1 className="mt-2 text-3xl font-black sm:text-4xl">PDF 編輯器</h1>
+              <p className="mt-3 max-w-3xl text-sm font-medium leading-6 text-white/88 sm:text-base">
+                獨立工具箱功能，用來先整理附件檔案；此頁不掛在人資系統選單底下。
+              </p>
+            </div>
+          </section>
 
       <section className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="rounded-[14px] border border-[#ead8c2] bg-white p-5 shadow-sm">
@@ -104,6 +122,8 @@ export default function PdfEditorPage() {
           </div>
         </div>
       </section>
-    </div>
+        </div>
+      </section>
+    </main>
   );
 }

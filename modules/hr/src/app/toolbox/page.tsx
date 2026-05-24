@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, FilePenLine, Files, Image, Stamp, Wrench } from "lucide-react";
+import { ArrowLeft, ArrowRight, FilePenLine, Files, Image, Stamp, Wrench } from "lucide-react";
+import { SuiyueLogo } from "@/components/brand/suiyue-logo";
 
 const tools = [
   {
@@ -31,16 +32,32 @@ const tools = [
 
 export default function ToolboxPage() {
   return (
-    <div className="space-y-5">
-      <section className="overflow-hidden rounded-[16px] border border-[#ead8c2] bg-white shadow-[0_18px_45px_rgba(120,72,20,0.12)]">
-        <div className="bg-[linear-gradient(135deg,#c86b00_0%,#e47d00_48%,#f4a737_100%)] p-5 text-white sm:p-6">
-          <p className="text-sm font-bold uppercase tracking-[0.14em] text-white/80">TOOLBOX</p>
-          <h1 className="mt-2 text-3xl font-black sm:text-4xl">工具列</h1>
-          <p className="mt-3 max-w-3xl text-sm font-medium leading-6 text-white/88 sm:text-base">
-            將日常行政、文件整理、PDF 編輯與附件處理工具集中管理，讓公文、人資與會計送簽前都能先整理好檔案。
-          </p>
-        </div>
-      </section>
+    <main className="min-h-screen bg-[#eee7de] p-0 text-slate-800 sm:p-4">
+      <section className="finance-shell-card mx-auto min-h-screen max-w-[1200px] overflow-hidden sm:min-h-[calc(100vh-2rem)] sm:rounded-[18px]">
+        <header className="finance-topbar flex min-h-[66px] items-center justify-between gap-3 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <SuiyueLogo className="h-10 w-10 shrink-0 p-0.5" />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-slate-800">歲悅長照集團</div>
+              <div className="truncate text-[10px] tracking-[0.16em] text-slate-500">TOOLBOX MODULE</div>
+            </div>
+          </div>
+          <Link className="inline-flex items-center rounded-lg border border-[#ead8c2] bg-white px-3 py-2 text-sm font-black text-[#8a4b06]" href="https://finance.suiyuecare.com/">
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            回模組入口
+          </Link>
+        </header>
+
+        <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+          <section className="overflow-hidden rounded-[16px] border border-[#ead8c2] bg-white shadow-[0_18px_45px_rgba(120,72,20,0.12)]">
+            <div className="bg-[linear-gradient(135deg,#c86b00_0%,#e47d00_48%,#f4a737_100%)] p-5 text-white sm:p-6">
+              <p className="text-sm font-bold uppercase tracking-[0.14em] text-white/80">TOOLBOX</p>
+              <h1 className="mt-2 text-3xl font-black sm:text-4xl">工具箱</h1>
+              <p className="mt-3 max-w-3xl text-sm font-medium leading-6 text-white/88 sm:text-base">
+                將 PDF 編輯與附件整理工具獨立集中管理；這裡不是人資系統頁面，不會出現在 HR 側欄。
+              </p>
+            </div>
+          </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {tools.map((tool) => {
@@ -75,13 +92,15 @@ export default function ToolboxPage() {
         <div className="flex items-start gap-3">
           <Wrench className="mt-1 h-5 w-5 text-[#b45309]" />
           <div>
-            <h2 className="font-black text-slate-950">工具列使用原則</h2>
+            <h2 className="font-black text-slate-950">工具箱使用原則</h2>
             <p className="mt-1 text-sm leading-6 text-slate-500">
               工具產出的檔案若要進入表單、公文或會計簽核，後續應寫入附件歸檔規則與 audit log，確保下載、版本與觀看權限都可追溯。
             </p>
           </div>
         </div>
       </section>
-    </div>
+        </div>
+      </section>
+    </main>
   );
 }

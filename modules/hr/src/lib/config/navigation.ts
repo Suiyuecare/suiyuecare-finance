@@ -6,11 +6,9 @@ import {
   Clock3,
   ClipboardCheck,
   ClipboardList,
-  FilePenLine,
   FileArchive,
   FileCheck2,
   Home,
-  KanbanSquare,
   Landmark,
   LockKeyhole,
   NotebookText,
@@ -22,7 +20,6 @@ import {
   UserCheck,
   UserRoundCog,
   Users,
-  Wrench,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import type { Permission } from "@/lib/auth/rbac";
@@ -51,7 +48,6 @@ export const navigationGroups: NavigationGroup[] = [
       { title: "出勤日曆", href: "/attendance", icon: CalendarDays, permissions: ["attendance:view"] },
       { title: "薪資袋", href: "/payslip", icon: LockKeyhole, permissions: ["payroll:self:view"] },
       { title: "公告中心", href: "/announcements", icon: Bell, permissions: ["announcement:view"] },
-      { title: "工具列", href: "/toolbox", icon: Wrench, permissions: ["dashboard:view"] },
     ],
   },
   {
@@ -61,8 +57,6 @@ export const navigationGroups: NavigationGroup[] = [
       { title: "人資後台", href: "/hr-admin", icon: UserRoundCog, permissions: ["employee:manage"] },
       { title: "人員主檔", href: "/employees", icon: UserRoundCog, permissions: ["employee:view"] },
       { title: "組織圖", href: "/organization", icon: Users, permissions: ["organization:view"] },
-      { title: "電子公文", href: "/official-documents", icon: FilePenLine, permissions: ["dashboard:view"] },
-      { title: "敏捷專案", href: "/agile-projects", icon: KanbanSquare, permissions: ["dashboard:view"] },
       { title: "出勤異常", href: "/attendance/anomalies", icon: ShieldAlert, permissions: ["attendance:approve", "attendance:manage"] },
       { title: "假別管理", href: "/attendance/leave-types", icon: CalendarDays, permissions: ["attendance:manage"] },
       { title: "薪資結算", href: "/payroll/closing", icon: ClipboardCheck, permissions: ["payroll:manage"] },
