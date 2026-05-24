@@ -46,9 +46,14 @@ export type PermissionPressureResult = {
 };
 
 const roleLabels: Record<HrRole, string> = {
-  team_member: "組員",
-  supervisor: "主管",
+  employee: "一般組員",
+  team_member: "一般組員",
+  section_chief: "課長",
+  dept_manager: "部門主管",
+  supervisor: "部門主管",
+  general_affairs: "總務",
   hr: "人資",
+  accountant: "會計",
   admin_director: "行政部門主任",
   ceo: "執行長",
 };
@@ -163,9 +168,9 @@ export function runPermissionPressureTest(): PermissionPressureResult[] {
 
   const dataScopeResults = hrRoles.map((role) => {
     const policy = getRolePolicy(role);
-    const expectedScope = role === "team_member"
+    const expectedScope = role === "employee"
       ? "self"
-      : role === "supervisor"
+      : role === "section_chief" || role === "dept_manager" || role === "general_affairs"
         ? "department"
         : role === "ceo"
           ? "all_companies"

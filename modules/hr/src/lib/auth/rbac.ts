@@ -1,12 +1,17 @@
 export const hrRoles = [
-  "team_member",
-  "supervisor",
-  "hr",
+  "employee",
+  "section_chief",
+  "dept_manager",
   "admin_director",
+  "general_affairs",
+  "hr",
+  "accountant",
   "ceo",
 ] as const;
 
-export type HrRole = (typeof hrRoles)[number];
+export type AccountingRole = (typeof hrRoles)[number];
+export type LegacyCompatibleRole = "team_member" | "supervisor";
+export type HrRole = AccountingRole | LegacyCompatibleRole;
 
 export type LegacyHrRole =
   | "super_admin"
@@ -16,6 +21,9 @@ export type LegacyHrRole =
   | "accountant"
   | "department_manager"
   | "employee"
+  | "section_chief"
+  | "dept_manager"
+  | "general_affairs"
   | "homecare_supervisor"
   | "homecare_worker"
   | "daycare_staff";
@@ -161,8 +169,18 @@ const hrBasePermissions: Permission[] = [
 ];
 
 export const rolePolicies: Record<HrRole, RolePolicy> = {
+  employee: {
+    label: "一般組員",
+    description: "一般組員可查看本人公告、班表、打卡、表單進度、薪資袋與教育訓練。",
+    dataScope: "self",
+    permissions: [
+      ...employeeBasePermissions,
+      "attendance:view",
+      "care_schedule:view",
+    ],
+  },
   team_member: {
-    label: "組員",
+    label: "一般組員",
     description: "員工自助帳號，可查看本人公告、班表、打卡、表單進度、薪資袋與教育訓練。",
     dataScope: "self",
     permissions: [
@@ -171,12 +189,44 @@ export const rolePolicies: Record<HrRole, RolePolicy> = {
       "care_schedule:view",
     ],
   },
+  section_chief: {
+    label: "課長",
+    description: "課長可查看管轄員工、班表、出勤異常、待簽核與部門統計。",
+    dataScope: "department",
+    permissions: [
+      ...managerBasePermissions,
+      "care_schedule:view",
+      "training:view",
+    ],
+  },
+  dept_manager: {
+    label: "部門主管",
+    description: "部門主管可查看管轄員工、班表、出勤異常、待簽核與部門統計。",
+    dataScope: "department",
+    permissions: [
+      ...managerBasePermissions,
+      "care_schedule:view",
+      "training:view",
+    ],
+  },
   supervisor: {
-    label: "主管",
+    label: "部門主管",
     description: "部門或據點主管，可查看管轄員工、班表、出勤異常、待簽核與部門統計。",
     dataScope: "department",
     permissions: [
       ...managerBasePermissions,
+      "care_schedule:view",
+      "training:view",
+    ],
+  },
+  general_affairs: {
+    label: "總務",
+    description: "總務帳號可處理行政表單、一般管理待辦與採購/行政支援流程。",
+    dataScope: "department",
+    permissions: [
+      ...managerBasePermissions,
+      "form:general_affairs:create",
+      "finance_handoff:view",
       "care_schedule:view",
       "training:view",
     ],
@@ -205,6 +255,24 @@ export const rolePolicies: Record<HrRole, RolePolicy> = {
       "system:audit:view",
       "permission:settings:view",
       "permission:settings:publish",
+    ],
+  },
+  accountant: {
+    label: "會計",
+    description: "會計帳號可查看薪資彙總、財務拋轉與必要的人資財務串接資料。",
+    dataScope: "company",
+    permissions: [
+      "dashboard:view",
+      "announcement:view",
+      "notification:view",
+      "organization:view",
+      "request:view",
+      "request:approve",
+      "request:team:view",
+      "payroll:aggregate:view",
+      "finance_handoff:view",
+      "finance_handoff:manage",
+      "analytics:view",
     ],
   },
   admin_director: {
@@ -262,16 +330,22 @@ const legacyRoleMap: Record<LegacyHrRole, HrRole> = {
   company_admin: "admin_director",
   hr_manager: "hr",
   hr_staff: "hr",
-  accountant: "admin_director",
-  department_manager: "supervisor",
-  employee: "team_member",
-  homecare_supervisor: "supervisor",
-  homecare_worker: "team_member",
-  daycare_staff: "team_member",
+  accountant: "accountant",
+  department_manager: "dept_manager",
+  employee: "employee",
+  section_chief: "section_chief",
+  dept_manager: "dept_manager",
+  general_affairs: "general_affairs",
+  homecare_supervisor: "dept_manager",
+  homecare_worker: "employee",
+  daycare_staff: "employee",
 };
 
 export function toCanonicalRole(role: string | null | undefined): HrRole {
-  if (role && hrRoles.includes(role as HrRole)) {
+  if (role === "team_member") return "employee";
+  if (role === "supervisor") return "dept_manager";
+
+  if (role && hrRoles.includes(role as AccountingRole)) {
     return role as HrRole;
   }
 
@@ -279,7 +353,7 @@ export function toCanonicalRole(role: string | null | undefined): HrRole {
     return legacyRoleMap[role as LegacyHrRole];
   }
 
-  return "team_member";
+  return "employee";
 }
 
 export function getRolePolicy(role: HrRole) {
@@ -287,7 +361,7 @@ export function getRolePolicy(role: HrRole) {
 }
 
 export function getRoleLabel(role: HrRole) {
-  return rolePolicies[role].label;
+  return rolePolicies[toCanonicalRole(role)].label;
 }
 
 function readClientPermissionDrafts(): Partial<Record<HrRole, Permission[]>> | null {
@@ -315,6 +389,33 @@ export function saveClientPermissionDrafts(drafts: Record<HrRole, Permission[]>)
 }
 
 const hardDeniedPermissions: Partial<Record<HrRole, Permission[]>> = {
+  employee: [
+    "employee:view",
+    "employee:manage",
+    "employee:sensitive:view",
+    "employee:contact:view",
+    "employee:address:view",
+    "employee:national_id:view",
+    "employee:salary:view",
+    "payroll:all:view",
+    "payroll:aggregate:view",
+    "payroll:individual:view",
+    "payroll:manage",
+    "payroll:draft:generate",
+    "payroll:lock",
+    "payroll:payslip:publish",
+    "payroll:bank_export",
+    "payroll:roster_export",
+    "payroll:adjust",
+    "insurance:view",
+    "insurance:manage",
+    "finance_handoff:view",
+    "finance_handoff:manage",
+    "system:settings",
+    "system:audit:view",
+    "permission:settings:view",
+    "permission:settings:publish",
+  ],
   team_member: [
     "employee:view",
     "employee:manage",
@@ -362,11 +463,52 @@ const hardDeniedPermissions: Partial<Record<HrRole, Permission[]>> = {
     "finance_handoff:manage",
     "permission:settings:publish",
   ],
+  section_chief: [
+    "employee:sensitive:view",
+    "employee:address:view",
+    "employee:national_id:view",
+    "employee:salary:view",
+    "payroll:all:view",
+    "payroll:individual:view",
+    "payroll:manage",
+    "payroll:draft:generate",
+    "payroll:lock",
+    "payroll:payslip:publish",
+    "payroll:bank_export",
+    "payroll:roster_export",
+    "payroll:adjust",
+    "insurance:view",
+    "insurance:manage",
+    "finance_handoff:view",
+    "finance_handoff:manage",
+    "permission:settings:publish",
+  ],
+  dept_manager: [
+    "employee:sensitive:view",
+    "employee:address:view",
+    "employee:national_id:view",
+    "employee:salary:view",
+    "payroll:all:view",
+    "payroll:individual:view",
+    "payroll:manage",
+    "payroll:draft:generate",
+    "payroll:lock",
+    "payroll:payslip:publish",
+    "payroll:bank_export",
+    "payroll:roster_export",
+    "payroll:adjust",
+    "insurance:view",
+    "insurance:manage",
+    "finance_handoff:view",
+    "finance_handoff:manage",
+    "permission:settings:publish",
+  ],
 };
 
 export function can(role: HrRole, permission: Permission) {
-  if (hardDeniedPermissions[role]?.includes(permission)) return false;
-  return getEffectiveRolePermissions(role).includes(permission);
+  const canonicalRole = toCanonicalRole(role);
+  if (hardDeniedPermissions[canonicalRole]?.includes(permission)) return false;
+  return getEffectiveRolePermissions(canonicalRole).includes(permission);
 }
 
 export function canAny(role: HrRole, permissions: Permission[] = []) {

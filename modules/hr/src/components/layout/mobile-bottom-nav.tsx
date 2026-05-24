@@ -31,21 +31,29 @@ type MobileItem = {
   permissions: Permission[];
 };
 
-const roleMobileItems: Record<HrRole, MobileItem[]> = {
-  team_member: [
+const employeeMobileItems: MobileItem[] = [
     { title: "總覽", href: "/dashboard", icon: Home, permissions: ["dashboard:view"] },
     { title: "打卡", href: "/clock", icon: Clock3, permissions: ["attendance:view"] },
     { title: "申請", href: "/requests/new", icon: CalendarDays, permissions: ["request:create"] },
     { title: "追蹤", href: "/requests", icon: FileText, permissions: ["request:view"] },
     { title: "薪資", href: "/payslip", icon: LockKeyhole, permissions: ["payroll:self:view"] },
-  ],
-  supervisor: [
+];
+
+const managerMobileItems: MobileItem[] = [
     { title: "總覽", href: "/dashboard", icon: Home, permissions: ["dashboard:view"] },
     { title: "主管", href: "/manager-portal", icon: UserCheck, permissions: ["request:approve"] },
     { title: "簽核", href: "/approvals", icon: ClipboardCheck, permissions: ["request:approve"] },
     { title: "表單", href: "/requests", icon: FileText, permissions: ["request:view"] },
     { title: "公告", href: "/announcements", icon: Bell, permissions: ["announcement:view"] },
-  ],
+];
+
+const roleMobileItems: Record<HrRole, MobileItem[]> = {
+  employee: employeeMobileItems,
+  team_member: employeeMobileItems,
+  section_chief: managerMobileItems,
+  dept_manager: managerMobileItems,
+  general_affairs: managerMobileItems,
+  supervisor: managerMobileItems,
   hr: [
     { title: "總覽", href: "/dashboard", icon: Home, permissions: ["dashboard:view"] },
     { title: "人資", href: "/hr-admin", icon: UserRoundCog, permissions: ["employee:manage"] },
@@ -66,6 +74,13 @@ const roleMobileItems: Record<HrRole, MobileItem[]> = {
     { title: "薪資", href: "/payroll", icon: Landmark, permissions: ["payroll:manage"] },
     { title: "法規", href: "/compliance", icon: ShieldCheck, permissions: ["compliance:view"] },
     { title: "設定", href: "/settings", icon: Settings2, permissions: ["system:settings"] },
+  ],
+  accountant: [
+    { title: "總覽", href: "/dashboard", icon: Home, permissions: ["dashboard:view"] },
+    { title: "簽核", href: "/approvals", icon: ClipboardCheck, permissions: ["request:approve"] },
+    { title: "薪資", href: "/payroll", icon: Landmark, permissions: ["payroll:aggregate:view"] },
+    { title: "報表", href: "/analytics", icon: BarChart3, permissions: ["analytics:view"] },
+    { title: "公告", href: "/announcements", icon: Bell, permissions: ["announcement:view"] },
   ],
 };
 

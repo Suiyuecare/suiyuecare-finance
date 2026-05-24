@@ -5,10 +5,12 @@ import type { CurrentUser } from "@/lib/auth/current-user";
 import {
   getQuickLoginUser,
   quickLoginChangedEvent,
+  supabaseAccountOptions,
   unauthenticatedUser,
 } from "@/lib/auth/current-user";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { toCanonicalRole } from "@/lib/auth/rbac";
+import { getRoleLabel } from "@/lib/auth/rbac";
 
 type UserProfileRow = {
   id: string;
@@ -31,7 +33,7 @@ function mapProfile(row: UserProfileRow): CurrentUser {
     name: row.display_name,
     email: row.email,
     role,
-    roleLabel: row.roles?.name ?? "員工",
+    roleLabel: getRoleLabel(role),
     companyId: row.company_id ?? "",
     primaryBranchId: row.employees?.primary_branch_id ?? "",
     departmentCode: row.employees?.departments?.code ?? "",
@@ -62,6 +64,12 @@ export function useCurrentUser() {
       } = await supabase.auth.getUser();
       if (!authUser) {
         if (isMounted) setUser(unauthenticatedUser);
+        return;
+      }
+
+      const sharedAccount = supabaseAccountOptions.find((account) => account.email === authUser.email);
+      if (sharedAccount) {
+        if (isMounted) setUser(sharedAccount);
         return;
       }
 

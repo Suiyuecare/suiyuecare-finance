@@ -15,17 +15,27 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { toCanonicalRole, type HrRole } from "@/lib/auth/rbac";
 
 const roleIcons = {
+  employee: UsersRound,
   team_member: UsersRound,
+  section_chief: UserCheck,
+  dept_manager: UserCheck,
   supervisor: UserCheck,
+  general_affairs: Building2,
   hr: ShieldCheck,
+  accountant: FileText,
   admin_director: Building2,
   ceo: CheckCircle2,
 } as const;
 
 const roleDescriptions = {
+  employee: "員工入口、打卡、表單申請、表單追蹤、薪資袋",
   team_member: "員工入口、打卡、表單申請、表單追蹤、薪資袋",
-  supervisor: "主管待辦、簽核、部門出勤異常、排班缺口",
+  section_chief: "課長待辦、簽核、部門出勤異常、排班缺口",
+  dept_manager: "部門主管待辦、簽核、部門出勤異常、排班缺口",
+  supervisor: "部門主管待辦、簽核、部門出勤異常、排班缺口",
+  general_affairs: "總務待辦、行政流程、簽核與跨部門支援",
   hr: "人資工作台、員工主檔、假勤、證照訓練、薪資前置",
+  accountant: "薪資彙總、財務拋轉、會計檢核",
   admin_director: "行政總控、權限設定、薪資結算、法規檢核",
   ceo: "經營儀表板、全集團報表、重大權限與總額檢視",
 } as const;

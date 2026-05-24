@@ -45,14 +45,14 @@ const mobilePrimaryActions: Array<{
   permissions: Permission[];
   roles?: HrRole[];
 }> = [
-  { title: "今日打卡", subtitle: "上下班 / 外出 / 返回", href: "/clock", icon: Clock3, permissions: ["attendance:view"], roles: ["team_member"] },
-  { title: "我要申請", subtitle: "請假、加班、補卡", href: "/requests/new", icon: CalendarDays, permissions: ["request:create"], roles: ["team_member", "supervisor"] },
-  { title: "表單追蹤", subtitle: "查看我的申請進度", href: "/requests", icon: FileText, permissions: ["request:view"], roles: ["team_member", "supervisor"] },
-  { title: "薪資袋", subtitle: "本人薪資與發薪紀錄", href: "/payslip", icon: LockKeyhole, permissions: ["payroll:self:view"], roles: ["team_member"] },
-  { title: "主管入口", subtitle: "待辦、異常、人力缺口", href: "/manager-portal", icon: UserCheck, permissions: ["request:approve"], roles: ["supervisor"] },
-  { title: "待簽核", subtitle: "請假、加班、補卡", href: "/approvals", icon: CheckSquare, permissions: ["request:approve"], roles: ["supervisor", "hr", "admin_director", "ceo"] },
+  { title: "今日打卡", subtitle: "上下班 / 外出 / 返回", href: "/clock", icon: Clock3, permissions: ["attendance:view"], roles: ["employee", "team_member"] },
+  { title: "我要申請", subtitle: "請假、加班、補卡", href: "/requests/new", icon: CalendarDays, permissions: ["request:create"], roles: ["employee", "section_chief", "dept_manager", "general_affairs", "team_member", "supervisor"] },
+  { title: "表單追蹤", subtitle: "查看我的申請進度", href: "/requests", icon: FileText, permissions: ["request:view"], roles: ["employee", "section_chief", "dept_manager", "general_affairs", "team_member", "supervisor"] },
+  { title: "薪資袋", subtitle: "本人薪資與發薪紀錄", href: "/payslip", icon: LockKeyhole, permissions: ["payroll:self:view"], roles: ["employee", "team_member"] },
+  { title: "主管入口", subtitle: "待辦、異常、人力缺口", href: "/manager-portal", icon: UserCheck, permissions: ["request:approve"], roles: ["section_chief", "dept_manager", "general_affairs", "supervisor"] },
+  { title: "待簽核", subtitle: "請假、加班、補卡", href: "/approvals", icon: CheckSquare, permissions: ["request:approve"], roles: ["section_chief", "dept_manager", "general_affairs", "accountant", "supervisor", "hr", "admin_director", "ceo"] },
   { title: "人資後台", subtitle: "員工、出勤、證照訓練", href: "/hr-admin", icon: UserRoundCog, permissions: ["employee:manage"], roles: ["hr", "admin_director", "ceo"] },
-  { title: "員工管理", subtitle: "人員主檔與異動紀錄", href: "/employees", icon: Users, permissions: ["employee:view"], roles: ["hr", "admin_director", "ceo"] },
+  { title: "員工管理", subtitle: "人員主檔與異動紀錄", href: "/employees", icon: Users, permissions: ["employee:view"], roles: ["section_chief", "dept_manager", "general_affairs", "supervisor", "hr", "admin_director", "ceo"] },
   { title: "薪資後台", subtitle: "結薪、清冊、發薪", href: "/payroll", icon: Landmark, permissions: ["payroll:manage"], roles: ["hr", "admin_director", "ceo"] },
   { title: "法規檢核", subtitle: "勞基法與性平規則", href: "/compliance", icon: ShieldCheck, permissions: ["compliance:view"], roles: ["admin_director", "ceo"] },
 ];

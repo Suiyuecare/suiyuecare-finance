@@ -190,10 +190,15 @@ const riskWeight = {
   高敏感: 3,
 };
 
-const protectedRolePermissions: Record<HrRole, Permission[]> = {
+const protectedRolePermissions: Partial<Record<HrRole, Permission[]>> = {
+  employee: ["dashboard:view", "request:create", "request:own:view", "payroll:self:view", "attendance:self:punch"],
   team_member: ["dashboard:view", "request:create", "request:own:view", "payroll:self:view", "attendance:self:punch"],
+  section_chief: ["dashboard:view", "employee:view", "employee:contact:view", "attendance:view", "request:approve", "request:team:view"],
+  dept_manager: ["dashboard:view", "employee:view", "employee:contact:view", "attendance:view", "request:approve", "request:team:view"],
   supervisor: ["dashboard:view", "employee:view", "employee:contact:view", "attendance:view", "request:approve", "request:team:view"],
+  general_affairs: ["dashboard:view", "employee:view", "employee:contact:view", "attendance:view", "request:approve", "request:team:view"],
   hr: ["dashboard:view", "employee:view", "employee:manage", "employee:sensitive:view", "employee:national_id:view"],
+  accountant: ["dashboard:view", "request:approve", "payroll:aggregate:view", "finance_handoff:view"],
   admin_director: ["dashboard:view", "system:settings", "permission:settings:view", "permission:settings:publish"],
   ceo: ["dashboard:view", "system:settings", "permission:settings:view", "permission:settings:publish"],
 };
@@ -247,10 +252,15 @@ const forbiddenRolePermissions: Partial<Record<HrRole, Permission[]>> = {
   ],
 };
 
-const roleGuardrails: Record<HrRole, string[]> = {
+const roleGuardrails: Partial<Record<HrRole, string[]>> = {
+  employee: ["只能看本人資料、本人表單、本人薪資袋。", "不得開通查看他人員工主檔、敏感個資或薪資清冊。"],
   team_member: ["只能看本人資料、本人表單、本人薪資袋。", "不得開通查看他人員工主檔、敏感個資或薪資清冊。"],
+  section_chief: ["可看部門管理必要資料。", "不得查看員工身分證、地址、銀行帳號與個人薪資。"],
+  dept_manager: ["可看部門管理必要資料。", "不得查看員工身分證、地址、銀行帳號與個人薪資。"],
   supervisor: ["可看部門管理必要資料。", "不得查看員工身分證、地址、銀行帳號與個人薪資。"],
+  general_affairs: ["可看行政流程必要資料。", "不得查看非必要敏感個資或個人薪資明細。"],
   hr: ["可查看人員主檔與敏感個資。", "薪資與個資操作需保留稽核紀錄。"],
+  accountant: ["可查看薪資彙總與財務拋轉。", "不得查看非財務必要的員工敏感個資。"],
   admin_director: ["公司範圍內最高行政權限。", "可看全部功能與敏感資料，調整權限需複核。"],
   ceo: ["全集團最高決策權限。", "預設可看薪資總額與經營報表；若要看個人薪資明細，需另行開通高敏感權限並留稽核。"],
 };
@@ -266,7 +276,7 @@ function buildInitialPermissionDrafts(): Record<HrRole, Permission[]> {
 }
 
 function isProtectedPermission(role: HrRole, permission: Permission) {
-  return protectedRolePermissions[role].includes(permission);
+  return protectedRolePermissions[role]?.includes(permission) ?? false;
 }
 
 function isForbiddenPermission(role: HrRole, permission: Permission) {
@@ -824,7 +834,7 @@ export default function SettingsPage() {
               >
                 <div className="text-sm font-black text-slate-950">{rolePolicies[role].label}</div>
                 <div className="mt-2 space-y-1">
-                  {roleGuardrails[role].map((guardrail) => (
+                  {(roleGuardrails[role] ?? []).map((guardrail) => (
                     <p key={guardrail} className="text-xs leading-5 text-slate-500">
                       {guardrail}
                     </p>

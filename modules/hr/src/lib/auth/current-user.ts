@@ -14,7 +14,7 @@ export type CurrentUser = {
   supportBranchIds?: string[];
 };
 
-export const defaultLoginEmail = "3@suiyuecare.com";
+export const defaultLoginEmail = "entrepreneur@suiyuecare.com";
 export const quickLoginStorageKey = "suiyue-hris-quick-login-user";
 export const quickLoginChangedEvent = "suiyue-hris-quick-login-changed";
 export const quickLoginCookieKey = "suiyue_hris_quick_login_user";
@@ -32,68 +32,32 @@ export const supabaseAccountOptions: Array<{
   teamId?: string;
   supportBranchIds?: string[];
 }> = [
-  {
-    id: "4adb8779-65c1-4e30-9339-60c6f5c0c6df",
-    email: "1@suiyuecare.com",
-    role: "team_member",
-    roleLabel: "組員",
-    name: "潘雨柔",
-    companyId: "48f39a3e-7bb4-4293-ac4a-0da6e326fe0a",
-    primaryBranchId: "754fba73-1902-437e-9fd9-8e114871c175",
-    departmentCode: "HOMECARE",
-    departmentId: "7d45f8b7-0a92-41e5-b64f-021255be1a64",
-  },
-  {
-    id: "52f47456-bef6-4d6b-bd2d-a637cb0948d7",
-    email: "2@suiyuecare.com",
-    role: "supervisor",
-    roleLabel: "主管",
-    name: "陳怡霖",
-    companyId: "48f39a3e-7bb4-4293-ac4a-0da6e326fe0a",
-    primaryBranchId: "754fba73-1902-437e-9fd9-8e114871c175",
-    departmentCode: "HOMECARE",
-    departmentId: "7d45f8b7-0a92-41e5-b64f-021255be1a64",
-  },
-  {
-    id: "d9bf99ad-842c-40a9-83b1-a8828495a3a8",
-    email: "3@suiyuecare.com",
-    role: "hr",
-    roleLabel: "人資",
-    name: "陳羽俊",
-    companyId: "48f39a3e-7bb4-4293-ac4a-0da6e326fe0a",
-    primaryBranchId: "f5902e69-e686-4b22-96b5-2e8942759016",
-    departmentCode: "HR",
-    departmentId: "1009854c-8862-40a1-b62d-c969f2adc46c",
-  },
-  {
-    id: "d9646f71-e453-48d8-9e16-a4743ea19cfa",
-    email: "4@suiyuecare.com",
-    role: "admin_director",
-    roleLabel: "行政部門主任",
-    name: "劉巧涵",
-    companyId: "48f39a3e-7bb4-4293-ac4a-0da6e326fe0a",
-    primaryBranchId: "f5902e69-e686-4b22-96b5-2e8942759016",
-    departmentCode: "ADMIN",
-    departmentId: "9da1d8db-b418-4e86-a6dd-b48431d6f238",
-  },
-  {
-    id: "bae25445-d57e-4d16-a93a-e88be70ceea7",
-    email: "5@suiyuecare.com",
-    role: "ceo",
-    roleLabel: "執行長",
-    name: "李佳泰",
-    companyId: "48f39a3e-7bb4-4293-ac4a-0da6e326fe0a",
-    primaryBranchId: "f5902e69-e686-4b22-96b5-2e8942759016",
-    departmentCode: "ADMIN",
-    departmentId: "9da1d8db-b418-4e86-a6dd-b48431d6f238",
-  },
+  { id: "finance-entrepreneur", email: "entrepreneur@suiyuecare.com", role: "ceo", roleLabel: "執行長", name: "李佳泰", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "EXEC" },
+  { id: "finance-admin", email: "admin@suiyuecare.com", role: "admin_director", roleLabel: "行政部門主任", name: "劉巧涵", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "ADMIN" },
+  { id: "finance-hr", email: "suiyue.hr@suiyuecare.com", role: "hr", roleLabel: "人資", name: "陳羽俊", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "HR" },
+  { id: "finance-accounting", email: "suiyue.acct@suiyuecare.com", role: "accountant", roleLabel: "會計", name: "歲悅會計", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "A1101" },
+  { id: "finance-general-affairs", email: "generalaffairs@suiyuecare.com", role: "general_affairs", roleLabel: "總務", name: "朱夏欣", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "ADMIN" },
+  { id: "finance-project-chiang", email: "project_chiang@suiyuecare.com", role: "section_chief", roleLabel: "課長", name: "江守舜", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "PROJECT" },
+  { id: "finance-project", email: "project@suiyuecare.com", role: "dept_manager", roleLabel: "部門主管", name: "陳怡霖", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "PROJECT" },
+  { id: "finance-homecare-taipei", email: "homecare.taipei@suiyuecare.com", role: "dept_manager", roleLabel: "部門主管", name: "黃致皓", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "B1303" },
+  { id: "finance-daycare-wanhua", email: "daycare.wanhua@suiyuecare.com", role: "dept_manager", roleLabel: "部門主管", name: "林方春", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "DAYCARE" },
+  { id: "finance-edu-control", email: "edu.control@suiyuecare.com", role: "dept_manager", roleLabel: "部門主管", name: "陳蕙婷", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "EDU" },
+  { id: "finance-project-hsu", email: "project_hsu@suiyuecare.com", role: "employee", roleLabel: "一般組員", name: "徐靖雯", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "PROJECT" },
+  { id: "finance-project-pan", email: "project_pan@suiyuecare.com", role: "employee", roleLabel: "一般組員", name: "潘雨柔", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "PROJECT" },
+  { id: "finance-project-yu", email: "project_yu@suiyuecare.com", role: "employee", roleLabel: "一般組員", name: "沈芊佑", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "PROJECT" },
+  { id: "finance-daycare-datong", email: "daycare.datong@suiyuecare.com", role: "employee", roleLabel: "一般組員", name: "吳俊璋", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "DAYCARE" },
+  { id: "finance-daycare-shilin", email: "daycare.shilin@suiyuecare.com", role: "employee", roleLabel: "一般組員", name: "王立行", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "DAYCARE" },
+  { id: "finance-daycare-xinyi", email: "daycare.xinyi@suiyuecare.com", role: "employee", roleLabel: "一般組員", name: "信義失智", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "B1104" },
+  { id: "finance-homecare-taipei-members", email: "homecare.taipei.members@suiyuecare.com", role: "employee", roleLabel: "一般組員", name: "臺北居家照顧服務課組員", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "B1303" },
+  { id: "finance-projectmember", email: "projectmember@suiyuecare.com", role: "employee", roleLabel: "一般組員", name: "移工培訓部組員", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "PROJECT" },
+  { id: "finance-admin-jiobar", email: "admin@jiobar.com", role: "section_chief", roleLabel: "課長", name: "移站式", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "D1000" },
 ];
 
 export const unauthenticatedUser: CurrentUser = {
   id: "",
   name: "未登入",
   email: "",
-  role: "team_member",
+  role: "employee",
   roleLabel: "未登入",
   companyId: "",
   primaryBranchId: "",

@@ -214,5 +214,5 @@ function normalizeRole(role: unknown): HrRole {
     return toCanonicalRole(role);
   }
 
-  return "team_member";
+  return "employee";
 }
