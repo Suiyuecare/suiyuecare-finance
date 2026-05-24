@@ -100,6 +100,37 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .nr-info-panel{background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:11px;min-height:100%}
 .nr-info-title{font-size:12px;font-weight:650;color:#334155;margin-bottom:9px}
 @media(max-width:860px){.nr-two-col{grid-template-columns:1fr!important}}
+.employee-guide{display:grid;grid-template-columns:1.15fr 1fr;gap:10px;margin-bottom:12px}
+.employee-guide-main,.employee-guide-card,.employee-step-help,.type-picker-help{background:#fff;border:1px solid #ead8c2;border-radius:12px;padding:12px;box-shadow:0 10px 24px rgba(52,36,18,.04)}
+.employee-guide-main{background:linear-gradient(135deg,#fff8ed 0%,#fff 62%);border-left:4px solid var(--br)}
+.employee-guide-kicker{font-size:10px;font-weight:800;letter-spacing:.08em;color:#b45309;margin-bottom:5px}
+.employee-guide-title{font-size:16px;font-weight:800;color:#172033;margin-bottom:5px}
+.employee-guide-copy{font-size:12px;color:#64748b;line-height:1.65}
+.employee-guide-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.employee-mini-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:10px}
+.employee-mini-step{background:#fffaf3;border:1px solid #efd7b8;border-radius:9px;padding:8px}
+.employee-mini-step strong{display:block;font-size:12px;color:#334155;margin-bottom:3px}
+.employee-mini-step span{font-size:10px;color:#8b7358;line-height:1.45}
+.employee-guide-card-title{font-size:12px;font-weight:750;color:#334155;margin-bottom:6px}
+.employee-guide-list{display:flex;flex-direction:column;gap:6px}
+.employee-guide-list div{font-size:11px;color:#64748b;line-height:1.55;background:#fffaf3;border:1px solid #f0e0c8;border-radius:8px;padding:7px 8px}
+.employee-step-help{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;background:#fff8ed}
+.employee-step-help .step-no{width:30px;height:30px;border-radius:10px;background:var(--br);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
+.employee-step-help .step-title{font-size:13px;font-weight:800;color:#172033;margin-bottom:3px}
+.employee-step-help .step-copy{font-size:12px;color:#64748b;line-height:1.6}
+.employee-step-help .step-next{font-size:11px;color:#8b7358;margin-top:5px}
+.type-picker-help{margin:10px;border-style:dashed;background:#fffdf9}
+.type-picker-help-title{font-size:12px;font-weight:800;color:#334155;margin-bottom:6px}
+.type-picker-rules{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.type-picker-rules button{border:1px solid #efd7b8;background:#fff;border-radius:9px;padding:8px;text-align:left;cursor:pointer;color:#334155}
+.type-picker-rules button:hover{border-color:var(--br);background:#fff8ed}
+.type-picker-rules strong{display:block;font-size:11px;color:#7c3f00;margin-bottom:3px}
+.type-picker-rules span{display:block;font-size:10px;color:#64748b;line-height:1.45}
+.type-employee-note{margin-top:7px;font-size:10px;color:#8b7358;line-height:1.45;background:#fffaf3;border:1px solid #f0e0c8;border-radius:7px;padding:6px}
+.employee-empty-state{text-align:center;padding:24px 12px;color:#64748b}
+.employee-empty-state strong{display:block;font-size:13px;color:#334155;margin-bottom:4px}
+.employee-empty-state span{display:block;font-size:11px;margin-bottom:10px}
+@media(max-width:860px){.employee-guide{grid-template-columns:1fr}.employee-mini-steps,.type-picker-rules{grid-template-columns:1fr}.employee-step-help{padding:10px}}
 .si-dot{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;flex-shrink:0;transition:all .2s}
 .si-wait{background:var(--warm);color:#b09070;border:1px solid #e0d0b8}
 .si-cur{background:var(--br);color:#fff}
@@ -714,6 +745,7 @@ html,body{overflow-x:hidden}
       </div>
     </div>
     <div id="dash-alert"></div>
+    <div id="dash-employee-guide"></div>
     <div id="ceo-decision-center"></div>
     <div style="margin-bottom:12px" id="entity-cards-wrap">
       <div style="font-size:13px;font-weight:500;color:#334155;margin-bottom:7px">各法人本月概況</div>
@@ -754,6 +786,7 @@ html,body{overflow-x:hidden}
       <div style="height:1px;background:#e0d0b8;flex:1;min-width:8px"></div>
       <div class="si-dot si-wait" id="sd3">3</div><span style="font-size:11px;color:#94a3b8" id="sl3">填寫送出</span>
     </div>
+    <div id="nr-step-help"></div>
     <div class="g2" id="nr-main-grid"><div id="nr-content"></div>
       <div id="nr-side-panel" style="display:flex;flex-direction:column;gap:10px">
         <div class="card"><div class="chd"><span class="cht">簽核流程預覽</span><span style="font-size:10px;background:var(--brxxl);color:var(--brtxt);padding:2px 7px;border-radius:99px;border:1px solid var(--brxl)">依申請人層級自動跳關</span></div><div style="padding:11px 13px"><div class="flow-wrap" id="nr-flow"></div></div></div>
@@ -795,7 +828,7 @@ html,body{overflow-x:hidden}
         <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column" id="appr-list"></div>
       </div>
       <div id="appr-panel" style="display:none" class="card"><div id="appr-inner" style="height:100%;overflow-y:auto"></div></div>
-      <div id="appr-empty" style="border:1.5px dashed #e0d0b8;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#c0a880;font-size:12px">← 點選左側單據查看詳情</div>
+      <div id="appr-empty" style="border:1.5px dashed #e0d0b8;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#8b7358;font-size:12px;text-align:center;line-height:1.7;padding:18px">點左側單據可查看詳情。<br>若你剛送出申請，請切到「我的申請」追蹤目前簽到哪一關。</div>
     </div>
   </div>
 
@@ -4692,6 +4725,69 @@ function dashAlertHtml(pm,period,eid){
   blocks.push('<div style="display:grid;grid-template-columns:repeat('+Math.min(h.length,3)+',minmax(0,1fr));gap:7px">'+h.map(function(x){var col=x.k==='ok'?'#2a6010':x.k==='warn'?'#8a1010':'#7a4500';var bg=x.k==='ok'?'#e6f4d8':x.k==='warn'?'#fde8e8':'#fff8e8';return'<div style="padding:8px 10px;border-radius:9px;background:'+bg+';border:1px solid #efd7b8"><div style="font-size:11px;font-weight:650;color:'+col+'">'+x.t+'</div><div style="font-size:10px;color:#8b7358;margin-top:2px;line-height:1.4">'+x.d+'</div></div>';}).join('')+'</div>');
   return'<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:12px">'+blocks.join('')+'</div>';
 }
+function employeeDashboardGuideHtml(myReqs,pendingMine,drafts){
+  var pending=pendingMine.length,done=myReqs.filter(function(r){return r.status==='completed';}).length;
+  return '<div class="employee-guide">'
+    +'<div class="employee-guide-main">'
+      +'<div class="employee-guide-kicker">START HERE</div>'
+      +'<div class="employee-guide-title">今天要報費用，就從這裡開始</div>'
+      +'<div class="employee-guide-copy">系統會一步一步帶你上傳附件、整理明細、填匯款資料，送出後會自動跑簽核。你不用判斷會計科目，主管與會計會在後續關卡檢核。</div>'
+      +'<div class="employee-guide-actions"><button class="btn-p" onclick="nav(\'newreq\',null)">新增一張申請</button><button class="btn-s" onclick="nav(\'approvals\',null);setTimeout(function(){apprTab(\'mine\')},0)">查看我的申請</button><button class="btn-s" onclick="nav(\'approvals\',null);setTimeout(function(){apprTab(\'drafts\')},0)">繼續暫存表單</button></div>'
+      +'<div class="employee-mini-steps">'
+        +'<div class="employee-mini-step"><strong>1. 選類型</strong><span>不確定時看每張卡片的白話說明。</span></div>'
+        +'<div class="employee-mini-step"><strong>2. 上傳/填表</strong><span>發票照片、Excel 明細、匯款資訊依序完成。</span></div>'
+        +'<div class="employee-mini-step"><strong>3. 追進度</strong><span>送出後到「簽核管理 → 我的申請」看目前到哪一關。</span></div>'
+      +'</div>'
+    +'</div>'
+    +'<div class="employee-guide-card">'
+      +'<div class="employee-guide-card-title">我的目前狀態</div>'
+      +'<div class="employee-guide-list">'
+        +'<div>進行中申請：<strong>'+pending+' 筆</strong>。若主管退回，打開該單即可看退回原因與補件位置。</div>'
+        +'<div>暫存表單：<strong>'+drafts+' 筆</strong>。暫存只自己看得到，還沒有送主管。</div>'
+        +'<div>已完成申請：<strong>'+done+' 筆</strong>。完成後會由會計依規則入帳。</div>'
+      +'</div>'
+    +'</div>'
+  +'</div>';
+}
+function employeeTypePickerHelpHtml(){
+  var rules=[
+    ['已經先墊錢','費用報銷','expense_reimbursement'],
+    ['公司要直接付廠商','付款申請','payment_request'],
+    ['還沒花，先借支','預支申請','advance_request'],
+    ['請總務買東西','採購申請','purchase_request']
+  ];
+  return '<div class="type-picker-help"><div class="type-picker-help-title">不知道要選哪一種？先看這四個最常見情境</div><div class="type-picker-rules">'
+    +rules.map(function(r){return'<button type="button" onclick="nrT(\''+r[2]+'\')"><strong>'+r[0]+'</strong><span>選「'+r[1]+'」</span></button>';}).join('')
+    +'</div></div>';
+}
+function requestTypeEmployeeNote(id){
+  var map={
+    expense_reimbursement:'適合：你已經先付錢。請準備發票/收據照片與自己的匯款資訊。',
+    payment_request:'適合：公司要直接匯款給廠商。請準備對方請款文件、收款人與銀行帳號。',
+    advance_request:'適合：活動或任務前先領款。請下載預支申請書填好後上傳，之後還要補最後憑據核銷。',
+    petty_cash_request:'適合：零用金補足或初次申請。初次申請不需憑據，一般申請需上傳支出憑據。',
+    travel_request:'適合：出差交通、住宿、膳什、停車等。先選同行人員，系統會協助算上限。',
+    purchase_request:'適合：請總務協助採購。申請人只填品項、數量、連結，不需先填付款帳號。',
+    refund_request:'適合：退還多收或錯收款項。需說明退費原因；若發票作廢請上傳原發票。',
+    hr_expense_request:'適合：薪資、獎金、勞報、勞健保勞退等整批人事費用。通常由人資/會計使用。'
+  };
+  return map[id]||'';
+}
+function newRequestStepHelpHtml(){
+  var t=S.nrType, typeName=t?requestTypeLabel(t):'申請類型';
+  if(S.nrStep===1){
+    return '<div class="employee-step-help"><div class="step-no">1</div><div><div class="step-title">先選你這張單的情境</div><div class="step-copy">不用懂會計科目，只要想：「我是已經先花錢、要公司付款、要先預支、還是要請總務採購？」</div><div class="step-next">選錯也可以返回重選，尚未送出前不會進簽核。</div></div></div>';
+  }
+  if(S.nrStep===2){
+    return '<div class="employee-step-help"><div class="step-no">2</div><div><div class="step-title">補充「'+typeName+'」需要的基本情境</div><div class="step-copy">'+escAttr(requestTypeEmployeeNote(t))+'</div><div class="step-next">下一步會進入附件、Excel 明細、支出資訊與匯款資訊。</div></div></div>';
+  }
+  var copy=t==='purchase_request'
+    ?'採購申請先填想買的品項、數量與商品連結即可。總務會在後面補匯款資料與實際憑據。'
+    :t==='travel_request'
+      ?'請先選同行人員與差旅天數，再依住宿、交通、停車、其他費用上傳附件；膳什費會依規則計算。'
+      :'依序完成 2-1 上傳附件、2-2 明細表、2-3 支出與匯款資訊。表單最下方可暫存，確認無誤再送出給主管。';
+  return '<div class="employee-step-help"><div class="step-no">3</div><div><div class="step-title">填寫「'+typeName+'」資料</div><div class="step-copy">'+copy+'</div><div class="step-next">送出前系統會跳確認頁，送出後請到「簽核管理 → 我的申請」追蹤。</div></div></div>';
+}
 
 // ══ 儀表板 ══
 function buildDash(){
@@ -4727,6 +4823,13 @@ function buildDash(){
   el('appr-cnt').textContent=pm.length;el('ac2').textContent=pm.length;
   el('notif-cnt').textContent=unread;el('n-badge').style.display=unread?'block':'none';
   if(financeView)el('dash-alert').innerHTML=dashAlertHtml(pm,dashPeriod,eid);
+  var employeeGuide=el('dash-employee-guide');
+  if(employeeGuide){
+    var mineReqs=REQS.filter(function(r){return r.app===S.user.n;});
+    var pendingMine=mineReqs.filter(function(r){return isReqOpen(r);});
+    employeeGuide.style.display=financeView?'none':'block';
+    employeeGuide.innerHTML=financeView?'':employeeDashboardGuideHtml(mineReqs,pendingMine,DRAFTS.length);
+  }
   var ceoBox=el('ceo-decision-center');if(ceoBox)ceoBox.innerHTML=financeView?ceoDecisionCenterHtml(dashPeriod,eid):'';
   // 法人概況卡（全體時顯示六張並可點擊篩選，個別時隱藏）
   var ecWrap=el('entity-cards-wrap');
@@ -4756,7 +4859,7 @@ function buildDash(){
     var e=gE(r.eid);
     tb.innerHTML+='<tr style="cursor:pointer" onclick="openDetail(\''+r.id+'\')"><td><span style="font-family:monospace;font-size:10px;color:#64748b">'+r.no+'</span></td><td><span class="ep" style="font-size:9px">'+e.s+'</span></td><td>'+r.app+'</td><td style="font-weight:500">'+fmt(r.amt)+'</td><td style="font-size:10px;color:#64748b;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.bankAcc||'—')+'</td><td><span class="badge '+SCSS[r.status]+'">'+SL[r.status]+'</span></td></tr>';
   });
-  if(!allReqs.length)tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8">此法人目前沒有申請記錄</td></tr>';
+  if(!allReqs.length)tb.innerHTML='<tr><td colspan="6"><div class="employee-empty-state"><strong>'+(financeView?'此法人目前沒有申請記錄':'你還沒有送出任何申請')+'</strong><span>'+(financeView?'切換法人或期間後可查看其他資料。':'第一次使用可以先從「新增申請」開始，暫存不會送給主管。')+'</span>'+(!financeView?'<button class="btn-p" onclick="nav(\'newreq\',null)">建立第一張申請</button>':'')+'</div></td></tr>';
   // 固定兩列三欄財務分布：公司收入/支出/淨利，部門收入/支出/淨利
   var entRows=ENTS.map(function(e){var f=financeSummary(e.id,dashPeriod);return{key:e.id,n:e.s,revenue:f.revenue,expense:f.expense,net:f.net};});
   if(financeView){
@@ -4828,11 +4931,12 @@ function renderLazyExpensePage(){
   applyCurrentUserDefaults();
   updateBankTypeUI();
   syncLazyBankFeeRow(true);
+  var stepHelp=el('nr-step-help');if(stepHelp)stepHelp.innerHTML=newRequestStepHelpHtml();
 }
 function nrTypeCardHtml(t){
   return '<button class="step-type'+(S.nrType===t.id?' on':'')+'" onclick="nrT(\''+t.id+'\')" style="text-align:left">'
     +'<div class="type-mark">'+nrTypeIcon(t.id)+'</div>'
-    +'<div class="type-copy"><div class="type-title">'+t.n+'</div><div class="type-desc">'+t.d+'</div></div>'
+    +'<div class="type-copy"><div class="type-title">'+t.n+'</div><div class="type-desc">'+t.d+'</div><div class="type-employee-note">'+requestTypeEmployeeNote(t.id)+'</div></div>'
     +'</button>';
 }
 function buildNR(){S.nrStep=1;S.nrType=null;S.nrRec=null;S.nrPay=null;S.nrFiles=[];S.nrPassbookFile=null;S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;S.lazyRows=[];S.refundRows=[];S.purchaseRows=[];S.hrRows=[];S.pettyMode='general';S.lazyBusy=false;S.lazyMode=false;S.nrDraftId='';renderNR();}
@@ -4852,7 +4956,7 @@ function renderNR(){
   if(S.nrStep===1){
     if(grid)grid.style.gridTemplateColumns='1fr';
     if(side)side.style.display='none';
-    c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 1 — 選擇費用性質</span></div><div class="nr-type-grid" style="padding:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:stretch">'+NR_TYPES.map(nrTypeCardHtml).join('')+'</div></div>';
+    c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 1 — 選擇費用性質</span></div>'+employeeTypePickerHelpHtml()+'<div class="nr-type-grid" style="padding:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:stretch">'+NR_TYPES.map(nrTypeCardHtml).join('')+'</div></div>';
   }else if(S.nrStep===2){
     if(S.nrType==='hr_expense_request'){
       c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 2 — 選擇人事費用項目</span><button class="btn-g" onclick="nrBack(1)">← 返回</button></div><div style="padding:11px;display:flex;flex-direction:column;gap:8px">'+HR_ITEMS.map(function(x,i){return'<button class="step-type'+(S.hrItem===x.id?' on':'')+'" onclick="nrHrItem(\''+x.id+'\')" style="text-align:left;min-height:64px;width:100%;display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center"><div class="type-mark">'+(i+1)+'</div><div><div style="font-size:14px;font-weight:650;color:#263244">'+x.label+'</div><div style="font-size:11px;color:#8b7358;margin-top:4px">'+(x.hint||'整批人事費用明細')+'</div></div></button>';}).join('')+'</div></div>';
@@ -4905,6 +5009,7 @@ function renderNR(){
     if(S.nrType==='hr_expense_request')renderHrExpenseSheet();
     applyCurrentUserDefaults();
   }
+  var stepHelp=el('nr-step-help');if(stepHelp)stepHelp.innerHTML=newRequestStepHelpHtml();
   updNRUI();updNRAcct();renderFlow();updateBankTypeUI();
   applicantSelectChanged(true);
   enhanceLongSelects(c);
@@ -5282,7 +5387,7 @@ function travelApprovalOverviewHtml(){
 }
 function nrSubmitActionsHtml(includeTravelStep){
   var msg=includeTravelStep?'確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊、2-4 差旅申請資料都填寫完成後，再暫存或送出簽核。':'確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊都填寫完成後，再暫存或送出簽核。';
-  return'<div class="nr-submit-actions" style="display:flex;gap:8px;align-items:center;margin-top:12px;padding:10px;border:1px solid #f0e0c8;background:#fff8ed;border-radius:10px"><div class="nr-submit-hint" style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">'+msg+'</div><button type="button" class="btn-s" style="min-width:100px;justify-content:center" onclick="nrSaveDraft()">暫存</button><button type="button" class="btn-p" style="min-width:150px;justify-content:center" onclick="submitNR()">送出簽核</button></div>';
+  return'<div class="nr-submit-actions" style="display:flex;gap:8px;align-items:center;margin-top:12px;padding:10px;border:1px solid #f0e0c8;background:#fff8ed;border-radius:10px"><div class="nr-submit-hint" style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">'+msg+' 暫存只會存在你的帳號，不會送主管。</div><button type="button" class="btn-s" style="min-width:130px;justify-content:center" onclick="nrSaveDraft()">暫存，晚點再填</button><button type="button" class="btn-p" style="min-width:160px;justify-content:center" onclick="submitNR()">送出給主管簽核</button></div>';
 }
 window.applicantSelectChanged=function(keepValue){
   var sel=el('nr-app-sel'),inp=el('nr-app'),wrap=el('nr-app-custom-wrap');
