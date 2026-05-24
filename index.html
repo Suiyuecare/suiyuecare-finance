@@ -1347,15 +1347,15 @@ html,body{overflow-x:hidden}
   </header>
   <main class="hub-main">
     <div class="hub-kicker">SELECT MODULE</div>
-    <div class="hub-title">選擇今天要處理的系統</div>
-    <div class="hub-desc">登入完成後，先選擇模組再進入工作台。會計模組會連到目前這套財務、簽核、付款與報表系統。</div>
+    <div class="hub-title">選擇今天要處理的功能</div>
+    <div class="hub-desc">登入完成後，直接從六個功能入口進入工作台；可用模組會立即開啟，尚未上線的模組會標示狀態。</div>
     <div class="module-grid">
       <button class="module-card is-muted" onclick="moduleNotice('business')">
         <div>
-          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M4 20V6a2 2 0 0 1 2-2h8l6 6v10zM14 4v6h6M8 13h8M8 17h6"/></svg></div>
+          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M10 6h4M5 9h14M8 9v9M16 9v9M7 20h10a2 2 0 0 0 2-2V9H5v9a2 2 0 0 0 2 2zM9 6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/></svg></div>
           <div class="module-meta">BUSINESS</div>
           <div class="module-name">業務系統</div>
-          <p class="module-copy">個案、服務、合約與營運資料管理。</p>
+          <p class="module-copy">個案、居服排班、服務紀錄、合約與督導追蹤。</p>
         </div>
         <div class="module-action">等待正式串接 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
@@ -1364,18 +1364,45 @@ html,body{overflow-x:hidden}
           <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0M18 5l2 2 3-4"/></svg></div>
           <div class="module-meta">HUMAN RESOURCE</div>
           <div class="module-name">人資系統</div>
-          <p class="module-copy">員工資料、假勤、薪資、簽核、組織與法遵作業。</p>
+          <p class="module-copy">員工自助、表單簽核、假勤出勤、薪資袋與法遵規則。</p>
         </div>
-        <div class="module-action">進入人資工作台 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+        <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
       <button class="module-card is-primary" onclick="enterFinanceModule()">
         <div>
           <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 17V7h12v10M8 10h8M8 13h5M7 5h10"/></svg></div>
           <div class="module-meta">ACCOUNTING</div>
           <div class="module-name">會計系統</div>
-          <p class="module-copy">支出申請、簽核、付款、收款、傳票與三表管理。</p>
+          <p class="module-copy">支出申請、付款、收款、傳票、三表與薪資傳票。</p>
         </div>
-        <div class="module-action">進入會計工作台 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+        <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+      </button>
+      <button class="module-card is-primary" onclick="openExternalModule('https://edoc.suiyuecare.com')">
+        <div>
+          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5zM15 4v5h5M8 13h8M8 17h6"/></svg></div>
+          <div class="module-meta">DOCUMENT</div>
+          <div class="module-name">電子公文交換系統</div>
+          <p class="module-copy">收文、發文、簽辦、歸檔與跨部門公文追蹤。</p>
+        </div>
+        <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+      </button>
+      <button class="module-card is-primary" onclick="openExternalModule('https://pm.suiyuecare.com')">
+        <div>
+          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14M8 4v4M16 10v4M12 16v4"/></svg></div>
+          <div class="module-meta">PROJECT</div>
+          <div class="module-name">敏捷式專案管理</div>
+          <p class="module-copy">任務看板、Sprint、負責人、期限與跨模組專案進度。</p>
+        </div>
+        <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+      </button>
+      <button class="module-card is-primary" onclick="openExternalModule('https://hr.suiyuecare.com/toolbox')">
+        <div>
+          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-3-3z"/></svg></div>
+          <div class="module-meta">TOOLBOX</div>
+          <div class="module-name">工具列</div>
+          <p class="module-copy">PDF 編輯器、檔案整理與日常行政工具集中入口。</p>
+        </div>
+        <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
       </button>
     </div>
     <div class="hub-note" id="hub-note"></div>
@@ -3789,6 +3816,10 @@ window.enterHrModule=function(){
     label:'HR OS · HUMAN RESOURCE MODULE',
     onEnter:function(){window.location.href='https://hr.suiyuecare.com/modules';}
   });
+};
+window.openExternalModule=function(url){
+  if(!S.user){window.showLogin();return;}
+  window.location.href=url;
 };
 function openFinanceWorkspace(){
   var login=el('login-screen'),hub=el('module-hub'),sidebar=el('sidebar'),main=el('main-wrap'),root=el('root');
