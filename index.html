@@ -1901,6 +1901,7 @@ var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 var OPENAI_INVOICE_OCR_ENDPOINT=SUPABASE_URL+'/functions/v1/parse-invoice-openai';
 var SUPABASE_ATTACHMENT_BUCKET='finance-attachments';
 var PRODUCTION_APP_URL='https://finance.suiyuecare.com/';
+var HR_APP_URL='https://hr.suiyuecare.com/dashboard';
 var NATIVE_OAUTH_REDIRECT_URL='com.suiyuecare.finance://oauth-callback';
 var sb=null;
 var realtimeChannel=null;
@@ -3595,6 +3596,40 @@ async function enterByEmail(email){
   doEnter(mapUser(prof.data));
   return true;
 }
+var HR_QUICK_LOGIN_COOKIE='suiyue_hris_quick_login_user';
+function hrCookieDomainAttr(){
+  var host=location.hostname||'';
+  if(host==='suiyuecare.com'||host.endsWith('.suiyuecare.com'))return '; Domain=.suiyuecare.com';
+  return '';
+}
+function financeUserToHrUser(){
+  var u=S.user||{};
+  var role=u.role||'employee';
+  return {
+    id:String(u.id||u.email||u.n||'finance-user'),
+    name:String(u.n||u.name||'使用者'),
+    email:String(u.email||''),
+    role:role,
+    roleLabel:String(u.rL||RL[role]||role),
+    companyId:String(u.eid||u.entity_id||entityOfDept(u.dc)||'finance-shared'),
+    primaryBranchId:'group',
+    departmentCode:String(u.dc||''),
+    departmentId:String(u.dc||''),
+    supportBranchIds:[]
+  };
+}
+function writeHrSharedLogin(){
+  if(!S.user)return;
+  var value=encodeURIComponent(JSON.stringify(financeUserToHrUser()));
+  var attrs='; path=/; max-age=604800; SameSite=Lax';
+  document.cookie=HR_QUICK_LOGIN_COOKIE+'='+value+attrs;
+  document.cookie=HR_QUICK_LOGIN_COOKIE+'='+value+attrs+hrCookieDomainAttr();
+}
+function clearHrSharedLogin(){
+  var attrs='; path=/; max-age=0; SameSite=Lax';
+  document.cookie=HR_QUICK_LOGIN_COOKIE+'='+attrs;
+  document.cookie=HR_QUICK_LOGIN_COOKIE+'='+attrs+hrCookieDomainAttr();
+}
 function oauthRedirectUrl(){
   if(isCapacitorNativeApp())return NATIVE_OAUTH_REDIRECT_URL;
   if(location.protocol==='file:')return PRODUCTION_APP_URL;
@@ -3801,11 +3836,12 @@ window.enterFinanceModule=function(){
 };
 window.enterHrModule=function(){
   if(!S.user){window.showLogin();return;}
+  writeHrSharedLogin();
   playModuleIntro({
     title:'人資系統',
     subtitle:'HUMAN RESOURCE MODULE',
     label:'HR OS · HUMAN RESOURCE MODULE',
-    onEnter:function(){window.location.href='https://hr.suiyuecare.com/dashboard';}
+    onEnter:function(){window.location.href=HR_APP_URL;}
   });
 };
 window.openExternalModule=function(url){
@@ -3878,6 +3914,7 @@ window.moduleNotice=function(module){
   if(note)note.textContent=label+'目前暫不開放，正式啟用後再提供入口。';
 };
 window.showLogin=function(){
+  clearHrSharedLogin();
   el('login-screen').style.display='flex';
   var hub=el('module-hub');if(hub)hub.style.display='none';
   el('sidebar').style.display='none';el('main-wrap').style.display='none';

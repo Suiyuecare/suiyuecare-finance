@@ -32,6 +32,14 @@ export const supabaseAccountOptions: Array<{
   teamId?: string;
   supportBranchIds?: string[];
 }> = [
+  { id: "u1", email: "1@suiyuecare.com", role: "employee", roleLabel: "一般組員", name: "潘雨柔", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "A1101" },
+  { id: "u2", email: "2@suiyuecare.com", role: "section_chief", roleLabel: "課長", name: "江守舜", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "A1101" },
+  { id: "u3", email: "3@suiyuecare.com", role: "dept_manager", roleLabel: "部門主管", name: "陳怡霖", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "A1100" },
+  { id: "u4", email: "4@suiyuecare.com", role: "ceo", roleLabel: "執行長", name: "李佳泰", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "A1000" },
+  { id: "u5", email: "5@suiyuecare.com", role: "admin_director", roleLabel: "行政部門主任", name: "劉巧涵", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "A1100" },
+  { id: "u6", email: "6@suiyuecare.com", role: "accountant", roleLabel: "會計", name: "王會計師", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "A1101" },
+  { id: "u7", email: "7@suiyuecare.com", role: "hr", roleLabel: "人資", name: "陳羽俊", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "A1102" },
+  { id: "u8", email: "8@suiyuecare.com", role: "general_affairs", roleLabel: "總務", name: "朱夏欣", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "A1102" },
   { id: "finance-entrepreneur", email: "entrepreneur@suiyuecare.com", role: "ceo", roleLabel: "執行長", name: "李佳泰", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "EXEC" },
   { id: "finance-admin", email: "admin@suiyuecare.com", role: "admin_director", roleLabel: "行政部門主任", name: "劉巧涵", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "ADMIN" },
   { id: "finance-hr", email: "suiyue.hr@suiyuecare.com", role: "hr", roleLabel: "人資", name: "陳羽俊", companyId: "finance-shared", primaryBranchId: "group", departmentCode: "HR" },
@@ -75,12 +83,19 @@ function readQuickLoginCookie() {
 
 function writeQuickLoginCookie(value: string) {
   if (typeof document === "undefined") return;
-  document.cookie = `${quickLoginCookieKey}=${encodeURIComponent(value)}; path=/; max-age=604800; SameSite=Lax`;
+  const encoded = encodeURIComponent(value);
+  document.cookie = `${quickLoginCookieKey}=${encoded}; path=/; max-age=604800; SameSite=Lax`;
+  if (window.location.hostname === "suiyuecare.com" || window.location.hostname.endsWith(".suiyuecare.com")) {
+    document.cookie = `${quickLoginCookieKey}=${encoded}; path=/; max-age=604800; SameSite=Lax; Domain=.suiyuecare.com`;
+  }
 }
 
 function clearQuickLoginCookie() {
   if (typeof document === "undefined") return;
   document.cookie = `${quickLoginCookieKey}=; path=/; max-age=0; SameSite=Lax`;
+  if (window.location.hostname === "suiyuecare.com" || window.location.hostname.endsWith(".suiyuecare.com")) {
+    document.cookie = `${quickLoginCookieKey}=; path=/; max-age=0; SameSite=Lax; Domain=.suiyuecare.com`;
+  }
 }
 
 function readQuickLoginStorage() {

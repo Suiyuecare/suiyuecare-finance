@@ -154,7 +154,9 @@ function getQuickLoginApiUser(request: NextRequest): ApiUserContext | null {
 
   try {
     const parsed = JSON.parse(decodeURIComponent(raw)) as { id?: string; email?: string };
-    const matched = supabaseAccountOptions.find((account) => account.id === parsed.id && account.email === parsed.email);
+    const matched = supabaseAccountOptions.find(
+      (account) => account.email === parsed.email && (!parsed.id || account.id === parsed.id),
+    ) ?? supabaseAccountOptions.find((account) => account.email === parsed.email);
     if (!matched) return null;
 
     return {
