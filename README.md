@@ -21,6 +21,7 @@
 4. 在 `index.html` 填入 `SUPABASE_ANON_KEY`。只能放 anon public key，不能放 service role key。
 5. 若要使用 Google 登入，在 Supabase Auth Providers 啟用 Google；Google Cloud OAuth「已授權重新導向 URI」需加入 `https://udtlppnrugmtzhigdsxo.supabase.co/auth/v1/callback`。Supabase Auth URL Configuration 的 Site URL 設為 `https://finance.suiyuecare.com`，Redirect URLs 需加入 `https://finance.suiyuecare.com/`。
 6. 若要使用 OpenAI 發票辨識，部署 `supabase/functions/parse-invoice-openai`，並在 Supabase Edge Function secrets 設定 `OPENAI_API_KEY`。
+7. 測試快捷登入只允許在 `file://`、`localhost` 或 `127.0.0.1` 使用；正式網址不開放 URL 參數啟用測試帳號。
 
 ## 核心資料流
 

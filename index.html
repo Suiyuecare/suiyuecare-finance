@@ -1145,7 +1145,7 @@ html,body{overflow-x:hidden}
       <div class="login-title">財務會計系統入口</div>
       <div class="login-points">
         <div class="login-point">登入後直接進入 Finance 會計工作台</div>
-        <div class="login-point">支援 Google Workspace 與內部測試帳號</div>
+        <div class="login-point">支援 Google Workspace 與正式授權帳號</div>
         <div class="login-point">支出、收入、簽核、付款、傳票與三表集中管理</div>
         <div class="login-point">Finance 僅保留會計、簽核、付款、傳票與報表功能</div>
       </div>
@@ -1795,8 +1795,7 @@ function formatStorageUploadError(err){
 }
 function allowDemoLogin(){
   var host=String(location.hostname||'');
-  var q=new URLSearchParams(location.search||'');
-  return location.protocol==='file:'||host==='localhost'||host==='127.0.0.1'||q.get('demo')==='1';
+  return location.protocol==='file:'||host==='localhost'||host==='127.0.0.1';
 }
 function formalOnlineMode(){
   return hasSupabase()&&!S.demoLogin&&!allowDemoLogin();
