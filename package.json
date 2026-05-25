@@ -4,7 +4,7 @@
   "private": true,
   "description": "歲悅長照集團財務管理系統 V3",
   "scripts": {
-    "build": "rm -rf www && mkdir -p www/assets/templates www/docs && cp index.html privacy.html www/ && cp assets/suiyue-logo-transparent.png www/assets/ && cp assets/templates/hr_expense_template.xlsx assets/templates/labor_service_fee.docx www/assets/templates/ && cp docs/歲悅會計系統_V2-V3修訂重點.html docs/歲悅會計系統教育訓練手冊_橘色版.docx docs/歲悅財務管理系統V3_使用教學.pptx www/docs/"
+    "build": "node scripts/build_www.js"
   },
   "dependencies": {},
   "devDependencies": {}
