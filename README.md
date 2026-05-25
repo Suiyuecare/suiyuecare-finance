@@ -2,13 +2,12 @@
 
 歲悅長照內部財務會計系統。主要入口為 `index.html`，可部署到 Vercel 靜態網站，並透過 Supabase 提供登入、資料庫、附件 JSON 儲存與稽核紀錄。
 
-## HR 模組整合狀態
+## 系統邊界
 
-- `modules/hr/` 已納入 Module_HR 的可維護原始碼、Supabase migration、public assets 與 scripts，不包含 `node_modules`、`.next`、`.git`、`.vercel` 等本機或部署產物。
-- Finance 登入後的模組選擇頁已將「人資系統」改為可進入工作台，目前導向 `https://hr.suiyuecare.com/modules`。
-- Vercel 已保留 `/hr` 與 `/hr/:path*` redirect，方便之後把入口統一成 Finance 主系統路徑。
-- Supabase 已套用 HR/Finance 共用核心資料表，包含 `companies`、`branches`、`departments`、`positions`、`roles`、`employees`、`users`，並由 Finance 的 `system_settings` 與 `finance_users` 同步。
-- 下一階段若要做到「完全同一個 Vercel project runtime」，需要把 Finance 靜態網站逐步改成 Next.js shell，或把 HR Next app 設為 Finance repo 的 Vercel build app；不能直接把 Next.js app 混進目前 `www` 靜態輸出而不改架構。
+- Finance repo 僅保留財務會計系統功能，登入後直接進入會計工作台。
+- HR 系統已獨立維護於 `/Users/seniorlifepr/Documents/GitHub/module-hr`，不再打包進 Finance。
+- PDF 工具網站已獨立維護於 `/Users/seniorlifepr/Documents/pdf-tools-website`，不再由 Finance 入口提供。
+- iOS / Android App 與 PWA 上架相關內容先暫停，不納入目前 Finance 正式版部署。
 
 ## 上線前設定
 

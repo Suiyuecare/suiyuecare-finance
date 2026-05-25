@@ -1,16 +1,4 @@
 {
   "buildCommand": "pnpm build",
-  "outputDirectory": "www",
-  "redirects": [
-    {
-      "source": "/hr",
-      "destination": "https://hr.suiyuecare.com/dashboard",
-      "permanent": false
-    },
-    {
-      "source": "/hr/:path*",
-      "destination": "https://hr.suiyuecare.com/:path*",
-      "permanent": false
-    }
-  ]
+  "outputDirectory": "www"
 }

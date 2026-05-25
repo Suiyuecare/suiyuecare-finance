@@ -697,7 +697,6 @@ html,body{overflow-x:hidden}
 <div class="main" id="main-wrap" style="display:none">
   <div class="topbar">
     <div style="font-size:13px;font-weight:500;color:#1e293b;flex:1" id="page-title">儀表板</div>
-    <button class="module-return-btn" onclick="returnToModuleHub()" type="button" aria-label="返回模組選單"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>返回模組</button>
     <button onclick="nav('notif',null)" style="background:#fff;border:1px solid #ead8c2;border-radius:8px;cursor:pointer;position:relative;padding:5px 7px;color:#7c3f00;display:inline-flex;align-items:center"><svg width="14" height="14" viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M6 17h12M8 17V9a4 4 0 0 1 8 0v8M10 20h4"/></svg><span id="n-badge" style="position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--br);border:1.5px solid #fff"></span></button>
     <select id="mobile-nav-select" class="mobile-nav-select" onchange="mobileNavChange(this.value)" aria-label="手機版頁面選單"></select>
     <span style="font-size:11px;color:#94a3b8" id="top-info">王會計師 · 會計</span>
@@ -1226,12 +1225,12 @@ html,body{overflow-x:hidden}
         <div class="login-brand" aria-label="歲悅長照"><img src="assets/suiyue-logo-transparent.png" alt="歲悅長照形象標章"></div>
         <div><div style="color:#fff;font-weight:700;font-size:18px">歲悅長照集團</div><div style="color:rgba(255,255,255,.72);font-size:11px;letter-spacing:.05em;margin-top:3px">SUIYUE CARE GROUP</div></div>
       </div>
-      <div class="login-title">集團營運系統入口</div>
+      <div class="login-title">財務會計系統入口</div>
       <div class="login-points">
-        <div class="login-point">同一組帳號登入後，依照權限選擇模組</div>
+        <div class="login-point">登入後直接進入 Finance 會計工作台</div>
         <div class="login-point">支援 Google Workspace 與內部測試帳號</div>
-        <div class="login-point">業務、人資、會計系統統一入口</div>
-        <div class="login-point">登入後才會進入各模組工作台</div>
+        <div class="login-point">支出、收入、簽核、付款、傳票與三表集中管理</div>
+        <div class="login-point">HR 與工具網站已拆到獨立系統，Finance 僅保留會計功能</div>
       </div>
       <div class="version-note">
         <div class="version-note-head">
@@ -1268,7 +1267,7 @@ html,body{overflow-x:hidden}
   <div class="login-right">
     <div style="width:100%;max-width:320px">
       <div style="font-size:19px;font-weight:500;color:#1e293b;margin-bottom:3px">歡迎回來</div>
-      <div style="font-size:12px;color:#94a3b8;margin-bottom:18px">請先登入，再選擇要進入的系統模組</div>
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:18px">請先登入，系統會直接進入會計工作台</div>
       <button class="google-btn" onclick="googleLogin()">
         <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
         使用 Google 帳號快速登入
@@ -1295,96 +1294,11 @@ html,body{overflow-x:hidden}
         <button onclick="quickLogin('employee')" class="btn-g" style="font-size:11px;padding:6px">潘雨柔（一般組員）</button>
         <button onclick="quickLogin('dept_manager')" class="btn-g" style="font-size:11px;padding:6px">陳怡霖（部門主管）</button>
         <button onclick="quickLogin('admin_director')" class="btn-g" style="font-size:11px;padding:6px">劉巧涵（行政主任）</button>
-        <button onclick="quickLogin('hr')" class="btn-g" style="font-size:11px;padding:6px">陳羽俊（人資）</button>
         <button onclick="quickLogin('general_affairs')" class="btn-g" style="font-size:11px;padding:6px">朱夏欣（總務）</button>
       </div>
     </div>
   </div>
 </div>
-<!-- MODULE HUB -->
-<section class="module-hub" id="module-hub" aria-label="模組選擇">
-  <header class="hub-top">
-    <div class="hub-brand">
-      <div class="hub-logo" aria-label="歲悅長照"><img src="assets/suiyue-logo-transparent.png" alt="歲悅長照形象標章"></div>
-      <div>
-        <div class="hub-brand-title">歲悅長照集團</div>
-        <div class="hub-brand-sub">MODULE ACCESS CENTER</div>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:12px">
-      <div style="text-align:right">
-        <div id="hub-user-name" style="font-size:13px;font-weight:750;color:#172033">使用者</div>
-        <div id="hub-user-role" style="font-size:11px;color:#7a8699;margin-top:2px">已登入</div>
-      </div>
-      <a class="hub-manual" href="docs/歲悅會計系統_V2-V3修訂重點.html" download>V2-V3 修訂重點</a>
-      <a class="hub-manual" href="privacy.html" target="_blank" rel="noopener">隱私權政策</a>
-      <a class="hub-manual" href="docs/歲悅會計系統教育訓練手冊_橘色版.docx" download>教育訓練手冊</a>
-      <button class="btn-s" onclick="showLogin()">登出</button>
-    </div>
-  </header>
-  <main class="hub-main">
-    <div class="hub-kicker">SELECT MODULE</div>
-    <div class="hub-title">選擇今天要處理的功能</div>
-    <div class="hub-desc">登入完成後，直接從六個功能入口進入工作台；可用模組會立即開啟，尚未上線的模組會標示狀態。</div>
-    <div class="module-grid">
-      <button class="module-card is-muted" onclick="moduleNotice('business')">
-        <div>
-          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M10 6h4M5 9h14M8 9v9M16 9v9M7 20h10a2 2 0 0 0 2-2V9H5v9a2 2 0 0 0 2 2zM9 6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/></svg></div>
-          <div class="module-meta">BUSINESS</div>
-          <div class="module-name">業務系統</div>
-          <p class="module-copy">個案、居服排班、服務紀錄、合約與督導追蹤。</p>
-        </div>
-        <div class="module-action">等待正式串接 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
-      </button>
-      <button class="module-card is-primary" onclick="enterHrModule()">
-        <div>
-          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0M18 5l2 2 3-4"/></svg></div>
-          <div class="module-meta">HUMAN RESOURCE</div>
-          <div class="module-name">人資系統</div>
-          <p class="module-copy">員工自助、表單簽核、假勤出勤、薪資袋與法遵規則。</p>
-        </div>
-        <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
-      </button>
-      <button class="module-card is-primary" onclick="enterFinanceModule()">
-        <div>
-          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 17V7h12v10M8 10h8M8 13h5M7 5h10"/></svg></div>
-          <div class="module-meta">ACCOUNTING</div>
-          <div class="module-name">會計系統</div>
-          <p class="module-copy">支出申請、付款、收款、傳票、三表與薪資傳票。</p>
-        </div>
-        <div class="module-action">進入模組 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
-      </button>
-      <button class="module-card is-muted" onclick="moduleNotice('document')">
-        <div>
-          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5zM15 4v5h5M8 13h8M8 17h6"/></svg></div>
-          <div class="module-meta">DOCUMENT</div>
-          <div class="module-name">電子公文交換系統</div>
-          <p class="module-copy">收文、發文、簽辦、歸檔與跨部門公文追蹤。</p>
-        </div>
-        <div class="module-action">暫不開放 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
-      </button>
-      <button class="module-card is-muted" onclick="moduleNotice('project')">
-        <div>
-          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14M8 4v4M16 10v4M12 16v4"/></svg></div>
-          <div class="module-meta">PROJECT</div>
-          <div class="module-name">敏捷式專案管理</div>
-          <p class="module-copy">任務看板、Sprint、負責人、期限與跨模組專案進度。</p>
-        </div>
-        <div class="module-action">暫不開放 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
-      </button>
-      <button class="module-card is-primary" onclick="enterToolboxModule()">
-        <div>
-          <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-3-3z"/></svg></div>
-          <div class="module-meta">TOOLBOX</div>
-          <div class="module-name">工具箱</div>
-          <p class="module-copy">PDF 編輯器、檔案整理與日常行政工具集中入口。</p>
-        </div>
-        <div class="module-action">進入工具箱 <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
-      </button>
-    </div>
-    <div class="hub-note" id="hub-note"></div>
-  </main>
-</section>
 </div><!-- app -->
 <div class="entry-loader hidden" id="entry-loader" aria-hidden="true">
   <div class="entry-line"></div>
@@ -1909,7 +1823,6 @@ var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 var OPENAI_INVOICE_OCR_ENDPOINT=SUPABASE_URL+'/functions/v1/parse-invoice-openai';
 var SUPABASE_ATTACHMENT_BUCKET='finance-attachments';
 var PRODUCTION_APP_URL='https://finance.suiyuecare.com/';
-var HR_APP_URL='https://hr.suiyuecare.com/dashboard';
 var sb=null;
 var realtimeChannel=null;
 var syncTimer=null;
@@ -2977,6 +2890,7 @@ async function loadRemoteData(){
   if(Array.isArray(res[13]))BACKUP_EVENTS=res[13].map(mapBackupEvent).filter(inActiveDataEnvironment);
   if(Array.isArray(res[14]))SETTINGS_VERSIONS=res[14].map(mapSettingVersion).filter(inActiveDataEnvironment);
   if(Array.isArray(res[15]))PAYEE_BANK_ACCOUNTS=res[15].map(mapPayeeBankAccount).filter(inActiveDataEnvironment).filter(function(a){return a.active!==false;});
+  normalizeRequestFlows();
   lastSyncAt=new Date().toISOString();
   return true;
 }
@@ -3231,7 +3145,7 @@ function departmentManagerUser(appUser){
     cur=directSupervisorUser(cur);
     if(cur&&cur.role==='dept_manager'&&cur.active!==false)return cur;
   }
-  return firstUserByRole('dept_manager');
+  return null;
 }
 function buildApprovalSteps(appUser,requestType){
   if(requestType==='purchase_request'){
@@ -3296,6 +3210,47 @@ function buildInvoiceApprovalSteps(appUser){
   steps.push({r:'會計部門開立發票並上傳檔案',rk:'accountant_invoice',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_invoice_accountant'});
   steps.push({r:'申請人取得會計部門發票並確認交付',rk:'applicant_invoice_delivery',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_invoice_delivery'});
   return steps;
+}
+function requestRequiresCashierStep(r){
+  if(!r||!Array.isArray(r.steps))return false;
+  if(['completed','cancelled','rejected'].indexOf(r.status)>-1)return false;
+  if((r.steps||[]).some(function(s){return s.rk==='cashier';}))return false;
+  return (r.steps||[]).some(function(s){return s.rk==='accountant';})&&(r.steps||[]).some(function(s){return s.rk==='applicant_confirm'||s.rk==='accountant_final';});
+}
+function ensureRequestCashierStep(r){
+  if(!requestRequiresCashierStep(r))return false;
+  var cashier=cashierUser()||{};
+  var cashStep={
+    r:'出納放款（目前由執行長代行）',
+    rk:'cashier',
+    uid:cashier.id||'',
+    n:'',
+    a:'',
+    t:'',
+    c:'',
+    files:[],
+    status:'pending_cashier',
+    purpose:'出納確認付款指示後執行撥款；現階段由執行長暫代。現金流量表於本關通過後認列銀行流出。'
+  };
+  var steps=r.steps||[];
+  var acctIdx=steps.findIndex(function(s){return s.rk==='accountant';});
+  var insertIdx=acctIdx>-1?acctIdx+1:steps.findIndex(function(s){return s.rk==='applicant_confirm';});
+  if(insertIdx<0)insertIdx=steps.length;
+  steps.splice(insertIdx,0,cashStep);
+  if(['pending_applicant_confirm','pending_voucher'].indexOf(r.status)>-1&&!requestCashPostedAt(r)){
+    r.status='pending_cashier';
+    r.step=insertIdx+1;
+  }else{
+    var activeIdx=steps.findIndex(function(s){return !s.a;});
+    r.step=activeIdx>-1?activeIdx+1:steps.length;
+  }
+  r.formPayload=Object.assign({},r.formPayload||{},{flowNormalizedAt:new Date().toISOString(),flowNormalizedReason:'insert_cashier_after_accountant'});
+  return true;
+}
+function normalizeRequestFlows(){
+  var changed=false;
+  (REQS||[]).forEach(function(r){if(ensureRequestCashierStep(r))changed=true;});
+  return changed;
 }
 function stepPurpose(s){
   if(s&&s.purpose)return s.purpose;
@@ -3630,40 +3585,6 @@ async function enterByEmail(email){
   doEnter(mapUser(prof.data));
   return true;
 }
-var HR_QUICK_LOGIN_COOKIE='suiyue_hris_quick_login_user';
-function hrCookieDomainAttr(){
-  var host=location.hostname||'';
-  if(host==='suiyuecare.com'||host.endsWith('.suiyuecare.com'))return '; Domain=.suiyuecare.com';
-  return '';
-}
-function financeUserToHrUser(){
-  var u=S.user||{};
-  var role=u.role||'employee';
-  return {
-    id:String(u.id||u.email||u.n||'finance-user'),
-    name:String(u.n||u.name||'使用者'),
-    email:String(u.email||''),
-    role:role,
-    roleLabel:String(u.rL||RL[role]||role),
-    companyId:String(u.eid||u.entity_id||entityOfDept(u.dc)||'finance-shared'),
-    primaryBranchId:'group',
-    departmentCode:String(u.dc||''),
-    departmentId:String(u.dc||''),
-    supportBranchIds:[]
-  };
-}
-function writeHrSharedLogin(){
-  if(!S.user)return;
-  var value=encodeURIComponent(JSON.stringify(financeUserToHrUser()));
-  var attrs='; path=/; max-age=604800; SameSite=Lax';
-  document.cookie=HR_QUICK_LOGIN_COOKIE+'='+value+attrs;
-  document.cookie=HR_QUICK_LOGIN_COOKIE+'='+value+attrs+hrCookieDomainAttr();
-}
-function clearHrSharedLogin(){
-  var attrs='; path=/; max-age=0; SameSite=Lax';
-  document.cookie=HR_QUICK_LOGIN_COOKIE+'='+attrs;
-  document.cookie=HR_QUICK_LOGIN_COOKIE+'='+attrs+hrCookieDomainAttr();
-}
 function oauthRedirectUrl(){
   if(location.protocol==='file:')return PRODUCTION_APP_URL;
   if(location.hostname==='localhost'||location.hostname==='127.0.0.1')return location.origin+location.pathname;
@@ -3784,7 +3705,7 @@ function doEnter(u){
   loadLocalAppState();
   el('sb-av').textContent=u.init;el('sb-name').textContent=u.n;
   el('sb-role').textContent=u.rL+' · '+u.dc;el('top-info').textContent=u.n+' · '+u.rL+' · '+dataEnvLabel();
-  showModuleHub();
+  openFinanceWorkspace();
   applyRolePermissions();
   setRuntimeDefaults();
   initFilters();buildAll();
@@ -3817,63 +3738,6 @@ function doEnter(u){
     });
   }
 }
-function showModuleHub(){
-  var u=S.user||{};
-  var login=el('login-screen'),hub=el('module-hub'),sidebar=el('sidebar'),main=el('main-wrap');
-  if(login)login.style.display='none';
-  if(hub)hub.style.display='flex';
-  if(sidebar)sidebar.style.display='none';
-  if(main)main.style.display='none';
-  var name=el('hub-user-name'),role=el('hub-user-role'),note=el('hub-note');
-  if(name)name.textContent=u.n||'使用者';
-  if(role)role.textContent=(u.rL||'已登入')+(u.dc?' · '+u.dc:'');
-  if(note)note.textContent='';
-}
-window.enterFinanceModule=function(){
-  if(!S.user){window.showLogin();return;}
-  playModuleIntro({
-    title:'會計系統',
-    subtitle:'ACCOUNTING MODULE',
-    label:'FINANCE OS · ACCOUNTING MODULE',
-    onEnter:openFinanceWorkspace
-  });
-};
-window.enterHrModule=function(){
-  if(!S.user){window.showLogin();return;}
-  writeHrSharedLogin();
-  playModuleIntro({
-    title:'人資系統',
-    subtitle:'HUMAN RESOURCE MODULE',
-    label:'HR OS · HUMAN RESOURCE MODULE',
-    onEnter:function(){window.location.href=HR_APP_URL;}
-  });
-};
-window.enterToolboxModule=function(){
-  if(!S.user){window.showLogin();return;}
-  writeHrSharedLogin();
-  playModuleIntro({
-    title:'工具箱',
-    subtitle:'TOOLBOX MODULE',
-    label:'TOOLS · PDF EDITOR',
-    onEnter:function(){window.location.href='https://hr.suiyuecare.com/toolbox';}
-  });
-};
-window.openExternalModule=function(url){
-  if(!S.user){window.showLogin();return;}
-  window.location.href=url;
-};
-window.returnToModuleHub=async function(){
-  if(!S.user){window.showLogin();return;}
-  if(shouldPromptUnsavedNewReq('modulehub')){
-    var choice=await confirmLeaveNewReq();
-    if(choice==='stay')return;
-    if(choice==='save'){
-      var saved=await nrSaveDraft();
-      if(!saved)return;
-    }
-  }
-  showModuleHub();
-};
 function openFinanceWorkspace(){
   var login=el('login-screen'),hub=el('module-hub'),sidebar=el('sidebar'),main=el('main-wrap'),root=el('root');
   if(login)login.style.display='none';
@@ -3906,31 +3770,8 @@ function playModuleIntro(cfg){
     loader.classList.remove('play');
   },2950);
 }
-window.enterPendingModule=function(module){
-  var isHr=module==='hr';
-  playModuleIntro({
-    title:isHr?'HR OS':'BUSINESS OS',
-    subtitle:isHr?'HUMAN RESOURCE MODULE':'BUSINESS MODULE',
-    label:isHr?'人資系統':'業務系統',
-    onEnter:function(){showModuleHub();moduleNotice(module);}
-  });
-};
-window.moduleNotice=function(module){
-  var note=el('hub-note');
-  var labels={
-    business:'業務系統',
-    document:'電子公文交換系統',
-    project:'敏捷式專案管理',
-    toolbox:'工具箱',
-    hr:'人資系統'
-  };
-  var label=labels[module]||'此功能';
-  if(note)note.textContent=label+'目前暫不開放，正式啟用後再提供入口。';
-};
 window.showLogin=function(){
-  clearHrSharedLogin();
   el('login-screen').style.display='flex';
-  var hub=el('module-hub');if(hub)hub.style.display='none';
   el('sidebar').style.display='none';el('main-wrap').style.display='none';
 };
 function initFilters(){
@@ -4070,6 +3911,7 @@ window.newReqBack=function(){
   goBack();
 };
 function buildAll(){
+  normalizeRequestFlows();
   buildDash();buildExp();buildApprovals();buildNotifs();buildUsers();
   if(S.page==='orgchart')buildOrgChart();
   if(S.page==='settings')buildSettings();
@@ -7285,6 +7127,7 @@ window.withdrawRequest=async function(rid){
 // ══ 詳情（FIX 1+3+4）══
 window.openDetail=function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
+  ensureRequestCashierStep(r);
   if(S.page!=='detail')S.prev=S.page;
   nav('detail',null);
   var d=gD(r.dc);var e=gE(r.eid);
@@ -10289,7 +10132,7 @@ function renderLedger(){
   if(tw) tw.style.display = rows.length>0 ? 'block' : 'none';
   if(rows.length>0 && typeof buildLdgComboChart === 'function'){
     if(!S.ldgTrendRange) S.ldgTrendRange='3m';
-    buildLdgComboChart(tDr, tCr, S.ldgTrendRange);
+  buildLdgComboChart(tDr, tCr, S.ldgTrendRange);
   }
 }
 
@@ -10301,16 +10144,6 @@ window.renderLedger = renderLedger;
 setDemoLoginVisibility();
 updateOAuthWebviewNotice();
 handleOAuthReturn();
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.getRegistrations().then(function(regs){
-    regs.forEach(function(reg){reg.unregister();});
-  }).catch(function(){});
-}
-if(window.caches&&caches.keys){
-  caches.keys().then(function(keys){
-    keys.filter(function(key){return /^suiyue-finance-shell/i.test(key);}).forEach(function(key){caches.delete(key);});
-  }).catch(function(){});
-}
 
 })();
 </script>
