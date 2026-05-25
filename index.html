@@ -778,7 +778,7 @@ html,body{overflow-x:hidden}
     <div style="display:flex;gap:7px;margin-bottom:10px;flex-wrap:wrap">
       <input type="text" id="exp-q" placeholder="搜尋單號、申請人…" oninput="filterExp()" style="width:180px;flex:none">
       <select id="exp-ef" onchange="filterExp()" style="width:auto"><option value="">全部法人</option></select>
-      <select id="exp-sf" onchange="filterExp()" style="width:auto"><option value="">全部狀態</option><option value="completed">已完成</option><option value="pending_section_chief">待上一層主管</option><option value="pending_dept_manager">待部門主管</option><option value="pending_admin_director">待行政部門主任</option><option value="pending_accountant">待會計</option><option value="pending_ceo">待執行長</option><option value="pending_applicant_confirm">待申請人確認</option><option value="pending_voucher">待會計入帳</option><option value="rejected">已退件</option></select>
+      <select id="exp-sf" onchange="filterExp()" style="width:auto"><option value="">全部狀態</option><option value="completed">已完成</option><option value="pending_section_chief">待上一層主管</option><option value="pending_dept_manager">待部門主管</option><option value="pending_admin_director">待行政部門主任</option><option value="pending_accountant">待會計</option><option value="pending_ceo">待執行長授權</option><option value="pending_cashier">待出納放款</option><option value="pending_applicant_confirm">待申請人確認</option><option value="pending_voucher">待會計入帳</option><option value="rejected">已退件</option></select>
     </div>
     <div class="card"><div style="overflow-x:auto"><table><thead><tr><th>申請單號</th><th>暫存</th><th>法人</th><th>部門</th><th>類型</th><th>申請人</th><th>金額</th><th>匯款帳號</th><th>狀態</th><th>日期</th></tr></thead><tbody id="exp-tbody"></tbody></table></div></div>
   </div>
@@ -1096,7 +1096,7 @@ html,body{overflow-x:hidden}
       <div id="user-add-wrap"></div>
     </div>
     <div id="user-readonly-notice" style="display:none;padding:8px 13px;border-radius:8px;background:#f0ece6;border:1px solid #e0d0b8;font-size:12px;color:#6a5840;margin-bottom:10px">權限提醒：您的角色為唯讀，僅執行長、行政部門主任與人資可新增或編輯人員。</div>
-      <div style="display:flex;gap:7px;margin-bottom:10px"><input type="text" id="uq" placeholder="搜尋名字、公司、部門、Email…" oninput="filterUsers()" style="width:220px;flex:none"><select id="urf" onchange="filterUsers()" style="width:auto"><option value="">全部角色</option><option value="employee">一般員工</option><option value="section_chief">課長</option><option value="dept_manager">部門主管</option><option value="admin_director">行政主任</option><option value="general_affairs">總務</option><option value="hr">人資</option><option value="accountant">會計</option><option value="ceo">執行長</option></select></div>
+      <div style="display:flex;gap:7px;margin-bottom:10px"><input type="text" id="uq" placeholder="搜尋名字、公司、部門、Email…" oninput="filterUsers()" style="width:220px;flex:none"><select id="urf" onchange="filterUsers()" style="width:auto"><option value="">全部角色</option><option value="employee">一般員工</option><option value="section_chief">課長</option><option value="dept_manager">部門主管</option><option value="admin_director">行政主任</option><option value="general_affairs">總務</option><option value="hr">人資</option><option value="accountant">會計</option><option value="cashier">出納</option><option value="ceo">執行長</option></select></div>
     <div id="user-health"></div>
     <div class="card" id="user-wrap"></div>
   </div>
@@ -1150,7 +1150,7 @@ html,body{overflow-x:hidden}
   </div>
 
   <!-- Modals -->
-  <div class="modal-bg" id="m-add-user" style="display:none"><div class="modal"><div class="chd" style="background:var(--brxxl)"><span class="cht" id="user-modal-title">新增人員</span><button onclick="closeModal('m-add-user')" style="background:none;border:none;cursor:pointer;font-size:17px;color:#c0a080">&#215;</button></div><div style="padding:13px"><div class="fr2"><div class="fg"><label class="fl">名字 *</label><input id="un"></div><div class="fg"><label class="fl">Email *</label><input id="ue" type="email"></div></div><div class="fr2"><div class="fg"><label class="fl">公司別 *</label><select id="uent" onchange="initDeptSel('ud')" style="font-size:11px"></select></div><div class="fg"><label class="fl">部門 *</label><select id="ud" style="font-size:11px"></select><div style="font-size:10px;color:#8b7358;margin-top:4px">部門代號採共用清單，不受公司別限制。</div></div></div><div class="fr2"><div class="fg"><label class="fl">層級 *</label><select id="ur"><option value="employee">一般組員</option><option value="section_chief">課長</option><option value="dept_manager">部門主管</option><option value="admin_director">行政部門主任</option><option value="general_affairs">總務</option><option value="hr">人資</option><option value="accountant">會計</option><option value="ceo">執行長</option></select></div><div class="fg"><label class="fl">狀態</label><input id="uactive-label" value="啟用" readonly style="background:var(--warm)"></div></div><div id="add-err" style="color:#8a1010;font-size:12px;margin-bottom:7px;display:none"></div><div style="display:flex;gap:7px;justify-content:flex-end"><button class="btn-s" onclick="closeModal('m-add-user')">取消</button><button class="btn-p" id="user-modal-submit" onclick="submitAddUser()">建立帳號</button></div></div></div></div>
+  <div class="modal-bg" id="m-add-user" style="display:none"><div class="modal"><div class="chd" style="background:var(--brxxl)"><span class="cht" id="user-modal-title">新增人員</span><button onclick="closeModal('m-add-user')" style="background:none;border:none;cursor:pointer;font-size:17px;color:#c0a080">&#215;</button></div><div style="padding:13px"><div class="fr2"><div class="fg"><label class="fl">名字 *</label><input id="un"></div><div class="fg"><label class="fl">Email *</label><input id="ue" type="email"></div></div><div class="fr2"><div class="fg"><label class="fl">公司別 *</label><select id="uent" onchange="initDeptSel('ud')" style="font-size:11px"></select></div><div class="fg"><label class="fl">部門 *</label><select id="ud" style="font-size:11px"></select><div style="font-size:10px;color:#8b7358;margin-top:4px">部門代號採共用清單，不受公司別限制。</div></div></div><div class="fr2"><div class="fg"><label class="fl">層級 *</label><select id="ur"><option value="employee">一般組員</option><option value="section_chief">課長</option><option value="dept_manager">部門主管</option><option value="admin_director">行政部門主任</option><option value="general_affairs">總務</option><option value="hr">人資</option><option value="accountant">會計</option><option value="cashier">出納</option><option value="ceo">執行長</option></select></div><div class="fg"><label class="fl">狀態</label><input id="uactive-label" value="啟用" readonly style="background:var(--warm)"></div></div><div id="add-err" style="color:#8a1010;font-size:12px;margin-bottom:7px;display:none"></div><div style="display:flex;gap:7px;justify-content:flex-end"><button class="btn-s" onclick="closeModal('m-add-user')">取消</button><button class="btn-p" id="user-modal-submit" onclick="submitAddUser()">建立帳號</button></div></div></div></div>
 
   <div class="modal-bg" id="m-add-bill" style="display:none">
     <div class="modal" style="width:580px;max-height:88vh;display:flex;flex-direction:column">
@@ -1441,14 +1441,15 @@ var USERS=[
   {id:'u8',n:'朱夏欣',email:'8@suiyuecare.com',pw:DEMO_PASSWORD,role:'general_affairs',rL:'總務',dc:'A1102',init:'朱',active:true},
 ];
 
-// 八階段流程：申請人 → 上一層主管 → 部門主管（若相同則跳過）→ 行政部門主任 → 會計 → 執行長 → 申請人確認 → 會計入帳
+// 財務流程：申請人 → 上一層主管 → 部門主管（若相同則跳過）→ 行政部門主任 → 會計 → 執行長/主管授權 → 出納放款 → 申請人確認 → 會計入帳
 var FLOW_STEPS=[
   {role:'applicant',label:'申請人送件',sub:'填寫費用、匯款帳號、上傳憑據'},
   {role:'direct_supervisor',label:'申請人上一層級主管',sub:'確認費用合理性與必要性'},
   {role:'dept_manager',label:'申請人部門主管',sub:'若與上一層主管為同一人則自動跳過'},
   {role:'admin_director',label:'行政部門主任',sub:'行政流程與預算控管'},
-  {role:'accountant',label:'會計',sub:'確認匯款帳號，執行網銀轉帳'},
-  {role:'ceo',label:'執行長',sub:'最終授權'},
+  {role:'accountant',label:'會計',sub:'確認匯款帳號、科目與付款資料'},
+  {role:'ceo',label:'執行長／主管授權',sub:'確認重大金額、風險與資金配置'},
+  {role:'cashier',label:'出納放款',sub:'實際執行付款；目前由執行長代行'},
   {role:'applicant_confirm',label:'申請人確認',sub:'確認已撥款，發票專用關卡則確認已交付發票或憑據'},
   {role:'accountant_final',label:'會計確認入帳',sub:'系統自動生成傳票，寫入帳冊'},
 ];
@@ -1456,6 +1457,7 @@ var STEP_FOR={
   accountant:'pending_accountant',
   hr:'pending_hr',
   ceo:'pending_ceo',
+  cashier:'pending_cashier',
   section_chief:'pending_section_chief',
   dept_manager:'pending_dept_manager',
   admin_director:'pending_admin_director',
@@ -1551,9 +1553,9 @@ function nrTypeIcon(type){
   return '<svg viewBox="0 0 24 24">'+(icons[type]||'<path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h4"/>')+'</svg>';
 }
 var TCSS={expense_reimbursement:'b-wait',payment_request:'b-blue',advance_request:'b-purp',petty_cash_request:'b-teal',travel_request:'b-ok',purchase_request:'b-gray',refund_request:'b-rej',hr_expense_request:'b-purp'};
-var SCSS={completed:'b-ok',rejected:'b-rej',cancelled:'b-gray',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_procurement:'b-teal',pending_hr:'b-blue',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal',pending_countersign:'b-purp'};
-var SL={completed:'已完成',rejected:'已退件',cancelled:'已抽單取消',pending_section_chief:'待上一層主管',pending_dept_manager:'待部門主管',pending_admin_director:'待行政部門主任',pending_procurement:'待總務採購審核',pending_hr:'待人資',pending_accountant:'待會計',pending_ceo:'待執行長',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳',pending_countersign:'待指定員工加簽'};
-var RL={employee:'一般組員',section_chief:'課長',dept_manager:'部門主管',admin_director:'行政部門主任',general_affairs:'總務',hr:'人資',accountant:'會計',ceo:'執行長'};
+var SCSS={completed:'b-ok',rejected:'b-rej',cancelled:'b-gray',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_procurement:'b-teal',pending_hr:'b-blue',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_cashier:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal',pending_countersign:'b-purp'};
+var SL={completed:'已完成',rejected:'已退件',cancelled:'已抽單取消',pending_section_chief:'待上一層主管',pending_dept_manager:'待部門主管',pending_admin_director:'待行政部門主任',pending_procurement:'待總務採購審核',pending_hr:'待人資',pending_accountant:'待會計',pending_ceo:'待執行長授權',pending_cashier:'待出納放款',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳',pending_countersign:'待指定員工加簽'};
+var RL={employee:'一般組員',section_chief:'課長',dept_manager:'部門主管',admin_director:'行政部門主任',general_affairs:'總務',hr:'人資',accountant:'會計',ceo:'執行長',cashier:'出納'};
 function normalizedRoleKey(u){
   var raw=String((u&&u.role)||'').trim();
   var label=String((u&&u.rL)||(u&&u.role_label)||'').trim();
@@ -1561,6 +1563,7 @@ function normalizedRoleKey(u){
   if(email==='entrepreneur@suiyuecare.com')return'ceo';
   if(RL[raw])return raw;
   if(raw==='執行長'||label==='執行長')return'ceo';
+  if(raw==='出納'||raw==='出納人員'||label==='出納'||label==='出納人員')return'cashier';
   if(raw==='行政部門主任'||raw==='行政主任'||label==='行政部門主任'||label==='行政主任')return'admin_director';
   if(raw==='會計'||label==='會計')return'accountant';
   if(raw==='人資'||label==='人資')return'hr';
@@ -1748,6 +1751,7 @@ function defaultRolePermissions(){
     general_affairs:common.slice(),
     hr:common.concat(['users','orgchart','compliance']),
     accountant:finance.slice(),
+    cashier:['dashboard','expenses','approvals','notif'],
     ceo:PERMISSION_PAGES.slice()
   };
 }
@@ -2639,8 +2643,9 @@ function stepDateToIsoLike(v){
   }
   return v;
 }
-function requestCeoApprovedAt(r){
-  var s=(r&&r.steps||[]).find(function(x){return x.rk==='ceo'&&x.a==='approved';});
+function requestCashierApprovedAt(r){
+  var s=(r&&r.steps||[]).find(function(x){return x.rk==='cashier'&&x.a==='approved';});
+  if(!s)s=(r&&r.steps||[]).find(function(x){return x.rk==='ceo'&&x.a==='approved'&&!(r.steps||[]).some(function(y){return y.rk==='cashier';});});
   return s?stepDateToIsoLike(s.t||todayIso()):'';
 }
 function requestFundingBaseAmount(r){
@@ -2658,12 +2663,15 @@ function requestCashAmount(r){
 }
 function ensureRequestCashPostedFromCeo(r){
   if(!r||requestCashPostedAt(r))return false;
-  var ceoAt=requestCeoApprovedAt(r);
-  if(!ceoAt)return false;
-  r.cashPostedAt=ceoAt;
+  var cashierAt=requestCashierApprovedAt(r);
+  if(!cashierAt)return false;
+  var cashierStep=((r.steps||[]).find(function(s){return s.rk==='cashier'&&s.a==='approved';})||((r.steps||[]).find(function(s){return s.rk==='ceo'&&s.a==='approved';})||{}));
+  r.cashPostedAt=cashierAt;
   r.formPayload=Object.assign({},r.formPayload||{},{
-    cashPostedAt:ceoAt,
-    cashPostedBy:((r.steps||[]).find(function(s){return s.rk==='ceo'&&s.a==='approved';})||{}).n||'執行長',
+    cashPostedAt:cashierAt,
+    cashPostedBy:cashierStep.n||'出納',
+    cashPostedRole:cashierStep.rk||'cashier',
+    cashPostingRule:'cash_flow_posts_after_cashier_disbursement',
     cashAmount:requestFundingBaseAmount(r)+requestBankFeeAmount(r)
   });
   return true;
@@ -2721,8 +2729,8 @@ function advanceFinalFiles(r){
 function advanceReadyForFinalAccounting(r){
   if(!r||r.type!=='advance_request')return {ok:true};
   var files=advanceFinalFiles(r);
-  if(!files.some(attachmentIsReceiptEvidence))return {ok:false,msg:'預支申請第 7 關需先上傳最後實際花費的發票、收據或 PDF 憑據。'};
-  if(!files.some(attachmentIsExcel))return {ok:false,msg:'預支申請第 7 關需上傳最後即時 Excel 明細表，會計才可核銷。'};
+  if(!files.some(attachmentIsReceiptEvidence))return {ok:false,msg:'預支申請第 8 關需先上傳最後實際花費的發票、收據或 PDF 憑據。'};
+  if(!files.some(attachmentIsExcel))return {ok:false,msg:'預支申請第 8 關需上傳最後即時 Excel 明細表，會計才可核銷。'};
   return {ok:true};
 }
 function isAdvanceDisbursementLedger(r,row){
@@ -2737,7 +2745,7 @@ function advanceTwoEventHtml(r){
   var original=advanceOriginalAmount(r),actual=advanceActualAmount(r),settle=advanceSettlementInfo(r,actual);
   return'<div style="margin-top:8px;background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:8px;font-size:11px;color:#6a5840;line-height:1.6">'
     +'<strong style="color:#334155">預支兩段式會計事件</strong><br>'
-    +'事件一：執行長放款後，Dr 1191 暫付款 <strong>'+fmt(original)+'</strong> / Cr 1112 銀行存款，現金流量表先反映撥款。'+(fp.advanceDisbursementVoucherId?' <button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+fp.advanceDisbursementVoucherId+'\')">'+fp.advanceDisbursementVoucherId+'</button>':'')+'<br>'
+    +'事件一：出納放款後（目前由執行長代行），Dr 1191 暫付款 <strong>'+fmt(original)+'</strong> / Cr 1112 銀行存款，現金流量表先反映撥款。'+(fp.advanceDisbursementVoucherId?' <button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+fp.advanceDisbursementVoucherId+'\')">'+fp.advanceDisbursementVoucherId+'</button>':'')+'<br>'
     +'事件二：會計收齊最後憑據後，Dr 實際費用 <strong>'+(actual?fmt(actual):'待填寫')+'</strong> / Cr 1191 暫付款，並處理多退少補：<strong style="color:'+(settle.diff>0?'#b45309':settle.diff<0?'#0f766e':'#334155')+'">'+(actual?settle.label:'待核銷')+'</strong>。'
     +'</div>';
 }
@@ -3176,6 +3184,9 @@ function applyRolePermissions(){
 function firstUserByRole(role){
   return USERS.find(function(u){return u.role===role&&u.active;})||null;
 }
+function cashierUser(){
+  return firstUserByRole('cashier')||firstUserByRole('ceo');
+}
 function activeUniqueUsers(){
   var groups={};
   USERS.filter(function(u){return u.active!==false;}).forEach(function(u){
@@ -3192,11 +3203,11 @@ function activeUniqueUsers(){
   }).sort(function(a,b){return String(a.n||'').localeCompare(String(b.n||''),'zh-Hant');});
 }
 function directSupervisorRole(role){
-  return {employee:'section_chief',section_chief:'dept_manager',dept_manager:'admin_director',accountant:'admin_director',hr:'admin_director',admin_director:'ceo'}[role]||null;
+  return {employee:'section_chief',section_chief:'dept_manager',dept_manager:'admin_director',accountant:'admin_director',cashier:'ceo',hr:'admin_director',admin_director:'ceo'}[role]||null;
 }
 function defaultOrganizationChart(){
   var byRole=function(role){return (USERS.find(function(u){return u.role===role&&u.active;})||{}).id||'';};
-  var fallback={employee:byRole('section_chief'),section_chief:byRole('dept_manager'),dept_manager:byRole('admin_director'),general_affairs:byRole('admin_director'),hr:byRole('admin_director'),accountant:byRole('admin_director'),admin_director:byRole('ceo'),ceo:''};
+  var fallback={employee:byRole('section_chief'),section_chief:byRole('dept_manager'),dept_manager:byRole('admin_director'),general_affairs:byRole('admin_director'),hr:byRole('admin_director'),accountant:byRole('admin_director'),cashier:byRole('ceo'),admin_director:byRole('ceo'),ceo:''};
   return USERS.map(function(u){return{userId:u.id,supervisorId:fallback[u.role]||''};});
 }
 function orgRowForUser(uid){
@@ -3229,8 +3240,8 @@ function buildApprovalSteps(appUser,requestType){
     function padd(role,label,status,assignedUser){
       if(!role)return;
       var u=assignedUser||firstUserByRole(role);
-      if(role===appUser.role&&role!=='ceo'&&(!u||u.id===appUser.id))return;
-      if(pSteps.some(function(s){return s.rk===role||(u&&s.uid===u.id);}))return;
+      if(role===appUser.role&&role!=='ceo'&&role!=='cashier'&&(!u||u.id===appUser.id))return;
+      if(pSteps.some(function(s){return s.rk===role||(role!=='cashier'&&u&&s.uid===u.id);}))return;
       pSteps.push({r:label||RL[role]||role,rk:role,uid:u?u.id:'',n:'',a:'',t:'',c:'',status:status});
     }
     var pSupervisor=directSupervisorUser(appUser),pDirect=(pSupervisor&&pSupervisor.role)||directSupervisorRole(appUser.role);
@@ -3238,7 +3249,8 @@ function buildApprovalSteps(appUser,requestType){
     var pDeptManager=departmentManagerUser(appUser);
     padd('dept_manager','申請人部門主任通過'+(pDeptManager?'：'+pDeptManager.n:''),'pending_dept_manager',pDeptManager);
     padd('accountant','會計通過','pending_accountant');
-    padd('ceo','執行長放款','pending_ceo');
+    padd('ceo','執行長／部門主管上層授權','pending_ceo');
+    padd('cashier','出納放款（目前由執行長代行）','pending_cashier',cashierUser());
     pSteps.push({r:'申請人確認收到採購商品',rk:'applicant_confirm',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_applicant_confirm',purpose:'申請人確認總務採購的商品或服務已實際收到，確認後才進入總務補憑據。'});
     pSteps.push({r:'總務提供採購憑據',rk:'procurement_receipt',uid:ga?ga.id:'',n:'',a:'',t:'',c:'',status:'pending_procurement',purpose:'總務採購完成後上傳發票或憑據，並填入最後正確採購金額；會計將依此銷帳。'});
     pSteps.push({r:'會計銷帳入帳',rk:'accountant_final',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_voucher',purpose:'會計確認憑據與最後金額，通過後才產生傳票並連動三表。'});
@@ -3248,8 +3260,8 @@ function buildApprovalSteps(appUser,requestType){
   function add(role,label,status,assignedUser){
     if(!role)return;
     var u=assignedUser||firstUserByRole(role);
-    if(role===appUser.role&&role!=='ceo'&&(!u||u.id===appUser.id))return;
-    if(steps.some(function(s){return s.rk===role||(u&&s.uid===u.id);}))return;
+    if(role===appUser.role&&role!=='ceo'&&role!=='cashier'&&(!u||u.id===appUser.id))return;
+    if(steps.some(function(s){return s.rk===role||(role!=='cashier'&&u&&s.uid===u.id);}))return;
     steps.push({r:label||RL[role]||role,rk:role,uid:u?u.id:'',n:'',a:'',t:'',c:'',status:status});
   }
   var supervisor=directSupervisorUser(appUser),direct=(supervisor&&supervisor.role)||directSupervisorRole(appUser.role);
@@ -3259,7 +3271,8 @@ function buildApprovalSteps(appUser,requestType){
     add('dept_manager','部門主管通過'+(deptManager?'：'+deptManager.n:''),'pending_dept_manager',deptManager);
     add('admin_director','行政部門主任','pending_admin_director');
     add('accountant','會計','pending_accountant');
-    add('ceo','執行長放款','pending_ceo');
+    add('ceo','執行長／部門主管上層授權','pending_ceo');
+    add('cashier','出納放款（目前由執行長代行）','pending_cashier',cashierUser());
     steps.push({r:'申請人提供最後支出最正確的憑據',rk:'applicant_confirm',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_applicant_confirm',purpose:'請申請人上傳最後實際花費的發票、憑據照片與即時 Excel 明細，作為核銷依據。'});
     steps.push({r:'會計收到最後憑據並入帳調整',rk:'accountant_final',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_voucher',purpose:'會計收回實體憑據，確認多退少補，並以最後正確費用調整入帳；三表以本關最終金額認列。'});
     return steps;
@@ -3268,14 +3281,15 @@ function buildApprovalSteps(appUser,requestType){
   add('dept_manager','部門主管'+(deptManager?'：'+deptManager.n:''),'pending_dept_manager',deptManager);
   add('admin_director','行政部門主任','pending_admin_director');
   add('accountant','會計','pending_accountant');
-  add('ceo','執行長','pending_ceo');
+  add('ceo','執行長／部門主管上層授權','pending_ceo');
+  add('cashier','出納放款（目前由執行長代行）','pending_cashier',cashierUser());
   steps.push({r:'申請人確認：確認已撥款',rk:'applicant_confirm',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_applicant_confirm'});
   steps.push({r:'會計確認入帳',rk:'accountant_final',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_voucher'});
   return steps;
 }
 function buildInvoiceApprovalSteps(appUser){
   var steps=buildApprovalSteps(appUser).filter(function(s){
-    return ['applicant_confirm','accountant_final'].indexOf(s.rk)<0;
+    return ['cashier','applicant_confirm','accountant_final'].indexOf(s.rk)<0;
   });
   steps.push({r:'會計部門開立發票並上傳檔案',rk:'accountant_invoice',uid:(firstUserByRole('accountant')||{}).id||'',n:'',a:'',t:'',c:'',status:'pending_invoice_accountant'});
   steps.push({r:'申請人取得會計部門發票並確認交付',rk:'applicant_invoice_delivery',uid:appUser.id,n:'',a:'',t:'',c:'',status:'pending_invoice_delivery'});
@@ -3293,7 +3307,8 @@ function stepPurpose(s){
     procurement_review:'總務採購專用關卡。採購完成後上傳憑據發票，並填寫最終實際採購金額；會計將以此金額入帳。',
     hr:'確認員工福利資格、年資、文件證明、是否重複申請與福利辦法適用性。',
     accountant:'確認會計科目、稅務處理、匯款或發票資料，必要時要求補件。',
-    ceo:'最終授權，確認重大金額、公司風險與整體資金配置。',
+    ceo:'部門主管的上一層授權與最終風險確認；此關不代表實際放款。',
+    cashier:'出納放款關卡。確認付款指示後執行撥款，現階段由執行長代行；現金流量表於本關通過後認列銀行流出。',
     applicant_confirm:'申請人確認已收到款項或採購商品，並補齊必要收款、交付或核銷憑據。',
     applicant_revision:'申請人依退回意見補充資料、修正附件或確認內容後重新送出。',
     accountant_final:'會計確認憑據與金流後正式入帳，系統產生傳票並寫入分類帳。',
@@ -3306,6 +3321,7 @@ function stepPurpose(s){
 function stepTitle(s){
   if(!s)return'';
   if(s.rk==='assigned_user')return s.r||'指定員工加簽';
+  if(s.rk==='cashier')return s.r||'出納放款（目前由執行長代行）';
   if(s.rk==='applicant_confirm')return s.r||'申請人確認：確認已撥款';
   if(s.rk==='applicant_invoice_delivery')return'申請人取得會計部門發票並確認交付';
   return s.r||'';
@@ -3334,7 +3350,12 @@ function requestIsMine(r){
 }
 function requestReachedCeoFunding(r){
   if(!r)return false;
-  if(['pending_ceo','pending_applicant_confirm','pending_voucher','completed','paid','settled','closed'].indexOf(r.status)>-1)return true;
+  if(['pending_cashier','pending_applicant_confirm','pending_voucher','completed','paid','settled','closed'].indexOf(r.status)>-1)return true;
+  var cashIdx=(r.steps||[]).findIndex(function(s){return s.rk==='cashier'||s.role==='cashier'||/出納/.test(String(s.r||''));});
+  if(cashIdx>-1){
+    var cashCurIdx=activeStepIndex(r);
+    return cashCurIdx>-1&&cashCurIdx>=cashIdx;
+  }
   var ceoIdx=(r.steps||[]).findIndex(function(s){return s.rk==='ceo'||s.role==='ceo'||s.r==='執行長';});
   var curIdx=activeStepIndex(r);
   return ceoIdx>-1&&curIdx>-1&&curIdx>=ceoIdx;
@@ -3369,6 +3390,7 @@ function canActStep(r,s){
   if(s.rk==='applicant_confirm')return requestIsMine(r);
   if(s.rk==='applicant_invoice_delivery')return requestIsMine(r)||invoiceIsMine(r);
   if(['procurement_review','procurement_payment','procurement_receipt'].indexOf(s.rk)>-1)return S.user.role==='general_affairs'||S.user.id===s.uid;
+  if(s.rk==='cashier')return S.user.role==='cashier'||(S.user.role==='ceo'&&(!s.uid||stepAssignedToCurrentUser(s)));
   if(s.rk==='accountant_final')return S.user.role==='accountant';
   if(s.rk==='accountant_invoice')return S.user.role==='accountant';
   return S.user.role===s.rk;
@@ -3390,6 +3412,7 @@ function stepBelongsToUser(s,owner){
     return requestIsMine(owner)||invoiceIsMine(owner);
   }
   if(['procurement_review','procurement_payment','procurement_receipt'].indexOf(s.rk)>-1)return S.user.role==='general_affairs'||S.user.id===s.uid;
+  if(s.rk==='cashier')return S.user.role==='cashier'||(S.user.role==='ceo'&&(!s.uid||stepAssignedToCurrentUser(s)));
   if(s.rk==='accountant_final')return S.user.role==='accountant';
   if(s.rk==='accountant_invoice')return S.user.role==='accountant';
   return s.rk===S.user.role;
@@ -3398,13 +3421,15 @@ function syncRequestStatus(r){
   var s=activeStep(r);
   r.status=s?s.status:'completed';
   r.step=(r.steps||[]).filter(function(x){return x.a;}).length+1;
-  if(r.status==='completed')r.step=8;
+  if(r.status==='completed')r.step=(r.steps||[]).length||8;
 }
 function markRequestCashPosted(r,approvedStep){
-  if(!r||!approvedStep||approvedStep.rk!=='ceo'||requestCashPostedAt(r))return false;
+  var hasCashier=(r&&r.steps||[]).some(function(s){return s.rk==='cashier';});
+  if(!r||!approvedStep||requestCashPostedAt(r))return false;
+  if(approvedStep.rk!=='cashier'&&!(approvedStep.rk==='ceo'&&!hasCashier))return false;
   var ts=new Date().toISOString();
   r.cashPostedAt=ts;
-  r.formPayload=Object.assign({},r.formPayload||{},{cashPostedAt:ts,cashPostedBy:S.user?S.user.n:'',cashAmount:requestFundingBaseAmount(r)+requestBankFeeAmount(r)});
+  r.formPayload=Object.assign({},r.formPayload||{},{cashPostedAt:ts,cashPostedBy:S.user?S.user.n:'',cashPostedRole:approvedStep.rk==='cashier'?'cashier':'legacy_ceo',cashPostingRule:approvedStep.rk==='cashier'?'cash_flow_posts_after_cashier_disbursement':'legacy_cash_flow_posts_after_ceo_approval',cashAmount:requestFundingBaseAmount(r)+requestBankFeeAmount(r)});
   return true;
 }
 function approveActiveStep(r, action, comment, files, addUid){
@@ -4460,7 +4485,7 @@ window.openReportTraceModal=function(kind,key){
       +'<div style="background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:8px"><div style="font-size:10px;color:#a08060;margin-bottom:2px">法人 / 期間</div><div style="font-size:12px;color:#334155">'+(ent.s||eid)+' · '+period+'</div></div>'
       +'<div style="background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:8px"><div style="font-size:10px;color:#a08060;margin-bottom:2px">合計 / 筆數</div><div style="font-size:12px;font-weight:650;color:var(--brtxt)">'+fmt(total)+' · '+rows.length+' 筆</div></div>'
     +'</div>'
-    +'<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:9px">三表數字只取正式分類帳分錄；現金流量表另列執行長放款現金事件。每筆可回查申請單、發票、傳票與附件。</div>'
+    +'<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:9px">三表數字只取正式分類帳分錄；現金流量表另列出納放款現金事件（目前由執行長代行）。每筆可回查申請單、發票、傳票與附件。</div>'
     +(rows.length?'<div style="overflow-x:auto"><table style="min-width:900px"><thead><tr><th>日期</th><th>來源單號</th><th>摘要 / 部門</th><th>Posting Key</th><th style="text-align:right">借方</th><th style="text-align:right">貸方</th><th style="text-align:right">追溯金額</th><th>操作</th></tr></thead><tbody>'+rows.map(rowHtml).join('')+'</tbody></table></div>':'<div style="text-align:center;padding:28px;color:#94a3b8;border:1.5px dashed #e0d0b8;border-radius:9px;font-size:12px">此項目目前沒有可追溯的正式來源</div>');
   document.getElementById('m-voucher').style.display='flex';
 };
@@ -5420,18 +5445,20 @@ function lazyApprovalFlowHtml(title){
     ['3','部門主管通過','確認部門預算、專案歸屬與預支風險。'],
     ['4','行政部門主任','確認行政流程、申請書完整性與匯款資料。'],
     ['5','會計','確認暫付款科目、付款資料與後續核銷責任。'],
-    ['6','執行長放款','核准後視為款項實際發出，現金流量表於本關通過時計入銀行流出。'],
-    ['7','申請人提供最後支出最正確的憑據','款項使用後，上傳最後實際花費的發票、憑據照片與即時 Excel 明細表。'],
-    ['8','會計收到最後憑據','收回實體憑據與多退少補款項，三表依最後正確費用金額調整入帳，而非一開始送單金額。']
+    ['6','執行長／部門主管上層授權','確認重大金額、公司風險與整體資金配置；此關不代表已放款。'],
+    ['7','出納放款（目前由執行長代行）','核准後視為款項實際發出，現金流量表於本關通過時計入銀行流出。'],
+    ['8','申請人提供最後支出最正確的憑據','款項使用後，上傳最後實際花費的發票、憑據照片與即時 Excel 明細表。'],
+    ['9','會計收到最後憑據','收回實體憑據與多退少補款項，三表依最後正確費用金額調整入帳，而非一開始送單金額。']
   ]:[
     ['1','申請人送件','確認申請內容、匯款資料、憑據照片與 Excel 明細無誤後送出。'],
     ['2','申請人上一層級主管','確認費用是否合理、是否為業務必要支出，並檢查金額與用途。'],
     ['3','申請人部門主管','確認部門預算、成本歸屬與跨組別影響；若與上一層級主管相同則自動跳過。'],
     ['4','行政部門主任','確認行政流程、付款對象、附件完整性、手續費歸屬與資料是否可執行。'],
     ['5','會計','確認會計科目、稅務處理、憑證格式、匯款帳號與傳票切分方式。'],
-    ['6','執行長','最終授權，確認重大金額、公司風險與整體資金配置。'],
-    ['7','申請人確認','款項撥付後，申請人確認已收到款項或已完成必要交付。'],
-    ['8','會計確認入帳','會計確認憑據與金流後正式入帳，系統產生傳票並寫入帳冊。']
+    ['6','執行長／部門主管上層授權','最終授權，確認重大金額、公司風險與整體資金配置；此關不代表已放款。'],
+    ['7','出納放款（目前由執行長代行）','實際執行付款，現金流量表於本關通過時計入銀行流出。'],
+    ['8','申請人確認','款項撥付後，申請人確認已收到款項或已完成必要交付。'],
+    ['9','會計確認入帳','會計確認憑據與金流後正式入帳，系統產生傳票並寫入帳冊。']
   ];
   return'<div class="card"><div class="chd"><span class="cht">'+(title||'2-4. 簽核流程')+'</span><span style="font-size:10px;color:#94a3b8">每關任務</span></div><div style="padding:12px"><div class="flow-wrap">'+rows.map(function(r){
     return'<div class="flow-step"><div class="flow-dot">'+r[0]+'</div><div class="flow-body"><div class="flow-label">'+r[1]+'</div><div class="flow-sub">'+r[2]+'</div></div></div>';
@@ -5867,9 +5894,9 @@ function travelAttachmentGuideHtml(){
 function advanceRequestUploadPanelHtml(){
   return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%">'
     +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px"><div><div style="font-size:12px;font-weight:650;color:#334155">預支申請書下載與上傳</div><div style="font-size:10px;color:#8b7358;margin-top:2px;line-height:1.5">請先下載預支申請書填寫完成，再把填好的 Word / Excel / PDF 上傳回本區；這裡不是上傳消費憑據。</div></div><div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-s" onclick="dlAdvanceTemplate(\'doc\')">Word</button><button class="btn-s" onclick="dlAdvanceTemplate(\'xls\')">Excel</button></div></div>'
-    +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">UPLOAD ADVANCE FORM</div><div style="font-size:13px;font-weight:650;color:#334155;margin-bottom:3px">上傳已填寫的預支申請書</div><div style="font-size:11px;color:#94a3b8;line-height:1.5">可上傳 Word、Excel、PDF 或掃描圖片；最後實際花費的發票憑據請於第 7 關再補上。</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" capture="environment" onchange="nrFileChange(this)"></div>'
+    +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">UPLOAD ADVANCE FORM</div><div style="font-size:13px;font-weight:650;color:#334155;margin-bottom:3px">上傳已填寫的預支申請書</div><div style="font-size:11px;color:#94a3b8;line-height:1.5">可上傳 Word、Excel、PDF 或掃描圖片；最後實際花費的發票憑據請於第 8 關再補上。</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" capture="environment" onchange="nrFileChange(this)"></div>'
     +'<div id="nr-flist" style="margin-top:7px">'+nrFileListHtml(180)+'</div>'
-    +'<div style="font-size:11px;color:#8b7358;margin-top:8px">預支款核准撥付後會先列為暫付款；執行長放款通過時計入現金流，最後會計依第 7 關補上的正確憑據調整三表。</div>'
+    +'<div style="font-size:11px;color:#8b7358;margin-top:8px">預支款核准撥付後會先列為暫付款；出納放款通過時計入現金流（目前由執行長代行），最後會計依第 8 關補上的正確憑據調整三表。</div>'
   +'</div>';
 }
 function passbookUploadPanelHtml(){
@@ -6456,7 +6483,7 @@ function purchaseAmountCompareHtml(r){
   return'<div style="margin-top:8px;background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:8px;font-size:11px;color:#6a5840;line-height:1.6">'
     +'<strong style="color:#334155">採購金額分流</strong><br>'
     +'預估付款：<strong>'+fmt(est)+'</strong>，最後實際：<strong>'+(actual?fmt(actual):'待填寫')+'</strong>，差異：<strong style="color:'+diffColor+'">'+diffText+'</strong><br>'
-    +'<span style="color:#8b7358">現金流量以執行長放款時的預估付款為準；資產負債表與損益表只在會計銷帳時依最後實際憑據入帳。</span>'
+    +'<span style="color:#8b7358">現金流量以出納放款時的預估付款為準（目前由執行長代行）；資產負債表與損益表只在會計銷帳時依最後實際憑據入帳。</span>'
     +'</div>';
 }
 function pettyModeValue(r){
@@ -6818,7 +6845,7 @@ function showSubmitConfirm(meta){
           +submitConfirmRow('匯款資料',meta.bankText)
           +submitConfirmRow('附件數量','憑據/文件 '+num(meta.fileCount)+' 份'+(num(meta.passbookCount)?'，存摺封面 '+num(meta.passbookCount)+' 份':''))
           +submitConfirmRow('下一關',meta.nextStep)
-          +submitConfirmRow('抽單規則','執行長放款前可由申請人抽單取消；已到執行長放款或後續關卡後不可抽單。')
+          +submitConfirmRow('抽單規則','出納放款前可由申請人抽單取消；已到出納放款或後續關卡後不可抽單。')
         +'</div></div>'
       +'</div>'
       +'<div style="margin-top:11px;border-radius:10px;border:1px solid #d7ead0;background:#f3fbec;padding:10px;color:#1a5010;font-size:12px;line-height:1.7">員工提醒：送出後您可以在「簽核管理 > 我的申請」查看進度；若主管退回，系統會顯示需要補充的內容與附件。</div>';
@@ -7054,7 +7081,7 @@ window.submitNR=async function(){
     ok.textContent='申請單 '+no+' 已送出，已切到「簽核管理 > 我的申請」供確認。';
     setTimeout(function(){ok.style.display='none';},5000);
   }
-  alert('申請單 '+no+' 已送出。\n目前送到：'+requestNextStepLabel(nextStep)+'\n您可在「簽核管理 > 我的申請」查看進度；執行長放款前可抽單取消。');
+  alert('申請單 '+no+' 已送出。\n目前送到：'+requestNextStepLabel(nextStep)+'\n您可在「簽核管理 > 我的申請」查看進度；出納放款前可抽單取消。');
   }catch(err){
     console.error('submit request failed',err);
     alert('送出簽核失敗：'+(err&&err.message?err.message:'請稍後再試。請開啟瀏覽器 Console 執行 debugApprovalLinks() 或截圖錯誤訊息給我。'));
@@ -7166,7 +7193,7 @@ function supervisorReviewCardHtml(r,compact){
 }
 function approvalManagerSummaryHtml(pm){
   if(!S.user)return'';
-  var managerRoles=['section_chief','dept_manager','admin_director','ceo'];
+  var managerRoles=['section_chief','dept_manager','admin_director','ceo','cashier'];
   if(managerRoles.indexOf(S.user.role)<0&&S.user.role!=='general_affairs')return'';
   var reqs=pm.filter(function(item){return item.kind==='req';}).map(function(item){return item.raw;});
   var high=reqs.filter(function(r){return requestReviewAmount(r)>=50000;}).length;
@@ -7181,7 +7208,7 @@ function approvalManagerSummaryHtml(pm){
 function ceoPendingFundingRequests(){
   return REQS.filter(function(r){
     var s=activeStep(r);
-    return r.status==='pending_ceo'&&s&&s.rk==='ceo';
+    return r.status==='pending_cashier'&&s&&s.rk==='cashier';
   }).sort(function(a,b){return requestReviewAmount(b)-requestReviewAmount(a);});
 }
 function ceoCashImpactAmount(r){
@@ -7191,7 +7218,7 @@ function pendingSettingChangesCount(){
   return (SYSTEM_SETTINGS.pending_settings_changes||[]).filter(function(c){return c&&c.status==='pending';}).length;
 }
 function ceoDecisionCenterHtml(period,eid){
-  if(!S.user||S.user.role!=='ceo')return'';
+  if(!S.user||['ceo','cashier'].indexOf(S.user.role)<0)return'';
   var funding=ceoPendingFundingRequests();
   var fundingTotal=funding.reduce(function(s,r){return s+ceoCashImpactAmount(r);},0);
   var high=funding.filter(function(r){return requestReviewAmount(r)>=50000;}).length;
@@ -7202,24 +7229,24 @@ function ceoDecisionCenterHtml(period,eid){
     var e=gE(r.eid),d=gD(r.dc),issues=supervisorReviewIssues(r);
     var flags=issues.slice(0,2).map(function(x){return'<span class="badge '+(x.level==='high'?'b-rej':'b-wait')+'" style="font-size:9px">'+escAttr(x.label)+'</span>';}).join(' ');
     return'<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f0e6d6;align-items:flex-start"><div style="min-width:0"><div style="font-size:12px;font-weight:800;color:#334155">'+escAttr(r.no)+' '+flags+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">'+escAttr(r.app)+' · '+escAttr(e.s)+' · '+escAttr(r.dc+' '+(d.n||''))+'</div><div style="font-size:10px;color:#8b7358;margin-top:3px">放款後現金流出 '+fmt(ceoCashImpactAmount(r))+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:900;color:#8a1010">'+fmt(requestReviewAmount(r))+'</div><button class="btn-g" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="openDetail(\''+r.id+'\')">檢視</button></div></div>';
-  }).join('')||'<div style="font-size:12px;color:#94a3b8;padding:10px 0">目前沒有待執行長放款的申請。</div>';
+  }).join('')||'<div style="font-size:12px;color:#94a3b8;padding:10px 0">目前沒有待出納放款的申請。</div>';
   return'<div class="card" style="margin-bottom:12px;border-color:#f0c982;background:#fffaf2">'
     +'<div class="chd"><span class="cht">執行長決策中心</span><span style="font-size:11px;color:#a08060">'+monthLabel(period)+'</span></div>'
     +'<div style="padding:12px"><div class="grid three" style="margin-bottom:10px">'
-    +'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">待我放款</div><div style="font-size:22px;font-weight:900;color:#1f2a44">'+funding.length+' 筆</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">預計現金流出 '+fmt(fundingTotal)+'</div></div>'
+    +'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">待出納放款</div><div style="font-size:22px;font-weight:900;color:#1f2a44">'+funding.length+' 筆</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">目前由執行長代行 · 預計現金流出 '+fmt(fundingTotal)+'</div></div>'
     +'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">重大/缺件風險</div><div style="font-size:22px;font-weight:900;color:'+(high+missing?'#8a1010':'#1f2a44')+'">'+(high+missing)+' 件</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">高金額 '+high+' · 缺附件 '+missing+'</div></div>'
     +'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">待核准設定</div><div style="font-size:22px;font-weight:900;color:'+(settingCount?'#9a5a00':'#1f2a44')+'">'+settingCount+' 筆</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">含會計科目、權限或系統設定</div></div>'
     +'</div>'
     +'<div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.8fr);gap:10px;align-items:start">'
     +'<div><div style="font-size:12px;font-weight:800;color:#334155;margin-bottom:6px">待放款清單</div>'+rows+'</div>'
-    +'<div style="background:#fff;border:1px solid #ead8c2;border-radius:10px;padding:10px"><div style="font-size:12px;font-weight:800;color:#334155;margin-bottom:6px">老闆視角提醒</div><div style="font-size:11px;color:#6a5840;line-height:1.7">執行長核准後，現金流量表會先認列實際撥款；最後一關會計收到憑據後，才更新資產負債表與損益表，避免重複入帳。</div><div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.6">營業稅：'+(tax.payable>0?'本期應繳 '+fmt(tax.payable):(tax.credit>0?'尚可折抵 '+fmt(tax.credit):'互抵為 0'))+'</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px"><button class="btn-p" onclick="openApprovalTab(\'p\')">處理待簽核</button><button class="btn-g" onclick="nav(\'settings\',null)">檢核設定</button><button class="btn-g" onclick="nav(\'reports\',null)">看三表</button></div></div>'
+    +'<div style="background:#fff;border:1px solid #ead8c2;border-radius:10px;padding:10px"><div style="font-size:12px;font-weight:800;color:#334155;margin-bottom:6px">老闆視角提醒</div><div style="font-size:11px;color:#6a5840;line-height:1.7">執行長關卡負責主管與風險授權；出納放款關卡才代表錢已實際發出，現金流量表也只在出納放款後認列。最後一關會計收到憑據後，才更新資產負債表與損益表，避免重複入帳。</div><div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.6">營業稅：'+(tax.payable>0?'本期應繳 '+fmt(tax.payable):(tax.credit>0?'尚可折抵 '+fmt(tax.credit):'互抵為 0'))+'</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px"><button class="btn-p" onclick="openApprovalTab(\'p\')">處理待簽核</button><button class="btn-g" onclick="nav(\'settings\',null)">檢核設定</button><button class="btn-g" onclick="nav(\'reports\',null)">看三表</button></div></div>'
     +'</div></div></div>';
 }
 window.withdrawRequest=async function(rid){
   if(S.withdrawBusy)return;
   var r=REQS.find(function(x){return x.id===rid;});
   if(!r)return;
-  if(!canWithdrawRequest(r)){alert('這張單已進入執行長放款或後續關卡，不能抽單。');return;}
+  if(!canWithdrawRequest(r)){alert('這張單已進入出納放款或後續關卡，不能抽單。');return;}
   if(!confirm('確定要抽單並刪除這張申請？刪除後不會再出現在我的申請。'))return;
   var reason='申請人自行抽單';
   try{
@@ -7264,7 +7291,7 @@ window.openDetail=function(rid){
   var detailUpload='<div style="min-width:260px;max-width:420px;flex:1">'+approvalActionFields('appr-c','appr-files','appr-add-user')+'</div>';
   var advanceFinalAmtField=r.type==='advance_request'?advanceFinalAccountingHtml(r):'';
   var returnBtn=canActRequest(r)&&canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPrevious(\''+r.id+'\')">退回上一關</button>':'';
-  var approveLabel=curStep&&curStep.rk==='ceo'?'核准放款並更新現金流':'核准';
+  var approveLabel=curStep&&curStep.rk==='cashier'?'出納放款並更新現金流':'核准';
   if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request'&&curStep&&curStep.rk==='procurement_payment')acts.push(procurementPaymentActionHtml(r,false)+'<button class="btn-p" style="background:#0f766e" onclick="submitProcurementPaymentInfo(\''+r.id+'\')">送出總務付款資料</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
   else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request')acts.push('<div style="min-width:280px;max-width:520px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計銷帳與三表只會以這個實際金額入帳，預估金額只保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+approvalActionFields('proc-c','proc-files','proc-add-user')+'</div><button class="btn-p" style="background:#0f766e" onclick="submitProcurementActual(\''+r.id+'\')">提交憑據與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
   else if(canActRequest(r)&&r.status!=='pending_applicant_confirm'&&r.status!=='pending_voucher')acts.push(detailUpload+'<button class="btn-p" onclick="doApprove(\''+r.id+'\')">'+approveLabel+'</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">退件</button>');
@@ -7314,7 +7341,7 @@ window.doApprove=async function(rid){
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'approval_step');
   if(shouldCollectAccountingLines(r,beforeStep))collectAccountingLinesFromDom(r,'detail-acct-line');
   approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
-  if(r.type==='advance_request'&&beforeStep&&beforeStep.rk==='ceo')await postAdvanceDisbursementEvent(r);
+  if(r.type==='advance_request'&&beforeStep&&(beforeStep.rk==='cashier'||(beforeStep.rk==='ceo'&&!(r.steps||[]).some(function(s){return s.rk==='cashier';}))))await postAdvanceDisbursementEvent(r);
   await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps,debit_account:r.dr,debit_account_name:r.drN,credit_account:r.cr,credit_account_name:r.crN,form_payload:r.formPayload||{},cash_posted_at:requestCashPostedAt(r)||null});
   await persistAccountingLinesRemote(r);
   buildAll();openDetail(rid);
@@ -7366,7 +7393,7 @@ window.doConfirmPay=async function(rid){
   if(!canActRequest(r)){alert('目前不是您的確認步驟');return;}
   var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
   if(r.type==='advance_request'){
-    if(!p.files||!p.files.length){alert('預支申請第 7 關需上傳最後花費的憑據照片/PDF，以及即時 Excel 明細表。');return;}
+    if(!p.files||!p.files.length){alert('預支申請第 8 關需上傳最後花費的憑據照片/PDF，以及即時 Excel 明細表。');return;}
     if(!p.files.some(attachmentIsReceiptEvidence)){alert('請至少上傳一份最後憑據照片或 PDF。');return;}
     if(!p.files.some(attachmentIsExcel)){alert('請上傳即時 Excel 明細表檔案（Excel 或 CSV）。');return;}
   }
@@ -7750,8 +7777,8 @@ function showApprD(r){
     else actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計最後會以此實際支出金額切傳票與認列三表，預估金額僅保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+approvalActionFields('proc-c','proc-files','proc-add-user')+'<button class="btn-p" style="width:100%;justify-content:center;background:#0f766e;margin-bottom:5px" onclick="submitProcurementActual(\''+r.id+'\')">提交憑據發票與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':'')+'</div>';
   }
   else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+advanceFinalAmtField+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080;margin-bottom:5px" onclick="doConfirmVoucher(\''+r.id+'\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn+'</div>';
-  else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+(cur.rk==='ceo'?'<div style="font-size:11px;color:#7a3b00;line-height:1.6;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px;margin-bottom:8px">按下核准後，系統會先在現金流量表認列撥款 '+fmt(ceoCashImpactAmount(r))+'；最後一關會計收到憑據後才更新資產負債表與損益表。</div>':'')+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">'+(cur.rk==='ceo'?'核准放款並更新現金流':'核准此申請')+'</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">整批退件</button></div>';
-  if(!actH&&canWithdrawRequest(r))actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-top:6px">單子尚未進入執行長放款關卡，因此申請人可以抽單取消。</div></div>';
+  else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+(cur.rk==='cashier'?'<div style="font-size:11px;color:#7a3b00;line-height:1.6;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px;margin-bottom:8px">按下出納放款後，系統會先在現金流量表認列撥款 '+fmt(ceoCashImpactAmount(r))+'；最後一關會計收到憑據後才更新資產負債表與損益表。</div>':'')+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">'+(cur.rk==='cashier'?'出納放款並更新現金流':'核准此申請')+'</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">整批退件</button></div>';
+  if(!actH&&canWithdrawRequest(r))actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-top:6px">單子尚未進入出納放款關卡，因此申請人可以抽單取消。</div></div>';
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:monospace;font-size:10px;color:#c0a080">'+r.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+r.app+' · '+e.s+'</div></div></div>'
     +supervisorReviewCardHtml(r,true)
@@ -7811,7 +7838,7 @@ window.apprApprove=async function(rid){
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'approval_step');
   if(shouldCollectAccountingLines(r,beforeStep))collectAccountingLinesFromDom(r,'appr-acct-line');
   approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
-  if(r.type==='advance_request'&&beforeStep&&beforeStep.rk==='ceo')await postAdvanceDisbursementEvent(r);
+  if(r.type==='advance_request'&&beforeStep&&(beforeStep.rk==='cashier'||(beforeStep.rk==='ceo'&&!(r.steps||[]).some(function(s){return s.rk==='cashier';}))))await postAdvanceDisbursementEvent(r);
   await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps,debit_account:r.dr,debit_account_name:r.drN,credit_account:r.cr,credit_account_name:r.crN,form_payload:r.formPayload||{},cash_posted_at:requestCashPostedAt(r)||null});
   await persistAccountingLinesRemote(r);
   buildAll();closeAppr();
@@ -9565,7 +9592,7 @@ function renderUsers(){
     var hay=[u.n,u.email,u.rL,RL[u.role],u.dc,d.n,ent.s,ent.full].join(' ').toLowerCase();
     return(!q||hay.indexOf(q)>-1)&&(!rf||u.role===rf);
   });
-  var RC={employee:'b-gray',section_chief:'b-blue',dept_manager:'b-purp',admin_director:'b-wait',general_affairs:'b-teal',hr:'b-blue',accountant:'b-ok',ceo:'b-wait'};
+  var RC={employee:'b-gray',section_chief:'b-blue',dept_manager:'b-purp',admin_director:'b-wait',general_affairs:'b-teal',hr:'b-blue',accountant:'b-ok',cashier:'b-wait',ceo:'b-wait'};
   el('user-sub').textContent='共 '+USERS.length+' 位，'+USERS.filter(function(u){return u.active;}).length+' 位啟用中';
   var canEdit=canManageUsers();
   var aw=el('user-add-wrap');if(aw)aw.innerHTML=canEdit?'<button class="btn-p" onclick="openAddUser()">+ 新增人員</button>':'';
