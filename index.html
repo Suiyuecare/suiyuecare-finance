@@ -3223,6 +3223,8 @@ function directSupervisorUser(appUser){
   return role?firstUserByRole(role):null;
 }
 function departmentManagerUser(appUser){
+  if(!appUser)return null;
+  if(['dept_manager','admin_director','ceo'].indexOf(appUser.role)>-1)return null;
   var seen={},cur=appUser;
   for(var i=0;i<8&&cur&&!seen[cur.id];i++){
     seen[cur.id]=true;
@@ -3247,7 +3249,7 @@ function buildApprovalSteps(appUser,requestType){
     var pSupervisor=directSupervisorUser(appUser),pDirect=(pSupervisor&&pSupervisor.role)||directSupervisorRole(appUser.role);
     padd(pDirect,'申請人主管通過'+(pSupervisor?'：'+pSupervisor.n:''),STEP_FOR[pDirect]||'pending_section_chief',pSupervisor);
     var pDeptManager=departmentManagerUser(appUser);
-    padd('dept_manager','申請人部門主任通過'+(pDeptManager?'：'+pDeptManager.n:''),'pending_dept_manager',pDeptManager);
+    if(pDeptManager)padd('dept_manager','申請人部門主任通過：'+pDeptManager.n,'pending_dept_manager',pDeptManager);
     padd('accountant','會計通過','pending_accountant');
     padd('ceo','執行長／部門主管上層授權','pending_ceo');
     padd('cashier','出納放款（目前由執行長代行）','pending_cashier',cashierUser());
@@ -3268,7 +3270,7 @@ function buildApprovalSteps(appUser,requestType){
   var deptManager=departmentManagerUser(appUser);
   if(requestType==='advance_request'){
     add(direct,'主管通過'+(supervisor?'：'+supervisor.n:''),STEP_FOR[direct]||'pending_section_chief',supervisor);
-    add('dept_manager','部門主管通過'+(deptManager?'：'+deptManager.n:''),'pending_dept_manager',deptManager);
+    if(deptManager)add('dept_manager','部門主管通過：'+deptManager.n,'pending_dept_manager',deptManager);
     add('admin_director','行政部門主任','pending_admin_director');
     add('accountant','會計','pending_accountant');
     add('ceo','執行長／部門主管上層授權','pending_ceo');
@@ -3278,7 +3280,7 @@ function buildApprovalSteps(appUser,requestType){
     return steps;
   }
   add(direct,'上一層級主管：'+(supervisor?supervisor.n:(RL[direct]||direct)),STEP_FOR[direct]||'pending_section_chief',supervisor);
-  add('dept_manager','部門主管'+(deptManager?'：'+deptManager.n:''),'pending_dept_manager',deptManager);
+  if(deptManager)add('dept_manager','部門主管：'+deptManager.n,'pending_dept_manager',deptManager);
   add('admin_director','行政部門主任','pending_admin_director');
   add('accountant','會計','pending_accountant');
   add('ceo','執行長／部門主管上層授權','pending_ceo');
