@@ -4683,17 +4683,6 @@ function employeeDashboardGuideHtml(myReqs,pendingMine,drafts){
     +'</div>'
   +'</div>';
 }
-function employeeTypePickerHelpHtml(){
-  var rules=[
-    ['已經先墊錢','費用報銷','expense_reimbursement'],
-    ['公司要直接付廠商','付款申請','payment_request'],
-    ['還沒花，先借支','預支申請','advance_request'],
-    ['請總務買東西','採購申請','purchase_request']
-  ];
-  return '<div class="type-picker-help"><div class="type-picker-help-title">不知道要選哪一種？先看這四個最常見情境</div><div class="type-picker-rules">'
-    +rules.map(function(r){return'<button type="button" onclick="nrT(\''+r[2]+'\')"><strong>'+r[0]+'</strong><span>選「'+r[1]+'」</span></button>';}).join('')
-    +'</div></div>';
-}
 function requestTypeEmployeeNote(id){
   var map={
     expense_reimbursement:'適合：你已經先付錢。請準備發票/收據照片與自己的匯款資訊。',
@@ -4890,7 +4879,7 @@ function renderNR(){
   if(S.nrStep===1){
     if(grid)grid.style.gridTemplateColumns='1fr';
     if(side)side.style.display='none';
-    c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 1 — 選擇費用性質</span></div>'+employeeTypePickerHelpHtml()+'<div class="nr-type-grid" style="padding:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:stretch">'+NR_TYPES.map(nrTypeCardHtml).join('')+'</div></div>';
+    c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 1 — 選擇費用性質</span></div><div class="nr-type-grid" style="padding:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:stretch">'+NR_TYPES.map(nrTypeCardHtml).join('')+'</div></div>';
   }else if(S.nrStep===2){
     if(S.nrType==='hr_expense_request'){
       c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 2 — 選擇人事費用項目</span><button class="btn-g" onclick="nrBack(1)">← 返回</button></div><div style="padding:11px;display:flex;flex-direction:column;gap:8px">'+HR_ITEMS.map(function(x,i){return'<button class="step-type'+(S.hrItem===x.id?' on':'')+'" onclick="nrHrItem(\''+x.id+'\')" style="text-align:left;min-height:64px;width:100%;display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center"><div class="type-mark">'+(i+1)+'</div><div><div style="font-size:14px;font-weight:650;color:#263244">'+x.label+'</div><div style="font-size:11px;color:#8b7358;margin-top:4px">'+(x.hint||'整批人事費用明細')+'</div></div></button>';}).join('')+'</div></div>';
