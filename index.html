@@ -3149,7 +3149,8 @@ function canManageSettings(){return S.user&&['ceo','admin_director','accountant'
 function canAccessPage(id){
   if(id==='detail')return true;
   if(!S.user)return false;
-  if(['shareholder','invoices','bills','recv'].indexOf(id)>-1)return ['ceo','admin_director','accountant'].indexOf(S.user.role)>-1;
+  if(id==='invoices')return true;
+  if(['shareholder','bills','recv'].indexOf(id)>-1)return ['ceo','admin_director','accountant'].indexOf(S.user.role)>-1;
   if(id==='users')return canManageUsers();
   if(id==='orgchart')return canManageOrgChart();
   if(id==='settings')return canManageSettings();
@@ -9351,14 +9352,15 @@ function renderSettingFees(){
 function renderSettingPermissions(){
   var head=el('settings-perm-head'),body=el('settings-perms');if(!head||!body)return;
   var roles=Object.keys(RL);
-  var incomePages=['shareholder','invoices','bills','recv'];
+  var incomePages=['shareholder','bills','recv'];
   var incomeRoles=['ceo','admin_director','accountant'];
   head.innerHTML='<tr><th>功能</th>'+roles.map(function(r){return'<th>'+RL[r]+'</th>';}).join('')+'</tr>';
   body.innerHTML=PERMISSION_PAGES.map(function(p){
     return'<tr><td style="font-weight:650;color:#334155">'+PAGE_LABELS[p]+'</td>'+roles.map(function(r){
       var isIncome=incomePages.indexOf(p)>-1,allowedIncome=incomeRoles.indexOf(r)>-1;
-      var checked=isIncome?allowedIncome:(ROLE_PERMISSIONS[r]||[]).indexOf(p)>-1;
-      var locked=p==='settings'||isIncome;
+      var openToAll=p==='invoices';
+      var checked=openToAll?true:(isIncome?allowedIncome:(ROLE_PERMISSIONS[r]||[]).indexOf(p)>-1);
+      var locked=p==='settings'||isIncome||openToAll;
       return'<td style="text-align:center"><input type="checkbox" '+(checked?'checked':'')+' '+(locked||!SETTINGS_EDIT?'disabled':'')+' onchange="toggleRolePermission(\''+r+'\',\''+p+'\',this.checked)"></td>';
     }).join('')+'</tr>';
   }).join('');
