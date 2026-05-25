@@ -4,13 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#ea880c">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="歲悅財務">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="application-name" content="歲悅財務">
-<meta name="msapplication-TileColor" content="#ea880c">
-<meta name="msapplication-TileImage" content="assets/pwa/icon-192.png">
 <title>歲悅長照集團 · 財務管理系統 V3</title>
 <script>
 (function(){
@@ -22,13 +15,6 @@
 })();
 </script>
 <link rel="icon" type="image/png" href="assets/suiyue-logo-transparent.png">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="assets/pwa/apple-touch-icon.png">
-<link rel="apple-touch-startup-image" href="assets/pwa/splash-iphone-390x844.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-<link rel="apple-touch-startup-image" href="assets/pwa/splash-iphone-393x852.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-<link rel="apple-touch-startup-image" href="assets/pwa/splash-iphone-430x932.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-<link rel="apple-touch-startup-image" href="assets/pwa/splash-ipad-768x1024.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
-<link rel="apple-touch-startup-image" href="assets/pwa/splash-ipad-1024x1366.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
 :root{--br:#ea880c;--brd:#c97008;--brl:#f5c060;--brxl:#fde8bc;--brxxl:#fff8ed;--brtxt:#5c3800;--cream:#fdf8f2;--warm:#f8f0e4}
@@ -1288,8 +1274,8 @@ html,body{overflow-x:hidden}
         使用 Google 帳號快速登入
       </button>
       <div class="oauth-webview-warning" id="oauth-webview-warning">
-        <strong>手機 App 內建瀏覽器無法使用 Google 登入</strong>
-        Google 會封鎖 LINE、Facebook、Instagram 等 App 內建瀏覽器的 OAuth 登入。請用 Safari 或 Chrome 開啟正式網址後再登入。
+        <strong>內建瀏覽器無法使用 Google 登入</strong>
+        Google 會封鎖 LINE、Facebook、Instagram 等內建瀏覽器的 OAuth 登入。請用 Safari 或 Chrome 開啟正式網址後再登入。
         <button type="button" onclick="copyOfficialUrl()">複製正式網址</button>
       </div>
       <div class="divider">或使用帳號密碼</div>
@@ -1920,7 +1906,6 @@ var OPENAI_INVOICE_OCR_ENDPOINT=SUPABASE_URL+'/functions/v1/parse-invoice-openai
 var SUPABASE_ATTACHMENT_BUCKET='finance-attachments';
 var PRODUCTION_APP_URL='https://finance.suiyuecare.com/';
 var HR_APP_URL='https://hr.suiyuecare.com/dashboard';
-var NATIVE_OAUTH_REDIRECT_URL='com.suiyuecare.finance://oauth-callback';
 var sb=null;
 var realtimeChannel=null;
 var syncTimer=null;
@@ -1936,16 +1921,6 @@ function getSb(){
   if(!hasSupabase())return null;
   if(!sb)sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
   return sb;
-}
-function capacitorPlugin(name){
-  return window.Capacitor&&window.Capacitor.Plugins?window.Capacitor.Plugins[name]:null;
-}
-function isCapacitorNativeApp(){
-  try{
-    return !!(window.Capacitor&&typeof window.Capacitor.isNativePlatform==='function'&&window.Capacitor.isNativePlatform());
-  }catch(e){
-    return false;
-  }
 }
 async function currentSupabaseSession(){
   var client=getSb();if(!client||!client.auth)return null;
@@ -1969,10 +1944,22 @@ async function ensureSupabaseStorageReady(){
   return {ok:true,session:sess};
 }
 function formatStorageUploadError(err){
-  var msg=(err&&(err.message||err.error_description||err.error))?String(err.message||err.error_description||err.error):String(err||'未知錯誤');
+  var details=[];
+  if(err&&typeof err==='object'){
+    ['message','error_description','error','statusCode','status','code','reason','name'].forEach(function(k){
+      if(err[k]!=null&&String(err[k]).trim())details.push(k+': '+String(err[k]));
+    });
+  }
+  var msg=details.length?details.join('；'):String(err||'未知錯誤');
   var lower=msg.toLowerCase();
+  if(lower.indexOf('invalid key')>-1){
+    return '附件路徑或檔名含有 Storage 不接受的字元：'+msg+'。系統已改為送出前強制轉成安全檔名，請重新整理頁面後再送出。';
+  }
+  if(lower.indexOf('jwt')>-1||lower.indexOf('unauthorized')>-1||lower.indexOf('not authenticated')>-1){
+    return '目前登入狀態已失效：'+msg+'。請登出後重新登入，再送出一次。';
+  }
   if(lower.indexOf('row-level security')>-1||lower.indexOf('rls')>-1){
-    return 'Supabase Storage RLS 擋住上傳：'+msg+'。請確認登入帳號已在 finance_users 啟用，且 finance-attachments 的 INSERT policy 允許 authenticated 使用者上傳。';
+    return 'Supabase Storage RLS 擋住上傳：'+msg+'。目前規則應允許已登入使用者上傳，請重新整理後再試；若仍失敗，請把這段錯誤訊息回傳。';
   }
   if(lower.indexOf('mime')>-1||lower.indexOf('not allowed')>-1){
     return '附件檔案格式被 Storage bucket 限制擋下：'+msg+'。請改傳 PDF/JPG/PNG/XLSX/DOCX，或把此 MIME type 加到 finance-attachments bucket。';
@@ -3651,13 +3638,12 @@ function clearHrSharedLogin(){
   document.cookie=HR_QUICK_LOGIN_COOKIE+'='+attrs+hrCookieDomainAttr();
 }
 function oauthRedirectUrl(){
-  if(isCapacitorNativeApp())return NATIVE_OAUTH_REDIRECT_URL;
   if(location.protocol==='file:')return PRODUCTION_APP_URL;
   if(location.hostname==='localhost'||location.hostname==='127.0.0.1')return location.origin+location.pathname;
   return PRODUCTION_APP_URL;
 }
 function oauthSetupHint(){
-  return 'Google 登入設定請確認：1. Google Cloud OAuth「已授權重新導向 URI」必須包含 '+SUPABASE_URL+'/auth/v1/callback；2. Supabase Auth URL Configuration 的 Site URL / Redirect URLs 必須包含 '+PRODUCTION_APP_URL+' 與 '+NATIVE_OAUTH_REDIRECT_URL+'；3. Vercel 正式網址與目前網址一致。';
+  return 'Google 登入設定請確認：1. Google Cloud OAuth「已授權重新導向 URI」必須包含 '+SUPABASE_URL+'/auth/v1/callback；2. Supabase Auth URL Configuration 的 Site URL / Redirect URLs 必須包含 '+PRODUCTION_APP_URL+'；3. Vercel 正式網址與目前網址一致。';
 }
 function isOAuthBlockedUserAgent(){
   var ua=navigator.userAgent||'';
@@ -3668,8 +3654,7 @@ function isOAuthBlockedUserAgent(){
   return inApp||(ios&&!isSafari&&!isKnownBrowser);
 }
 function oauthWebviewMessage(){
-  if(isCapacitorNativeApp())return 'App 版會使用系統瀏覽器開啟 Google 登入，完成後會自動回到歲悅財務。若沒有回來，請確認 Supabase Redirect URLs 已加入 '+NATIVE_OAUTH_REDIRECT_URL+'。';
-  return '目前是在手機 App 內建瀏覽器中開啟。Google 會封鎖這種 OAuth 登入方式（403 disallowed_useragent）。請點右上角或右下角選單，選「在 Safari 開啟」或「在 Chrome 開啟」，網址請使用：'+PRODUCTION_APP_URL;
+  return '目前是在內建瀏覽器中開啟。Google 會封鎖這種 OAuth 登入方式（403 disallowed_useragent）。請點右上角或右下角選單，選「在 Safari 開啟」或「在 Chrome 開啟」，網址請使用：'+PRODUCTION_APP_URL;
 }
 window.copyOfficialUrl=function(){
   var url=PRODUCTION_APP_URL;
@@ -3682,7 +3667,7 @@ window.copyOfficialUrl=function(){
 function updateOAuthWebviewNotice(){
   var box=el('oauth-webview-warning'),btn=document.querySelector('.google-btn');
   if(!box||!btn)return;
-  if(isOAuthBlockedUserAgent()&&!isCapacitorNativeApp()){
+  if(isOAuthBlockedUserAgent()){
     box.style.display='block';
     btn.title='請先用 Safari 或 Chrome 開啟正式網址後再使用 Google 登入';
   }else{
@@ -3699,7 +3684,7 @@ window.quickLogin=function(role){
 };
 window.googleLogin=async function(){
   var envSel=el('login-data-env');if(envSel)setDataEnvironment(envSel.value);
-  if(isOAuthBlockedUserAgent()&&!isCapacitorNativeApp()){
+  if(isOAuthBlockedUserAgent()){
     updateOAuthWebviewNotice();
     alert(oauthWebviewMessage());
     return;
@@ -3710,24 +3695,14 @@ window.googleLogin=async function(){
     return;
   }
   var err=el('login-err');if(err){err.style.display='none';err.textContent='';}
-  var nativeApp=isCapacitorNativeApp();
   var res=await client.auth.signInWithOAuth({
     provider:'google',
     options:{
       redirectTo:oauthRedirectUrl(),
-      skipBrowserRedirect:nativeApp,
       queryParams:{access_type:'offline',prompt:'select_account'}
     }
   });
   if(res.error&&err){err.style.display='block';err.textContent='Google 登入啟動失敗：'+res.error.message+'。'+oauthSetupHint();}
-  if(nativeApp&&!res.error&&res.data&&res.data.url){
-    var Browser=capacitorPlugin('Browser');
-    if(Browser&&Browser.open){
-      await Browser.open({url:res.data.url,windowName:'_blank',presentationStyle:'fullscreen'});
-    }else{
-      location.href=res.data.url;
-    }
-  }
 };
 async function completeOAuthFromUrl(rawUrl,cleanBrowserUrl){
   var client=getSb();
@@ -3764,30 +3739,11 @@ async function completeOAuthFromUrl(rawUrl,cleanBrowserUrl){
     if(cleanBrowserUrl&&history.replaceState){
       history.replaceState(null,document.title,location.pathname);
     }
-    var Browser=capacitorPlugin('Browser');
-    if(Browser&&Browser.close){try{await Browser.close();}catch(e){}}
     return true;
   }catch(e){
     var errBox=el('login-err');
     if(errBox){errBox.style.display='block';errBox.textContent='Google 登入回傳處理失敗：'+(e&&e.message?e.message:e)+'。'+oauthSetupHint();}
     return true;
-  }
-}
-function initCapacitorOAuthRedirect(){
-  if(!isCapacitorNativeApp())return;
-  var App=capacitorPlugin('App');
-  if(!App||!App.addListener)return;
-  App.addListener('appUrlOpen',function(event){
-    var url=event&&event.url?event.url:'';
-    if(url.indexOf(NATIVE_OAUTH_REDIRECT_URL)===0){
-      completeOAuthFromUrl(url,false);
-    }
-  });
-  if(App.getLaunchUrl){
-    App.getLaunchUrl().then(function(res){
-      var url=res&&res.url?res.url:'';
-      if(url.indexOf(NATIVE_OAUTH_REDIRECT_URL)===0)completeOAuthFromUrl(url,false);
-    }).catch(function(){});
   }
 }
 async function handleOAuthReturn(){
@@ -5030,7 +4986,7 @@ function renderLazyExpensePage(){
           +expenseOwnerFieldsHtml(entOpts,dOpts,userOpts,S.user?S.user.n:'')
           +'<div class="fg"><label class="fl">表單填寫日期</label><input type="date" id="nr-date" value="'+todayIso()+'"></div>'
           +'<div class="fg"><label class="fl">目的 *</label><input id="nr-desc-purpose" placeholder="例：活動採買、交通差旅、辦公用品"></div>'
-          +'<div class="fg"><label class="fl">備註內容</label><textarea id="nr-desc" rows="3" placeholder="補充說明，可由 Excel 明細自動帶入"></textarea></div>'
+          +'<div class="fg"><label class="fl">備註內容</label><textarea id="nr-desc" rows="3" placeholder="補充說明，可由 Excel 明細自動帶入" onkeydown="handleTextareaLineDelete(event)"></textarea></div>'
         +'</div><div class="nr-info-panel"><div class="nr-info-title">匯款資訊</div>'+paymentFieldsHtml()+'</div>'
       +'</div>'+nrSubmitActionsHtml()+'</div></div>'
       +lazyApprovalFlowHtml()
@@ -5095,7 +5051,7 @@ function renderNR(){
       +refundHtml
       +purchaseHtml
       +hrHtml
-      +'<div class="fg"><label class="fl">申請說明 * （請詳述費用用途）</label><textarea id="nr-desc" rows="3" placeholder="例：2026/05 居服部門薪資">'+(S.nrType==='hr_expense_request'?'2026/05 居服部門薪資':'')+'</textarea></div>'
+      +'<div class="fg"><label class="fl">申請說明 * （請詳述費用用途）</label><textarea id="nr-desc" rows="3" placeholder="例：2026/05 居服部門薪資" onkeydown="handleTextareaLineDelete(event)">'+(S.nrType==='hr_expense_request'?'2026/05 居服部門薪資':'')+'</textarea></div>'
       +aoHtml;
     var rightPayHtml=S.nrType==='hr_expense_request'?hrBatchPaymentFieldsHtml():(S.nrType==='purchase_request'?'<div style="font-size:12px;color:#334155;line-height:1.7;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:10px">採購申請由申請人先提出商品項目、數量與商品連結即可。總務會在下一關填寫預估匯款金額、收款人、銀行分行帳號與預計匯款日。</div>':paymentFieldsHtml());
     var submitActions=nrSubmitActionsHtml(S.nrType==='travel_request');
@@ -5560,6 +5516,29 @@ function lazyTaxAmount(r){return Math.max(0,num(r.taxAmount)||num(r.tax)||Math.m
 function lazyRowTotal(r){return Math.max(0,num(r.grossAmount)||num(r.total)||(lazyNetAmount(r)+lazyTaxAmount(r)));}
 function lazySum(){return S.lazyRows.reduce(function(s,r){return s+(r.systemFee?0:lazyRowTotal(r));},0);}
 function lazyDisplaySum(){return S.lazyRows.reduce(function(s,r){return s+lazyRowTotal(r);},0);}
+window.handleTextareaLineDelete=function(ev){
+  var target=ev&&ev.target;
+  if(!target||target.tagName!=='TEXTAREA')return;
+  if(ev.key!=='Backspace'&&ev.key!=='Delete')return;
+  if(target.selectionStart!==target.selectionEnd)return;
+  var pos=target.selectionStart;
+  var value=target.value||'';
+  var removeAt=-1;
+  var nextPos=pos;
+  if(ev.key==='Backspace'&&pos>0&&value.charAt(pos-1)==='\n'){
+    removeAt=pos-1;
+    nextPos=pos-1;
+  }else if(ev.key==='Delete'&&pos<value.length&&value.charAt(pos)==='\n'){
+    removeAt=pos;
+    nextPos=pos;
+  }
+  if(removeAt<0)return;
+  ev.preventDefault();
+  target.value=value.slice(0,removeAt)+value.slice(removeAt+1);
+  target.setSelectionRange(nextPos,nextPos);
+  target.dispatchEvent(new Event('input',{bubbles:true}));
+  target.dispatchEvent(new Event('change',{bubbles:true}));
+};
 function applyLazySummary(){
   if(!S.lazyRows.length)return;
   var amt=el('nr-amt');if(amt)amt.value=Math.round(lazySum());
@@ -10292,19 +10271,9 @@ window.buildCF = buildCF;
 window.renderLedger = renderLedger;
 setDemoLoginVisibility();
 updateOAuthWebviewNotice();
-initCapacitorOAuthRedirect();
 handleOAuthReturn();
 
 })();
-</script>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('/sw.js').catch(function(err){
-      console.warn('Service worker registration failed', err);
-    });
-  });
-}
 </script>
 </body>
 </html>

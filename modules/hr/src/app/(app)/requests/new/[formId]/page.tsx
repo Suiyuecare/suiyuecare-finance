@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, ChevronRight, Eye, Paperclip, Printer, Save, Send, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -361,6 +361,32 @@ export default function RequestFormPage() {
     if (value.trim()) clearFieldError("reason");
   }
 
+  function handleReasonKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Backspace" && event.key !== "Delete") return;
+    const target = event.currentTarget;
+    if (target.selectionStart !== target.selectionEnd) return;
+    const position = target.selectionStart;
+    const value = target.value;
+    let removeAt = -1;
+    let nextPosition = position;
+
+    if (event.key === "Backspace" && position > 0 && value.charAt(position - 1) === "\n") {
+      removeAt = position - 1;
+      nextPosition = position - 1;
+    } else if (event.key === "Delete" && position < value.length && value.charAt(position) === "\n") {
+      removeAt = position;
+      nextPosition = position;
+    }
+
+    if (removeAt < 0) return;
+    event.preventDefault();
+    const nextValue = value.slice(0, removeAt) + value.slice(removeAt + 1);
+    updateReason(nextValue);
+    window.requestAnimationFrame(() => {
+      target.setSelectionRange(nextPosition, nextPosition);
+    });
+  }
+
   function updateAttachments(fileNames: string[]) {
     setAttachments(fileNames);
     if (fileNames.length > 0) clearFieldError("attachments");
@@ -705,6 +731,7 @@ export default function RequestFormPage() {
                   <textarea
                     value={reason}
                     onChange={(event) => updateReason(event.target.value)}
+                    onKeyDown={handleReasonKeyDown}
                     className="min-h-32 w-full rounded-md border border-[#dfc9b1] bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#d97706]/20"
                     placeholder={getReasonPlaceholder(activeForm.id)}
                   />

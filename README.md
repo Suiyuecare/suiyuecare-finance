@@ -8,7 +8,7 @@
 - Finance 登入後的模組選擇頁已將「人資系統」改為可進入工作台，目前導向 `https://hr.suiyuecare.com/modules`。
 - Vercel 已保留 `/hr` 與 `/hr/:path*` redirect，方便之後把入口統一成 Finance 主系統路徑。
 - Supabase 已套用 HR/Finance 共用核心資料表，包含 `companies`、`branches`、`departments`、`positions`、`roles`、`employees`、`users`，並由 Finance 的 `system_settings` 與 `finance_users` 同步。
-- 下一階段若要做到「完全同一個 Vercel project runtime」，需要把 Finance 靜態 PWA 逐步改成 Next.js shell，或把 HR Next app 設為 Finance repo 的 Vercel build app；不能直接把 Next.js app 混進目前 `www` 靜態輸出而不改架構。
+- 下一階段若要做到「完全同一個 Vercel project runtime」，需要把 Finance 靜態網站逐步改成 Next.js shell，或把 HR Next app 設為 Finance repo 的 Vercel build app；不能直接把 Next.js app 混進目前 `www` 靜態輸出而不改架構。
 
 ## 上線前設定
 
@@ -21,7 +21,7 @@
    `supabase/compliance_and_drafts.sql`
 3. 在 Supabase Authentication 建立員工帳號，Email 需與 `finance_users.email` 一致。
 4. 在 `index.html` 填入 `SUPABASE_ANON_KEY`。只能放 anon public key，不能放 service role key。
-5. 若要使用 Google 登入，在 Supabase Auth Providers 啟用 Google；Google Cloud OAuth「已授權重新導向 URI」需加入 `https://udtlppnrugmtzhigdsxo.supabase.co/auth/v1/callback`。Supabase Auth URL Configuration 的 Site URL 設為 `https://finance.suiyuecare.com`，Redirect URLs 需加入 `https://finance.suiyuecare.com/` 與 App 回跳網址 `com.suiyuecare.finance://oauth-callback`。
+5. 若要使用 Google 登入，在 Supabase Auth Providers 啟用 Google；Google Cloud OAuth「已授權重新導向 URI」需加入 `https://udtlppnrugmtzhigdsxo.supabase.co/auth/v1/callback`。Supabase Auth URL Configuration 的 Site URL 設為 `https://finance.suiyuecare.com`，Redirect URLs 需加入 `https://finance.suiyuecare.com/`。
 6. 若要使用 OpenAI 發票辨識，部署 `supabase/functions/parse-invoice-openai`，並在 Supabase Edge Function secrets 設定 `OPENAI_API_KEY`。
 
 ## 核心資料流
@@ -43,26 +43,6 @@
 - 資料統整最強：儀表板、收款情形、三表、分類帳共用同一批資料來源，優先採用已入帳分錄。
 - 即時：Supabase Realtime 開啟後，使用者不用重新整理即可看到最新待辦與財務數字。
 
-## 手機 App 專案
+## 網頁版部署
 
-本 repo 已建立 Capacitor iOS / Android 專案。
-
-常用指令：
-
-```bash
-pnpm install
-pnpm run cap:sync
-pnpm run cap:open:ios
-pnpm run cap:open:android
-```
-
-注意事項：
-
-- Web 打包輸出在 `www/`，執行 `pnpm run cap:sync` 時會重新複製 `index.html`、`assets/`、`docs/`、PWA 檔案到原生專案。
-- iOS 專案使用 Swift Package Manager，不需要 CocoaPods。
-- 原生 App icon 與 splash source 檔在 `resources/`。
-- iOS 編譯需要完整 Xcode；Android 編譯需要 Android Studio / JDK。
-- 隱私權政策頁在 `privacy.html`，正式網址為 `https://finance.suiyuecare.com/privacy.html`。
-- 上架審核資料草稿在 `docs/app_store_review_notes.md`。
-- 行動版打包與送審流程在 `docs/mobile_release_runbook.md`。
-- 手機截圖草稿在 `docs/app-store-screenshots/`。
+目前專注在網頁正式版、RWD 與模組整合。正式網址為 `https://finance.suiyuecare.com/`，Vercel build 輸出在 `www/`。
