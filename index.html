@@ -1568,6 +1568,24 @@ var TCSS={expense_reimbursement:'b-wait',payment_request:'b-blue',advance_reques
 var SCSS={completed:'b-ok',rejected:'b-rej',cancelled:'b-gray',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_procurement:'b-teal',pending_hr:'b-blue',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal',pending_countersign:'b-purp'};
 var SL={completed:'已完成',rejected:'已退件',cancelled:'已抽單取消',pending_section_chief:'待上一層主管',pending_dept_manager:'待部門主管',pending_admin_director:'待行政部門主任',pending_procurement:'待總務採購審核',pending_hr:'待人資',pending_accountant:'待會計',pending_ceo:'待執行長',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳',pending_countersign:'待指定員工加簽'};
 var RL={employee:'一般組員',section_chief:'課長',dept_manager:'部門主管',admin_director:'行政部門主任',general_affairs:'總務',hr:'人資',accountant:'會計',ceo:'執行長'};
+function normalizedRoleKey(u){
+  var raw=String((u&&u.role)||'').trim();
+  var label=String((u&&u.rL)||(u&&u.role_label)||'').trim();
+  var email=String((u&&u.email)||'').trim().toLowerCase();
+  if(email==='entrepreneur@suiyuecare.com')return'ceo';
+  if(RL[raw])return raw;
+  if(raw==='執行長'||label==='執行長')return'ceo';
+  if(raw==='行政部門主任'||raw==='行政主任'||label==='行政部門主任'||label==='行政主任')return'admin_director';
+  if(raw==='會計'||label==='會計')return'accountant';
+  if(raw==='人資'||label==='人資')return'hr';
+  if(raw==='總務'||label==='總務')return'general_affairs';
+  if(raw==='部門主管'||label==='部門主管')return'dept_manager';
+  if(raw==='課長'||label==='課長')return'section_chief';
+  if(raw==='一般組員'||raw==='一般員工'||label==='一般組員'||label==='一般員工')return'employee';
+  return raw||'employee';
+}
+function isCeoUser(u){return normalizedRoleKey(u||S.user)==='ceo';}
+function currentRoleKey(){return normalizedRoleKey(S.user);}
 var ACCTS=[
   // 流動資產
   {c:'1111',n:'零用金',s:'debit',d:'all',on:true},
@@ -2417,8 +2435,9 @@ window.downloadAttachment=function(reqId,idx){
 function mapUser(u){
   var dc=u.dc||u.department_code;
   var name=u.n||u.name;
-  if((u.email==='8@suiyuecare.com'||u.id==='u8'||u.role==='general_affairs')&&name==='朱雪欣')name='朱夏欣';
-  return {id:u.id,n:name,email:u.email,pw:u.pw||u.demo_password||'',role:u.role,rL:u.rL||u.role_label||RL[u.role]||u.role,eid:u.eid||u.entity_id||entityOfDept(dc)||'E1',dc:dc,init:u.init||String(name||'?').slice(0,1),active:u.active!==false};
+  var role=normalizedRoleKey(u);
+  if((u.email==='8@suiyuecare.com'||u.id==='u8'||role==='general_affairs')&&name==='朱雪欣')name='朱夏欣';
+  return {id:u.id,n:name,email:u.email,pw:u.pw||u.demo_password||'',role:role,rL:u.rL||u.role_label||RL[role]||role,eid:u.eid||u.entity_id||entityOfDept(dc)||'E1',dc:dc,init:u.init||String(name||'?').slice(0,1),active:u.active!==false};
 }
 function requestFeeBearer(r){
   var raw=r&&r.feeBearer||r&&r.fee_bearer||'';
@@ -3142,20 +3161,20 @@ async function callAccountingRpc(name,args){
 
 function gD(c){return DEPTS.find(function(d){return d.c===c;})||{c:c,n:c,lv:2};}
 function gE(id){return ENTS.find(function(e){return e.id===id;})||ENTS[0];}
-function isFinance(){return S.user&&['accountant','ceo','admin_director'].indexOf(S.user.role)>-1;}
-function canManageUsers(){return S.user&&['ceo','admin_director','hr'].indexOf(S.user.role)>-1;}
-function canManageOrgChart(){return S.user&&['ceo','hr','admin_director'].indexOf(S.user.role)>-1;}
-function canManageSettings(){return S.user&&['ceo','admin_director','accountant'].indexOf(S.user.role)>-1;}
+function isFinance(){return S.user&&['accountant','ceo','admin_director'].indexOf(currentRoleKey())>-1;}
+function canManageUsers(){return S.user&&['ceo','admin_director','hr'].indexOf(currentRoleKey())>-1;}
+function canManageOrgChart(){return S.user&&['ceo','hr','admin_director'].indexOf(currentRoleKey())>-1;}
+function canManageSettings(){return S.user&&['ceo','admin_director','accountant'].indexOf(currentRoleKey())>-1;}
 function canAccessPage(id){
   if(id==='detail')return true;
   if(!S.user)return false;
   if(id==='invoices')return true;
-  if(['shareholder','bills','recv'].indexOf(id)>-1)return ['ceo','admin_director','accountant'].indexOf(S.user.role)>-1;
+  if(['shareholder','bills','recv'].indexOf(id)>-1)return ['ceo','admin_director','accountant'].indexOf(currentRoleKey())>-1;
   if(id==='users')return canManageUsers();
   if(id==='orgchart')return canManageOrgChart();
   if(id==='settings')return canManageSettings();
-  if(id==='compliance')return isFinance()||S.user.role==='hr';
-  var allowed=ROLE_PERMISSIONS[S.user.role]||defaultRolePermissions()[S.user.role]||[];
+  if(id==='compliance')return isFinance()||currentRoleKey()==='hr';
+  var allowed=ROLE_PERMISSIONS[currentRoleKey()]||defaultRolePermissions()[currentRoleKey()]||[];
   return allowed.indexOf(id)>-1;
 }
 function applyRolePermissions(){
@@ -3796,6 +3815,7 @@ function doEnter(u){
     loadRemoteData().then(function(ok){
       if(ok){
         setRuntimeDefaults();
+        applyRolePermissions();
         initFilters();buildAll();
         startRealtime();
         setTopSyncStatus(syncStatusText());
