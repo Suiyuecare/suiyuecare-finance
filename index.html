@@ -1000,7 +1000,6 @@ html,body{overflow-x:hidden}
       <div class="card"><div class="chd"><span class="cht">8. 執行長年度審核</span><button class="btn-p" onclick="approveAnnualReview()">審核通過</button></div><div style="padding:12px" id="annual-review-box"></div></div>
     </div>
     <div class="card" style="margin-top:12px"><div class="chd"><span class="cht">9. 備份與還原</span><div style="display:flex;gap:6px;align-items:center"><button class="btn-g" onclick="downloadBackupPackage()">下載備份包</button><label class="btn-s" style="cursor:pointer">上傳備份包<input type="file" accept="application/json,.json" style="display:none" onchange="backupFileChange(this)"></label></div></div><div style="padding:12px" id="backup-box"></div></div>
-    <div class="card" style="margin-top:12px"><div class="chd"><span class="cht">10. 勞檢資料準備</span><button class="btn-g" onclick="exportLaborInspectionPackage()">匯出勞檢包 CSV</button></div><div style="padding:12px" id="labor-inspection-box"></div></div>
   </div>
 
   <!-- 通知 -->
@@ -7846,68 +7845,6 @@ function backupReadableSummary(s){
   s=s||{};
   return '申請 '+(s.requests||0)+'、發票 '+(s.invoices||0)+'、傳票 '+(s.vouchers||0)+'、分類帳 '+(s.ledger||0)+'、繳費 '+(s.bills||0)+'、人員 '+(s.users||0);
 }
-function laborRelatedRequests(period,eid){
-  return REQS.filter(function(r){
-    if(!inActiveDataEnvironment(r)||!inEntity(eid,r,'req')||!inPeriod(r.date,period))return false;
-    if(r.type==='hr_expense_request')return true;
-    var txt=[r.tL,r.desc,((r.formPayload||{}).hrInfo||{}).item&&((r.formPayload||{}).hrInfo||{}).item.label].join(' ');
-    return /薪資|獎金|勞保|健保|勞退|二代健保|補充保費|資遣|離職|勞務|9A|9B|加班/.test(txt);
-  });
-}
-function laborRelatedBills(period,eid){
-  return BILLS.filter(function(b){
-    if(!inActiveDataEnvironment(b)||!inEntity(eid,b,'bill')||!inPeriod(b.due||b.date,period))return false;
-    return /勞保|健保|勞退|補充保費/.test(String(b.item||b.note||''));
-  });
-}
-function laborInspectionSummary(eid,period){
-  var activeUsers=USERS.filter(function(u){return u.active!==false&&(!eid||eid==='all'||(u.eid||entityOfDept(u.dc)||'E1')===eid);});
-  var missingDept=activeUsers.filter(function(u){return !u.dc||!DEPTS.some(function(d){return d.c===u.dc;});});
-  var missingSupervisor=activeUsers.filter(function(u){return u.role!=='ceo'&&!(orgRowForUser(u.id)||{}).supervisorId;});
-  var hrReqs=laborRelatedRequests(period,eid);
-  var payroll=hrReqs.filter(function(r){return /薪資|獎金|加班|50薪資/.test([r.desc,((r.formPayload||{}).hrInfo||{}).item&&((r.formPayload||{}).hrInfo||{}).item.label].join(' '));});
-  var laborFee=hrReqs.filter(function(r){return /勞務|9A|9B/.test([r.desc,((r.formPayload||{}).hrInfo||{}).item&&((r.formPayload||{}).hrInfo||{}).item.label].join(' '));});
-  var severance=hrReqs.filter(function(r){return /資遣|離職/.test([r.desc,((r.formPayload||{}).hrInfo||{}).item&&((r.formPayload||{}).hrInfo||{}).item.label].join(' '));});
-  var insuranceBills=laborRelatedBills(period,eid);
-  var unpaidBills=insuranceBills.filter(function(b){return b.status!=='paid';});
-  var missingFiles=hrReqs.filter(function(r){return !requestAttachmentCount(r);});
-  var issues=[];
-  if(missingDept.length)issues.push('人員部門異常 '+missingDept.length+' 位');
-  if(missingSupervisor.length)issues.push('缺直屬主管 '+missingSupervisor.length+' 位');
-  if(missingFiles.length)issues.push('人事費用缺附件 '+missingFiles.length+' 張');
-  if(unpaidBills.length)issues.push('勞健保勞退繳費未完成 '+unpaidBills.length+' 筆');
-  return {activeUsers:activeUsers,missingDept:missingDept,missingSupervisor:missingSupervisor,hrReqs:hrReqs,payroll:payroll,laborFee:laborFee,severance:severance,insuranceBills:insuranceBills,unpaidBills:unpaidBills,missingFiles:missingFiles,issues:issues};
-}
-function laborInspectionHtml(eid,period){
-  var s=laborInspectionSummary(eid,period);
-  var issueHtml=s.issues.length?'<div style="font-size:11px;color:#7a3b00;line-height:1.7;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px;margin-top:8px">'+s.issues.map(function(x){return '• '+escAttr(x);}).join('<br>')+'</div>':'<div style="font-size:11px;color:#2a6010;line-height:1.7;background:#eaf8d8;border:1px solid #b0e090;border-radius:8px;padding:8px;margin-top:8px">目前未偵測到勞檢資料重大缺口。</div>';
-  return'<div style="font-size:12px;color:#334155;line-height:1.7;margin-bottom:10px">勞檢重點會先看人員名冊、勞動條件資料、薪資與加班費、勞保健保勞退繳費、資遣/離職給付及相關文件保存。此區只整理系統內已有資料，不會補估或產生假資料。</div>'
-    +'<div class="grid three" style="margin-bottom:10px">'
-    +'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">啟用人員</div><div style="font-size:18px;font-weight:800;color:#1e293b">'+s.activeUsers.length+' 位</div><div style="font-size:10px;color:#94a3b8">人員管理主檔</div></div>'
-    +'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">人事費用單</div><div style="font-size:18px;font-weight:800;color:#1e293b">'+s.hrReqs.length+' 張</div><div style="font-size:10px;color:#94a3b8">薪資/勞務/保費/資遣</div></div>'
-    +'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:3px">保費繳費</div><div style="font-size:18px;font-weight:800;color:'+(s.unpaidBills.length?'#8a1010':'#1e293b')+'">'+s.insuranceBills.length+' 筆</div><div style="font-size:10px;color:#94a3b8">未完成 '+s.unpaidBills.length+' 筆</div></div>'
-    +'</div>'
-    +'<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px">'
-    +'<div style="background:#fff;border:1px solid #ead8c2;border-radius:8px;padding:8px"><div style="font-size:10px;color:#a08060">薪資/獎金/加班</div><div style="font-size:15px;font-weight:800;color:#334155">'+s.payroll.length+' 張</div></div>'
-    +'<div style="background:#fff;border:1px solid #ead8c2;border-radius:8px;padding:8px"><div style="font-size:10px;color:#a08060">9A/9B 勞務</div><div style="font-size:15px;font-weight:800;color:#334155">'+s.laborFee.length+' 張</div></div>'
-    +'<div style="background:#fff;border:1px solid #ead8c2;border-radius:8px;padding:8px"><div style="font-size:10px;color:#a08060">資遣/離職</div><div style="font-size:15px;font-weight:800;color:#334155">'+s.severance.length+' 張</div></div>'
-    +'<div style="background:#fff;border:1px solid #ead8c2;border-radius:8px;padding:8px"><div style="font-size:10px;color:#a08060">缺附件</div><div style="font-size:15px;font-weight:800;color:'+(s.missingFiles.length?'#8a1010':'#334155')+'">'+s.missingFiles.length+' 張</div></div>'
-    +'</div>'+issueHtml;
-}
-window.exportLaborInspectionPackage=async function(){
-  if(!S.user||['ceo','admin_director','hr','accountant'].indexOf(S.user.role)<0){alert('只有執行長、行政部門主任、人資或會計可以匯出勞檢包');return;}
-  var eid=compEntity(),period=compPeriod(),s=laborInspectionSummary(eid,period),ent=gE(eid),csv='勞檢資料包\\n法人,'+csvCell(ent.full)+'\\n期間,'+csvCell(period)+'\\n匯出時間,'+csvCell(new Date().toISOString())+'\\n\\n';
-  csv+='【一、人員名冊】\\n姓名,Email,公司,部門,層級,狀態,直屬主管\\n';
-  s.activeUsers.forEach(function(u){var row=orgRowForUser(u.id)||{},sup=userById(row.supervisorId)||{};csv+=[u.n,u.email,gE(u.eid||entityOfDept(u.dc)||'E1').full,(u.dc||'')+' '+(gD(u.dc).n||''),u.rL||RL[u.role]||u.role,u.active===false?'停用':'啟用',sup.n||'未設定'].map(csvCell).join(',')+'\\n';});
-  csv+='\\n【二、人事費用與薪資勞務】\\n單號,日期,類型,申請人,金額,狀態,附件數,說明\\n';
-  s.hrReqs.forEach(function(r){csv+=[r.no,r.date,r.tL||requestTypeLabel(r.type),r.app,requestReviewAmount(r),SL[r.status]||r.status,requestAttachmentCount(r),String(r.desc||'').replace(/\\n/g,' ')].map(csvCell).join(',')+'\\n';});
-  csv+='\\n【三、勞健保勞退繳費】\\n項目,法人,金額,到期日,方式,狀態,說明\\n';
-  s.insuranceBills.forEach(function(b){csv+=[b.item,gE(b.eid).full,b.amt,b.due,b.method,b.status,b.note].map(csvCell).join(',')+'\\n';});
-  csv+='\\n【四、資料缺口】\\n項目\\n'+(s.issues.length?s.issues.map(csvCell).join('\\n'):'無重大缺口')+'\\n';
-  dlCSV(csv,'labor_inspection_'+eid+'_'+period+'.csv');
-  await auditLog('勞檢資料包匯出',ent.s+' '+period,'匯出人員名冊、人事費用、勞健保勞退與缺口清單',{eid:eid,period:period});
-  buildCompliance();
-};
 function buildBackupPackage(){
   return {
     schema:'module_finance_backup',
@@ -8031,7 +7968,6 @@ window.buildCompliance=function buildCompliance(){
     el('backup-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">備份包包含目前資料環境的申請、發票、傳票、分類帳、繳費、系統設定與合規紀錄。還原前會要求輸入確認文字，並留下 audit log。</div>'
       +'<div style="margin-top:8px">'+(BACKUP_EVENTS||[]).slice(0,5).map(function(b){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #f0e6d6"><div><div style="font-size:11px;font-weight:650;color:#334155">'+(b.action==='restore'?'還原':'備份')+' · '+(b.status||'completed')+'</div><div style="font-size:10px;color:#94a3b8">'+String(b.time||'').slice(0,19).replace('T',' ')+' · '+(b.by||'—')+' · '+backupReadableSummary(b.summary)+'</div></div><span class="badge '+(b.action==='restore'?'b-purp':'b-blue')+'">'+dataEnvLabel(b.dataEnv)+'</span></div>';}).join('')+'</div>';
   }
-  if(el('labor-inspection-box'))el('labor-inspection-box').innerHTML=laborInspectionHtml(eid,period);
 }
 window.closeAccountingPeriod=async function(){
   var eid=compEntity(),period=compPeriod();
