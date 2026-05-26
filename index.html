@@ -80,7 +80,16 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .fr2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
 #pg-newreq .fr2,#pg-newreq .fr3{grid-template-columns:1fr!important}
-#pg-newreq #nr-main-grid{grid-template-columns:1fr!important}
+#pg-newreq #nr-main-grid{grid-template-columns:minmax(0,1fr)!important}
+#pg-newreq #nr-main-grid,
+#pg-newreq #nr-main-grid>*,
+#pg-newreq #nr-content,
+#pg-newreq #nr-side-panel,
+#pg-newreq #nr-content>.card{
+  min-width:0!important;
+  max-width:100%!important;
+}
+#pg-newreq #nr-content{overflow:hidden}
 #pg-newreq .sheet-full-scroll{max-height:68vh!important}
 .nr-two-col{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:12px;align-items:start}
 .nr-info-panel{background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:11px;min-height:100%}
@@ -572,14 +581,21 @@ html,body{overflow-x:hidden}
 }
 /* New request detail sheets are spreadsheet editors. Keep them as tables on every viewport. */
 #pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) :is(.sheet-full-scroll,.lazy-sheet-scroll,.hr-sheet-scroll){
+  display:block!important;
+  position:relative!important;
+  width:100%!important;
+  min-width:0!important;
   max-width:100%!important;
   overflow-x:auto!important;
   overflow-y:auto!important;
   -webkit-overflow-scrolling:touch;
+  overscroll-behavior-x:contain;
+  touch-action:pan-x pan-y;
+  scrollbar-width:thin;
 }
 #pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table{
   display:table!important;
-  width:max-content!important;
+  width:auto!important;
   max-width:none!important;
   border-collapse:collapse!important;
   border-spacing:0!important;
@@ -622,6 +638,16 @@ html,body{overflow-x:hidden}
   word-break:normal!important;
   overflow-wrap:normal!important;
   line-height:1.35!important;
+}
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table input,
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table select{
+  min-width:92px!important;
+}
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table::after{
+  content:'';
+  display:block;
+  height:1px;
+  width:1px;
 }
 </style>
 </head>
