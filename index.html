@@ -570,6 +570,59 @@ html,body{overflow-x:hidden}
   .sheet-full-scroll table,.hr-sheet-scroll table,#lazy-sheet table,#hr-expense-sheet table{width:100%!important;min-width:0!important}
   .sheet-full-scroll::after,.hr-sheet-scroll::after{content:none!important;display:none!important}
 }
+/* New request detail sheets are spreadsheet editors. Keep them as tables on every viewport. */
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) :is(.sheet-full-scroll,.lazy-sheet-scroll,.hr-sheet-scroll){
+  max-width:100%!important;
+  overflow-x:auto!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch;
+}
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table{
+  display:table!important;
+  width:max-content!important;
+  max-width:none!important;
+  border-collapse:collapse!important;
+  border-spacing:0!important;
+  table-layout:auto!important;
+}
+#pg-newreq #lazy-sheet table.excel-sheet-table{min-width:1200px!important}
+#pg-newreq #travel-sheet table.excel-sheet-table{min-width:880px!important}
+#pg-newreq #refund-sheet table.excel-sheet-table{min-width:1260px!important}
+#pg-newreq #purchase-sheet table.excel-sheet-table{min-width:760px!important}
+#pg-newreq #hr-expense-sheet table.excel-sheet-table{min-width:1120px!important}
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table thead{display:table-header-group!important}
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table tbody{display:table-row-group!important}
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table tr{
+  display:table-row!important;
+  background:#fff!important;
+  border:none!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  margin:0!important;
+  padding:0!important;
+  overflow:visible!important;
+}
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table th,
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table td{
+  display:table-cell!important;
+  white-space:nowrap!important;
+  word-break:normal!important;
+  overflow:visible!important;
+  writing-mode:horizontal-tb!important;
+  vertical-align:middle!important;
+}
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table td::before,
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table td:empty::after{
+  content:none!important;
+  display:none!important;
+}
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table td *,
+#pg-newreq :is(#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet) table.excel-sheet-table th *{
+  writing-mode:horizontal-tb!important;
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+  line-height:1.35!important;
+}
 </style>
 </head>
 <body>
@@ -1638,13 +1691,28 @@ function filterSearchableSelect(sel,q){
   if(rows.some(function(o){return o.value===current&&!o.disabled;}))sel.value=current;
   else if(rows.some(function(o){return !o.disabled;}))sel.value=rows.find(function(o){return !o.disabled;}).value;
 }
+var EXCEL_SHEET_SELECTOR='#lazy-sheet,#travel-sheet,#refund-sheet,#purchase-sheet,#hr-expense-sheet';
+function isExcelSheetTable(table){
+  return !!(table&&table.closest&&table.closest(EXCEL_SHEET_SELECTOR));
+}
+function resetExcelSheetTable(table){
+  if(!isExcelSheetTable(table))return;
+  table.classList.remove('mobile-card-table');
+  delete table.dataset.mobileEnhanced;
+  Array.from(table.querySelectorAll('td[data-label]')).forEach(function(td){td.removeAttribute('data-label');});
+}
 function shouldEnhanceMobileTable(table){
   if(!table)return false;
+  if(isExcelSheetTable(table)){
+    resetExcelSheetTable(table);
+    return false;
+  }
   return !!table.querySelector('thead th');
 }
 function enhanceMobileTables(root){
   root=root||document;
   Array.from(root.querySelectorAll('table')).forEach(function(table){
+    resetExcelSheetTable(table);
     if(!shouldEnhanceMobileTable(table))return;
     var labels=Array.from(table.querySelectorAll('thead th')).map(function(th){return (th.textContent||'').trim()||'欄位';});
     Array.from(table.querySelectorAll('tbody tr')).forEach(function(tr){
@@ -5322,7 +5390,7 @@ function renderLazySheet(){
       +'</tr>';
   }).join('');
   box.innerHTML='<style>#lazy-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0}#lazy-sheet td,#lazy-sheet th{border:1px solid #e8dcc8;padding:0}#lazy-sheet th{background:#f7ead6;color:#7c3f00;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
-    +'<div class="lazy-sheet-scroll sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:1200px;width:100%"><thead><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>買方統編</th><th>賣方統編</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="lazy-sheet-scroll sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table class="excel-sheet-table" style="min-width:1200px;width:100%"><thead><tr><th>#</th><th>發票號碼</th><th>發票日期</th><th>買方統編</th><th>賣方統編</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>未稅</th><th>營業稅</th><th>含稅價格</th><th>來源檔案</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="lazyAdd()">新增一列</button><button class="btn-g" onclick="applyLazySummary()">回填金額與說明</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">明細合計（含稅，含手續費）</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(lazyDisplaySum())+'</div></div></div>';
   var nextScroll=box.querySelector('.lazy-sheet-scroll');
   if(nextScroll){nextScroll.scrollLeft=oldLeft;nextScroll.scrollTop=oldTop;}
@@ -5939,7 +6007,7 @@ function renderTravelSheet(){
       +'</tr>';
   }).join('');
   box.innerHTML='<style>#travel-sheet table input{border:none;background:transparent;padding:5px 6px;font-size:11px;width:100%;border-radius:0}#travel-sheet td,#travel-sheet th{border:1px solid #e8dcc8;padding:6px;vertical-align:top}#travel-sheet th{background:#f7ead6;color:#7c3f00;font-size:10px;font-weight:650;text-align:left}</style>'
-    +'<div class="sheet-full-scroll" style="overflow:auto;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:880px;width:100%"><thead><tr><th>費用項目</th><th>本次申請金額</th><th>申請金額上限</th><th>說明</th><th>規則</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="sheet-full-scroll" style="overflow:auto;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table class="excel-sheet-table" style="min-width:880px;width:100%"><thead><tr><th>費用項目</th><th>本次申請金額</th><th>申請金額上限</th><th>說明</th><th>規則</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><div style="font-size:11px;color:#8b7358">'+travelLimitSummary()+'</div><div style="text-align:right"><div style="font-size:10px;color:#94a3b8">差旅申請合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(travelSum())+'</div></div></div>';
 }
 function travelRowRuleText(kind){
@@ -6087,7 +6155,7 @@ function renderRefundSheet(){
       +'</tr>';
   }).join('');
   box.innerHTML='<style>#refund-sheet table input,#refund-sheet table select{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0;min-width:92px}#refund-sheet td,#refund-sheet th{border:1px solid #e8dcc8;padding:0}#refund-sheet th{background:#d9eaf7;color:#253044;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
-    +'<div class="sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:1260px;width:100%"><thead><tr><th>原繳費金額</th><th>退費原因</th><th>其他退費原因</th><th>退費說明</th><th>應收金額</th><th>實收金額</th><th>應退金額</th><th>計算說明</th><th>退款方式</th><th>銀行名稱</th><th>分行名稱 *</th><th>戶名</th><th>帳號</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table class="excel-sheet-table" style="min-width:1260px;width:100%"><thead><tr><th>原繳費金額</th><th>退費原因</th><th>其他退費原因</th><th>退費說明</th><th>應收金額</th><th>實收金額</th><th>應退金額</th><th>計算說明</th><th>退款方式</th><th>銀行名稱</th><th>分行名稱 *</th><th>戶名</th><th>帳號</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="refundAdd()">新增一列</button><button class="btn-g" onclick="refundApplySummary()">回填金額與說明</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">應退合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(refundSum())+'</div></div></div>';
   var total=el('rf-total');if(total)total.value=fmt(refundSum());
 }
@@ -6295,7 +6363,7 @@ function renderPurchaseSheet(){
       +'</tr>';
   }).join('');
   box.innerHTML='<style>#purchase-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0;min-width:92px}#purchase-sheet td,#purchase-sheet th{border:1px solid #e8dcc8;padding:0}#purchase-sheet th{background:#d9eaf7;color:#253044;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
-    +'<div class="sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table style="min-width:760px;width:100%"><thead><tr><th>項次</th><th>商品項目 *</th><th>數量 *</th><th>商品連結 *</th><th>備註</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="sheet-full-scroll" style="overflow:auto;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table class="excel-sheet-table" style="min-width:760px;width:100%"><thead><tr><th>項次</th><th>商品項目 *</th><th>數量 *</th><th>商品連結 *</th><th>備註</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="purchaseAdd()">新增一列</button><button class="btn-g" onclick="purchaseApplySummary()">回填說明</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">申請品項</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+(S.purchaseRows||[]).length+' 項</div></div></div>';
   var total=el('po-total');if(total)total.value=fmt(purchaseSum());
 }
@@ -6430,7 +6498,7 @@ function renderHrExpenseSheet(){
     }).join('')+'<td style="width:30px;text-align:center"><button onclick="hrDel('+i+')" style="border:none;background:transparent;color:#94a3b8;cursor:pointer">×</button></td></tr>';
   }).join('');
   box.innerHTML='<style>#hr-expense-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0;min-width:90px}#hr-expense-sheet td,#hr-expense-sheet th{border:1px solid #e8dcc8;padding:0}#hr-expense-sheet th{background:#d9eaf7;color:#253044;font-size:10px;font-weight:650;text-align:left;padding:5px}.hr-sheet-scroll{overflow:auto;max-width:100%;max-height:68vh;border:1px solid #e8dcc8;border-radius:8px;background:#fff}</style>'
-    +'<div class="hr-sheet-scroll sheet-full-scroll"><table style="min-width:1120px;width:100%"><thead><tr><th>項次</th>'+head+'<th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="hr-sheet-scroll sheet-full-scroll"><table class="excel-sheet-table" style="min-width:1120px;width:100%"><thead><tr><th>項次</th>'+head+'<th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;align-items:center;gap:7px;margin-top:8px"><button class="btn-g" onclick="hrAdd()">新增一列</button><button class="btn-g" onclick="hrApplySummary()">回填金額與說明</button><div style="margin-left:auto;text-align:right"><div style="font-size:10px;color:#94a3b8">人事費用合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(hrSum())+'</div></div></div>';
 }
 window.hrEdit=function(i,k,v){
