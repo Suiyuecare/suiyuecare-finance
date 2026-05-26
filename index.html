@@ -1910,6 +1910,31 @@ function todayIso(){return new Date().toISOString().slice(0,10);}
 function todaySlash(){return todayIso().replace(/-/g,'/');}
 function todayMonth(){return todayIso().slice(0,7);}
 function todayShort(){var d=new Date();return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0');}
+function requestNoPad(v){return String(v).padStart(2,'0');}
+function requestNoRandomSuffix(){
+  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var out='';
+  if(window.crypto&&crypto.getRandomValues){
+    var buf=new Uint8Array(4);
+    crypto.getRandomValues(buf);
+    for(var i=0;i<buf.length;i++)out+=chars[buf[i]%chars.length];
+    return out;
+  }
+  return Math.random().toString(36).slice(2,6).toUpperCase();
+}
+function makeExpenseRequestNo(){
+  var d=new Date();
+  var stamp=d.getFullYear()+'-'+requestNoPad(d.getMonth()+1)+requestNoPad(d.getDate())+'-'+requestNoPad(d.getHours())+requestNoPad(d.getMinutes())+requestNoPad(d.getSeconds());
+  for(var i=0;i<8;i++){
+    var no='EXP-'+stamp+'-'+requestNoRandomSuffix();
+    if(!REQS.some(function(r){return r.no===no;}))return no;
+  }
+  return 'EXP-'+stamp+'-'+Date.now().toString(36).toUpperCase();
+}
+function isDuplicateExpenseRequestNoError(msg){
+  msg=String(msg||'').toLowerCase();
+  return msg.indexOf('expense_requests_no_key')>-1||(msg.indexOf('duplicate key')>-1&&msg.indexOf('no')>-1);
+}
 function monthLabel(m){var p=String(m||todayMonth()).split('-');return p[0]+'年'+String(Number(p[1]||1))+'月';}
 function initialDataEnvironment(){
   var q=new URLSearchParams(location.search||'').get('env');
@@ -6735,7 +6760,7 @@ window.submitNR=async function(){
   var a=S.nrType==='hr_expense_request'?hrAccountingMap((hrInfo&&hrInfo.item&&hrInfo.item.id)||S.hrItem):(AMAP[S.nrType+'_'+S.nrRec+'_'+S.nrPay]||{dr:'—',drN:'待指定',cr:'—',crN:'待指定'});
   var tObj=NR_TYPES.find(function(t){return t.id===S.nrType;});
   var tL=tObj?tObj.n:S.nrType;
-  var no='EXP-2026-'+(REQS.length+502).toString().padStart(4,'0');
+  var no=makeExpenseRequestNo();
   var eid=(el('nr-ent')||{}).value||'E1';var dc=(el('nr-dept')||{}).value||(S.user&&S.user.dc)||'A1101';
   var entityDeptCheck=normalizeRequestEntityDept(eid,dc);
   eid=entityDeptCheck.eid;dc=entityDeptCheck.dc;
@@ -6874,6 +6899,9 @@ window.submitNR=async function(){
   var reqInsert=await dbInsert('expense_requests',reqDbRow(newReq));
   if(!reqInsert||!reqInsert.ok){
     var msg=reqInsert&&reqInsert.error?(reqInsert.error.message||JSON.stringify(reqInsert.error)):'未知原因';
+    if(isDuplicateExpenseRequestNoError(msg)){
+      msg='申請單號撞號，系統已改為不依賴前端筆數的單號規則。請重新整理頁面後再送出一次。\n原始錯誤：'+msg;
+    }
     REQS=REQS.filter(function(x){return x.id!==newReq.id;});
     NOTIFS=NOTIFS.filter(function(x){return x.id!==newNotif.id;});
     buildAll();renderNotifs();
