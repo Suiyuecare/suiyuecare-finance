@@ -897,7 +897,6 @@ html,body{overflow-x:hidden}
         </div></div>
         <div style="display:flex;flex-direction:column;gap:10px">
           <div class="card"><div class="chd"><span class="cht">即時預覽</span></div><div style="padding:12px"><div id="inv-prev" style="background:var(--warm);border:1px solid #e0d0b8;border-radius:9px;padding:12px;font-size:12px"></div></div></div>
-          <div class="card"><div class="chd"><span class="cht">近期記錄</span><span id="inv-cnt" style="font-size:11px;color:#94a3b8"></span></div><table><thead><tr><th>發票號碼</th><th>買受人</th><th>含稅金額</th><th>狀態</th></tr></thead><tbody id="inv-tbody"></tbody></table></div>
         </div>
       </div>
     </div>
@@ -8155,7 +8154,8 @@ window.buildInvoices=function buildInvoices(){
   var ready=INVS.filter(invoiceIsReceivable),pending=INVS.filter(function(i){return !invoiceIsReceivable(i);});
   el('inv-stats').innerHTML=[{l:'發票簽核中',v:pending.length+' 張'},{l:'已交付待收款',v:ready.filter(function(i){return i.status!=='paid';}).length+' 張',s:fmt(ready.filter(function(i){return i.status!=='paid';}).reduce(function(s,i){return s+i.total;},0))},{l:'已收款',v:ready.filter(function(i){return i.status==='paid';}).length+' 張'},{l:'全部發票',v:INVS.length+' 張'}].map(function(s){return'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:#1e293b">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');
   initInvoiceMetaSelects();
-  renderInvTable();updInvPrev();renderBatchInvTable();renderBatchTable();el('inv-cnt').textContent='共 '+INVS.length+' 張';
+  renderInvTable();updInvPrev();renderBatchInvTable();renderBatchTable();
+  if(el('inv-cnt'))el('inv-cnt').textContent='共 '+INVS.length+' 張';
 }
 window.switchInv=function(mode){S.invMode=mode;el('inv-s').style.display=mode==='single'?'block':'none';el('inv-b').style.display=mode==='batch'?'block':'none';el('btn-single').style.cssText=mode==='single'?'background:var(--br);color:#fff;border:none':'';el('btn-batch').style.cssText=mode==='batch'?'background:var(--br);color:#fff;border:none':'';};
 window.updInvTrack=function(){var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:'AF'};var v=(el('inv-ent')||{}).value;if(v)el('inv-no').value=(T[v]||'AA')+'-'+Math.floor(Math.random()*900000+100000);};
@@ -8245,11 +8245,12 @@ window.issueInv=async function(){
   renderInvTable();['inv-buyer','inv-amt','inv-desc','inv-total'].forEach(function(id){var e=el(id);if(e)e.value='';});
   var tx=el('inv-taxid');if(tx)tx.value='';
   var t=el('inv-ft');if(t){t.textContent='發票簽核已送出';setTimeout(function(){t.textContent='開立新發票';},2500);}
-  el('inv-cnt').textContent='共 '+INVS.length+' 張';
+  if(el('inv-cnt'))el('inv-cnt').textContent='共 '+INVS.length+' 張';
   buildApprovals();
 };
 function invApprovalLabel(i){if(invoiceIsReceivable(i))return'已交付待收款';var s=activeStep(i);return s?SL[s.status]||stepTitle(s)||i.approvalStatus:'待簽核';}
 function renderInvTable(){
+  if(!el('inv-tbody'))return;
   var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue',pending_receipt_review:'b-purp'};var RECVL={paid:'已收款',unpaid:'未收款',partial:'部分收款',pending_receipt_review:'待行政複核'};
   el('inv-tbody').innerHTML=INVS.slice(0,10).map(function(i){
     var can=canActInvoice(i);
