@@ -1348,7 +1348,7 @@ input:focus,select:focus,textarea:focus{
     </div>
     <div id="inv-stats" style="display:none"></div>
     <div id="inv-s">
-      <div class="g2">
+      <div>
         <div class="card"><div class="chd"><span class="cht" id="inv-ft">開立新發票</span></div><div style="padding:13px">
           <div style="font-size:13px;font-weight:800;color:#1f2937;margin-bottom:9px">2-1. 申請人資訊</div>
           <div class="fr2"><div class="fg"><label class="fl">開立法人（全名）</label><select id="inv-ent" onchange="updInvTrack()">
@@ -1397,9 +1397,6 @@ input:focus,select:focus,textarea:focus{
           <div id="inv-flow" style="border:1px solid #ead8c2;border-radius:9px;background:#fffaf4;padding:10px;margin-bottom:10px"></div>
           <div style="display:flex;gap:7px"><button class="btn-s" style="flex:1" onclick="saveInvDraft()">存草稿</button><button class="btn-p" style="flex:2;justify-content:center" onclick="issueInv()">開立發票</button></div>
         </div></div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div class="card"><div class="chd"><span class="cht">即時預覽</span></div><div style="padding:12px"><div id="inv-prev" style="background:var(--warm);border:1px solid #e0d0b8;border-radius:9px;padding:12px;font-size:12px"></div></div></div>
-        </div>
       </div>
     </div>
     <div id="inv-b" style="display:none">
@@ -6125,6 +6122,112 @@ function invoiceRowsFromOcr(data,fileName){
     return{no:no,date:date,buyerTaxId:buyerTaxId,sellerTaxId:sellerTaxId,item:x.item_name||x.name||x.description||inv.description||'憑據費用',qty:qty,unitName:x.unit||x.unit_name||x.unitName||'',unitPrice:unitPrice,netAmount:net,taxAmount:tax,grossAmount:gross,total:gross,file:fileName};
   });
 }
+function hrPickValue(o,keys,idx){
+  if(!o)return'';
+  if(Array.isArray(o))return o[idx]||'';
+  for(var i=0;i<keys.length;i++){
+    var k=keys[i];
+    if(o[k]!==undefined&&o[k]!==null&&o[k]!=='')return o[k];
+    var lk=String(k).toLowerCase();
+    if(o[lk]!==undefined&&o[lk]!==null&&o[lk]!=='')return o[lk];
+  }
+  return'';
+}
+function hrNormalizeAmount(v){
+  if(typeof v==='number')return Math.max(0,v);
+  return Math.max(0,num(String(v||'').replace(/NT\$|TWD|元|,/gi,'')));
+}
+function hrRowFromAny(o,fileName){
+  var item=hrItem();
+  var r=hrDefaultRow();
+  r['員工編號']=hrPickValue(o,['員工編號','employee_id','employeeNo','employee_no','id'],0);
+  r['姓名']=hrPickValue(o,['姓名','員工姓名','收款人','payee','payee_name','employee_name','name'],1);
+  r['類別']=hrPickValue(o,['類別','人事支出項目','expense_type','category','type'],2)||item.label;
+  r['薪資月份']=hrPickValue(o,['薪資月份','費用月份','月份','payroll_month','month'],3)||todayMonth();
+  r['匯款金額']=hrNormalizeAmount(hrPickValue(o,['匯款金額','金額','實付金額','amount','payment_amount','total','total_amount'],4));
+  r['銀行']=hrPickValue(o,['銀行','銀行名稱','bank','bank_name'],5);
+  r['分行']=hrPickValue(o,['分行','分行名稱','bank_branch','branch'],6);
+  r['帳號']=hrPickValue(o,['帳號','銀行帳號','account','bank_account'],7);
+  r['備註']=hrPickValue(o,['備註','說明','note','description','memo'],8)||'來源：'+(fileName||'附件');
+  return r;
+}
+function hrRowsFromDelimitedText(text,fileName){
+  var rows=parseCsv(text);
+  if(!rows.length)return[];
+  var head=rows[0].map(function(h){return String(h||'').trim();});
+  var hasHead=head.some(function(h){return HR_DETAIL_COLS.indexOf(h)>-1||['employee_id','employee_no','employee_name','name','amount','bank','bank_name','branch','account','note'].indexOf(String(h).toLowerCase())>-1;});
+  var objects=hasHead?rows.slice(1).map(function(row){
+    var o={};
+    head.forEach(function(h,i){o[h]=row[i]||'';o[String(h).toLowerCase()]=row[i]||'';});
+    return o;
+  }):rows.map(function(row){return row;});
+  return objects.map(function(o){return hrRowFromAny(o,fileName);}).filter(function(r){
+    return r['姓名']||r['匯款金額']||r['銀行']||r['帳號'];
+  });
+}
+function hrRowsFromOcrData(data,fileName){
+  var root=data&&data.invoice?data.invoice:data||{};
+  var candidates=[];
+  ['rows','items','lines','employees','payroll_items','hr_expense_items','expense_items'].forEach(function(k){
+    if(Array.isArray(root[k]))candidates=candidates.concat(root[k]);
+    if(data&&Array.isArray(data[k]))candidates=candidates.concat(data[k]);
+  });
+  if(!candidates.length&&Array.isArray(root))candidates=root;
+  if(!candidates.length&&root&&typeof root==='object')candidates=[root];
+  return candidates.map(function(o){return hrRowFromAny(o,fileName);}).filter(function(r){
+    return r['姓名']||r['匯款金額']||r['銀行']||r['帳號'];
+  });
+}
+window.hrAnalyzePayroll=async function(){
+  if(!S.nrFiles.length){alert('請先上傳薪資表、人事費用支出表、勞務報酬單或相關附件');return;}
+  var all=[];
+  setLazyProgress(0,'準備分析人事費用附件…');
+  for(var i=0;i<S.nrFiles.length;i++){
+    var f=S.nrFiles[i],name=f.name||f.n||'附件',ext=fileExt(name),base=i/S.nrFiles.length*100;
+    setLazyProgress(base,'讀取 '+(i+1)+'/'+S.nrFiles.length+'：'+name);
+    try{
+      if(/\.(csv|xls|xlsx)$/i.test(name)&&!(f.url||f.path||f.storagePath)){
+        try{
+          var text=await new Promise(function(resolve,reject){
+            var reader=new FileReader();
+            reader.onload=function(){resolve(String(reader.result||''));};
+            reader.onerror=function(){reject(reader.error||new Error('讀取表格失敗'));};
+            reader.readAsText(f,'utf-8');
+          });
+          if(!(/^\s*PK/.test(text)&&ext==='xlsx')){
+            var localRows=hrRowsFromDelimitedText(text,name);
+            if(localRows.length){
+              all=all.concat(localRows);
+              setLazyProgress((i+1)/S.nrFiles.length*100,'已讀取 '+localRows.length+' 列：'+name);
+              continue;
+            }
+          }
+        }catch(localErr){
+          setLazyProgress(base+(15/S.nrFiles.length),'表格直接讀取失敗，改用 OPENAI 分析… '+name);
+        }
+      }
+      if(!OPENAI_INVOICE_OCR_ENDPOINT||!SUPABASE_ANON_KEY)throw new Error('請先部署 Supabase Edge Function 並填入 SUPABASE_ANON_KEY');
+      var att=await fileToAttachment(f);
+      setLazyProgress(base+(35/S.nrFiles.length),'送出 OPENAI 分析… '+name);
+      var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_ANON_KEY},body:JSON.stringify({fileName:name,mime:f.type||f.mime,dataUrl:att.url,mode:'hr_expense_items',fields:HR_DETAIL_COLS})});
+      var json=await res.json();if(!res.ok)throw new Error(json.error||'分析失敗');
+      var ocrRows=hrRowsFromOcrData(json,name);
+      if(!ocrRows.length)throw new Error('OPENAI 沒有讀到可回填的人事明細欄位');
+      all=all.concat(ocrRows);
+      setLazyProgress((i+1)/S.nrFiles.length*100,'已分析 '+ocrRows.length+' 列：'+name);
+    }catch(err){
+      var msg=ocrErrorMessage(err);
+      var r=hrDefaultRow();
+      r['備註']='請人工確認：'+name+'；'+msg;
+      all.push(r);
+      setLazyProgress((i+1)/S.nrFiles.length*100,'部分附件需人工確認：'+name,true);
+    }
+  }
+  S.hrRows=all.length?all:[hrDefaultRow()];
+  renderHrExpenseSheet();
+  applyHrSummary(false);
+  setLazyProgress(100,'分析完成，已回填 '+S.hrRows.length+' 列到 2-2 即時 Excel 明細表');
+};
 function ocrErrorMessage(err){
   var msg=String((err&&err.message)||err||'辨識失敗');
   var lower=msg.toLowerCase();
@@ -6414,7 +6517,7 @@ function nrFileListHtml(maxWidth){
 function receiptUploadPanelHtml(opt){
   opt=opt||{};
   var isPayroll=opt.kind==='payroll';
-  var ocrBtn=opt.ocr?'<button class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button>':'';
+  var ocrBtn=opt.ocr?'<button class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button>':(isPayroll?'<button class="btn-p" onclick="hrAnalyzePayroll()">OPENAI 分析</button>':'');
   var payrollTemplates=isPayroll?'<div style="background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:9px;margin-bottom:8px"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:6px">範本下載與上傳</div><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">請先下載適用範本填寫完成，再於本區上傳薪資表、人事費用支出表或勞務報酬單。9A/9B 勞報單請一併上傳勞務報酬單。</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/hr_expense_template.xlsx\',\'人事費用支出.xlsx\')">下載人事費用支出 Excel</button><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/labor_service_fee.docx\',\'勞務報酬單.docx\')">下載勞務報酬單 Word</button></div></div>':'';
   return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%">'
     +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:650;color:#334155">'+(isPayroll?'上傳薪資表 / 人事附件':'上傳憑據')+'</div>'+ocrBtn+'</div>'
@@ -6422,8 +6525,8 @@ function receiptUploadPanelHtml(opt){
     +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">'+(isPayroll?'UPLOAD PAYROLL':'UPLOAD RECEIPTS')+'</div><div style="font-size:13px;font-weight:650;color:#334155;margin-bottom:3px">'+(isPayroll?'點擊或拖放薪資表、人事費用支出表或勞務報酬單':'點擊或拖放發票 / 收據 / PDF')+'</div><div style="font-size:11px;color:#94a3b8;line-height:1.5">'+(isPayroll?'Excel、PDF、Word、圖片皆可；9A、9B 勞務報酬單需附勞務報酬單':'可一次上傳多張 JPG、PNG、PDF、Word、Excel；建議一張發票拍成一張照片，多張發票請分開拍後一次上傳。')+'</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" '+(isPayroll?'':'capture="environment"')+' onchange="nrFileChange(this)"></div>'
     +(isPayroll?'':'<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #f0c987;color:#7c3f00;font-size:11px;line-height:1.55">提醒：請不要把很多張發票拍成同一張照片，OCR 可能只辨識到其中一張。</div>')
     +'<div id="nr-flist" style="margin-top:7px">'+nrFileListHtml(180)+'</div>'
-    +(opt.ocr?'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OpenAI 解析憑據」，下方會產生可編輯表格。</div>':'<div style="font-size:11px;color:#8b7358;margin-top:8px">附件會隨申請單送簽核，主管可下載檢視。</div>')
-    +(opt.ocr?lazyProgressHtml():'')
+    +(opt.ocr?'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OpenAI 解析憑據」，下方會產生可編輯表格。</div>':(isPayroll?'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OPENAI 分析」，系統會嘗試讀取薪資表、人事費用表或勞務報酬單，並回填 2-2 即時 Excel 明細表。</div>':'<div style="font-size:11px;color:#8b7358;margin-top:8px">附件會隨申請單送簽核，主管可下載檢視。</div>'))
+    +(opt.ocr||isPayroll?lazyProgressHtml():'')
   +'</div>';
 }
 function travelAttachmentGuideHtml(){
@@ -8595,7 +8698,10 @@ window.bulkCountersignSelected=function(){bulkRunSelected('countersign');};
 window.bulkReturnSelected=function(){bulkRunSelected('return');};
 window.bulkCancelSelected=function(){bulkRunSelected('cancel');};
 function openApprModal(){
-  var m=el('m-appr');if(m)m.style.display='flex';
+  var m=el('m-appr');
+  if(!m)return;
+  if(m.parentElement!==document.body)document.body.appendChild(m);
+  m.style.display='flex';
 }
 function showDraftD(d){
   openApprModal();
