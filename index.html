@@ -1807,6 +1807,7 @@ input:focus,select:focus,textarea:focus{
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script>
 (function(){
 'use strict';
@@ -6102,49 +6103,122 @@ function loadImageForPdf(src){
     var img=new Image();
     img.onload=function(){resolve(img);};
     img.onerror=function(){reject(new Error('image load failed'));};
+    img.crossOrigin='anonymous';
     img.src=src;
   });
+}
+function dataUrlToUint8Array(dataUrl){
+  var parts=String(dataUrl||'').split(',');
+  if(parts.length<2)return new TextEncoder().encode(String(dataUrl||''));
+  var meta=parts[0]||'',body=parts.slice(1).join(',');
+  if(/;base64/i.test(meta)){
+    var bin=atob(body),arr=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    return arr;
+  }
+  return new TextEncoder().encode(decodeURIComponent(body));
+}
+async function attachmentBytes(f){
+  f=normalizeFileMeta(f);
+  if(!f.url)return null;
+  if(/^data:/i.test(f.url))return dataUrlToUint8Array(f.url);
+  var res=await fetch(f.url);
+  if(!res.ok)throw new Error('attachment fetch failed');
+  return new Uint8Array(await res.arrayBuffer());
+}
+function attachmentLooksPdf(f){
+  f=normalizeFileMeta(f);
+  return fileExt(f.n||f.name)==='pdf'||/pdf/i.test(f.mime||'')||/^data:application\/pdf/i.test(f.url||'');
+}
+function attachmentLooksImage(f){
+  f=normalizeFileMeta(f);
+  return /^image\//i.test(f.mime||'')||/^data:image\//i.test(f.url||'')||['jpg','jpeg','png','webp','heic'].indexOf(fileExt(f.n||f.name||''))>-1;
+}
+function imageToJpegBytes(src){
+  return loadImageForPdf(src).then(function(img){
+    var canvas=document.createElement('canvas');
+    canvas.width=img.naturalWidth||img.width;
+    canvas.height=img.naturalHeight||img.height;
+    var ctx=canvas.getContext('2d');
+    ctx.fillStyle='#fff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img,0,0);
+    return dataUrlToUint8Array(canvas.toDataURL('image/jpeg',0.92));
+  });
+}
+async function addImagePageToPdfLib(doc,f){
+  var bytes=await attachmentBytes(f);
+  if(!bytes)return false;
+  var ext=fileExt(f.n||f.name||'');
+  var mime=String(f.mime||'');
+  var img;
+  if(ext==='png'||/png/i.test(mime)){
+    try{img=await doc.embedPng(bytes);}catch(err){bytes=await imageToJpegBytes(f.url);img=await doc.embedJpg(bytes);}
+  }else if(ext==='jpg'||ext==='jpeg'||/jpe?g/i.test(mime)){
+    img=await doc.embedJpg(bytes);
+  }else{
+    bytes=await imageToJpegBytes(f.url);
+    img=await doc.embedJpg(bytes);
+  }
+  var page=doc.addPage([595.28,841.89]);
+  var margin=28,maxW=595.28-margin*2,maxH=841.89-margin*2;
+  var scale=Math.min(maxW/img.width,maxH/img.height,1);
+  var w=img.width*scale,h=img.height*scale;
+  page.drawImage(img,{x:(595.28-w)/2,y:(841.89-h)/2,width:w,height:h});
+  return true;
+}
+async function addPdfPagesToPdfLib(doc,f){
+  var bytes=await attachmentBytes(f);
+  if(!bytes)return 0;
+  var src=await PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true});
+  var pages=await doc.copyPages(src,src.getPageIndices());
+  pages.forEach(function(p){doc.addPage(p);});
+  return pages.length;
 }
 async function receiptPdfAttachment(files,meta){
   files=normalizeFiles(files||[]).filter(function(f){return f.url;});
   if(!files.length)return null;
-  var jspdf=window.jspdf&&window.jspdf.jsPDF;
-  if(!jspdf)return null;
-  var doc=new jspdf({orientation:'p',unit:'pt',format:'a4'});
-  var pageW=595.28,pageH=841.89,margin=36;
-  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text('Receipt Image Bundle',margin,42);
-  doc.setFont('helvetica','normal');doc.setFontSize(10);
-  doc.text('Request No: '+(meta.no||''),margin,62);
-  doc.text('Applicant: '+(meta.app||''),margin,76);
-  doc.text('Type: '+(meta.typeLabel||''),margin,90);
-  for(var i=0;i<files.length;i++){
-    if(i>0)doc.addPage();
-    var y=i===0?116:42;
-    var f=files[i];
-    doc.setFont('helvetica','bold');doc.setFontSize(11);
-    doc.text('File '+(i+1)+': '+String(f.n||'receipt').slice(0,78),margin,y);
-    var isImg=String(f.mime||'').indexOf('image/')===0||/^data:image\//.test(f.url||'');
-    if(isImg){
+  if(window.PDFLib&&PDFLib.PDFDocument){
+    var merged=await PDFLib.PDFDocument.create();
+    var added=0;
+    for(var i=0;i<files.length;i++){
+      var f=files[i];
       try{
-        var img=await loadImageForPdf(f.url);
-        var maxW=pageW-margin*2,maxH=pageH-y-52;
-        var ratio=Math.min(maxW/img.width,maxH/img.height,1);
-        var w=img.width*ratio,h=img.height*ratio;
-        doc.addImage(f.url,undefined,margin,y+14,w,h);
+        if(attachmentLooksPdf(f))added+=await addPdfPagesToPdfLib(merged,f);
+        else if(attachmentLooksImage(f)){if(await addImagePageToPdfLib(merged,f))added++;}
       }catch(err){
-        doc.setFont('helvetica','normal');doc.setFontSize(10);
-        doc.text('This image could not be embedded. Please download the original attachment.',margin,y+24);
+        console.warn('receipt bundle skip attachment',f&&f.n,err);
       }
-    }else{
-      doc.setFont('helvetica','normal');doc.setFontSize(10);
-      doc.text('Non-image attachment included in this review bundle.',margin,y+24);
-      doc.text('File name: '+String(f.n||'attachment').slice(0,92),margin,y+40);
-      doc.text('Type: '+String(f.mime||f.t||'file').slice(0,92),margin,y+56);
-      doc.text('Please download the original file from the approval attachment list for full content.',margin,y+72);
+    }
+    if(added){
+      var pdfBytes=await merged.save();
+      var bin='',chunk=0x8000;
+      for(var p=0;p<pdfBytes.length;p+=chunk){
+        bin+=String.fromCharCode.apply(null,pdfBytes.subarray(p,p+chunk));
+      }
+      var dataUrl='data:application/pdf;base64,'+btoa(bin);
+      return {n:'憑據照片彙整_'+(meta.no||todayIso())+'.pdf',t:'pdf',mime:'application/pdf',size:pdfBytes.length,url:dataUrl,uploadedAt:new Date().toISOString(),kind:'receipt_bundle'};
+    }
+  }
+  var imgFiles=files.filter(attachmentLooksImage);
+  var jspdf=window.jspdf&&window.jspdf.jsPDF;
+  if(!jspdf||!imgFiles.length)return null;
+  var doc=new jspdf({orientation:'p',unit:'pt',format:'a4'});
+  var pageW=595.28,pageH=841.89,margin=28;
+  for(var j=0;j<imgFiles.length;j++){
+    if(j>0)doc.addPage();
+    try{
+      var img=await loadImageForPdf(imgFiles[j].url);
+      var maxW=pageW-margin*2,maxH=pageH-margin*2;
+      var ratio=Math.min(maxW/img.width,maxH/img.height,1);
+      var w=img.width*ratio,h=img.height*ratio;
+      doc.addImage(imgFiles[j].url,undefined,(pageW-w)/2,(pageH-h)/2,w,h);
+    }catch(err2){
+      console.warn('receipt image fallback failed',imgFiles[j]&&imgFiles[j].n,err2);
     }
   }
   var dataUrl=doc.output('datauristring');
-  return {n:'憑據照片彙整_'+(meta.no||todayIso())+'.pdf',t:'pdf',mime:'application/pdf',size:dataUrl.length,url:dataUrl,uploadedAt:new Date().toISOString()};
+  return {n:'憑據照片彙整_'+(meta.no||todayIso())+'.pdf',t:'pdf',mime:'application/pdf',size:dataUrl.length,url:dataUrl,uploadedAt:new Date().toISOString(),kind:'receipt_bundle'};
 }
 async function receiptBundleAttachment(files,meta){
   var pdf=await receiptPdfAttachment(files,meta);
