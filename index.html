@@ -3666,10 +3666,43 @@ function activeUniqueUsers(){
 function directSupervisorRole(role){
   return {employee:'section_chief',section_chief:'dept_manager',dept_manager:'admin_director',accountant:'admin_director',cashier:'ceo',hr:'admin_director',admin_director:'ceo'}[role]||null;
 }
+function deptUnitCode(dc){
+  dc=String(dc||'').trim();
+  return /^[A-Z]\d{4}$/i.test(dc)?(dc.slice(0,3)+'00'):dc;
+}
+function globalApprovalRole(role){
+  return ['admin_director','accountant','hr','general_affairs','ceo','cashier'].indexOf(role)>-1;
+}
+function scopedUserByRole(role,appUser){
+  if(!role)return null;
+  if(globalApprovalRole(role))return firstUserByRole(role);
+  var users=USERS.filter(function(u){return u.role===role&&u.active!==false;});
+  if(!users.length)return null;
+  if(!appUser)return users[0]||null;
+  var appDept=String(appUser.dc||''),appUnit=deptUnitCode(appDept),appEntity=appUser.eid||entityOfDept(appDept);
+  return users.find(function(u){return String(u.dc||'')===appDept;})
+    ||users.find(function(u){return deptUnitCode(u.dc)===appUnit;})
+    ||users.find(function(u){return (u.eid||entityOfDept(u.dc))===appEntity;})
+    ||null;
+}
+function userMatchesApprovalScope(user,appUser){
+  if(!user||!appUser)return false;
+  if(globalApprovalRole(user.role))return true;
+  var appDept=String(appUser.dc||''),userDept=String(user.dc||'');
+  if(userDept&&userDept===appDept)return true;
+  if(deptUnitCode(userDept)&&deptUnitCode(userDept)===deptUnitCode(appDept))return true;
+  return !!((user.eid||entityOfDept(userDept))&&(user.eid||entityOfDept(userDept))===(appUser.eid||entityOfDept(appDept)));
+}
+function fallbackSupervisorUser(appUser){
+  if(!appUser)return null;
+  var role=directSupervisorRole(appUser.role);
+  return role?scopedUserByRole(role,appUser):null;
+}
 function defaultOrganizationChart(){
-  var byRole=function(role){return (USERS.find(function(u){return u.role===role&&u.active;})||{}).id||'';};
-  var fallback={employee:byRole('section_chief'),section_chief:byRole('dept_manager'),dept_manager:byRole('admin_director'),general_affairs:byRole('admin_director'),hr:byRole('admin_director'),accountant:byRole('admin_director'),cashier:byRole('ceo'),admin_director:byRole('ceo'),ceo:''};
-  return USERS.map(function(u){return{userId:u.id,supervisorId:fallback[u.role]||''};});
+  return USERS.map(function(u){
+    var sup=fallbackSupervisorUser(u);
+    return{userId:u.id,supervisorId:sup&&sup.id?sup.id:''};
+  });
 }
 function orgRowForUser(uid){
   if(!ORG_CHART||!ORG_CHART.length)ORG_CHART=defaultOrganizationChart();
@@ -3679,9 +3712,8 @@ function directSupervisorUser(appUser){
   if(!appUser)return null;
   var row=orgRowForUser(appUser.id);
   var supervisor=row&&row.supervisorId?userById(row.supervisorId):null;
-  if(supervisor&&supervisor.active!==false)return supervisor;
-  var role=directSupervisorRole(appUser.role);
-  return role?firstUserByRole(role):null;
+  if(supervisor&&supervisor.active!==false&&userMatchesApprovalScope(supervisor,appUser))return supervisor;
+  return fallbackSupervisorUser(appUser);
 }
 function departmentManagerUser(appUser){
   if(!appUser)return null;
@@ -3702,7 +3734,8 @@ function buildApprovalSteps(appUser,requestType){
     ];
     function padd(role,label,status,assignedUser){
       if(!role)return;
-      var u=assignedUser||firstUserByRole(role);
+      var u=assignedUser||scopedUserByRole(role,appUser);
+      if(!u&&!globalApprovalRole(role))return;
       if(role===appUser.role&&role!=='ceo'&&role!=='cashier'&&(!u||u.id===appUser.id))return;
       if(pSteps.some(function(s){return s.rk===role||(role!=='cashier'&&u&&s.uid===u.id);}))return;
       pSteps.push({r:label||RL[role]||role,rk:role,uid:u?u.id:'',n:'',a:'',t:'',c:'',status:status});
@@ -3722,7 +3755,8 @@ function buildApprovalSteps(appUser,requestType){
   var steps=[];
   function add(role,label,status,assignedUser){
     if(!role)return;
-    var u=assignedUser||firstUserByRole(role);
+    var u=assignedUser||scopedUserByRole(role,appUser);
+    if(!u&&!globalApprovalRole(role))return;
     if(role===appUser.role&&role!=='ceo'&&role!=='cashier'&&(!u||u.id===appUser.id))return;
     if(steps.some(function(s){return s.rk===role||(role!=='cashier'&&u&&s.uid===u.id);}))return;
     steps.push({r:label||RL[role]||role,rk:role,uid:u?u.id:'',n:'',a:'',t:'',c:'',status:status});
@@ -3794,9 +3828,31 @@ function ensureRequestCashierStep(r){
   r.formPayload=Object.assign({},r.formPayload||{},{flowNormalizedAt:new Date().toISOString(),flowNormalizedReason:'insert_cashier_after_accountant'});
   return true;
 }
+function flowStatusValue(flow){
+  return flow?(flow.approvalStatus||flow.status||''):'';
+}
+function flowIsTerminal(flow){
+  var s=flowStatusValue(flow);
+  return ['completed','cancelled','rejected','voided','closed'].indexOf(s)>-1||['cancelled','rejected'].indexOf(flow&&flow.status)>-1;
+}
+function approvedStepCount(flow){
+  return (flow&&flow.steps||[]).filter(function(x){return x.a==='approved';}).length;
+}
+function normalizeRequestTerminalState(r){
+  if(!r||!Array.isArray(r.steps)||flowIsTerminal(r))return false;
+  var idx=r.steps.findIndex(function(s){return ['cancelled','rejected','rejected_all'].indexOf(s.a)>-1;});
+  if(idx<0)return false;
+  r.status=r.steps[idx].a==='cancelled'?'cancelled':'rejected';
+  r.step=idx+1;
+  r.formPayload=Object.assign({},r.formPayload||{},{flowStoppedAt:new Date().toISOString(),flowStoppedReason:r.steps[idx].a,flowStoppedStep:r.steps[idx].rk||r.steps[idx].r||''});
+  return true;
+}
 function normalizeRequestFlows(){
   var changed=false;
-  (REQS||[]).forEach(function(r){if(ensureRequestCashierStep(r))changed=true;});
+  (REQS||[]).forEach(function(r){
+    if(normalizeRequestTerminalState(r))changed=true;
+    if(ensureRequestCashierStep(r))changed=true;
+  });
   return changed;
 }
 function stepPurpose(s){
@@ -3831,9 +3887,11 @@ function stepTitle(s){
   return s.r||'';
 }
 function activeStep(r){
+  if(flowIsTerminal(r))return null;
   return (r.steps||[]).find(function(s){return !s.a;})||null;
 }
 function activeStepIndex(r){
+  if(flowIsTerminal(r))return -1;
   return (r.steps||[]).findIndex(function(s){return !s.a;});
 }
 function userById(uid){
@@ -3922,9 +3980,10 @@ function stepBelongsToUser(s,owner){
   return s.rk===S.user.role;
 }
 function syncRequestStatus(r){
+  if(flowIsTerminal(r))return;
   var s=activeStep(r);
   r.status=s?s.status:'completed';
-  r.step=(r.steps||[]).filter(function(x){return x.a;}).length+1;
+  r.step=approvedStepCount(r)+1;
   if(r.status==='completed')r.step=(r.steps||[]).length||8;
 }
 function markRequestCashPosted(r,approvedStep){
@@ -3949,8 +4008,21 @@ function approveActiveStep(r, action, comment, files, addUid){
   syncRequestStatus(r);
   return s;
 }
+function rejectActiveRequest(r,comment,files){
+  var idx=activeStepIndex(r);
+  var s=activeStep(r);if(!s)return null;
+  s.a='rejected_all';
+  s.n=S.user?S.user.n:'';
+  s.t=todayShort();
+  s.c=comment||'退件';
+  if(files&&files.length)s.files=normalizeFiles(s.files||[]).concat(files);
+  r.status='rejected';
+  r.step=idx>-1?idx+1:(r.step||1);
+  r.formPayload=Object.assign({},r.formPayload||{},{flowStoppedAt:new Date().toISOString(),flowStoppedReason:'rejected_all',flowStoppedBy:S.user?S.user.n:''});
+  return s;
+}
 function canReturnPreviousStep(flow){
-  return activeStepIndex(flow)>0;
+  return !flowIsTerminal(flow)&&activeStepIndex(flow)>0;
 }
 function appendReturnNote(step,comment){
   var by=S.user?S.user.n:'系統';
@@ -3982,9 +4054,10 @@ function returnRequestToPrevious(r,comment,files){
   return true;
 }
 function syncInvoiceStatus(i){
+  if(flowIsTerminal(i))return;
   var s=activeStep(i);
   i.approvalStatus=s?s.status:'completed';
-  i.approvalStep=(i.steps||[]).filter(function(x){return x.a;}).length+1;
+  i.approvalStep=approvedStepCount(i)+1;
   if(i.approvalStatus==='completed')i.approvalStep=8;
 }
 function approveInvoiceStep(i,comment,files,addUid){
@@ -7749,10 +7822,11 @@ window.withdrawRequest=async function(rid){
   var reason='申請人自行抽單';
   try{
   S.withdrawBusy=true;
+  var currentIdx=activeStepIndex(r);
   var s=activeStep(r);
   if(s){s.a='cancelled';s.n=S.user?S.user.n:'';s.t=todaySlash();s.c=reason;}
   r.status='cancelled';
-  r.step=(r.steps||[]).filter(function(x){return x.a;}).length+1;
+  r.step=currentIdx>-1?currentIdx+1:(r.step||1);
   r.cancelledAt=new Date().toISOString();
   r.cancelledBy=S.user?S.user.n:'';
   r.cancelReason=reason;
@@ -7781,6 +7855,7 @@ window.withdrawRequest=async function(rid){
 // ══ 詳情（FIX 1+3+4）══
 window.openDetail=function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
+  normalizeRequestTerminalState(r);
   ensureRequestCashierStep(r);
   if(S.page!=='detail')S.prev=S.page;
   nav('detail',null);
@@ -7851,8 +7926,8 @@ window.doRejectQ=async function(rid){
   if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
   var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'approval_step');
-  approveActiveStep(r,'rejected_all',reason,p.files,'');
-  r.status='rejected';await dbUpdate('expense_requests',rid,{status:r.status,steps:r.steps});buildAll();openDetail(rid);
+  rejectActiveRequest(r,reason,p.files);
+  await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps,form_payload:r.formPayload||{}});buildAll();openDetail(rid);
 };
 async function returnPreviousRequestWithFields(rid,noteId,fileId,reopenDetail){
   try{
@@ -8438,8 +8513,11 @@ async function bulkRunSelected(action){
       if(action==='return'){
         if(returnRequestToPrevious(r,note,[])){await dbUpdate('expense_requests',r.id,{status:r.status,step:r.step,steps:r.steps,form_payload:r.formPayload||{}});ok++;}else skipped++;
       }else if(action==='cancel'){
-        r.status='cancelled';var s=activeStep(r);if(s){s.a='cancelled';s.n=S.user?S.user.n:'';s.t=todayShort();s.c=note;}
-        await dbUpdate('expense_requests',r.id,{status:r.status,steps:r.steps});ok++;
+        var cancelIdx=activeStepIndex(r);
+        var s=activeStep(r);if(s){s.a='cancelled';s.n=S.user?S.user.n:'';s.t=todayShort();s.c=note;}
+        r.status='cancelled';r.step=cancelIdx>-1?cancelIdx+1:(r.step||1);
+        r.formPayload=Object.assign({},r.formPayload||{},{cancelledAt:new Date().toISOString(),cancelledBy:S.user?S.user.n:'',cancelReason:note});
+        await dbUpdate('expense_requests',r.id,{status:r.status,step:r.step,steps:r.steps,form_payload:r.formPayload||{}});ok++;
       }else{
         var before=activeStep(r);
         if(shouldCollectAccountingLines(r,before)){skipped++;continue;}
@@ -8591,8 +8669,8 @@ window.apprReject=async function(rid){
   if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
   var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'approval_step');
-  approveActiveStep(r,'rejected_all',c,p.files,'');
-  r.status='rejected';await dbUpdate('expense_requests',rid,{status:r.status,steps:r.steps});buildAll();closeAppr();
+  rejectActiveRequest(r,c,p.files);
+  await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps,form_payload:r.formPayload||{}});buildAll();closeAppr();
 };
 window.apprReturnPrevious=function(rid){
   returnPreviousRequestWithFields(rid,'appr-c','appr-files',false).then(function(ok){if(ok)closeAppr();});
