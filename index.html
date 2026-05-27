@@ -194,6 +194,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .appr-card.selected{border-color:var(--br)!important;background:#fff3de!important;box-shadow:0 0 0 2px rgba(217,119,6,.16)}
 .appr-card.bulk-selected{border-color:#d97706!important;background:#fff7ed!important}
 .approval-table{min-width:980px}
+.finance-list-table{min-width:980px;width:100%;border-collapse:collapse}
+.finance-list-table th{white-space:nowrap}
+.finance-list-table td{vertical-align:top}
 .approval-table tbody tr{cursor:pointer;transition:background .12s,box-shadow .12s}
 .approval-table tbody tr:hover{background:#fffaf2}
 .approval-table tbody tr.selected{background:#fff3de!important;box-shadow:inset 4px 0 0 var(--br)}
@@ -1213,12 +1216,10 @@ input:focus,select:focus,textarea:focus{
         <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:650;margin-bottom:9px;color:#334155">部門淨利分布（含%）</div><div id="dept-net-chart"></div></div>
       </div>
     </div>
-    <div class="g2">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">最新通知</div><div id="dash-notif"></div></div>
       <div class="card"><div class="chd"><span class="cht">最近申請</span><button class="btn-g" onclick="nav('expenses',null)">全部 →</button></div>
-        <div style="overflow-x:auto"><table><thead><tr><th>單號</th><th>法人</th><th>申請人</th><th>金額</th><th>匯款帳號</th><th>狀態</th></tr></thead><tbody id="dash-tbl"></tbody></table></div></div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">最新通知</div><div id="dash-notif"></div></div>
-      </div>
+        <div style="overflow-x:auto"><table class="finance-list-table"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody id="dash-tbl"></tbody></table></div></div>
     </div>
   </div>
 
@@ -1253,7 +1254,7 @@ input:focus,select:focus,textarea:focus{
       <select id="exp-ef" onchange="filterExp()" style="width:auto"><option value="">全部法人</option></select>
       <select id="exp-sf" onchange="filterExp()" style="width:auto"><option value="">全部狀態</option><option value="completed">已完成</option><option value="pending_section_chief">待上一層主管</option><option value="pending_dept_manager">待部門主管</option><option value="pending_admin_director">待行政部門主任</option><option value="pending_accountant">待會計</option><option value="pending_ceo">待執行長授權</option><option value="pending_cashier">待出納放款</option><option value="pending_applicant_confirm">待申請人確認</option><option value="pending_voucher">待會計入帳</option><option value="rejected">已退件</option></select>
     </div>
-    <div class="card"><div style="overflow-x:auto"><table style="min-width:920px"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody id="exp-tbody"></tbody></table></div></div>
+    <div class="card"><div style="overflow-x:auto"><table class="finance-list-table"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody id="exp-tbody"></tbody></table></div></div>
   </div>
 
   <!-- 詳情 -->
@@ -2234,10 +2235,20 @@ function resetExcelSheetTable(table){
   delete table.dataset.mobileEnhanced;
   Array.from(table.querySelectorAll('td[data-label]')).forEach(function(td){td.removeAttribute('data-label');});
 }
+function resetMobileCardTable(table){
+  if(!table)return;
+  table.classList.remove('mobile-card-table');
+  delete table.dataset.mobileEnhanced;
+  Array.from(table.querySelectorAll('td[data-label]')).forEach(function(td){td.removeAttribute('data-label');});
+}
 function shouldEnhanceMobileTable(table){
   if(!table)return false;
   if(isExcelSheetTable(table)){
     resetExcelSheetTable(table);
+    return false;
+  }
+  if(table.closest('#pg-expenses,#pg-approvals')||table.classList.contains('finance-list-table')||table.classList.contains('approval-table')){
+    resetMobileCardTable(table);
     return false;
   }
   return !!table.querySelector('thead th');
@@ -5411,10 +5422,18 @@ function buildDash(){
   // 最近申請表格（依篩選）
   var tb=el('dash-tbl');tb.innerHTML='';
   allReqs.slice(0,6).forEach(function(r){
-    var e=gE(r.eid);
-    tb.innerHTML+='<tr style="cursor:pointer" onclick="openDetail(\''+r.id+'\')"><td><span style="font-family:monospace;font-size:10px;color:#64748b">'+r.no+'</span></td><td><span class="ep" style="font-size:9px">'+e.s+'</span></td><td>'+r.app+'</td><td style="font-weight:500">'+fmt(r.amt)+'</td><td style="font-size:10px;color:#64748b;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.bankAcc||'—')+'</td><td><span class="badge '+SCSS[r.status]+'">'+SL[r.status]+'</span></td></tr>';
+    var e=gE(r.eid),dept=gD(r.dc),summary=expenseRequestSummary(r,e),doneAt=expenseCompletedDate(r);
+    tb.innerHTML+='<tr style="cursor:pointer" onclick="openDetail(\''+escAttr(r.id)+'\')">'
+      +'<td><div style="font-family:monospace;font-size:11px;color:#334155;font-weight:700">'+escAttr(r.no)+'</div></td>'
+      +'<td style="font-weight:650;color:#334155">'+escAttr(r.app||'—')+'</td>'
+      +'<td><span class="dt" style="font-size:10px">'+escAttr(r.dc||'—')+'</span><div style="font-size:10px;color:#94a3b8;margin-top:3px">'+escAttr((dept||{}).n||'')+'</div></td>'
+      +'<td><span class="badge '+(TCSS[r.type]||'b-gray')+'">'+escAttr(r.tL||requestTypeLabel(r.type))+'</span></td>'
+      +'<td><div style="font-size:12px;color:#334155;line-height:1.45;max-width:420px;white-space:normal">'+summary+'</div><div style="font-size:10px;color:#94a3b8;margin-top:4px">'+escAttr(e.s||'—')+' · <span class="badge '+(SCSS[r.status]||'b-gray')+'" style="font-size:9px">'+escAttr(SL[r.status]||r.status||'—')+'</span></div></td>'
+      +'<td style="text-align:right;font-weight:800;color:#1f2a44">'+fmt(requestReviewAmount(r)||r.amt||0)+'</td>'
+      +'<td style="font-size:11px;color:'+(doneAt==='—'?'#94a3b8':'#334155')+'">'+doneAt+'</td>'
+      +'</tr>';
   });
-  if(!allReqs.length)tb.innerHTML='<tr><td colspan="6"><div class="employee-empty-state"><strong>'+(financeView?'此法人目前沒有申請記錄':'你還沒有送出任何申請')+'</strong><span>'+(financeView?'切換法人或期間後可查看其他資料。':'第一次使用可以先從「新增申請」開始，暫存不會送給主管。')+'</span>'+(!financeView?'<button class="btn-p" onclick="nav(\'newreq\',null)">建立第一張申請</button>':'')+'</div></td></tr>';
+  if(!allReqs.length)tb.innerHTML='<tr><td colspan="7"><div class="employee-empty-state"><strong>'+(financeView?'此法人目前沒有申請記錄':'你還沒有送出任何申請')+'</strong><span>'+(financeView?'切換法人或期間後可查看其他資料。':'第一次使用可以先從「新增申請」開始，暫存不會送給主管。')+'</span>'+(!financeView?'<button class="btn-p" onclick="nav(\'newreq\',null)">建立第一張申請</button>':'')+'</div></td></tr>';
   // 固定兩列三欄財務分布：公司收入/支出/淨利，部門收入/支出/淨利
   var entRows=ENTS.map(function(e){var f=financeSummary(e.id,dashPeriod);return{key:e.id,n:e.s,revenue:f.revenue,expense:f.expense,net:f.net};});
   if(financeView){
@@ -8387,7 +8406,7 @@ function renderApprList(data){
       +'<td style="font-size:11px;color:'+(approvalRowDoneDate(item)==='—'?'#94a3b8':'#334155')+'">'+approvalRowDoneDate(item)+'<div style="margin-top:5px">'+withdrawBtn+'</div></td>'
       +'</tr>';
   }).join('');
-  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
   refreshApprovalBulkCount();
 }
 function renderApprDraftList(){
@@ -8409,7 +8428,7 @@ function renderApprDraftList(){
       +'<td style="font-size:11px;color:#94a3b8">—</td>'
       +'</tr>';
   }).join('');
-  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
 window.openApprovalDraft=function(id){
   var d=(DRAFTS||[]).find(function(x){return x.id===id;});
