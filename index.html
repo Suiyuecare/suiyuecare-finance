@@ -1219,7 +1219,7 @@ input:focus,select:focus,textarea:focus{
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">最新通知</div><div id="dash-notif"></div></div>
       <div class="card"><div class="chd"><span class="cht">最近申請</span><button class="btn-g" onclick="nav('expenses',null)">全部 →</button></div>
-        <div style="overflow-x:auto"><table class="finance-list-table"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody id="dash-tbl"></tbody></table></div></div>
+        <div style="overflow-x:auto"><table class="finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody id="dash-tbl"></tbody></table></div></div>
     </div>
   </div>
 
@@ -1254,7 +1254,7 @@ input:focus,select:focus,textarea:focus{
       <select id="exp-ef" onchange="filterExp()" style="width:auto"><option value="">全部法人</option></select>
       <select id="exp-sf" onchange="filterExp()" style="width:auto"><option value="">全部狀態</option><option value="completed">已完成</option><option value="pending_section_chief">待上一層主管</option><option value="pending_dept_manager">待部門主管</option><option value="pending_admin_director">待行政部門主任</option><option value="pending_accountant">待會計</option><option value="pending_ceo">待執行長授權</option><option value="pending_cashier">待出納放款</option><option value="pending_applicant_confirm">待申請人確認</option><option value="pending_voucher">待會計入帳</option><option value="rejected">已退件</option></select>
     </div>
-    <div class="card"><div style="overflow-x:auto"><table class="finance-list-table"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody id="exp-tbody"></tbody></table></div></div>
+    <div class="card"><div style="overflow-x:auto"><table class="finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody id="exp-tbody"></tbody></table></div></div>
   </div>
 
   <!-- 詳情 -->
@@ -5422,16 +5422,7 @@ function buildDash(){
   // 最近申請表格（依篩選）
   var tb=el('dash-tbl');tb.innerHTML='';
   allReqs.slice(0,6).forEach(function(r){
-    var e=gE(r.eid),dept=gD(r.dc),summary=expenseRequestSummary(r,e),doneAt=expenseCompletedDate(r);
-    tb.innerHTML+='<tr style="cursor:pointer" onclick="openDetail(\''+escAttr(r.id)+'\')">'
-      +'<td><div style="font-family:monospace;font-size:11px;color:#334155;font-weight:700">'+escAttr(r.no)+'</div></td>'
-      +'<td style="font-weight:650;color:#334155">'+escAttr(r.app||'—')+'</td>'
-      +'<td><span class="dt" style="font-size:10px">'+escAttr(r.dc||'—')+'</span><div style="font-size:10px;color:#94a3b8;margin-top:3px">'+escAttr((dept||{}).n||'')+'</div></td>'
-      +'<td><span class="badge '+(TCSS[r.type]||'b-gray')+'">'+escAttr(r.tL||requestTypeLabel(r.type))+'</span></td>'
-      +'<td><div style="font-size:12px;color:#334155;line-height:1.45;max-width:420px;white-space:normal">'+summary+'</div><div style="font-size:10px;color:#94a3b8;margin-top:4px">'+escAttr(e.s||'—')+' · <span class="badge '+(SCSS[r.status]||'b-gray')+'" style="font-size:9px">'+escAttr(SL[r.status]||r.status||'—')+'</span></div></td>'
-      +'<td style="text-align:right;font-weight:800;color:#1f2a44">'+fmt(requestReviewAmount(r)||r.amt||0)+'</td>'
-      +'<td style="font-size:11px;color:'+(doneAt==='—'?'#94a3b8':'#334155')+'">'+doneAt+'</td>'
-      +'</tr>';
+    tb.innerHTML+=requestListRowHtml(r,'openRequestModal');
   });
   if(!allReqs.length)tb.innerHTML='<tr><td colspan="7"><div class="employee-empty-state"><strong>'+(financeView?'此法人目前沒有申請記錄':'你還沒有送出任何申請')+'</strong><span>'+(financeView?'切換法人或期間後可查看其他資料。':'第一次使用可以先從「新增申請」開始，暫存不會送給主管。')+'</span>'+(!financeView?'<button class="btn-p" onclick="nav(\'newreq\',null)">建立第一張申請</button>':'')+'</div></td></tr>';
   // 固定兩列三欄財務分布：公司收入/支出/淨利，部門收入/支出/淨利
@@ -7698,19 +7689,38 @@ function renderExp(data){
   el('exp-count').textContent='全集團共 '+data.length+' 筆';
   var tb=el('exp-tbody');if(!tb)return;tb.innerHTML='';
   data.forEach(function(r){
-    var e=gE(r.eid);var hf=r.files&&r.files.length;
-    var summary=expenseRequestSummary(r,e);
-    var doneAt=expenseCompletedDate(r);
-    tb.innerHTML+='<tr style="cursor:pointer" onclick="openDetail(\''+escAttr(r.id)+'\')">'
-      +'<td><div style="font-family:monospace;font-size:11px;color:#334155;font-weight:700">'+escAttr(r.no)+'</div><div style="margin-top:3px">'+(hf?'<span class="badge b-gray" style="font-size:9px">附件</span>':'')+(r.voucherId?' <span class="badge b-ok" style="font-size:9px">傳票</span>':'')+'</div></td>'
-      +'<td style="font-weight:650;color:#334155">'+escAttr(r.app||'—')+'</td>'
-      +'<td><span class="dt" style="font-size:10px">'+escAttr(r.dc||'—')+'</span><div style="font-size:10px;color:#94a3b8;margin-top:3px">'+escAttr((gD(r.dc)||{}).n||'')+'</div></td>'
-      +'<td><span class="badge '+(TCSS[r.type]||'b-gray')+'">'+escAttr(r.tL||requestTypeLabel(r.type))+'</span></td>'
-      +'<td><div style="font-size:12px;color:#334155;line-height:1.45;max-width:360px;white-space:normal">'+summary+'</div><div style="font-size:10px;color:#94a3b8;margin-top:4px">'+escAttr(e.s||'—')+' · <span class="badge '+(SCSS[r.status]||'b-gray')+'" style="font-size:9px">'+escAttr(SL[r.status]||r.status||'—')+'</span></div></td>'
-      +'<td style="text-align:right;font-weight:800;color:#1f2a44">'+fmt(requestReviewAmount(r)||r.amt||0)+'</td>'
-      +'<td style="font-size:11px;color:'+(doneAt==='—'?'#94a3b8':'#334155')+'">'+doneAt+'</td>'
-      +'</tr>';
+    tb.innerHTML+=requestListRowHtml(r,'openRequestModal');
   });
+}
+function requestDateText(r){
+  if(!r)return'—';
+  return r.date||fromIsoDate(r.createdAt||r.created_at)||'—';
+}
+function requestExpectedPayText(r){
+  if(!r)return'—';
+  return r.expectedPayDate||fromIsoDate(r.expected_pay_date)||'—';
+}
+function requestTypeCellHtml(r){
+  return'<div><span class="badge '+(TCSS[r.type]||'b-gray')+'">'+escAttr(r.tL||requestTypeLabel(r.type))+'</span><div style="font-size:10px;color:#94a3b8;margin-top:4px;font-family:monospace">'+escAttr(r.no||'—')+'</div></div>';
+}
+function requestDeptName(r){
+  return ((gD(r&&r.dc)||{}).n)||'—';
+}
+function requestSummaryCellHtml(r){
+  var e=gE(r.eid),status=SL[r.status]||r.status||'—';
+  return'<div style="font-size:12px;color:#334155;line-height:1.45;max-width:520px;white-space:normal">'+expenseRequestSummary(r,e)+'</div>'
+    +'<div style="font-size:10px;color:#94a3b8;margin-top:4px">'+escAttr(e.s||'—')+' · <span class="badge '+(SCSS[r.status]||'b-gray')+'" style="font-size:9px">'+escAttr(status)+'</span></div>';
+}
+function requestListRowHtml(r,openFn){
+  return'<tr style="cursor:pointer" onclick="'+openFn+'(\''+escAttr(r.id)+'\')">'
+    +'<td>'+requestTypeCellHtml(r)+'</td>'
+    +'<td style="font-weight:650;color:#334155">'+escAttr(requestDeptName(r))+'</td>'
+    +'<td style="font-weight:650;color:#334155">'+escAttr(r.app||'—')+'</td>'
+    +'<td>'+requestSummaryCellHtml(r)+'</td>'
+    +'<td style="text-align:right;font-weight:800;color:#1f2a44">'+fmt(requestReviewAmount(r)||r.amt||0)+'</td>'
+    +'<td style="font-size:11px;color:#334155">'+escAttr(requestDateText(r))+'</td>'
+    +'<td style="font-size:11px;color:'+(requestExpectedPayText(r)==='—'?'#94a3b8':'#334155')+'">'+escAttr(requestExpectedPayText(r))+'</td>'
+    +'</tr>';
 }
 function expenseRequestSummary(r,e){
   var fp=(r&&r.formPayload)||{};
@@ -7872,6 +7882,13 @@ window.withdrawRequest=async function(rid){
 };
 
 // ══ 詳情（FIX 1+3+4）══
+window.openRequestModal=function(rid){
+  var r=REQS.find(function(x){return x.id===rid;});
+  if(!r)return;
+  normalizeRequestTerminalState(r);
+  ensureRequestCashierStep(r);
+  showApprD(r);
+};
 window.openDetail=function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
   normalizeRequestTerminalState(r);
@@ -8321,9 +8338,12 @@ function selectedApprovalItems(){
   var map=S.apprItemMap||{},sel=S.apprSelected||{};
   return Object.keys(sel).filter(function(k){return sel[k]&&map[k];}).map(function(k){return map[k];});
 }
-function approvalRowNo(item){
+function approvalRowFormNo(item){
   if(item.kind==='req')return item.raw.no||'—';
   return invoiceGroupNo(item.raw)||item.raw.no||'—';
+}
+function approvalRowNo(item){
+  return approvalRowFormNo(item);
 }
 function approvalRowApplicant(item){
   var r=item.raw;
@@ -8373,6 +8393,17 @@ function approvalRowDoneDate(item){
   var last=steps.find(function(s){return s&&s.a==='approved'&&s.t;});
   return last?(fromIsoDate(stepDateToIsoLike(last.t))||String(last.t).slice(0,10)):'—';
 }
+function approvalRowApplyDate(item){
+  var r=item.raw;
+  if(item.kind==='req')return requestDateText(r);
+  return fromIsoDate(r.date||r.createdAt||r.created_at)||r.date||'—';
+}
+function approvalRowExpectedPayDate(item){
+  var r=item.raw;
+  if(item.kind==='req')return requestExpectedPayText(r);
+  if(item.kind==='recv')return fromIsoDate(r.dueDate||r.due_date)||'—';
+  return fromIsoDate(r.expectedReceiptDate||r.expected_receipt_date)||'—';
+}
 window.openApprovalItem=function(key){
   var item=(S.apprItemMap||{})[key];if(!item)return;
   document.querySelectorAll('[data-appr-key].selected').forEach(function(x){x.classList.remove('selected');});
@@ -8397,16 +8428,16 @@ function renderApprList(data){
     var batchBadge=(kind!=='req'&&r.batchId)?'<span class="badge b-blue" style="font-size:9px;margin-left:4px">整批 '+invoiceGroupCount(r)+' 張</span>':'';
     var pick=S.aT==='p'?'<label class="appr-select" onclick="event.stopPropagation()"><input class="appr-pick" type="checkbox" '+((S.apprSelected||{})[key]?'checked':'')+' onchange="toggleApprovalSelection(\''+key+'\',this.checked)">選取</label>':'';
     return'<tr data-appr-key="'+escAttr(key)+'" class="'+((S.apprSelected||{})[key]?'bulk-selected':'')+'" onclick="openApprovalItem(\''+key+'\')">'
-      +'<td>'+pick+'<div style="font-family:monospace;font-size:11px;color:#334155;font-weight:700">'+escAttr(approvalRowNo(item))+'</div><div style="margin-top:3px">'+histBadge+batchBadge+riskBadge+'</div></td>'
+      +'<td>'+pick+'<div><span class="badge '+type.cls+'">'+escAttr(type.label)+'</span><div style="font-size:10px;color:#94a3b8;margin-top:4px;font-family:monospace">'+escAttr(approvalRowFormNo(item))+'</div><div style="margin-top:3px">'+histBadge+batchBadge+riskBadge+'</div></div></td>'
+      +'<td style="font-weight:650;color:#334155">'+escAttr(dept.name||'—')+'</td>'
       +'<td style="font-weight:650;color:#334155">'+escAttr(approvalRowApplicant(item))+'</td>'
-      +'<td><span class="dt" style="font-size:10px">'+escAttr(dept.code)+'</span><div style="font-size:10px;color:#94a3b8;margin-top:3px">'+escAttr(dept.name)+'</div></td>'
-      +'<td><span class="badge '+type.cls+'">'+escAttr(type.label)+'</span></td>'
       +'<td><div style="font-size:12px;color:#334155;line-height:1.45;max-width:420px;white-space:normal">'+approvalRowSummary(item)+'</div><div style="font-size:10px;color:#94a3b8;margin-top:4px">'+(curStep?'目前關卡：'+escAttr(stepTitle(curStep))+' · ':'')+'<span class="badge '+status.cls+'" style="font-size:9px">'+escAttr(status.label)+'</span></div></td>'
       +'<td style="text-align:right;font-weight:800;color:#1f2a44">'+fmt(approvalRowAmount(item))+'</td>'
-      +'<td style="font-size:11px;color:'+(approvalRowDoneDate(item)==='—'?'#94a3b8':'#334155')+'">'+approvalRowDoneDate(item)+'<div style="margin-top:5px">'+withdrawBtn+'</div></td>'
+      +'<td style="font-size:11px;color:#334155">'+escAttr(approvalRowApplyDate(item))+'</td>'
+      +'<td style="font-size:11px;color:'+(approvalRowExpectedPayDate(item)==='—'?'#94a3b8':'#334155')+'">'+escAttr(approvalRowExpectedPayDate(item))+'<div style="margin-top:5px">'+withdrawBtn+'</div></td>'
       +'</tr>';
   }).join('');
-  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
   refreshApprovalBulkCount();
 }
 function renderApprDraftList(){
@@ -8416,19 +8447,19 @@ function renderApprDraftList(){
   var rows=DRAFTS.map(function(d){
     var fields=(d.state&&d.state.fields)||{};
     var applicant=d.applicant||fields['nr-app']||(S.user&&S.user.n)||'—';
-    var dept=fields['nr-dc']||fields['nr-dept']||'—';
+    var dept=fields['nr-dc']||fields['nr-dept']||'—',deptName=((gD(dept)||{}).n)||dept;
     var summary=escAttr((d.title||requestTypeLabel(d.type))+' · 附件 '+((d.files||[]).length)+' 個 · '+draftTime(d.updatedAt));
     return'<tr data-appr-key="draft:'+escAttr(d.id)+'" onclick="openApprovalDraft(\''+escAttr(d.id)+'\')">'
-      +'<td><div style="font-family:monospace;font-size:11px;color:#334155;font-weight:700">暫存</div><div style="margin-top:3px"><span class="badge b-gray" style="font-size:9px">草稿</span></div></td>'
+      +'<td><span class="badge '+(TCSS[d.type]||'b-gray')+'">'+escAttr(requestTypeLabel(d.type))+'</span><div style="font-size:10px;color:#94a3b8;margin-top:4px;font-family:monospace">暫存</div></td>'
+      +'<td style="font-weight:650;color:#334155">'+escAttr(deptName||'—')+'</td>'
       +'<td style="font-weight:650;color:#334155">'+escAttr(applicant)+'</td>'
-      +'<td><span class="dt" style="font-size:10px">'+escAttr(dept)+'</span></td>'
-      +'<td><span class="badge '+(TCSS[d.type]||'b-gray')+'">'+escAttr(requestTypeLabel(d.type))+'</span></td>'
       +'<td><div style="font-size:12px;color:#334155;line-height:1.45;max-width:420px;white-space:normal">'+summary+'</div><div style="margin-top:5px;display:flex;gap:5px"><button class="btn-g" onclick="event.stopPropagation();openDraft(\''+escAttr(d.id)+'\')">繼續填寫</button><button class="btn-g" style="color:#8a1010" onclick="event.stopPropagation();deleteDraftFromApprovals(\''+escAttr(d.id)+'\')">刪除</button></div></td>'
       +'<td style="text-align:right;font-weight:800;color:#1f2a44">'+(d.amount?fmt(d.amount):'—')+'</td>'
-      +'<td style="font-size:11px;color:#94a3b8">—</td>'
+      +'<td style="font-size:11px;color:#334155">'+escAttr(fields['nr-date']||'—')+'</td>'
+      +'<td style="font-size:11px;color:#94a3b8">'+escAttr(fields['nr-paydate']||'—')+'</td>'
       +'</tr>';
   }).join('');
-  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table"><thead><tr><th>單號</th><th>申請人</th><th>部門</th><th>表單類型</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>完成日期</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>摘要資訊</th><th style="text-align:right">金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
 window.openApprovalDraft=function(id){
   var d=(DRAFTS||[]).find(function(x){return x.id===id;});
