@@ -4292,15 +4292,30 @@ async function demoLoginByEmail(email,pw,authMessage){
 async function enterByEmail(email){
   var client=getSb();
   if(!client)return false;
-  var prof=await client.from('finance_users').select('*').eq('email',email).single();
+  var profileEmail=financeLoginEmailAlias(email);
+  var prof=await client.from('finance_users').select('*').eq('email',profileEmail).single();
   if(prof.error||!prof.data){
     var err=el('login-err');
-    if(err){err.style.display='block';err.textContent='此 Google 帳號尚未列入 finance_users 或未啟用：'+email;}
+    if(err){err.style.display='block';err.textContent='此帳號尚未列入 finance_users 或未啟用：'+email;}
     return false;
   }
   S.demoLogin=false;
   doEnter(mapUser(prof.data));
   return true;
+}
+function financeLoginEmailAlias(email){
+  var e=String(email||'').trim().toLowerCase();
+  var map={
+    '1@suiyuecare.com':'project_pan@suiyuecare.com',
+    '2@suiyuecare.com':'project_chiang@suiyuecare.com',
+    '3@suiyuecare.com':'project@suiyuecare.com',
+    '4@suiyuecare.com':'entrepreneur@suiyuecare.com',
+    '5@suiyuecare.com':'admin@suiyuecare.com',
+    '6@suiyuecare.com':'suiyue.acct@suiyuecare.com',
+    '7@suiyuecare.com':'suiyue.hr@suiyuecare.com',
+    '8@suiyuecare.com':'generalaffairs@suiyuecare.com'
+  };
+  return map[e]||e;
 }
 function oauthRedirectUrl(){
   if(location.protocol==='file:')return PRODUCTION_APP_URL;
