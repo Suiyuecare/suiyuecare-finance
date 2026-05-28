@@ -1133,6 +1133,52 @@ input:focus,select:focus,textarea:focus{
   background:transparent!important;
   font-weight:700!important;
 }
+
+/* Finance-wide shape normalization: keep controls professional, not circular. */
+.btn-p,.btn-s,.btn-g,.tb,.rtab,.google-btn,.manual-download,.version-note-badge,
+.badge,.ep,.dt,.file-chip,.appr-select,.mobile-nav-select{
+  border-radius:10px!important;
+}
+.btn-p,.btn-s,.btn-g{
+  min-height:40px!important;
+  padding:8px 14px!important;
+  justify-content:center;
+}
+.tb-bar,.rtab-bar,.appr-bulkbar,.upload-zone,.card,.sc,.bill-card,.voucher-card,.modal,
+.employee-guide-main,.employee-guide-card,.employee-step-help,.employee-mini-step,
+.step-type,.step-opt,.nr-info-panel,.type-mark,.brand-logo,.login-brand{
+  border-radius:10px!important;
+}
+.si-dot,.flow-dot,.tl-dot,.av,.login-point::before,
+.ni .cnt,#n-badge,#dash-notif [style*="border-radius:50%"],
+.notif-row [style*="border-radius:50%"]{
+  border-radius:6px!important;
+}
+.prog-wrap,.prog-fill,.bar-track,.bar-fill,
+[style*="border-radius:999px"],[style*="border-radius:99px"],[style*="border-radius:50%"]{
+  border-radius:8px!important;
+}
+#pg-bills>.pg-header,#pg-bills .btn-p{
+  border-radius:10px!important;
+}
+#pg-bills>div:first-child{
+  align-items:flex-start!important;
+  gap:12px;
+}
+#pg-bills>div:first-child .btn-p{
+  width:auto!important;
+  height:auto!important;
+  min-width:0!important;
+  min-height:42px!important;
+  padding:8px 14px!important;
+  aspect-ratio:auto!important;
+  border-radius:10px!important;
+  flex-shrink:0;
+}
+@media(max-width:760px){
+  .btn-p,.btn-s,.btn-g{border-radius:10px!important}
+  nav .ni,nav .nav-ico,.card,.sc,.bill-card,.voucher-card,.modal{border-radius:10px!important}
+}
 </style>
 </head>
 <body>
