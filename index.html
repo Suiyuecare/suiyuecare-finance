@@ -1269,7 +1269,7 @@ input:focus,select:focus,textarea:focus{
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="card" style="padding:13px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">最新通知</div><div id="dash-notif"></div></div>
       <div class="card"><div class="chd"><span class="cht">最近申請</span><button class="btn-g" onclick="nav('expenses',null)">全部 →</button></div>
-        <div style="overflow-x:auto"><table class="finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>摘要資訊</th><th>金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody id="dash-tbl"></tbody></table></div></div>
+        <div style="overflow-x:auto"><table class="finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>目的</th><th>金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody id="dash-tbl"></tbody></table></div></div>
     </div>
   </div>
 
@@ -1304,7 +1304,7 @@ input:focus,select:focus,textarea:focus{
       <select id="exp-ef" onchange="filterExp()" style="width:auto"><option value="">全部法人</option></select>
       <select id="exp-sf" onchange="filterExp()" style="width:auto"><option value="">全部狀態</option><option value="completed">已完成</option><option value="pending_section_chief">待上一層主管</option><option value="pending_dept_manager">待部門主管</option><option value="pending_admin_director">待行政部門主任</option><option value="pending_accountant">待會計</option><option value="pending_ceo">待執行長授權</option><option value="pending_cashier">待出納放款</option><option value="pending_applicant_confirm">待申請人確認</option><option value="pending_voucher">待會計入帳</option><option value="rejected">已退件</option></select>
     </div>
-    <div class="card"><div style="overflow-x:auto"><table class="finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>摘要資訊</th><th>金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody id="exp-tbody"></tbody></table></div></div>
+    <div class="card"><div style="overflow-x:auto"><table class="finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>目的</th><th>金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody id="exp-tbody"></tbody></table></div></div>
   </div>
 
   <!-- 詳情 -->
@@ -1374,7 +1374,7 @@ input:focus,select:focus,textarea:focus{
       <div><div class="ph">股東 / 公司間往來</div><div class="ps">股東借款、還款、增資、公司間借款；完成後直接寫入分類帳並同步三表</div></div>
       <button class="btn-s" onclick="nav('reports',null)">查看三表</button>
     </div>
-    <div class="g2" style="align-items:start">
+    <div style="max-width:980px">
       <div class="card"><div class="chd"><span class="cht">新增股東 / 公司間資金往來</span></div><div style="padding:13px">
         <div class="fr2"><div class="fg"><label class="fl">法人 *</label><select id="sh-ent" onchange="updateShareholderPreview()"></select></div><div class="fg"><label class="fl">歸屬組別 / 部門 / 專案 *</label><select id="sh-dept"></select></div></div>
         <div class="fr2"><div class="fg"><label class="fl">交易類型 *</label><select id="sh-type" onchange="updateShareholderPreview()"><option value="capital">股東出資 / 增資</option><option value="loan_in">股東借款給公司</option><option value="loan_repay">公司償還股東借款</option><option value="intercompany_loan">公司間借款（本法人借出給對方）</option><option value="intercompany_repay">公司間還款（本法人還款給對方）</option></select></div><div class="fg"><label class="fl">入帳日期 *</label><input type="date" id="sh-date"></div></div>
@@ -1385,7 +1385,6 @@ input:focus,select:focus,textarea:focus{
         <div id="sh-preview" style="background:var(--warm);border:1px solid #f0e0c8;border-radius:9px;padding:9px;font-size:12px;color:#334155;margin-bottom:10px"></div>
         <button class="btn-p" style="width:100%;justify-content:center" onclick="submitShareholderTxn()">建立傳票並入帳</button>
       </div></div>
-      <div class="card"><div class="chd"><span class="cht">近期股東 / 公司間往來傳票</span><span id="sh-count" style="font-size:11px;color:#94a3b8"></span></div><div id="sh-list" style="padding:10px"></div></div>
     </div>
   </div>
 
@@ -6029,7 +6028,13 @@ function travelApprovalOverviewHtml(){
 }
 function nrSubmitActionsHtml(includeTravelStep){
   var msg=includeTravelStep?'確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊、2-4 差旅申請資料都填寫完成後，再暫存或送出簽核。':'確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊都填寫完成後，再暫存或送出簽核。';
-  return'<div class="nr-submit-actions" style="display:flex;gap:8px;align-items:center;margin-top:12px;padding:10px;border:1px solid #f0e0c8;background:#fff8ed;border-radius:10px"><div class="nr-submit-hint" style="flex:1;font-size:11px;color:#8b7358;line-height:1.5">'+msg+' 暫存只會存在你的帳號，不會送主管。</div><button type="button" class="btn-s" style="min-width:130px;justify-content:center" onclick="nrSaveDraft()">暫存，晚點再填</button><button type="button" class="btn-p" style="min-width:160px;justify-content:center" onclick="submitNR()">送出給主管簽核</button></div>';
+  return'<div class="nr-submit-actions" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,420px);gap:10px;align-items:stretch;margin-top:12px;padding:10px;border:1px solid #f0e0c8;background:#fff8ed;border-radius:10px">'
+    +'<div class="nr-submit-hint" style="display:flex;align-items:center;font-size:11px;color:#8b7358;line-height:1.5">'+msg+' 暫存只會存在你的帳號，不會送主管。</div>'
+    +'<div style="background:#fff;border:1px solid #efd7b8;border-radius:10px;padding:10px;display:grid;gap:8px">'
+    +'<div style="font-size:12px;font-weight:750;color:#4b2d18;text-align:center">暫存 / 送出簽核</div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn-s" style="min-width:130px;justify-content:center" onclick="nrSaveDraft()">暫存</button><button type="button" class="btn-p" style="min-width:160px;justify-content:center" onclick="submitNR()">送出簽核</button></div>'
+    +'</div>'
+    +'</div>';
 }
 window.applicantSelectChanged=function(keepValue){
   var sel=el('nr-app-sel'),inp=el('nr-app'),wrap=el('nr-app-custom-wrap');
@@ -7748,7 +7753,7 @@ window.submitNR=async function(){
     passbookFiles:passbookAttachments,
     steps:steps,voucherId:'',
     dataEnv:activeDataEnvironment(),
-    formPayload:{applicantProfile:applicantProfile,expenseEntity:eid,expenseDepartment:dc,dataEnvironment:activeDataEnvironment(),receiptType:S.nrRec||'',paymentType:S.nrPay||'',lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:passbookAttachments,travelInfo:travelInfo||null,refundInfo:refundInfo||null,purchaseInfo:purchaseInfo||null,hrInfo:hrInfo||null}};
+    formPayload:{applicantProfile:applicantProfile,expenseEntity:eid,expenseDepartment:dc,dataEnvironment:activeDataEnvironment(),requestPurpose:purpose,requestNote:note,receiptType:S.nrRec||'',paymentType:S.nrPay||'',lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:passbookAttachments,travelInfo:travelInfo||null,refundInfo:refundInfo||null,purchaseInfo:purchaseInfo||null,hrInfo:hrInfo||null}};
   if(S.nrType==='petty_cash_request'){
     normalizePettyAccounting(newReq);
     newReq.formPayload=Object.assign({},newReq.formPayload||{},{
@@ -7938,17 +7943,16 @@ function fullWidthSlice(v,len){
   }
   return out;
 }
-function expenseRequestSummary(r,e){
+function requestPurposeText(r){
   var fp=(r&&r.formPayload)||{};
-  var parts=[];
-  var desc=String((r&&r.desc)||fp.purpose||fp.reason||fp.note||'').trim();
-  if(desc)parts.push(desc);
-  if(r&&r.payee)parts.push('收款人：'+r.payee);
-  if(r&&r.expectedPayDate)parts.push('預計匯款：'+r.expectedPayDate);
-  if(r&&r.bankName)parts.push('銀行：'+r.bankName+(r.bankBranch?' '+r.bankBranch:''));
-  if(!parts.length&&r&&r.bankAcc)parts.push('匯款帳號：'+r.bankAcc);
-  if(!parts.length)parts.push((e&&e.s)||'—');
-  return escAttr(fullWidthSlice(parts.slice(0,3).join(' · '),30));
+  var purpose=String(fp.requestPurpose||fp.purpose||fp.reason||'').trim();
+  if(purpose)return purpose;
+  var desc=String((r&&r.desc)||fp.note||'').replace(/\s+/g,' ').trim();
+  if(!desc)return'—';
+  return desc.split(/[：:]/)[0].trim()||desc;
+}
+function expenseRequestSummary(r,e){
+  return escAttr(fullWidthSlice(requestPurposeText(r),30));
 }
 function expenseCompletedDate(r){
   if(!r||!isReqDone(r))return'—';
@@ -8008,18 +8012,7 @@ function supervisorReviewCardHtml(r,compact){
     +'</div><div style="display:grid;grid-template-columns:'+(compact?'1fr':'repeat(2,minmax(0,1fr))')+';gap:7px">'+issueHtml+'</div></div></div>';
 }
 function approvalManagerSummaryHtml(pm){
-  if(!S.user)return'';
-  var managerRoles=['section_chief','dept_manager','admin_director','ceo','cashier'];
-  if(managerRoles.indexOf(S.user.role)<0&&S.user.role!=='general_affairs')return'';
-  var reqs=pm.filter(function(item){return item.kind==='req';}).map(function(item){return item.raw;});
-  var high=reqs.filter(function(r){return requestReviewAmount(r)>=50000;}).length;
-  var missing=reqs.filter(function(r){return supervisorReviewIssues(r).some(function(x){return x.label==='缺附件';});}).length;
-  var returned=reqs.filter(requestHasReturnHistory).length;
-  return'<div class="grid three" style="margin-bottom:10px">'
-    +'<div class="card" style="padding:12px"><div style="font-size:11px;color:#8a6a3b;font-weight:800">主管待辦</div><div style="font-size:24px;font-weight:900;color:#1f2a44;margin-top:4px">'+pm.length+'</div><div style="font-size:11px;color:#94a3b8">目前需要你處理</div></div>'
-    +'<div class="card" style="padding:12px"><div style="font-size:11px;color:#8a6a3b;font-weight:800">高金額</div><div style="font-size:24px;font-weight:900;color:'+(high?'#8a1010':'#1f2a44')+';margin-top:4px">'+high+'</div><div style="font-size:11px;color:#94a3b8">達 NT$50,000 以上</div></div>'
-    +'<div class="card" style="padding:12px"><div style="font-size:11px;color:#8a6a3b;font-weight:800">需補確認</div><div style="font-size:24px;font-weight:900;color:'+(missing+returned?'#9a5a00':'#1f2a44')+';margin-top:4px">'+(missing+returned)+'</div><div style="font-size:11px;color:#94a3b8">缺附件或曾退回</div></div>'
-    +'</div>';
+  return'';
 }
 function ceoPendingFundingRequests(){
   return REQS.filter(function(r){
@@ -8653,7 +8646,7 @@ function renderApprList(data){
       +'<td class="date-cell" style="color:'+(approvalRowExpectedPayDate(item)==='—'?'#94a3b8':'#334155')+'">'+escAttr(approvalRowExpectedPayDate(item))+'<div style="margin-top:5px">'+withdrawBtn+'</div></td>'
       +'</tr>';
   }).join('');
-  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>摘要資訊</th><th>金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>目的</th><th>金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
   refreshApprovalBulkCount();
 }
 function renderApprDraftList(){
@@ -8675,7 +8668,7 @@ function renderApprDraftList(){
       +'<td class="date-cell" style="color:#94a3b8">'+escAttr(fields['nr-paydate']||'—')+'</td>'
       +'</tr>';
   }).join('');
-  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>摘要資訊</th><th>金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table"><thead><tr><th>表單類型</th><th>部門</th><th>申請人</th><th>目的</th><th>金額</th><th>申請日期</th><th>預計匯款日</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
 window.openApprovalDraft=function(id){
   var d=(DRAFTS||[]).find(function(x){return x.id===id;});
