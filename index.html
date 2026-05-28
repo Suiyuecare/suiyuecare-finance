@@ -6868,10 +6868,11 @@ function renderTravelSheet(){
       +'<td style="font-family:monospace;color:'+(warn?'#8a1010':'#334155')+'">'+cap+'</td>'
       +'<td><input value="'+escAttr(r.note||'')+'" placeholder="'+(r.kind==='other'?'請說明其他費用':'備註')+'" oninput="travelEditRow('+i+',\'note\',this.value)"></td>'
       +'<td style="font-size:10px;color:'+(warn?'#8a1010':'#8b7358')+'">'+(warn?'已自動限制不得超過上限':travelRowRuleText(r.kind))+'</td>'
+      +'<td style="width:30px;text-align:center"><button onclick="travelDelRow('+i+')" style="border:none;background:transparent;color:#94a3b8;cursor:pointer">×</button></td>'
       +'</tr>';
   }).join('');
   box.innerHTML='<style>#travel-sheet table input{border:none;background:transparent;padding:5px 6px;font-size:11px;width:100%;border-radius:0}#travel-sheet td,#travel-sheet th{border:1px solid #e8dcc8;padding:6px;vertical-align:top}#travel-sheet th{background:#f7ead6;color:#7c3f00;font-size:10px;font-weight:650;text-align:left}</style>'
-    +'<div class="sheet-full-scroll" style="overflow:auto;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table class="excel-sheet-table" style="min-width:880px;width:100%"><thead><tr><th>費用項目</th><th>本次申請金額</th><th>申請金額上限</th><th>說明</th><th>規則</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div class="sheet-full-scroll" style="overflow:auto;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table class="excel-sheet-table" style="min-width:920px;width:100%"><thead><tr><th>費用項目</th><th>本次申請金額</th><th>申請金額上限</th><th>說明</th><th>規則</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><div style="font-size:11px;color:#8b7358">'+travelLimitSummary()+'</div><div style="text-align:right"><div style="font-size:10px;color:#94a3b8">差旅申請合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(travelSum())+'</div></div></div>';
 }
 function travelRowRuleText(kind){
@@ -6905,6 +6906,12 @@ window.travelAddOtherRow=function(){
   ensureTravelRows();
   S.travelRows.push({kind:'other',label:'其他費用',amount:0,limit:0,note:'',files:travelFileNames('other')});
   renderTravelSheet();
+};
+window.travelDelRow=function(i){
+  ensureTravelRows();
+  S.travelRows.splice(i,1);
+  if(!S.travelRows.length)S.travelRows=[{kind:'other',label:'其他費用',amount:0,limit:0,note:'',files:''}];
+  syncTravelRows();
 };
 async function travelAnalyzeOneFile(file,kind){
   var att=await fileToAttachment(file);
@@ -10719,21 +10726,21 @@ function renderUsersHealth(){
   var box=el('user-health');if(!box)return;
   var h=hrPersonnelIssues();
   var duplicateCount=h.duplicateEmails.reduce(function(sum,rows){return sum+rows.length;},0);
-  var cards=[
-    {t:'啟用人員',v:h.active.length,cls:'b-ok',note:'可登入與參與簽核'},
-    {t:'缺直屬主管',v:h.missingSupervisor.length,cls:h.missingSupervisor.length?'b-wait':'b-ok',note:'會影響主管關卡'},
-    {t:'部門異常',v:h.invalidDept.length,cls:h.invalidDept.length?'b-bad':'b-ok',note:'會影響三表歸屬'},
-    {t:'重複 Email',v:duplicateCount,cls:duplicateCount?'b-bad':'b-ok',note:'會影響登入識別'}
+  var rows=[
+    ['啟用人員',h.active.length,'可登入與參與簽核','正常'],
+    ['缺直屬主管',h.missingSupervisor.length,'會影響主管關卡',h.missingSupervisor.length?'待處理':'正常'],
+    ['部門異常',h.invalidDept.length,'會影響三表歸屬',h.invalidDept.length?'待處理':'正常'],
+    ['重複 Email',duplicateCount,'會影響登入識別',duplicateCount?'待處理':'正常']
   ];
   var issueLines=[];
   if(h.missingSupervisor.length)issueLines.push('缺直屬主管：'+h.missingSupervisor.slice(0,5).map(function(u){return u.n;}).join('、')+(h.missingSupervisor.length>5?' 等':''));
   if(h.invalidDept.length)issueLines.push('部門異常：'+h.invalidDept.slice(0,5).map(function(u){return u.n+'（'+(u.dc||'未填')+'）';}).join('、')+(h.invalidDept.length>5?' 等':''));
   if(h.duplicateEmails.length)issueLines.push('重複 Email：'+h.duplicateEmails.slice(0,3).map(function(rows){return rows[0].email+'（'+rows.map(function(u){return u.n;}).join('、')+'）';}).join('；'));
   if(h.missingProfile.length)issueLines.push('資料不完整：'+h.missingProfile.slice(0,5).map(function(u){return u.n||u.email||u.id;}).join('、')+(h.missingProfile.length>5?' 等':''));
-  box.innerHTML='<div class="grid three" style="margin-bottom:10px">'
-    +cards.map(function(c){return'<div class="card" style="padding:12px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><div style="font-size:11px;color:#8a6a3b;font-weight:800">'+c.t+'</div><div style="font-size:24px;font-weight:900;color:#1f2a44;margin-top:4px">'+c.v+'</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+c.note+'</div></div><span class="badge '+c.cls+'">'+(c.v?'待處理':'正常')+'</span></div></div>';}).join('')
-    +'</div>'
-    +(issueLines.length?'<div class="card" style="padding:12px;margin-bottom:10px;border-color:#f0c982;background:#fffaf2"><div style="font-size:12px;font-weight:900;color:#7a3b00;margin-bottom:6px">人資資料檢核提醒</div><div style="font-size:12px;color:#334155;line-height:1.7">'+issueLines.map(function(x){return'<div>'+escAttr(x)+'</div>';}).join('')+'</div><div style="font-size:11px;color:#94a3b8;margin-top:6px">請優先補齊主管與部門，避免簽核找不到下一關或報表歸屬錯誤。</div></div>':'');
+  box.innerHTML='<div class="card" style="margin-bottom:10px"><div style="overflow-x:auto"><table class="finance-list-table user-list-table"><thead><tr><th>檢核項目</th><th style="text-align:right">數量</th><th>說明</th><th>狀態</th></tr></thead><tbody>'
+    +rows.map(function(r){var ok=r[3]==='正常';return'<tr><td><strong>'+r[0]+'</strong></td><td style="text-align:right;font-weight:900;color:#1f2a44">'+r[1]+'</td><td style="color:#64748b">'+r[2]+'</td><td><span class="badge '+(ok?'b-ok':'b-wait')+'">'+r[3]+'</span></td></tr>';}).join('')
+    +(issueLines.length?'<tr><td><strong>檢核提醒</strong></td><td style="text-align:right">'+issueLines.length+'</td><td colspan="2" style="color:#334155;line-height:1.7">'+issueLines.map(function(x){return'<div>'+escAttr(x)+'</div>';}).join('')+'</td></tr>':'')
+    +'</tbody></table></div></div>';
 }
 function renderUsers(){
   var q=el('uq')?el('uq').value.toLowerCase():'';var rf=(el('urf')||{}).value||'';
@@ -10748,12 +10755,12 @@ function renderUsers(){
   var aw=el('user-add-wrap');if(aw)aw.innerHTML=canEdit?'<button class="btn-p" onclick="openAddUser()">+ 新增人員</button>':'';
   var notice=el('user-readonly-notice');if(notice)notice.style.display=canEdit?'none':'block';
   renderUsersHealth();
-  el('user-wrap').innerHTML='<div style="overflow-x:auto"><table><thead><tr><th>名字</th><th>公司別</th><th>部門</th><th>層級</th><th>Email</th><th>狀態</th><th>操作</th></tr></thead><tbody>'
+  el('user-wrap').innerHTML='<div style="overflow-x:auto"><table class="finance-list-table user-list-table"><thead><tr><th>名字</th><th>公司別</th><th>部門</th><th>層級</th><th>Email</th><th>狀態</th><th>操作</th></tr></thead><tbody>'
     +(data.map(function(u){
       var d=gD(u.dc),ent=gE(u.eid||entityOfDept(u.dc)||'E1');
-      return'<tr style="opacity:'+(u.active?1:.5)+'"><td><div style="display:flex;align-items:center;gap:7px"><div class="av" style="width:26px;height:26px;font-size:11px;flex-shrink:0">'+u.init+'</div><strong style="font-size:12px;color:#334155">'+u.n+'</strong></div></td>'
-        +'<td><span class="ep" style="font-size:9px">'+(ent.s||'未指定')+'</span></td>'
-        +'<td><span class="dt" style="font-size:9px">'+u.dc+'</span> <span style="font-size:11px;color:#64748b">'+(d.n||'未指定')+'</span></td>'
+      return'<tr style="opacity:'+(u.active?1:.5)+'"><td><strong style="font-size:12px;color:#334155">'+u.n+'</strong></td>'
+        +'<td style="font-size:12px;color:#334155">'+(ent.full||ent.s||'未指定')+'</td>'
+        +'<td style="font-size:12px;color:#334155">'+(d.n||'未指定')+'</td>'
         +'<td><span class="badge '+RC[u.role]+'">'+(u.rL||RL[u.role]||u.role)+'</span></td>'
         +'<td style="font-size:12px;color:#334155">'+u.email+'</td>'
         +'<td><span class="badge '+(u.active?'b-ok':'b-gray')+'">'+(u.active?'啟用':'停用')+'</span></td>'
