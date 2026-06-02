@@ -8,7 +8,7 @@ type InvoiceRequest = {
   fileName?: string;
   mime?: string;
   dataUrl?: string;
-  mode?: "invoice" | "expense_items" | "passbook";
+  mode?: "invoice" | "expense_items" | "passbook" | "hr_expense_items" | "hr_labor_fee";
 };
 
 function json(body: unknown, status = 200) {
@@ -92,10 +92,20 @@ Deno.serve(async (req) => {
   const body = (await req.json()) as InvoiceRequest;
   if (!body.dataUrl) return json({ error: "Missing dataUrl" }, 400);
 
-  const mime = body.mime || "";
-  const isPdf = mime.includes("pdf") || body.fileName?.toLowerCase().endsWith(".pdf");
-  const fileInput = isPdf
-    ? { type: "input_file", filename: body.fileName || "invoice.pdf", file_data: body.dataUrl }
+  const mime = (body.mime || "").toLowerCase();
+  const fileName = body.fileName || "upload";
+  const lowerName = fileName.toLowerCase();
+  const isFileLike =
+    mime.includes("pdf") ||
+    mime.includes("word") ||
+    mime.includes("officedocument") ||
+    mime.includes("excel") ||
+    mime.includes("spreadsheet") ||
+    mime.includes("csv") ||
+    mime.includes("text/plain") ||
+    /\.(pdf|doc|docx|xls|xlsx|csv|txt)$/i.test(lowerName);
+  const fileInput = isFileLike
+    ? { type: "input_file", filename: fileName, file_data: body.dataUrl }
     : { type: "input_image", image_url: body.dataUrl, detail: "high" };
 
   const passbookSchema = {
@@ -130,6 +140,9 @@ Deno.serve(async (req) => {
       currency: { type: "string" },
       confidence: { type: "number" },
       accounting_subject_suggestion: { type: "string" },
+      usage_context_suggestion: { type: "string" },
+      tax_treatment_suggestion: { type: "string" },
+      assetization_suggestion: { type: "string" },
       items: {
         type: "array",
         items: {
@@ -161,16 +174,106 @@ Deno.serve(async (req) => {
       "currency",
       "confidence",
       "accounting_subject_suggestion",
+      "usage_context_suggestion",
+      "tax_treatment_suggestion",
+      "assetization_suggestion",
       "items",
       "warnings",
     ],
   };
 
+  const hrLaborSchema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      employee_no: { type: "string" },
+      payee_name: { type: "string" },
+      labor_fee_type: { type: "string", description: "9A 或 9B；若文件無法判斷請填空字串" },
+      labor_period: { type: "string", description: "勞務報酬單上的勞務期間原文；若文件沒有請填空字串" },
+      salary_month: { type: "string", description: "YYYY-MM-DD；以勞務期間月份加 1 個月的 15 日輸出，若無法判斷請填空字串" },
+      payment_amount: { type: "number" },
+      bank_name: { type: "string" },
+      branch_name: { type: "string" },
+      account_number: { type: "string" },
+      id_number: { type: "string" },
+      withholding_tax: { type: "number" },
+      supplemental_premium: { type: "number" },
+      confidence: { type: "number" },
+      warnings: { type: "array", items: { type: "string" } },
+    },
+    required: [
+      "employee_no",
+      "payee_name",
+      "labor_fee_type",
+      "labor_period",
+      "salary_month",
+      "payment_amount",
+      "bank_name",
+      "branch_name",
+      "account_number",
+      "id_number",
+      "withholding_tax",
+      "supplemental_premium",
+      "confidence",
+      "warnings",
+    ],
+  };
+
+  const hrExpenseSchema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      rows: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            employee_no: { type: "string" },
+            payee_name: { type: "string" },
+            expense_type: {
+              type: "string",
+              description: "50薪資、獎金、9A勞務報酬單、9B勞務報酬單、勞保、健保、勞退、二代健保補充保費、資遣費或其他",
+            },
+            labor_period: { type: "string", description: "9A/9B 勞務報酬單的勞務期間原文；非勞報單或沒有期間請填空字串" },
+            salary_month: { type: "string", description: "YYYY-MM-DD；9A/9B 以勞務期間月份加 1 個月的 15 日輸出，其他人事費用若文件有付款日/薪資日則填該日期，否則空字串" },
+            payment_amount: { type: "number" },
+            bank_name: { type: "string" },
+            branch_name: { type: "string" },
+            account_number: { type: "string" },
+            note: { type: "string" },
+          },
+          required: [
+            "employee_no",
+            "payee_name",
+            "expense_type",
+            "labor_period",
+            "salary_month",
+            "payment_amount",
+            "bank_name",
+            "branch_name",
+            "account_number",
+            "note",
+          ],
+        },
+      },
+      confidence: { type: "number" },
+      warnings: { type: "array", items: { type: "string" } },
+    },
+    required: ["rows", "confidence", "warnings"],
+  };
+
   const isPassbook = body.mode === "passbook";
-  const schema = isPassbook ? passbookSchema : invoiceSchema;
+  const isHrLabor = body.mode === "hr_labor_fee";
+  const isHrExpense = body.mode === "hr_expense_items";
+  const schema = isPassbook ? passbookSchema : isHrLabor ? hrLaborSchema : isHrExpense ? hrExpenseSchema : invoiceSchema;
   const prompt = isPassbook
     ? "請辨識這張台灣銀行存摺封面或帳戶資料截圖。只輸出 JSON。請抓取 account_name（戶名/收款人）、bank_name（銀行名稱，例如兆豐銀行、玉山銀行）、branch_name（分行名稱，若看不到填空字串）、account_number（帳號，保留原格式但移除多餘空白）、bank_code（銀行代號，例如 017，若看不到填空字串）、confidence、warnings。若不是存摺封面或看不清楚，請降低 confidence 並在 warnings 說明。"
-    : "請辨識這張台灣發票、收據或請款憑據。只輸出 JSON。金額請轉成數字；日期用 YYYY-MM-DD；若看不清楚請把 confidence 降低並在 warnings 說明。buyer 指買受人，seller 指開立方。items 請列出每個商品或費用項目，包含 item_name、quantity、unit、unit_price、total_amount；unit 請填單位，例如個、張、式、月、次、份，若看不到請填空字串；若憑據只看得到總額，items 請放一筆摘要列。accounting_subject_suggestion 請依內容用繁體中文建議會計科目，例如旅費、文具用品、勞務費、租金支出、其他費用。";
+    : isHrLabor
+      ? "請辨識這份台灣 9A/9B 勞務報酬單或接案人員勞報單。只輸出 JSON。請特別抓取：payee_name（所得人/收款人/姓名）、labor_fee_type（文件若標示 9A 就填 9A，標示 9B 就填 9B；無法判斷填空字串）、labor_period（勞務期間原文，例如 2026/06/01-2026/06/30 或 115年5月）、salary_month（薪資發放日，請以勞務期間月份加 1 個月的 15 日輸出 YYYY-MM-DD，例如勞務期間 2026/06 則輸出 2026-07-15；無法判斷填空字串，不要用檔名月份或今天日期猜測）、payment_amount（實際匯款/實領/應付金額，若只有給付總額則填給付總額）、bank_name、branch_name、account_number。若文件有 employee_no、身分證字號、扣繳稅額、補充保費，也請填入 employee_no、id_number、withholding_tax、supplemental_premium。帳號請以字串輸出、保留完整位數，不可使用科學記號，並移除多餘空白與破折號以外的雜訊。若看不清楚請降低 confidence 並在 warnings 說明。"
+      : isHrExpense
+        ? "請辨識這份台灣人事費用支出表、薪資表、獎金表、勞健保繳費表、勞退表、二代健保補充保費表、資遣費或其他人事費用明細。只輸出 JSON。請把每一位或每一筆支出轉成 rows。每列請抓取 employee_no（員工編號，沒有則空字串）、payee_name（姓名/收款人）、expense_type（請優先填 50薪資、獎金、9A勞務報酬單、9B勞務報酬單、勞保、健保、勞退、二代健保補充保費、資遣費、其他；若看到 9A 或 9B 必須分開填）、labor_period（9A/9B 勞報單請抓勞務期間原文，其他類型填空字串）、salary_month（9A/9B 請以勞務期間月份加 1 個月的 15 日輸出 YYYY-MM-DD，例如勞務期間 2026/06 則輸出 2026-07-15；其他類型若文件有薪資日或付款日才填，否則空字串）、payment_amount（實際匯款金額/應付金額）、bank_name、branch_name、account_number、note。銀行、分行、帳號若文件沒有請填空字串，不要猜測；帳號請以字串輸出、保留完整位數，不可使用科學記號。若看不清楚請降低 confidence 並在 warnings 說明。"
+      : "請辨識這張台灣發票、收據或請款憑據。只輸出 JSON。金額請轉成數字；日期用 YYYY-MM-DD；若看不清楚請把 confidence 降低並在 warnings 說明。buyer 指買受人，seller 指開立方。items 請列出每個商品或費用項目，包含 item_name、quantity、unit、unit_price、total_amount；unit 請填單位，例如個、張、式、月、次、份，若看不到請填空字串；若憑據只看得到總額，items 請放一筆摘要列。會計科目建議請先判斷使用情境，再看商品品項與明細。accounting_subject_suggestion 請依內容用繁體中文建議，例如差旅費、交通費、文具用品、印刷費、勞務費、租金支出、保險費、修繕費、廣告費、郵電費、長照服務成本、課程活動成本、固定資產待確認、其他費用。usage_context_suggestion 請填行政營運、長照服務、課程活動、差旅、人事、採購、股東往來、公司間往來或不確定。tax_treatment_suggestion 請填發票可扣抵、非發票不扣抵或需會計確認。assetization_suggestion 請說明是否可能需要資產化，若否請填不需資產化。";
 
   const openaiRes = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -195,7 +298,7 @@ Deno.serve(async (req) => {
       text: {
         format: {
           type: "json_schema",
-          name: isPassbook ? "passbook_ocr_result" : "invoice_ocr_result",
+          name: isPassbook ? "passbook_ocr_result" : isHrLabor ? "hr_labor_fee_ocr_result" : isHrExpense ? "hr_expense_ocr_result" : "invoice_ocr_result",
           schema,
           strict: false,
         },
@@ -208,7 +311,7 @@ Deno.serve(async (req) => {
 
   try {
     const parsed = parseModelJson(outputText(payload));
-    return json(isPassbook ? { passbook: parsed } : { invoice: parsed });
+    return json(isPassbook ? { passbook: parsed } : isHrLabor ? { hr_labor: parsed } : isHrExpense ? { hr_expense: parsed } : { invoice: parsed });
   } catch (err) {
     return json({ error: "OpenAI returned non-JSON output", detail: err instanceof Error ? err.message : String(err), raw: outputText(payload) }, 502);
   }

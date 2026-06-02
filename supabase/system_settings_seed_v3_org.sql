@@ -2,6 +2,9 @@
 -- Keeps frontend selectable organization data aligned with Supabase settings.
 -- Includes official tax IDs and registered addresses provided for the core group entities.
 
+delete from public.system_settings
+where key in ('entities', 'departments');
+
 insert into public.system_settings(key, value, updated_at, updated_by)
 values
 (
@@ -12,7 +15,10 @@ values
     {"id":"E3","s":"移站式股份有限公司","full":"移站式股份有限公司","taxId":"","color":"#1a4080"},
     {"id":"E4","s":"大齡好好投資有限公司","full":"大齡好好投資有限公司","taxId":"","color":"#4a2890"},
     {"id":"E5","s":"歲悅股份有限公司附設臺北市私立歲悅居家長照機構","full":"歲悅股份有限公司附設臺北市私立歲悅居家長照機構","taxId":"00602175","address":"111臺北市士林區社子街63巷21弄2號1樓","color":"#0a5040"},
-    {"id":"E6","s":"樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構","full":"樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構","taxId":"00667423","address":"108臺北市萬華區康定路43號2樓","color":"#8a1010"}
+    {"id":"E6","s":"樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構","full":"樂齡歲悅股份有限公司附設臺北市私立歲悅萬華社區長照機構","taxId":"00667423","address":"108臺北市萬華區康定路43號2樓","color":"#8a1010"},
+    {"id":"E7","s":"愛無限整合服務有限公司","full":"愛無限整合服務有限公司","taxId":"90691342","address":"","color":"#245d8f"},
+    {"id":"E8","s":"愛無限整合有限公司附設新北市私立愛無限居家長照機構","full":"愛無限整合有限公司附設新北市私立愛無限居家長照機構","taxId":"91254360","address":"","color":"#47683b"},
+    {"id":"E9","s":"好窩居家職能治療所","full":"好窩居家職能治療所","taxId":"","address":"","color":"#94622f"}
   ]'::jsonb,
   now(),
   'codex_v3_seed'
@@ -42,12 +48,11 @@ values
     {"c":"C1000","n":"樂齡歲悅股份有限公司","eid":"E2","lv":0},
     {"c":"C1100","n":"萬華日照中心","eid":"E2","lv":1},
     {"c":"D1000","n":"移站式股份有限公司","eid":"E3","lv":1},
-    {"c":"E1000","n":"大齡好好投資有限公司","eid":"E4","lv":1}
+    {"c":"E1000","n":"大齡好好投資有限公司","eid":"E4","lv":1},
+    {"c":"F1000","n":"愛無限整合服務有限公司","eid":"E7","lv":0},
+    {"c":"G1000","n":"愛無限整合有限公司附設新北市私立愛無限居家長照機構","eid":"E8","lv":0},
+    {"c":"H1000","n":"好窩居家職能治療所","eid":"E9","lv":0}
   ]'::jsonb,
   now(),
   'codex_v3_seed'
-)
-on conflict (key) do update
-set value = excluded.value,
-    updated_at = excluded.updated_at,
-    updated_by = excluded.updated_by;
+);
