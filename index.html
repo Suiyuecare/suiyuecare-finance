@@ -730,7 +730,7 @@ html,body{overflow-x:hidden}
   border-spacing:0!important;
   table-layout:auto!important;
 }
-#pg-invoices #invoice-single-sheet table.excel-sheet-table{min-width:1280px!important}
+#pg-invoices #invoice-single-sheet table.excel-sheet-table{min-width:1340px!important}
 #pg-invoices #invoice-batch-sheet table.excel-sheet-table{min-width:1020px!important}
 #pg-invoices :is(#invoice-single-sheet,#invoice-batch-sheet) table.excel-sheet-table thead{display:table-header-group!important}
 #pg-invoices :is(#invoice-single-sheet,#invoice-batch-sheet) table.excel-sheet-table tbody{display:table-row-group!important}
@@ -1551,8 +1551,8 @@ input:focus,select:focus,textarea:focus{
           </div>
           <div id="invoice-single-sheet" style="margin-top:8px">
             <div class="sheet-full-scroll invoice-sheet-scroll" style="overflow:auto;border:1px solid #e8dcc8;border-radius:8px;background:#fff">
-              <table class="excel-sheet-table" style="min-width:1280px;width:100%">
-                <thead><tr><th style="width:150px">發票號碼</th><th style="width:160px">買受人 *</th><th style="width:130px">開立方式</th><th style="width:140px">統編/載具號碼</th><th style="width:260px">品項說明 *</th><th style="width:120px">未稅金額 *</th><th style="width:90px">稅率</th><th style="width:130px">含稅總額</th><th style="width:120px">收款狀態</th></tr></thead>
+              <table class="excel-sheet-table" style="min-width:1340px;width:100%">
+                <thead><tr><th style="width:150px">發票號碼</th><th style="width:160px">買受人 *</th><th style="width:130px">開立方式</th><th style="width:140px">統編/載具號碼</th><th style="width:260px">品項說明 *</th><th style="width:120px">未稅金額 *</th><th style="width:90px">稅率</th><th style="width:130px">含稅總額</th><th style="width:120px">收款狀態</th><th style="width:48px"></th></tr></thead>
                 <tbody><tr>
                   <td><input type="text" id="inv-no" value="AA-00023456"></td>
                   <td><input type="text" id="inv-buyer" placeholder="公司或個人" oninput="updInvPrev()"></td>
@@ -1563,6 +1563,7 @@ input:focus,select:focus,textarea:focus{
                   <td><select id="inv-tax" onchange="calcInvTax()"><option value="0.05">5%</option><option value="0">0%免稅</option></select></td>
                   <td><input type="text" id="inv-total" readonly style="font-weight:700;color:#1e293b"></td>
                   <td><select id="inv-rs"><option value="unpaid">未收款</option><option value="partial">部分收款</option><option value="paid">已收款</option></select></td>
+                  <td style="text-align:center"><button onclick="clearSingleInvoiceRow()" title="清空此列" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:16px;line-height:1">×</button></td>
                 </tr></tbody>
               </table>
             </div>
@@ -3198,7 +3199,6 @@ function canReadRequestAttachment(r){
   if(requestIsMine(r))return true;
   if(canActRequest(r))return true;
   if((r.steps||[]).some(function(s){return stepBelongsToUser(s,r);}))return true;
-  if(['section_chief','dept_manager'].indexOf(S.user.role)>-1&&r.dc===S.user.dc)return true;
   if(S.user.role==='general_affairs'&&r.type==='purchase_request')return true;
   if(S.user.role==='hr'&&r.type==='hr_expense_request')return true;
   return false;
@@ -3209,7 +3209,6 @@ function canReadInvoiceAttachment(i){
   if(invoiceIsMine(i))return true;
   if(canActInvoice(i)||canActReceipt(i))return true;
   if((i.steps||[]).some(function(s){return stepBelongsToUser(s,i);}))return true;
-  if(['section_chief','dept_manager'].indexOf(S.user.role)>-1&&i.dc===S.user.dc)return true;
   return false;
 }
 function canDownloadAttachment(f,ctx){
@@ -4214,6 +4213,38 @@ function deptUnitCode(dc){
   dc=String(dc||'').trim();
   return /^[A-Z]\d{4}$/i.test(dc)?(dc.slice(0,3)+'00'):dc;
 }
+function deptParentCode(dc){
+  dc=String(dc||'').trim();
+  if(!dc)return '';
+  var d=DEPTS.find(function(x){return x.c===dc;})||{};
+  var explicit=d.parent||d.parentCode||d.parent_department_code||d.parentDepartmentCode||'';
+  if(explicit)return String(explicit).trim();
+  if(!/^[A-Z]\d{4}$/i.test(dc))return '';
+  if(dc.slice(1)==='1000')return '';
+  if(dc.slice(3)==='00')return dc.charAt(0)+'1000';
+  return dc.slice(0,3)+'00';
+}
+function deptAncestorCodes(dc){
+  var out=[],seen={},cur=deptParentCode(dc);
+  for(var i=0;i<8&&cur&&!seen[cur];i++){
+    seen[cur]=true;
+    out.push(cur);
+    cur=deptParentCode(cur);
+  }
+  return out;
+}
+function deptManagerForDepartment(dc,excludeUid){
+  var codes=[String(dc||'')].concat(deptAncestorCodes(dc));
+  for(var i=0;i<codes.length;i++){
+    var code=codes[i];
+    if(!code)continue;
+    var u=USERS.find(function(x){
+      return x.active!==false&&x.role==='dept_manager'&&String(x.dc||'')===code&&(!excludeUid||x.id!==excludeUid);
+    });
+    if(u)return u;
+  }
+  return null;
+}
 function globalApprovalRole(role){
   return ['admin_director','accountant','hr','general_affairs','ceo','cashier'].indexOf(role)>-1;
 }
@@ -4233,6 +4264,7 @@ function userMatchesApprovalScope(user,appUser){
   if(globalApprovalRole(user.role))return true;
   var appDept=String(appUser.dc||''),userDept=String(user.dc||'');
   if(userDept&&userDept===appDept)return true;
+  if(deptAncestorCodes(appDept).indexOf(userDept)>-1)return true;
   if(deptUnitCode(userDept)&&deptUnitCode(userDept)===deptUnitCode(appDept))return true;
   return false;
 }
@@ -4277,7 +4309,7 @@ function departmentManagerUser(appUser){
     cur=directSupervisorUser(cur);
     if(cur&&cur.role==='dept_manager'&&cur.active!==false)return cur;
   }
-  return null;
+  return deptManagerForDepartment(appUser.dc,appUser.id);
 }
 function routeGlobalUser(role,label,errors){
   var u=role==='cashier'?cashierUser():firstUserByRole(role);
@@ -4592,6 +4624,9 @@ function stepAssignedToCurrentUser(s){
   if(!S.user||!s)return false;
   return !!((s.uid&&S.user.id===s.uid)||(s.email&&S.user.email===s.email));
 }
+function stepHasExplicitAssignee(s){
+  return !!(s&&(s.uid||s.email));
+}
 function requestIsMine(r){
   if(!S.user||!r)return false;
   var fp=r.formPayload||{};
@@ -4649,10 +4684,11 @@ function canActStep(r,s){
   if(s.rk==='applicant_revision')return requestIsMine(r);
   if(s.rk==='applicant_confirm')return requestIsMine(r);
   if(s.rk==='applicant_invoice_delivery')return requestIsMine(r)||invoiceIsMine(r);
-  if(['procurement_review','procurement_payment','procurement_receipt'].indexOf(s.rk)>-1)return S.user.role==='general_affairs'||S.user.id===s.uid;
-  if(s.rk==='cashier')return S.user.role==='cashier'||(S.user.role==='ceo'&&(!s.uid||stepAssignedToCurrentUser(s)));
-  if(s.rk==='accountant_final')return S.user.role==='accountant';
-  if(s.rk==='accountant_invoice')return S.user.role==='accountant';
+  if(['procurement_review','procurement_payment','procurement_receipt'].indexOf(s.rk)>-1)return !stepHasExplicitAssignee(s)&&S.user.role==='general_affairs';
+  if(s.rk==='cashier')return !stepHasExplicitAssignee(s)&&(S.user.role==='cashier'||S.user.role==='ceo');
+  if(s.rk==='accountant_final')return !stepHasExplicitAssignee(s)&&S.user.role==='accountant';
+  if(s.rk==='accountant_invoice')return !stepHasExplicitAssignee(s)&&S.user.role==='accountant';
+  if(stepHasExplicitAssignee(s))return false;
   return S.user.role===s.rk;
 }
 function canActRequest(r){
@@ -4671,10 +4707,11 @@ function stepBelongsToUser(s,owner){
   if(['applicant_submit','applicant_revision','applicant_confirm','applicant_invoice_delivery'].indexOf(s.rk)>=0){
     return requestIsMine(owner)||invoiceIsMine(owner);
   }
-  if(['procurement_review','procurement_payment','procurement_receipt'].indexOf(s.rk)>-1)return S.user.role==='general_affairs'||S.user.id===s.uid;
-  if(s.rk==='cashier')return S.user.role==='cashier'||(S.user.role==='ceo'&&(!s.uid||stepAssignedToCurrentUser(s)));
-  if(s.rk==='accountant_final')return S.user.role==='accountant';
-  if(s.rk==='accountant_invoice')return S.user.role==='accountant';
+  if(['procurement_review','procurement_payment','procurement_receipt'].indexOf(s.rk)>-1)return !stepHasExplicitAssignee(s)&&S.user.role==='general_affairs';
+  if(s.rk==='cashier')return !stepHasExplicitAssignee(s)&&(S.user.role==='cashier'||S.user.role==='ceo');
+  if(s.rk==='accountant_final')return !stepHasExplicitAssignee(s)&&S.user.role==='accountant';
+  if(s.rk==='accountant_invoice')return !stepHasExplicitAssignee(s)&&S.user.role==='accountant';
+  if(stepHasExplicitAssignee(s))return false;
   return s.rk===S.user.role;
 }
 function syncRequestStatus(r){
@@ -6514,7 +6551,7 @@ function renderNR(){
     var rightPayHtml=S.nrType==='hr_expense_request'?hrBatchPaymentFieldsHtml():(S.nrType==='purchase_request'?'<div style="font-size:12px;color:#334155;line-height:1.7;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:10px">採購申請由申請人先提出商品項目、數量與商品連結即可。總務會在下一關填寫預估匯款金額、收款人、銀行分行帳號與預計匯款日。</div>':paymentFieldsHtml());
     var submitActions=nrSubmitActionsHtml(S.nrType==='travel_request');
     var uploadSectionHtml=S.nrType==='purchase_request'?'':'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span><button class="btn-g" onclick="'+((S.nrType==='travel_request'||S.nrType==='hr_expense_request')?'nrBack(1)':'nrBack(2)')+'">← 返回</button></div><div style="padding:11px"><div class="fr2">'
-        +(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():S.nrType==='travel_request'?travelAttachmentGuideHtml():receiptUploadPanelHtml({ocr:S.nrType==='expense_reimbursement',kind:S.nrType==='hr_expense_request'?'payroll':'receipt'}))
+        +(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():S.nrType==='travel_request'?travelAttachmentGuideHtml():receiptUploadPanelHtml({ocr:['expense_reimbursement','payment_request','petty_cash_request'].indexOf(S.nrType)>-1,kind:S.nrType==='hr_expense_request'?'payroll':'receipt'}))
         +(S.nrType==='travel_request'?'':S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A、9B 勞務報酬單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
       +'</div></div></div>';
     c.innerHTML='<div style="display:flex;flex-direction:column;gap:10px;'+(S.nrType==='hr_expense_request'?'max-width:1180px;margin:0 auto;width:100%;':'')+'">'
@@ -7044,12 +7081,19 @@ function lazyFeeRowAmount(){
   if(isMegaBankRecipient({bankName:bankName}))return 0;
   return getBankTransferFee(eid);
 }
+function lazyFeeRowKey(fee){
+  var eid=(el('nr-ent')||{}).value||currentUserEntityId();
+  var feeBearer=((el('nr-fee-bearer')||{}).value||'己方支出').trim();
+  var bankType=selectedBankType();
+  var bankName=((el('nr-bank-name')||{}).value||'').trim();
+  return [eid,feeBearer,bankType,bankName,fee||0].join('|');
+}
 function syncLazyBankFeeRow(render){
   if(!isLazyRequestType(S.nrType))return;
   if(!S.lazyRows)S.lazyRows=[];
   S.lazyRows=S.lazyRows.filter(function(r){return !r.systemFee;});
   var fee=lazyFeeRowAmount();
-  if(fee>0){
+  if(fee>0&&S.lazyBankFeeSuppressedKey!==lazyFeeRowKey(fee)){
     S.lazyRows.push({no:'',date:todayIso(),buyerTaxId:'',sellerTaxId:'',item:'銀行手續費（己方支出，免憑證）',qty:1,unitName:'筆',unitPrice:fee,netAmount:fee,taxAmount:0,grossAmount:fee,total:fee,file:'免憑證',systemFee:true});
   }
   if(render)renderLazySheet();
@@ -7115,7 +7159,7 @@ function renderLazySheet(){
       +'<td><input '+(r.systemFee?'readonly':'')+' type="number" min="0" step="1" value="'+escAttr(lazyTaxAmount(r))+'" onchange="lazyEdit('+i+',\'taxAmount\',this.value)"></td>'
       +'<td><input '+(r.systemFee?'readonly':'')+' type="number" min="0" step="1" value="'+escAttr(lazyRowTotal(r))+'" onchange="lazyEdit('+i+',\'grossAmount\',this.value)"></td>'
       +'<td style="font-size:10px;color:#94a3b8;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(r.file||'')+'</td>'
-      +'<td style="width:30px;text-align:center">'+(r.systemFee?'<span style="font-size:10px;color:#94a3b8">系統</span>':'<button onclick="lazyDel('+i+')" style="border:none;background:transparent;color:#94a3b8;cursor:pointer">×</button>')+'</td>'
+      +'<td style="width:30px;text-align:center"><button onclick="lazyDel('+i+')" style="border:none;background:transparent;color:#94a3b8;cursor:pointer">×</button></td>'
       +'</tr>';
   }).join('');
   box.innerHTML='<style>#lazy-sheet table input{border:none;background:transparent;padding:4px 5px;font-size:11px;width:100%;border-radius:0}#lazy-sheet td,#lazy-sheet th{border:1px solid #e8dcc8;padding:0}#lazy-sheet th{background:#f7ead6;color:#7c3f00;font-size:10px;font-weight:650;text-align:left;padding:5px}</style>'
@@ -7140,7 +7184,7 @@ window.lazyEdit=function(i,k,v){
   renderLazySheet();applyLazySummary();
 };
 window.lazyAdd=function(){S.lazyRows=(S.lazyRows||[]).filter(function(r){return !r.systemFee;});S.lazyRows.push({no:'',date:todayIso(),buyerTaxId:'',sellerTaxId:'',item:'',qty:1,unitName:'',unitPrice:0,netAmount:0,taxAmount:0,grossAmount:0,total:0,file:''});syncLazyBankFeeRow(true);applyLazySummary();};
-window.lazyDel=function(i){S.lazyRows.splice(i,1);syncLazyBankFeeRow(true);applyLazySummary();};
+window.lazyDel=function(i){var row=S.lazyRows[i];if(row&&row.systemFee)S.lazyBankFeeSuppressedKey=lazyFeeRowKey(lazyFeeRowAmount());S.lazyRows.splice(i,1);syncLazyBankFeeRow(true);applyLazySummary();};
 function invoiceRowsFromOcr(data,fileName){
   var inv=data.invoice||data||{};
   var no=inv.invoice_number||'',date=inv.invoice_date||todayIso();
@@ -7630,7 +7674,8 @@ function nrFileListHtml(maxWidth){
 function receiptUploadPanelHtml(opt){
   opt=opt||{};
   var isPayroll=opt.kind==='payroll';
-  var ocrBtn=opt.ocr?'<button class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button>':(isPayroll?'<button class="btn-p" onclick="hrAnalyzePayroll()">OPENAI 分析</button>':'');
+  var ocrBtn=opt.ocr?'<button type="button" class="btn-p" onclick="lazyAnalyze()">OpenAI 解析憑據</button>':'';
+  var payrollAnalyzeAction=isPayroll?'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px;padding:9px 10px;border-radius:8px;background:#fff7ed;border:1px solid #f0c987"><div style="font-size:11px;color:#7c3f00;line-height:1.55">已上傳薪資表、人事費用支出表或 9A / 9B 勞務報酬單後，請按右側分析；系統會回填姓名、銀行、分行、帳號與匯款金額到 2-2 即時 Excel 明細表。</div><button type="button" class="btn-p" onclick="hrAnalyzePayroll()">OPENAI 分析</button></div>':'';
   var payrollTemplates=isPayroll?'<div style="background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:9px;margin-bottom:8px"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:6px">範本下載與上傳</div><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">請先下載適用範本填寫完成，再於本區上傳薪資表、人事費用支出表或勞務報酬單。9A、9B 勞務報酬單請一併上傳勞務報酬單。</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/hr_expense_template.xlsx\',\'人事費用支出.xlsx\')">下載人事費用支出 Excel</button><button type="button" class="btn-s" onclick="downloadStaticTemplate(\'assets/templates/labor_service_fee.docx\',\'勞務報酬單.docx\')">下載勞務報酬單 Word</button></div></div>':'';
   return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%">'
     +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:650;color:#334155">'+(isPayroll?'上傳薪資表 / 人事附件':'上傳憑據')+'</div>'+ocrBtn+'</div>'
@@ -7638,6 +7683,7 @@ function receiptUploadPanelHtml(opt){
     +'<div class="upload-zone" id="nr-dz" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">'+(isPayroll?'UPLOAD PAYROLL':'UPLOAD RECEIPTS')+'</div><div style="font-size:13px;font-weight:650;color:#334155;margin-bottom:3px">'+(isPayroll?'點擊或拖放薪資表、人事費用支出表或勞務報酬單':'點擊或拖放發票 / 收據 / PDF')+'</div><div style="font-size:11px;color:#94a3b8;line-height:1.5">'+(isPayroll?'Excel、PDF、Word、圖片皆可；9A、9B 勞務報酬單需附勞務報酬單':'可一次上傳多張 JPG、PNG、PDF、Word、Excel；建議一張發票拍成一張照片，多張發票請分開拍後一次上傳。')+'</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" '+(isPayroll?'':'capture="environment"')+' onchange="nrFileChange(this)"></div>'
     +(isPayroll?'':'<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #f0c987;color:#7c3f00;font-size:11px;line-height:1.55">提醒：請不要把很多張發票拍成同一張照片，OCR 可能只辨識到其中一張。</div>')
     +'<div id="nr-flist" style="margin-top:7px">'+nrFileListHtml(180)+'</div>'
+    +payrollAnalyzeAction
     +(opt.ocr?'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OpenAI 解析憑據」，下方會產生可編輯表格。</div>':(isPayroll?'<div id="lazy-status" style="font-size:11px;color:#8b7358;margin-top:8px">上傳後按「OPENAI 分析」，系統會嘗試讀取薪資表、人事費用表或勞務報酬單，並回填 2-2 即時 Excel 明細表。</div>':'<div style="font-size:11px;color:#8b7358;margin-top:8px">附件會隨申請單送簽核，主管可下載檢視。</div>'))
     +(opt.ocr||isPayroll?lazyProgressHtml():'')
   +'</div>';
@@ -10697,6 +10743,19 @@ async function notifyBatchInvoiceReceivable(rows,batchId){
   await dbInsert('notifications',notifDbRow(n));
 }
 window.calcInvTax=function(){var amt=parseFloat((el('inv-amt')||{}).value||'0');var rate=parseFloat((el('inv-tax')||{}).value||'0.05');var tax=Math.round(amt*rate);var t=el('inv-total');if(t)t.value=amt+tax?fmt(amt+tax):'';updInvPrev();};
+window.clearSingleInvoiceRow=function(){
+  ['inv-buyer','inv-taxid','inv-desc','inv-amt','inv-total'].forEach(function(id){var x=el(id);if(x)x.value='';});
+  var type=el('inv-identifier-type');if(type)type.value='統一編號';
+  var tax=el('inv-tax');if(tax)tax.value='0.05';
+  var status=el('inv-rs');if(status)status.value='unpaid';
+  S.invOcrFile=null;
+  var file=el('inv-ocr-file');if(file)file.value='';
+  setInvOcrStatus('');
+  window.syncSingleInvoiceIdentifierPlaceholder();
+  window.updInvTrack();
+  window.calcInvTax();
+  window.updInvPrev();
+};
 window.updInvPrev=function(){var buyer=(el('inv-buyer')||{}).value||'—';var identifier=invoiceIdentifierType((el('inv-identifier-type')||{}).value);var desc=(el('inv-desc')||{}).value||'';var amt=parseFloat((el('inv-amt')||{}).value||'0');var rate=parseFloat((el('inv-tax')||{}).value||'0.05');var tax=Math.round(amt*rate);var no=(el('inv-no')||{}).value||'AA-XXXXXXXX';var date=((el('inv-date')||{}).value||todayIso());var p=el('inv-prev');if(!p)return;p.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid #e0d0b8"><div><div style="font-size:11px;font-weight:500;color:var(--brtxt)">'+no+'</div><div style="font-size:10px;color:#94a3b8">'+date+'</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:500;color:#334155">'+buyer+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">開立方式：'+identifier+'</div></div></div><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px"><span style="color:'+(desc?'#334155':'#94a3b8')+'">'+(desc||'請填寫品項說明')+'</span><span style="font-weight:500">'+(amt?fmt(amt):'—')+'</span></div><div style="text-align:right;padding-top:5px;border-top:1px solid #e0d0b8"><div style="font-size:10px;color:#94a3b8">未稅 '+fmt(amt)+' · 稅 '+fmt(tax)+'</div><div style="font-size:13px;font-weight:500;color:#1e293b">含稅 '+fmt(amt+tax)+'</div></div>';};
 function setInvOcrStatus(msg,color){var s=el('inv-ocr-status');if(s){s.textContent=msg||'';s.style.color=color||'#94a3b8';}}
 function applyInvoiceOcr(data){
