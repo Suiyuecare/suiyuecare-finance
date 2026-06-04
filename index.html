@@ -1405,7 +1405,8 @@ input:focus,select:focus,textarea:focus{
     <div class="approval-shell" style="display:block">
       <div class="tb-bar approval-tabs-bar" style="margin-bottom:10px">
         <button class="tb on" onclick="apprTab('p',this)">待簽核<span id="ac2" style="font-size:9px;background:var(--br);color:#fff;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
-        <button class="tb" onclick="apprTab('h',this)">已簽核</button>
+        <button class="tb" onclick="apprTab('cashier',this)">出納<span id="cashier-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
+        <button class="tb" onclick="apprTab('h',this)">已簽核<span id="history-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
         <button class="tb" onclick="apprTab('mine',this)">我的申請<span id="my-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
         <button class="tb" onclick="apprTab('drafts',this)">暫存表單<span id="draft-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">0</span></button>
         <div class="appr-toolbar">
@@ -9568,24 +9569,38 @@ function buildApprovals(){
   if(!S.user)return;
   loadDrafts();
   if(S.aT==='drafts'){
+    var draftAll=approvalAllItems();
+    var draftMine=draftAll.filter(function(item){return item.kind==='req'?requestIsMine(item.raw):invoiceIsMine(item.raw);});
+    var draftHis=draftAll.filter(function(item){
+      if(item.kind==='req'&&requestIsMine(item.raw))return true;
+      if(item.kind==='inv'&&invoiceIsMine(item.raw))return true;
+      if(item.kind==='recv'&&canActReceipt(item.raw))return true;
+      return (item.raw.steps||[]).some(function(s){return stepBelongsToUser(s,item.raw)&&s.a&&s.a.length>0;});
+    });
     el('appr-sub').textContent=RL[S.user.role]+' · 暫存表單 '+DRAFTS.length+' 筆';
     var msDraft=el('approval-manager-summary');if(msDraft)msDraft.innerHTML='';
     var bsDraft=el('approval-bulk-slot');if(bsDraft)bsDraft.innerHTML='';
     el('draft-appr-cnt').textContent=DRAFTS.length;
-    var acDraft=el('ac2');if(acDraft)acDraft.textContent=REQS.map(function(r){return{kind:'req',raw:r};}).concat(uniqueInvoiceGroups(INVS,function(i){return !invoiceIsReceivable(i)||((i.steps||[]).some(function(s){return s.a;}));}).map(function(i){return{kind:'inv',raw:i};}),uniqueInvoiceGroups(INVS,function(i){return canActReceipt(i);}).map(function(i){return{kind:'recv',raw:i};})).filter(function(item){return item.kind==='req'?canActRequest(item.raw):(item.kind==='inv'?canActInvoice(item.raw):canActReceipt(item.raw));}).length;
+    var draftActionItems=approvalActionableItems(draftAll);
+    var draftCashierItems=draftActionItems.filter(approvalItemIsCashierTask);
+    var draftPendingItems=draftActionItems.filter(function(item){return !approvalItemIsCashierTask(item);});
+    var acDraft=el('ac2');if(acDraft)acDraft.textContent=draftPendingItems.length;
+    var cashDraft=el('cashier-appr-cnt');if(cashDraft)cashDraft.textContent=draftCashierItems.length;
+    var hisDraft=el('history-appr-cnt');if(hisDraft)hisDraft.textContent=draftHis.length;
+    var mineDraft=el('my-appr-cnt');if(mineDraft)mineDraft.textContent=draftMine.length;
+    el('appr-cnt').textContent=draftActionItems.length;
     renderApprDraftList();
     return;
   }
-  var reqItems=REQS.filter(function(r){return r.status!=='cancelled';}).map(function(r){return{kind:'req',raw:r};});
-  var invItems=uniqueInvoiceGroups(INVS,function(i){return !invoiceIsReceivable(i)||((i.steps||[]).some(function(s){return s.a;}));}).map(function(i){return{kind:'inv',raw:i};});
-  var recvItems=uniqueInvoiceGroups(INVS,function(i){return canActReceipt(i);}).map(function(i){return{kind:'recv',raw:i};});
-  var all=reqItems.concat(invItems).concat(recvItems);
-  var pm=all.filter(function(item){return item.kind==='req'?canActRequest(item.raw):(item.kind==='inv'?canActInvoice(item.raw):canActReceipt(item.raw));});
+  var all=approvalAllItems();
+  var pm=approvalActionableItems(all);
   pm=pm.slice().sort(function(a,b){
     var ar=a.kind==='req'?requestReviewAmount(a.raw):0,br=b.kind==='req'?requestReviewAmount(b.raw):0;
     var ai=a.kind==='req'?supervisorReviewIssues(a.raw).length:0,bi=b.kind==='req'?supervisorReviewIssues(b.raw).length:0;
     return bi-ai||br-ar;
   });
+  var cashierItems=pm.filter(approvalItemIsCashierTask);
+  var pendingItems=pm.filter(function(item){return !approvalItemIsCashierTask(item);});
   var mine=all.filter(function(item){return item.kind==='req'?requestIsMine(item.raw):invoiceIsMine(item.raw);});
   // 歷史記錄：我送出的單，或我曾經處理過的簽核/收款任務
   var his=all.filter(function(item){
@@ -9594,14 +9609,18 @@ function buildApprovals(){
     if(item.kind==='recv'&&canActReceipt(item.raw))return true;
     return (item.raw.steps||[]).some(function(s){return stepBelongsToUser(s,item.raw)&&s.a&&s.a.length>0;});
   });
-  var sub={p:'待辦 '+pm.length+' 筆（含簽核與收款）',h:'已處理 '+his.length+' 筆',mine:'我送出的申請 '+mine.length+' 筆'}[S.aT]||'待辦 '+pm.length+' 筆（含簽核與收款）';
+  var tabData={p:pendingItems,cashier:cashierItems,h:his,mine:mine};
+  var currentItems=tabData[S.aT]||pendingItems;
+  var sub={p:'待簽核 '+pendingItems.length+' 筆',cashier:'出納待匯款 '+cashierItems.length+' 筆',h:'已處理 '+his.length+' 筆',mine:'我送出的申請 '+mine.length+' 筆'}[S.aT]||'待簽核 '+pendingItems.length+' 筆';
   el('appr-sub').textContent=RL[S.user.role]+(S.user.role==='admin_director'?' — 行政主任':'')+' · '+sub;
-  el('appr-cnt').textContent=pm.length;el('ac2').textContent=pm.length;
+  el('appr-cnt').textContent=pm.length;el('ac2').textContent=pendingItems.length;
+  var cashCnt=el('cashier-appr-cnt');if(cashCnt)cashCnt.textContent=cashierItems.length;
+  var hc=el('history-appr-cnt');if(hc)hc.textContent=his.length;
   var mc=el('my-appr-cnt');if(mc)mc.textContent=mine.length;
   var dc=el('draft-appr-cnt');if(dc)dc.textContent=DRAFTS.length;
-  var ms=el('approval-manager-summary');if(ms)ms.innerHTML=S.aT==='p'?approvalManagerSummaryHtml(pm):'';
-  var bs=el('approval-bulk-slot');if(bs)bs.innerHTML=S.aT==='p'?approvalBulkBarHtml(pm):'';
-  renderApprList(S.aT==='p'?pm:(S.aT==='mine'?mine:his));
+  var ms=el('approval-manager-summary');if(ms)ms.innerHTML=S.aT==='p'?approvalManagerSummaryHtml(pendingItems):'';
+  var bs=el('approval-bulk-slot');if(bs)bs.innerHTML=(S.aT==='p'||S.aT==='cashier')?approvalBulkBarHtml(currentItems):'';
+  renderApprList(currentItems);
 }
 function approvalDebugRows(){
   if(!S.user)return [];
@@ -9630,7 +9649,7 @@ window.debugApprovalLinks=function(){
   return rows;
 };
 function setApprovalTabVisual(t){
-  var order=['p','h','mine','drafts'];
+  var order=['p','cashier','h','mine','drafts'];
   document.querySelectorAll('#pg-approvals .tb').forEach(function(b,i){
     b.classList.toggle('on',order[i]===t);
   });
@@ -9656,11 +9675,26 @@ function approvalItemKey(item){
   if(item.kind==='req')return'req:'+item.raw.id;
   return item.kind+':'+invoiceGroupKey(item.raw);
 }
+function approvalAllItems(){
+  var reqItems=REQS.filter(function(r){return r.status!=='cancelled';}).map(function(r){return{kind:'req',raw:r};});
+  var invItems=uniqueInvoiceGroups(INVS,function(i){return !invoiceIsReceivable(i)||((i.steps||[]).some(function(s){return s.a;}));}).map(function(i){return{kind:'inv',raw:i};});
+  var recvItems=uniqueInvoiceGroups(INVS,function(i){return canActReceipt(i);}).map(function(i){return{kind:'recv',raw:i};});
+  return reqItems.concat(invItems).concat(recvItems);
+}
+function approvalActionableItems(items){
+  return (items||approvalAllItems()).filter(function(item){return item.kind==='req'?canActRequest(item.raw):(item.kind==='inv'?canActInvoice(item.raw):canActReceipt(item.raw));});
+}
+function approvalItemIsCashierTask(item){
+  if(!item||item.kind!=='req'||!item.raw)return false;
+  var s=activeStep(item.raw);
+  return item.raw.status==='pending_cashier'&&s&&s.rk==='cashier';
+}
 function approvalBulkBarHtml(items){
-  if(S.aT!=='p'||!items||!items.length)return'';
+  if((S.aT!=='p'&&S.aT!=='cashier')||!items||!items.length)return'';
   var selected=S.apprSelected||{};
   var cnt=Object.keys(selected).filter(function(k){return selected[k];}).length;
-  return '<div class="appr-bulkbar"><label class="appr-select" style="margin:0"><input type="checkbox" onchange="toggleAllApprovalSelection(this.checked)">全選本頁待辦</label><span id="appr-bulk-count" style="font-size:11px;color:#8b7358">已選 '+cnt+' 筆</span><button class="btn-p" onclick="bulkApproveSelected()">整批通過</button><button class="btn-g" onclick="bulkCountersignSelected()">整批加簽</button><button class="btn-g" onclick="bulkReturnSelected()">整批退回上一關</button><button class="btn-s" style="color:#8a1010" onclick="bulkCancelSelected()">整批不通過</button></div>';
+  var approveText=S.aT==='cashier'?'整批出納放款':'整批通過';
+  return '<div class="appr-bulkbar"><label class="appr-select" style="margin:0"><input type="checkbox" onchange="toggleAllApprovalSelection(this.checked)">全選本頁待辦</label><span id="appr-bulk-count" style="font-size:11px;color:#8b7358">已選 '+cnt+' 筆</span><button class="btn-p" onclick="bulkApproveSelected()">'+approveText+'</button><button class="btn-g" onclick="bulkCountersignSelected()">整批加簽</button><button class="btn-g" onclick="bulkReturnSelected()">整批退回上一關</button><button class="btn-s" style="color:#8a1010" onclick="bulkCancelSelected()">整批不通過</button></div>';
 }
 function refreshApprovalBulkCount(){
   var cnt=Object.keys(S.apprSelected||{}).filter(function(k){return S.apprSelected[k];}).length;
@@ -9897,7 +9931,7 @@ function renderApprList(data){
     if(S.aT==='mine')histBadge='';
     var withdrawBtn=(S.aT==='mine'&&kind==='req'&&canWithdrawRequest(r))?'<button class="btn-s" style="font-size:10px;padding:3px 7px;color:#8a1010;border-color:#f0b0b0" onclick="event.stopPropagation();withdrawRequest(\''+r.id+'\')">抽單</button>':'';
     var batchBadge=(kind!=='req'&&r.batchId)?'<span class="badge b-blue" style="font-size:9px;margin-left:4px">整批 '+invoiceGroupCount(r)+' 張</span>':'';
-    var pick=S.aT==='p'?'<label class="appr-select" onclick="event.stopPropagation()" style="justify-content:center;margin:0"><input class="appr-pick" type="checkbox" '+((S.apprSelected||{})[key]?'checked':'')+' onchange="toggleApprovalSelection(\''+key+'\',this.checked)"></label>':'<span style="color:#d8c8b2">—</span>';
+    var pick=(S.aT==='p'||S.aT==='cashier')?'<label class="appr-select" onclick="event.stopPropagation()" style="justify-content:center;margin:0"><input class="appr-pick" type="checkbox" '+((S.apprSelected||{})[key]?'checked':'')+' onchange="toggleApprovalSelection(\''+key+'\',this.checked)"></label>':'<span style="color:#d8c8b2">—</span>';
     return'<tr data-appr-key="'+escAttr(key)+'" class="'+((S.apprSelected||{})[key]?'bulk-selected':'')+'" onclick="openApprovalItem(\''+key+'\')">'
       +'<td class="appr-col-select">'+pick+'</td>'
       +'<td class="appr-col-formNo"><div class="mono-sub" style="font-size:12px;font-weight:850;color:#334155">'+escAttr(approvalRowFormNo(item))+'</div><div style="margin-top:3px"><span class="badge '+type.cls+'">'+escAttr(type.label)+'</span>'+histBadge+batchBadge+riskBadge+'</div></td>'
