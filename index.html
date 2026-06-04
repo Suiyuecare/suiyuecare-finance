@@ -4299,18 +4299,74 @@ function fallbackSupervisorUser(appUser){
 function defaultOrganizationChart(){
   return USERS.map(function(u){
     var sup=fallbackSupervisorUser(u);
-    return{userId:u.id,supervisorId:sup&&sup.id?sup.id:''};
+    return orgChartRowPayload(u,sup);
   });
 }
+function normEmail(v){return String(v||'').trim().toLowerCase();}
+function userByEmail(email){
+  var target=normEmail(email);
+  return target?USERS.find(function(u){return normEmail(u.email)===target;})||null:null;
+}
+function userByOrgRef(id,email,name,role){
+  var user=id?userById(id):null;
+  if(user)return user;
+  user=userByEmail(email);
+  if(user)return user;
+  var cleanName=String(name||'').trim();
+  if(!cleanName)return null;
+  var matches=USERS.filter(function(u){
+    return u.active!==false&&String(u.n||'').trim()===cleanName&&(!role||u.role===role);
+  });
+  return matches.length===1?matches[0]:null;
+}
+function orgChartRowPayload(user,supervisor){
+  return {
+    userId:user&&user.id?user.id:'',
+    userEmail:user&&user.email?user.email:'',
+    userName:user&&user.n?user.n:'',
+    userRole:user&&user.role?user.role:'',
+    supervisorId:supervisor&&supervisor.id?supervisor.id:'',
+    supervisorEmail:supervisor&&supervisor.email?supervisor.email:'',
+    supervisorName:supervisor&&supervisor.n?supervisor.n:'',
+    supervisorRole:supervisor&&supervisor.role?supervisor.role:''
+  };
+}
 function orgRowForUser(uid){
-  return (ORG_CHART||[]).find(function(o){return o.userId===uid;})||null;
+  var appUser=userById(uid);
+  var rows=ORG_CHART||[];
+  var row=rows.find(function(o){return String(o.userId||'')===String(uid||'');});
+  if(row)return row;
+  var email=normEmail(appUser&&appUser.email);
+  if(email){
+    row=rows.find(function(o){return normEmail(o.userEmail||o.email)===email;});
+    if(row)return row;
+  }
+  var name=String(appUser&&appUser.n||'').trim();
+  if(name){
+    row=rows.find(function(o){
+      return String(o.userName||'').trim()===name&&(!o.userRole||!appUser||o.userRole===appUser.role);
+    });
+    if(row)return row;
+  }
+  return null;
+}
+function orgSupervisorUser(row){
+  if(!row)return null;
+  return userByOrgRef(row.supervisorId,row.supervisorEmail,row.supervisorName,row.supervisorRole);
+}
+function controlledSupervisorFallback(appUser){
+  if(!appUser)return null;
+  return (globalApprovalRole(appUser.role)||appUser.role==='dept_manager')?fallbackSupervisorUser(appUser):null;
 }
 function explicitSupervisorResult(appUser){
   if(!appUser)return {user:null,error:'找不到申請人帳號，無法判定主管。'};
   if(appUser.role==='ceo')return {user:null,error:''};
   var row=orgRowForUser(appUser.id);
-  if(!row||!row.supervisorId)return {user:null,error:(appUser.n||'申請人')+' 尚未在「組織圖」設定直屬主管。'};
-  var supervisor=userById(row.supervisorId);
+  var supervisor=orgSupervisorUser(row);
+  if(!row||!supervisor){
+    supervisor=controlledSupervisorFallback(appUser);
+    if(!supervisor)return {user:null,error:(appUser.n||'申請人')+' 尚未在「組織圖」設定直屬主管。'};
+  }
   if(!supervisor)return {user:null,error:(appUser.n||'申請人')+' 的直屬主管不存在，請重新設定組織圖。'};
   if(supervisor.active===false)return {user:null,error:(supervisor.n||'直屬主管')+' 已停用，請重新設定組織圖。'};
   if(supervisor.id===appUser.id)return {user:null,error:(appUser.n||'申請人')+' 的直屬主管不可設定為本人。'};
@@ -12852,7 +12908,8 @@ function orgSupervisorOptions(userId,selected){
 function orgChildrenOf(uid){
   return USERS.filter(function(u){
     var row=orgRowForUser(u.id);
-    return row&&row.supervisorId===uid&&u.active!==false;
+    var supervisor=orgSupervisorUser(row);
+    return supervisor&&supervisor.id===uid&&u.active!==false;
   });
 }
 function orgCardHtml(u,depth,visited){
@@ -12875,7 +12932,7 @@ function orgCardHtml(u,depth,visited){
 function buildOrgChart(){
   var notice=el('org-readonly-notice');if(notice)notice.style.display=canManageOrgChart()?'none':'block';
   var activeUsers=USERS.filter(function(u){return u.active!==false;});
-  var roots=activeUsers.filter(function(u){var row=orgRowForUser(u.id);return !row||!row.supervisorId||!userById(row.supervisorId);});
+  var roots=activeUsers.filter(function(u){var row=orgRowForUser(u.id);return !row||!orgSupervisorUser(row);});
   if(!roots.length)roots=activeUsers.filter(function(u){return u.role==='ceo';});
   var view=el('org-chart-view');
   if(view)view.innerHTML=roots.map(function(u){return orgCardHtml(u,0);}).join('')||'<div style="font-size:12px;color:#94a3b8;text-align:center;padding:24px">目前沒有組織圖資料</div>';
@@ -12883,12 +12940,13 @@ function buildOrgChart(){
   var editor=el('org-editor');
   if(editor)editor.innerHTML=activeUsers.map(function(u){
     var row=orgRowForUser(u.id)||{userId:u.id,supervisorId:''};
+    var supervisor=orgSupervisorUser(row);
     var d=gD(u.dc),e=gE(u.eid||entityOfDept(u.dc)||'E1');
     return'<tr><td><strong style="font-size:12px;color:#334155">'+u.n+'</strong><div style="font-size:10px;color:#94a3b8">'+u.email+'</div></td>'
       +'<td><span class="ep" style="font-size:9px">'+(e.s||'未指定')+'</span></td>'
       +'<td><span class="dt" style="font-size:9px">'+(d.c||u.dc)+'</span> <span style="font-size:11px;color:#64748b">'+(d.n||'')+'</span></td>'
       +'<td><span class="badge b-blue">'+(u.rL||RL[u.role]||u.role)+'</span></td>'
-      +'<td><select class="org-supervisor" data-user-id="'+u.id+'" style="font-size:11px;min-width:230px">'+orgSupervisorOptions(u.id,row.supervisorId||'')+'</select></td></tr>';
+      +'<td><select class="org-supervisor" data-user-id="'+u.id+'" style="font-size:11px;min-width:230px">'+orgSupervisorOptions(u.id,(supervisor&&supervisor.id)||row.supervisorId||'')+'</select></td></tr>';
   }).join('');
   enhanceLongSelects(document);
 }
@@ -12900,7 +12958,11 @@ window.resetOrgChartFromUsers=function(){
 };
 window.saveOrgChart=async function(){
   if(!canManageOrgChart()){alert('此功能僅開放給執行長、人資與行政部門主任');return;}
-  var data=Array.from(document.querySelectorAll('.org-supervisor')).map(function(sel){return{userId:sel.getAttribute('data-user-id'),supervisorId:sel.value||''};});
+  var data=Array.from(document.querySelectorAll('.org-supervisor')).map(function(sel){
+    var user=userById(sel.getAttribute('data-user-id'));
+    var supervisor=userById(sel.value||'');
+    return orgChartRowPayload(user,supervisor);
+  });
   var byId={};data.forEach(function(r){byId[r.userId]=r.supervisorId;});
   var hasCycle=false;
   data.forEach(function(r){
