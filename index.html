@@ -2843,6 +2843,12 @@ function setRuntimeDefaults(){
 function num(v){return Number(v||0);}
 function escAttr(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fileExt(name){var parts=String(name||'file').split('.');return (parts.length>1?parts.pop():'file').toLowerCase();}
+function isImageFileMeta(f){
+  f=f||{};
+  var mime=String(f.mime||f.type||f.file_type||'').toLowerCase();
+  var ext=fileExt(f.n||f.name||f.file_name||'');
+  return /^image\//.test(mime)||['jpg','jpeg','png','webp','gif','heic','heif','bmp'].indexOf(ext)>-1;
+}
 function normalizeFileMeta(f){
   if(!f)return {n:'附件',t:'file',url:''};
   if(typeof f==='string')return {n:f.split('/').pop()||'附件',t:fileExt(f),url:f};
@@ -2899,6 +2905,21 @@ function safeStorageName(name){
   var base=raw.normalize?raw.normalize('NFKD'):raw;
   base=base.replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,48)||'file';
   return base+'.'+ext;
+}
+function renameImageAttachmentsForRecord(files,recordNo){
+  var base=safeStorageSegment(recordNo||'FORM','FORM');
+  var seq=0;
+  return (files||[]).map(function(file){
+    var f=Object.assign({},file||{});
+    if(f.path||f.storagePath||f.storage_path||f.bucket)return f;
+    if(!isImageFileMeta(f))return f;
+    seq++;
+    var oldName=f.n||f.name||f.file_name||'image.jpg';
+    var ext=fileExt(oldName);
+    if(['file','bin'].indexOf(ext)>-1)ext='jpg';
+    var nextName=safeStorageName(base+'_'+seq+'.'+ext);
+    return Object.assign({},f,{n:nextName,name:nextName,originalName:f.originalName||oldName});
+  });
 }
 function safeStorageSegment(v,fallback){
   var raw=String(v||fallback||'unknown');
@@ -3103,6 +3124,7 @@ async function uploadAttachmentToSupabase(att,ctx){
   return Object.assign({},att,{url:'',bucket:SUPABASE_ATTACHMENT_BUCKET,path:path,storagePath:path,archivePath:path,archiveYear:archive.year,archiveMonth:archive.ym,entityId:archive.entityId,departmentCode:archive.departmentCode,recordDate:archive.recordDate,retentionUntil:archive.retentionUntil,uploadedAt:new Date().toISOString(),kind:att.kind||kind,dataEnv:archive.dataEnvironment});
 }
 async function uploadAttachmentsToSupabase(files,ctx){
+  files=renameImageAttachmentsForRecord(files,(ctx&&ctx.recordNo)||'');
   var out=[];
   for(var i=0;i<(files||[]).length;i++){
     try{
@@ -4851,12 +4873,35 @@ function invoiceGroupTotal(i){
 function invoiceGroupCount(i){return invoiceGroupRows(i).length||1;}
 function invoiceGroupTitle(i){return i&&i.batchId?'整批發票':'發票';}
 function invoiceGroupNo(i){return i&&i.batchId?String(i.batchId).replace('batch_','整批 '):(i&&i.no||'');}
+window.toggleInvoiceDetailRow=function(id){
+  var row=el(id);
+  if(!row)return;
+  row.style.display=(row.style.display==='none'||!row.style.display)?'table-row':'none';
+};
+function invoiceReviewDetailHtml(i,opts){
+  opts=opts||{};
+  var rows=invoiceGroupRows(i);
+  if(!rows.length)return '';
+  var title=opts.title||(rows.length>1?'整批發票核對表':'發票核對表');
+  var groupKey=safeStorageSegment(invoiceGroupKey(i).replace(':','_'),'invoice');
+  return '<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6">'
+    +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;margin-bottom:7px"><div><div style="font-size:12px;font-weight:650;color:#334155">'+title+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">主管先核對每張發票總額；點選任一列可展開買受人、統編/載具、品項與稅額細項。</div></div><div style="font-size:11px;color:#a08060;font-weight:650">共 '+rows.length+' 張</div></div>'
+    +'<div style="overflow-x:auto"><table class="invoice-review-table" style="min-width:720px"><thead><tr><th style="width:110px">發票序號</th><th style="width:150px">發票日期</th><th>發票號碼</th><th style="width:180px;text-align:right">發票含稅總金額</th></tr></thead><tbody>'
+    +rows.map(function(x,idx){
+      var rid='inv-detail-'+groupKey+'-'+idx;
+      var taxId=x.taxId||x.taxid||x.tax_id||'';
+      var detail='<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;background:#fffaf2;border:1px solid #efd7b8;border-radius:8px">'
+        +[['買受人',x.buyer||'—'],['開立方式',invoiceIdentifierType(x.identifierType)],['統編/載具號碼',taxId||'—'],['品項說明',x.desc||'—'],['未稅金額',fmt(x.amt||0)],['營業稅',fmt(x.tax||0)],['狀態',receiptStatusLabel(x)],['資料來源',x.batchId?'整批發票':'單張發票']].map(function(d){return'<div style="min-width:0"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+d[0]+'</div><div style="font-size:12px;color:#334155;word-break:break-word">'+escAttr(d[1])+'</div></div>';}).join('')
+        +'</div>';
+      return '<tr onclick="toggleInvoiceDetailRow(\''+rid+'\')" style="cursor:pointer"><td><span class="badge b-blue">#'+(idx+1)+'</span></td><td>'+escAttr(normDate(x.date||'')||'—')+'</td><td style="font-family:monospace;color:var(--brtxt);font-weight:650">'+escAttr(x.no||'—')+'<div style="font-family:inherit;font-size:10px;color:#94a3b8;margin-top:2px">點開看細項</div></td><td style="text-align:right;font-weight:750;color:#3b2410">'+fmt(x.total||0)+'</td></tr>'
+        +'<tr id="'+rid+'" style="display:none"><td colspan="4" style="padding:8px 12px;background:#fff">'+detail+'</td></tr>';
+    }).join('')
+    +'</tbody></table></div></div>';
+}
 function invoiceBatchDetailHtml(i){
   var rows=invoiceGroupRows(i);
   if(!i||!i.batchId||rows.length<=1)return '';
-  return '<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">整批發票明細</div><div style="overflow-x:auto"><table style="min-width:860px"><thead><tr><th>發票號碼</th><th>買受人</th><th>開立方式</th><th>統編/載具號碼</th><th>品項說明</th><th style="text-align:right">含稅金額</th><th>狀態</th></tr></thead><tbody>'
-    +rows.map(function(x){var taxId=x.taxId||x.taxid||x.tax_id||'';return'<tr><td style="font-family:monospace;color:var(--brtxt)">'+escAttr(x.no||'')+'</td><td>'+escAttr(x.buyer||'—')+'</td><td>'+escAttr(invoiceIdentifierType(x.identifierType))+'</td><td style="font-family:monospace">'+escAttr(taxId||'—')+'</td><td>'+escAttr(x.desc||'—')+'</td><td style="text-align:right;font-weight:650">'+fmt(x.total||0)+'</td><td><span class="badge '+(x.status==='paid'?'b-ok':x.status==='pending_receipt_review'?'b-purp':'b-wait')+'">'+receiptStatusLabel(x)+'</span></td></tr>';}).join('')
-    +'</tbody></table></div><div style="font-size:10px;color:#94a3b8;margin-top:6px">此整批資料只跑一組簽核與一列收款追蹤；展開時才檢視個別發票。</div></div>';
+  return invoiceReviewDetailHtml(i,{title:'整批發票核對表'});
 }
 function uniqueInvoiceGroups(rows,filterFn){
   var seen={};
@@ -7099,9 +7144,35 @@ function syncLazyBankFeeRow(render){
   }
   if(render)renderLazySheet();
 }
-function lazyNetAmount(r){return Math.max(0,num(r.netAmount)||num(r.subtotal)||((num(r.qty)||1)*(num(r.unitPrice||r.unit||0))));}
-function lazyTaxAmount(r){return Math.max(0,num(r.taxAmount)||num(r.tax)||Math.max(0,num(r.grossAmount||r.total)-lazyNetAmount(r)));}
-function lazyRowTotal(r){return Math.max(0,num(r.grossAmount)||num(r.total)||(lazyNetAmount(r)+lazyTaxAmount(r)));}
+var BUSINESS_TAX_RATE=0.05;
+function lazyHasValue(r,k){return r&&r[k]!==undefined&&r[k]!==null&&r[k]!=='';}
+function lazyRoundTax(net){return Math.round(Math.max(0,num(net))*BUSINESS_TAX_RATE);}
+function lazyNetAmount(r){
+  if(!r)return 0;
+  if(lazyHasValue(r,'netAmount'))return Math.max(0,num(r.netAmount));
+  if(lazyHasValue(r,'subtotal'))return Math.max(0,num(r.subtotal));
+  var qty=num(r.qty)||1,unit=num(r.unitPrice||r.unit||0);
+  if(unit>0)return Math.max(0,qty*unit);
+  var gross=num(r.grossAmount||r.total||0),tax=num(r.taxAmount||r.tax||0);
+  if(gross>0&&tax>0)return Math.max(0,gross-tax);
+  if(gross>0)return Math.round(gross/(1+BUSINESS_TAX_RATE));
+  return 0;
+}
+function lazyTaxAmount(r){
+  if(!r)return 0;
+  if(r.systemFee)return Math.max(0,num(r.taxAmount||r.tax||0));
+  var explicitTax=num(r.taxAmount||r.tax||0);
+  if(explicitTax>0)return explicitTax;
+  var net=lazyNetAmount(r);
+  if(net>0)return lazyRoundTax(net);
+  var gross=num(r.grossAmount||r.total||0);
+  if(gross>0){
+    var inferredNet=Math.round(gross/(1+BUSINESS_TAX_RATE));
+    return Math.max(0,gross-inferredNet);
+  }
+  return 0;
+}
+function lazyRowTotal(r){var net=lazyNetAmount(r),tax=lazyTaxAmount(r);return Math.max(0,(net||tax)?net+tax:num((r&&r.grossAmount)||(r&&r.total)||0));}
 function lazySum(){return S.lazyRows.reduce(function(s,r){return s+(r.systemFee?0:lazyRowTotal(r));},0);}
 function lazyDisplaySum(){return S.lazyRows.reduce(function(s,r){return s+lazyRowTotal(r);},0);}
 window.handleTextareaLineDelete=function(ev){
@@ -7173,14 +7244,24 @@ window.lazyEdit=function(i,k,v){
   var r=S.lazyRows[i];if(!r||r.systemFee)return;
   r[k]=(k==='qty'||k==='unitPrice'||k==='total'||k==='netAmount'||k==='taxAmount'||k==='grossAmount')?num(v):v;
   if(k==='qty'||k==='unitPrice'){
-    r.netAmount=(num(r.qty)||1)*num(r.unitPrice||r.unit||0);
-    r.grossAmount=r.netAmount+num(r.taxAmount||0);
+    r.netAmount=Math.max(0,(num(r.qty)||1)*num(r.unitPrice||r.unit||0));
+    r.taxAmount=lazyRoundTax(r.netAmount);
+    r.grossAmount=r.netAmount+r.taxAmount;
     r.total=r.grossAmount;
-  }else if(k==='netAmount'||k==='taxAmount'){
-    r.grossAmount=num(r.netAmount)+num(r.taxAmount);
+  }else if(k==='netAmount'){
+    r.netAmount=Math.max(0,num(r.netAmount));
+    r.taxAmount=lazyRoundTax(r.netAmount);
+    r.grossAmount=r.netAmount+r.taxAmount;
+    r.total=r.grossAmount;
+  }else if(k==='taxAmount'){
+    r.taxAmount=Math.max(0,num(r.taxAmount));
+    r.grossAmount=lazyNetAmount(r)+r.taxAmount;
     r.total=r.grossAmount;
   }else if(k==='grossAmount'){
-    r.total=num(r.grossAmount);
+    r.grossAmount=Math.max(0,num(r.grossAmount));
+    r.netAmount=Math.round(r.grossAmount/(1+BUSINESS_TAX_RATE));
+    r.taxAmount=Math.max(0,r.grossAmount-r.netAmount);
+    r.total=r.grossAmount;
   }
   renderLazySheet();applyLazySummary();
 };
@@ -10195,7 +10276,7 @@ function showInvApprD(i){
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:monospace;font-size:10px;color:#c0a080">'+invoiceGroupNo(i)+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+invoiceGroupTitle(i)+'簽核 · '+e.s+(groupCount>1?' · '+groupCount+' 張':'')+'</div></div></div>'
     +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+e.s+'</span>'],['申請人',i.applicant||'—'],['組別 / 部門',(i.dc||'—')+' '+(gD(i.dc).n||'')],['買受人',groupCount>1?'整批 '+groupCount+' 張，請展開明細':(i.buyer||'—')],['開立方式',groupCount>1?'依各張明細':invoiceIdentifierType(i.identifierType)],['金額','<strong>'+fmt(groupTotal)+'</strong>'],['狀態','<span class="badge b-wait">'+invApprovalLabel(i)+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
     +'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:4px">品項說明</div><div style="background:var(--warm);border-radius:7px;padding:7px;font-size:12px">'+(groupCount>1?'整批開立發票，合計 '+groupCount+' 張；每張品項請看下方明細。':(i.desc||'—'))+'</div></div>'
-    +invoiceBatchDetailHtml(i)
+    +invoiceReviewDetailHtml(i,{title:groupCount>1?'整批發票核對表':'發票核對表'})
     +'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">簽核進度</div>'+sh+'</div>'
     +actH;
 }
@@ -10212,7 +10293,7 @@ function showReceiptTaskD(i){
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:monospace;font-size:10px;color:#c0a080">'+invoiceGroupNo(i)+'</div><div style="font-size:12px;font-weight:500;color:#334155">收款待辦 · '+e.s+(groupCount>1?' · 整批 '+groupCount+' 張':'')+'</div></div></div>'
     +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['買受人',groupCount>1?'整批 '+groupCount+' 張，請看下方明細':(i.buyer||'—')],['金額','<strong>'+fmt(groupTotal)+'</strong>'],['狀態','<span class="badge b-wait">'+receiptStatusLabel(i)+'</span>'],['收款證明',proof+' 份']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
-    +invoiceBatchDetailHtml(i)
+    +invoiceReviewDetailHtml(i,{title:groupCount>1?'整批發票核對表':'發票核對表'})
     +'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">收款證明附件</div>'+files+'</div>'
     +actH;
 }
@@ -11427,7 +11508,7 @@ window.showRecvInvoiceDetail=function(id){
   el('appr-inner').innerHTML=
     '<div style="padding:12px 14px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--brxxl)"><div style="display:flex;align-items:center;gap:8px"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:14px">←</button><div><div style="font-family:monospace;font-size:11px;color:#c0a080">'+escAttr(invoiceGroupNo(leader))+'</div><div style="font-size:14px;font-weight:650;color:#334155">收款 / 傳票詳情 · '+escAttr(e.s||'')+(groupCount>1?' · 整批 '+groupCount+' 張':'')+'</div></div></div><span class="badge '+statusCls+'">'+recvStatusShortLabel(leader)+'</span></div>'
     +'<div style="padding:12px 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;border-bottom:1px solid #f0e6d6">'+[['法人',e.full||e.s||'—'],['買受人',groupCount>1?'整批 '+groupCount+' 張，請看下方明細':(leader.buyer||'—')],['金額','<strong>'+fmt(groupTotal)+'</strong>'],['狀態','<span class="badge '+statusCls+'">'+receiptStatusLabel(leader)+'</span>'],['開立方式',groupCount>1?'依各張明細':invoiceIdentifierType(leader.identifierType)],['申請人',leader.applicant||'—'],['收款證明',proofCount+' 份'],['收款日期',leader.paidAt?normDate(leader.paidAt):'—']].map(function(x){return'<div style="background:var(--warm);border-radius:8px;padding:8px"><div style="font-size:11px;color:#a08060">'+x[0]+'</div><div style="font-size:12px;margin-top:2px;color:#3b2410;word-break:break-word">'+x[1]+'</div></div>';}).join('')+'</div>'
-    +(groupCount>1?invoiceBatchDetailHtml(leader):singleInvoiceDetailHtml(leader))
+    +invoiceReviewDetailHtml(leader,{title:groupCount>1?'整批發票核對表':'發票核對表'})
     +'<div style="padding:12px 14px;border-bottom:1px solid #f0e6d6"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px"><div style="font-size:12px;font-weight:650;color:#334155">傳票 / 分類帳追溯</div><div style="font-size:11px;color:#94a3b8">'+ledger.length+' 筆分錄</div></div>'+recvLedgerTraceHtml(ledger)+'</div>'
     +'<div style="padding:12px 14px;border-bottom:1px solid #f0e6d6"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:7px">收款證明附件</div>'+stepAttachmentHtml(receiptFiles)+'</div>'
     +'<div style="padding:12px 14px;border-bottom:1px solid #f0e6d6"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:7px">簽核或開立附件</div>'+stepAttachmentHtml(stepFiles)+'</div>'
