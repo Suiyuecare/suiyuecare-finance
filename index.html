@@ -259,6 +259,18 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .auth-loading-bar{height:6px;background:#f7ead8;border-radius:999px;overflow:hidden;margin-top:18px}
 .auth-loading-bar b{display:block;width:44%;height:100%;border-radius:999px;background:#ea880c;animation:authLoading 1.1s ease-in-out infinite alternate}
 @keyframes authLoading{from{transform:translateX(-80%)}to{transform:translateX(210%)}}
+.action-feedback{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:100000;background:rgba(26,16,8,.28);backdrop-filter:blur(2px)}
+.action-feedback.show{display:flex}
+.action-feedback-card{min-width:260px;max-width:min(360px,calc(100vw - 40px));background:#fff;border:1px solid #efd7b8;border-radius:14px;padding:22px 24px;box-shadow:0 24px 70px rgba(48,30,10,.22);text-align:center;color:#3a2517}
+.action-feedback-mark{width:42px;height:42px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center}
+.action-feedback-spinner{width:34px;height:34px;border:4px solid #f4dfc2;border-top-color:var(--br);border-radius:50%;animation:actionSpin .78s linear infinite}
+.action-feedback-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#eaf8d8;color:#1a7040;font-size:24px;font-weight:900;transform:scale(.9);animation:actionDone .18s ease-out forwards}
+.action-feedback.fail .action-feedback-icon{background:#fde8e8;color:#a02020}
+.action-feedback-title{font-size:17px;font-weight:850;margin-bottom:5px}
+.action-feedback-sub{font-size:12px;color:#8b7358;line-height:1.6}
+.action-busy{pointer-events:none;opacity:.72}
+@keyframes actionSpin{to{transform:rotate(360deg)}}
+@keyframes actionDone{to{transform:scale(1)}}
 .divider{display:flex;align-items:center;gap:9px;margin:10px 0;color:#94a3b8;font-size:11px}
 .divider::before,.divider::after{content:'';flex:1;height:1px;background:#e0d0b8}
 
@@ -13552,6 +13564,140 @@ window.buildBS = buildBS;
 window.buildPL = buildPL;
 window.buildCF = buildCF;
 window.renderLedger = renderLedger;
+
+var ACTION_FEEDBACK_TIMER=null;
+var ACTION_FEEDBACK_ACTIVE=0;
+var ACTION_FEEDBACK_ALERTED=false;
+function ensureActionFeedback(){
+  var box=document.getElementById('action-feedback');
+  if(box)return box;
+  box=document.createElement('div');
+  box.id='action-feedback';
+  box.className='action-feedback';
+  box.innerHTML='<div class="action-feedback-card" role="status" aria-live="polite">'+
+    '<div class="action-feedback-mark"><div class="action-feedback-spinner"></div></div>'+
+    '<div class="action-feedback-title">處理中</div>'+
+    '<div class="action-feedback-sub">系統正在建立資料，請不要重複點擊。</div>'+
+  '</div>';
+  document.body.appendChild(box);
+  return box;
+}
+function setActionFeedback(state,title,sub){
+  var box=ensureActionFeedback();
+  var mark=box.querySelector('.action-feedback-mark');
+  var titleEl=box.querySelector('.action-feedback-title');
+  var subEl=box.querySelector('.action-feedback-sub');
+  box.className='action-feedback show'+(state==='fail'?' fail':'');
+  mark.innerHTML=state==='loading'
+    ? '<div class="action-feedback-spinner"></div>'
+    : '<div class="action-feedback-icon">'+(state==='fail'?'!':'✓')+'</div>';
+  titleEl.textContent=title||'處理中';
+  subEl.textContent=sub||'系統正在建立資料，請不要重複點擊。';
+}
+function hideActionFeedback(){
+  if(ACTION_FEEDBACK_TIMER){clearTimeout(ACTION_FEEDBACK_TIMER);ACTION_FEEDBACK_TIMER=null;}
+  var box=document.getElementById('action-feedback');
+  if(box)box.classList.remove('show','fail');
+}
+function showActionFeedback(title,sub){
+  if(ACTION_FEEDBACK_TIMER){clearTimeout(ACTION_FEEDBACK_TIMER);ACTION_FEEDBACK_TIMER=null;}
+  setActionFeedback('loading',title||'處理中',sub||'系統正在建立資料，請不要重複點擊。');
+}
+function completeActionFeedback(title,sub){
+  setActionFeedback('done',title||'已完成',sub||'資料已建立或更新完成。');
+  ACTION_FEEDBACK_TIMER=setTimeout(hideActionFeedback,1150);
+}
+function failActionFeedback(title,sub){
+  setActionFeedback('fail',title||'處理失敗',sub||'請確認資料後再試一次。');
+  ACTION_FEEDBACK_TIMER=setTimeout(hideActionFeedback,1700);
+}
+async function withActionFeedback(title,runner,doneTitle,failTitle){
+  ACTION_FEEDBACK_ALERTED=false;
+  ACTION_FEEDBACK_ACTIVE+=1;
+  showActionFeedback(title,'系統正在處理，請不要重複點擊。');
+  try{
+    var out=await runner();
+    ACTION_FEEDBACK_ACTIVE=Math.max(0,ACTION_FEEDBACK_ACTIVE-1);
+    if(!ACTION_FEEDBACK_ACTIVE&&!ACTION_FEEDBACK_ALERTED)completeActionFeedback(doneTitle||'已完成','資料已建立或更新完成。');
+    return out;
+  }catch(err){
+    ACTION_FEEDBACK_ACTIVE=Math.max(0,ACTION_FEEDBACK_ACTIVE-1);
+    if(!ACTION_FEEDBACK_ALERTED)failActionFeedback(failTitle||'處理失敗',(err&&err.message)||'請確認資料後再試一次。');
+    throw err;
+  }
+}
+(function patchAlertForActionFeedback(){
+  if(window.__actionFeedbackAlertPatched)return;
+  window.__actionFeedbackAlertPatched=true;
+  var nativeAlert=window.alert;
+  window.alert=function(){
+    ACTION_FEEDBACK_ALERTED=true;
+    hideActionFeedback();
+    return nativeAlert.apply(window,arguments);
+  };
+})();
+function wrapActionFeedback(name,loading,done){
+  var fn=window[name];
+  if(typeof fn!=='function'||fn.__actionFeedbackWrapped)return;
+  var wrapped=function(){
+    var self=this,args=arguments;
+    return withActionFeedback(loading,function(){return fn.apply(self,args);},done);
+  };
+  wrapped.__actionFeedbackWrapped=true;
+  window[name]=wrapped;
+}
+function installActionFeedbackWrappers(){
+  [
+    ['submitNR','正在送出簽核','申請單已送出'],
+    ['saveCurrentDraft','正在暫存表單','暫存完成'],
+    ['saveDraft','正在暫存表單','暫存完成'],
+    ['saveInvDraft','正在暫存發票','暫存完成'],
+    ['withdrawRequest','正在抽單取消','已抽單取消'],
+    ['deleteDraftFromApprovals','正在刪除暫存','暫存已刪除'],
+    ['apprApprove','正在核准','已核准'],
+    ['apprReject','正在送出不通過','已送出不通過'],
+    ['apprReturnPrevious','正在退回上一關','已退回上一關'],
+    ['apprReturnPreviousProc','正在退回上一關','已退回上一關'],
+    ['bulkApproveSelected','正在整批通過','整批通過完成'],
+    ['bulkCountersignSelected','正在整批加簽','整批加簽完成'],
+    ['bulkReturnSelected','正在整批退回','整批退回完成'],
+    ['bulkCancelSelected','正在整批不通過','整批不通過完成'],
+    ['submitProcurementPaymentInfo','正在送出總務付款資料','總務付款資料已送出'],
+    ['submitProcurementActual','正在送出採購憑據','採購憑據已送出'],
+    ['apprApproveInv','正在核准發票','發票已核准'],
+    ['apprReturnPreviousInv','正在退回發票','發票已退回'],
+    ['apprRejectInv','正在送出發票不通過','發票不通過已送出'],
+    ['issueInv','正在送出發票申請','發票申請已送出'],
+    ['issueBatch','正在送出整批發票','整批發票已送出'],
+    ['analyzeBatchInvoiceUpload','正在分析檔案','分析完成'],
+    ['submitBill','正在建立繳費單','繳費單已建立'],
+    ['submitBillBatch','正在建立整批繳費單','整批繳費單已建立'],
+    ['submitShareholderTxn','正在送出資金往來申請','資金往來申請已送出'],
+    ['submitReceiptReview','正在送出收款複核','收款複核已送出'],
+    ['approveReceiptReview','正在確認收款','收款已確認'],
+    ['returnReceiptReview','正在退回收款','收款已退回'],
+    ['approvePendingSetting','正在核准設定','設定已核准'],
+    ['rejectPendingSetting','正在退回設定','設定已退回'],
+    ['saveFeeSetting','正在儲存手續費設定','手續費設定已儲存'],
+    ['saveAllSettings','正在儲存系統設定','系統設定已儲存'],
+    ['saveEntitySettings','正在儲存法人設定','法人設定已儲存'],
+    ['saveDeptSettings','正在儲存部門設定','部門設定已儲存'],
+    ['saveAcctSettings','正在儲存會計科目','會計科目已儲存'],
+    ['submitAddUser','正在新增人員','人員已新增'],
+    ['saveOrgChart','正在儲存組織圖','組織圖已儲存'],
+    ['createAdjustmentVoucher','正在建立調整傳票','調整傳票已建立'],
+    ['approveAnnualReview','正在核准年度覆核','年度覆核已核准']
+  ].forEach(function(x){wrapActionFeedback(x[0],x[1],x[2]);});
+  document.addEventListener('click',function(e){
+    var btn=e.target&&e.target.closest&&e.target.closest('button');
+    if(!btn||btn.disabled||btn.closest('.action-feedback'))return;
+    var text=(btn.textContent||'').trim();
+    if(!/送出|核准|通過|暫存|儲存|開立|建立|整批|退回|不通過|抽單|分析|確認|刪除/.test(text))return;
+    btn.classList.add('action-busy');
+    setTimeout(function(){btn.classList.remove('action-busy');},1200);
+  },true);
+}
+installActionFeedbackWrappers();
 setDemoLoginVisibility();
 updateOAuthWebviewNotice();
 bootAuthGate();
