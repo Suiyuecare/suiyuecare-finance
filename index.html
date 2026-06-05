@@ -6239,17 +6239,39 @@ function normalizeAccountingLine(line,r,i){
     locked:!!line.locked
   };
 }
+function accountingLineAmountInput(prefix,i,field,value){
+  var label={netAmount:'未稅/費用',taxAmount:'進項稅額',grossAmount:'含稅'}[field]||field;
+  var key={netAmount:'net',taxAmount:'tax',grossAmount:'gross'}[field]||field;
+  return '<input id="'+prefix+'-'+key+'-'+i+'" type="number" min="0" step="1" value="'+escAttr(Math.round(num(value)))+'" aria-label="'+label+'" title="'+label+'" style="width:112px;max-width:100%;text-align:right;font-family:monospace;font-weight:750;font-size:12px;padding:6px 8px" oninput="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onblur="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onchange="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')">';
+}
+window.syncAccountingLineAmountInputs=function(prefix,i,field){
+  var netEl=el(prefix+'-net-'+i),taxEl=el(prefix+'-tax-'+i),grossEl=el(prefix+'-gross-'+i);
+  if(!netEl||!taxEl||!grossEl)return;
+  var net=Math.max(0,Math.round(num(netEl.value)));
+  var tax=Math.max(0,Math.round(num(taxEl.value)));
+  var gross=Math.max(0,Math.round(num(grossEl.value)));
+  if(field==='grossAmount'){
+    if(tax>gross)tax=gross;
+    net=Math.max(0,gross-tax);
+  }else{
+    gross=net+tax;
+  }
+  netEl.value=net;
+  taxEl.value=tax;
+  grossEl.value=gross;
+};
 function accountingLinesHtml(r,editable,title){
   var prefix=arguments.length>3&&arguments[3]?arguments[3]:'acct-line';
   var lines=buildAccountingLines(r);
   var head='<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">每一列明細都可以有自己的借方會計科目。系統依申請類型、使用情境、明細品項、資產化與稅務憑證順序給 AI/規則建議，會計仍需覆核；貸方由流程鎖定，避免現金流量表與資產負債表不一致。</div>';
   var rows=lines.map(function(line,i){
+    var amountEditable=editable&&!line.locked;
     return'<tr>'
       +'<td style="text-align:center;color:#94a3b8">'+(i+1)+'</td>'
       +'<td><div style="font-size:11px;font-weight:650;color:#334155">'+escAttr(line.description)+'</div><div style="font-size:10px;color:#8b7358;line-height:1.4">'+escAttr(line.aiReason)+'</div></td>'
-      +'<td style="text-align:right;font-family:monospace">'+fmt(line.netAmount)+'</td>'
-      +'<td style="text-align:right;font-family:monospace">'+fmt(line.taxAmount)+'</td>'
-      +'<td style="text-align:right;font-family:monospace;font-weight:650">'+fmt(line.grossAmount)+'</td>'
+      +'<td style="text-align:right;font-family:monospace">'+(amountEditable?accountingLineAmountInput(prefix,i,'netAmount',line.netAmount):fmt(line.netAmount))+'</td>'
+      +'<td style="text-align:right;font-family:monospace">'+(amountEditable?accountingLineAmountInput(prefix,i,'taxAmount',line.taxAmount):fmt(line.taxAmount))+'</td>'
+      +'<td style="text-align:right;font-family:monospace;font-weight:650">'+(amountEditable?accountingLineAmountInput(prefix,i,'grossAmount',line.grossAmount):fmt(line.grossAmount))+'</td>'
       +'<td>'+(editable&&!line.locked?'<select id="'+prefix+'-dr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.debitAccount,'debit')+'</select>':'<span class="acct-dr">'+line.debitAccount+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+line.debitAccountName+'</div>')+'</td>'
       +'<td><span class="acct-cr">'+line.creditAccount+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+line.creditAccountName+'（系統鎖定）</div></td>'
       +'</tr>';
@@ -6333,7 +6355,17 @@ function collectAccountingLinesFromDom(r){
   lines=lines.map(function(line,i){
     var dr=accountByCode((el(prefix+'-dr-'+i)||{}).value||line.debitAccount)||{};
     var cr=controlledCreditAccountForRequest(r);
+    var netEl=el(prefix+'-net-'+i),taxEl=el(prefix+'-tax-'+i),grossEl=el(prefix+'-gross-'+i);
+    var net=netEl?Math.max(0,Math.round(num(netEl.value))):num(line.netAmount);
+    var tax=taxEl?Math.max(0,Math.round(num(taxEl.value))):num(line.taxAmount);
+    var gross=grossEl?Math.max(0,Math.round(num(grossEl.value))):(net+tax||num(line.grossAmount));
+    if(tax>gross)tax=gross;
+    if(grossEl&&Math.abs(gross-(net+tax))>0.5)net=Math.max(0,gross-tax);
+    else gross=net+tax;
     return Object.assign({},line,{
+      netAmount:net,
+      taxAmount:tax,
+      grossAmount:gross,
       debitAccount:dr.c||line.debitAccount,
       debitAccountName:dr.n||line.debitAccountName,
       creditAccount:cr.c||line.creditAccount,
@@ -6343,6 +6375,11 @@ function collectAccountingLinesFromDom(r){
     });
   });
   r.formPayload=Object.assign({},r.formPayload||{},{accountingLines:lines,accountingLinePolicy:'usage_context_item_tax_asset_v2'});
+  var grossTotal=lines.reduce(function(sum,line){return sum+num(line.grossAmount);},0);
+  if(grossTotal>0){
+    r.amt=grossTotal;
+    r.total=grossTotal;
+  }
   if(lines[0]){
     r.dr=lines[0].debitAccount;r.drN=lines[0].debitAccountName;
     r.cr=lines[0].creditAccount;r.crN=lines[0].creditAccountName;
