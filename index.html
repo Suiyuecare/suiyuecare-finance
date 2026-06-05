@@ -4798,6 +4798,25 @@ function canCeoEditRequestExcel(r){
   var cur=activeStep(r);
   return !!(cur&&requestReachedCeoReview(r)&&isReqOpen(r)&&!requestPostingLocked(r)&&['ceo','cashier'].indexOf(cur.rk)>-1);
 }
+function canApplicantEditReturnedAccountingLines(r){
+  if(!S.user||!r)return false;
+  var cur=activeStep(r);
+  return !!(cur&&cur.rk==='applicant_revision'&&r.status==='pending_applicant_confirm'&&isReqOpen(r)&&!requestPostingLocked(r)&&canActRequest(r));
+}
+function canEditRequestAccountingLines(r){
+  var cur=activeStep(r);
+  return !!((canActRequest(r)&&cur&&(cur.rk==='accountant'||cur.rk==='accountant_final'))||canCeoEditRequestExcel(r)||canApplicantEditReturnedAccountingLines(r));
+}
+function shouldShowRequestAccountingLines(r){
+  return !!(isFinance()||canCeoEditRequestExcel(r)||canApplicantEditReturnedAccountingLines(r));
+}
+function accountingLinesTitleForRequest(r){
+  var cur=activeStep(r)||{};
+  if(canApplicantEditReturnedAccountingLines(r))return '申請人補件：修正明細與金額';
+  if(cur.rk==='accountant_final')return '會計第二關：依最後憑據確認入帳科目';
+  if(canCeoEditRequestExcel(r))return '執行長覆核：檢視與修正入帳科目';
+  return '明細列入帳科目';
+}
 function canActReceipt(i){
   if(!S.user||!i||!invoiceNeedsReceivableFollowup(i))return false;
   if(i.status==='unpaid')return S.user.role==='accountant';
@@ -6425,6 +6444,7 @@ function hasVisibleAccountingInputs(prefix){
 }
 function shouldCollectAccountingLines(r,step){
   if(!r||!step)return false;
+  if(step.rk==='applicant_revision'&&canApplicantEditReturnedAccountingLines(r))return true;
   if((step.rk==='accountant'&&r.status==='pending_accountant')||(step.rk==='accountant_final'&&r.status==='pending_voucher'))return true;
   return canCeoEditRequestExcel(r)&&['ceo','cashier'].indexOf(step.rk)>-1;
 }
@@ -9547,12 +9567,11 @@ window.openDetail=function(rid){
       var dc=s.done?'#1a5010':s.rej?'#8a1010':s.cur?'var(--brtxt)':'#94a3b8';
       var db=s.done?'#2a9040':s.rej?'#c02020':s.cur?'var(--br)':'#e0d0b8';
       return'<div class="tl-item"><div class="tl-dot" style="background:'+db+';color:'+(s.done||s.rej||s.cur?'#fff':'#b09070')+';border:1px solid '+(s.cur?'var(--br)':'#e0d0b8')+'">'+(s.done?'OK':s.rej?'NO':i+1)+'</div><div style="flex:1;padding-top:2px"><div style="font-size:12px;font-weight:500;color:'+dc+'">'+s.label+(s.n?' — '+s.n:'')+(s.t?' <span style="font-size:10px;font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+(s.cur?' <span class="badge b-wait" style="font-size:9px;margin-left:4px">進行中</span>':'')+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px;line-height:1.5">'+(s.purpose||'建立申請並送出簽核流程。')+'</div>'+stepAttachmentHtml(s.files)+stepFeedbackHtml(s.c)+'</div></div>';
-    }).join('');
+  }).join('');
   var invoiceReviewCard=expenseInvoiceReviewHtml(r);
-  var canEditAccountingLines=canActRequest(r)&&curStep&&(curStep.rk==='accountant'||curStep.rk==='accountant_final');
-  if(canCeoEditRequestExcel(r))canEditAccountingLines=true;
-  var lineAccountingTitle=canCeoEditRequestExcel(r)?'執行長覆核：檢視與修正入帳科目':'明細列入帳科目';
-  var lineAccountingCard=isFinance()?accountingLinesHtml(r,canEditAccountingLines,lineAccountingTitle,'detail-acct-line'):'';
+  var canEditAccountingLines=canEditRequestAccountingLines(r);
+  var lineAccountingTitle=accountingLinesTitleForRequest(r);
+  var lineAccountingCard=shouldShowRequestAccountingLines(r)?accountingLinesHtml(r,canEditAccountingLines,lineAccountingTitle,'detail-acct-line'):'';
   var accountingCard=isFinance()
     ?'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById(\''+r.voucherId+'\')">'+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+r.dr+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+r.drN+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+r.cr+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+r.crN+'</div></div></div>'+(feeAmt?'<div style="font-size:11px;color:#6a5840;margin-top:6px;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:6px">己方支出手續費會自動增加：Dr 6290 手續費 '+fmt(feeAmt)+'，Cr '+r.cr+' 銀行存款合計 '+fmt(r.amt+feeAmt)+'。</div>':'')+'<div style="font-size:11px;color:#94a3b8;margin-top:6px">提醒：數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
     :'<div class="card" style="padding:12px;background:#fff8ed;border-color:#efd7b8"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:5px">會計處理</div><div style="font-size:11px;color:#8b7358;line-height:1.7">這張單完成簽核後，會計會確認憑據與金流並由系統處理入帳。您不用填寫會計科目、分錄或傳票，只需要追蹤簽核狀態與補齊附件。</div></div>';
@@ -9623,6 +9642,7 @@ window.doReturnPreviousProc=function(rid){returnPreviousRequestWithFields(rid,'p
 window.doConfirmPay=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
   if(!canActRequest(r)){alert('目前不是您的確認步驟');return;}
+  var beforeStep=activeStep(r);
   var p=await approvalActionPayload('appr-c','appr-files','appr-add-user');
   if(r.type==='advance_request'){
     if(!p.files||!p.files.length){alert('預支申請第 8 關需上傳最後花費的憑據照片/PDF，以及即時 Excel 明細表。');return;}
@@ -9634,9 +9654,15 @@ window.doConfirmPay=async function(rid){
     r.actualFiles=normalizeFiles(r.actualFiles||[]).concat(p.files||[]);
     r.formPayload=Object.assign({},r.formPayload||{},{advanceFinalFiles:r.actualFiles,advanceFinalEvidenceSubmittedAt:new Date().toISOString(),advanceFinalEvidenceSubmittedBy:S.user?S.user.n:''});
   }
+  if(shouldCollectAccountingLines(r,beforeStep)){
+    if(hasVisibleAccountingInputs('appr-acct-line'))collectAccountingLinesFromDom(r,'appr-acct-line');
+    else if(hasVisibleAccountingInputs('detail-acct-line'))collectAccountingLinesFromDom(r,'detail-acct-line');
+  }
   approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
   await maybeFinalizeShareholderRequest(r);
-  await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps,actual_files:r.actualFiles||[],form_payload:r.formPayload||{},ledger_posted_at:requestLedgerPostedAt(r)||null,posting_locked_at:r.postingLockedAt||r.posting_locked_at||null,voucher_id:r.voucherId||null});buildAll();openDetail(rid);
+  await dbUpdate('expense_requests',rid,{status:r.status,step:r.step,steps:r.steps,actual_files:r.actualFiles||[],debit_account:r.dr,debit_account_name:r.drN,credit_account:r.cr,credit_account_name:r.crN,form_payload:r.formPayload||{},ledger_posted_at:requestLedgerPostedAt(r)||null,posting_locked_at:r.postingLockedAt||r.posting_locked_at||null,voucher_id:r.voucherId||null});
+  await persistAccountingLinesRemote(r);
+  buildAll();openDetail(rid);
 };
 // FIX 1：自動切傳票
 window.doConfirmVoucher=async function(rid){
@@ -10427,11 +10453,9 @@ function showApprD(r){
   var cur=activeStep(r)||{};
   var isApplicantRevision=cur.rk==='applicant_revision';
   var invoiceReviewH=expenseInvoiceReviewHtml(r);
-  var ceoCanEditExcel=canCeoEditRequestExcel(r);
-  var canEditAccountingReview=canAct&&(cur.rk==='accountant'||cur.rk==='accountant_final');
-  if(ceoCanEditExcel)canEditAccountingReview=true;
-  var accountingReviewTitle=cur.rk==='accountant_final'?'會計第二關：依最後憑據確認入帳科目':(ceoCanEditExcel?'執行長覆核：檢視與修正入帳科目':'會計第一關：確認金額與入科目');
-  var accountingReviewH=isFinance()?accountingLinesHtml(r,canEditAccountingReview,accountingReviewTitle,'appr-acct-line'):'';
+  var canEditAccountingReview=canEditRequestAccountingLines(r);
+  var accountingReviewTitle=accountingLinesTitleForRequest(r);
+  var accountingReviewH=shouldShowRequestAccountingLines(r)?accountingLinesHtml(r,canEditAccountingReview,accountingReviewTitle,'appr-acct-line'):'';
   var advanceFieldsH=r.type==='advance_request'&&!isApplicantRevision?'<div style="font-size:10px;color:#8b7358;line-height:1.5;margin-bottom:7px">請上傳最後實際花費的憑據照片/PDF，以及即時 Excel 明細表。兩種檔案都要上傳。</div>'+fieldsH:fieldsH;
   var advanceFinalAmtField=r.type==='advance_request'?advanceFinalAccountingHtml(r):'';
   var returnBtn=canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPrevious(\''+r.id+'\')">退回上一關</button>':'';
