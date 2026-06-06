@@ -1556,7 +1556,7 @@ input:focus,select:focus,textarea:focus{
 
   <!-- 開立發票 -->
   <div class="pg" id="pg-invoices">
-    <div style="display:flex;justify-content:space-between;margin-bottom:12px"><div><div class="ph">開立發票</div><div class="ps">依各法人字軌 AA～AF · 支援整批上傳</div></div><div style="display:flex;gap:7px"><button class="btn-s" id="btn-batch" onclick="switchInv('batch')">整批上傳</button><button class="btn-p" id="btn-single" onclick="switchInv('single')">+ 單張開立</button></div></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:12px"><div><div class="ph">開立發票</div><div class="ps">依系統設定法人字軌 · 支援整批上傳</div></div><div style="display:flex;gap:7px"><button class="btn-s" id="btn-batch" onclick="switchInv('batch')">整批上傳</button><button class="btn-p" id="btn-single" onclick="switchInv('single')">+ 單張開立</button></div></div>
     <div style="background:#eaf8d8;border:1px solid #b0e090;border-radius:9px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#1a5010;display:flex;align-items:center;gap:7px">
       <strong>易發票 API</strong>：尚未串接。串接後發票號碼由平台自動核配，本欄改為唯讀顯示。
       <span style="margin-left:auto;background:#fff;border:1px solid #b0e090;padding:2px 8px;border-radius:99px;font-weight:500;cursor:pointer" onclick="alert('請聯繫系統管理員設定 API Key')">設定串接 →</span>
@@ -1942,7 +1942,7 @@ input:focus,select:focus,textarea:focus{
         <!-- 批量 -->
         <div id="bill-batch-form" style="padding:13px;display:none">
           <div style="background:#eaf8d8;border:1px solid #b0e090;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:11px;color:#1a5010">
-            <strong>範本欄位：</strong>法人代碼（E1-E6）、費用項目（labor/health/pension/tax/rent/other）、金額、期限（YYYY/MM/DD）、方式、說明
+            <strong>範本欄位：</strong>法人代碼（依系統設定）、費用項目（labor/health/pension/tax/rent/other）、金額、期限（YYYY/MM/DD）、方式、說明
             <div style="display:flex;gap:6px;margin-top:6px">
               <button onclick="dlBillTemplate('csv')" style="padding:3px 10px;border-radius:5px;font-size:11px;background:#fff;border:1px solid #b0e090;color:#1a5010;cursor:pointer">下載範本 CSV</button>
               <button onclick="dlBillTemplate('xlsx')" style="padding:3px 10px;border-radius:5px;font-size:11px;background:#fff;border:1px solid #b0e090;color:#1a5010;cursor:pointer">下載範本 Excel</button>
@@ -2512,7 +2512,7 @@ function normalizeRolePermissionsConfig(saved){
 }
 var ROLE_PERMISSIONS=normalizeRolePermissionsConfig();
 var SEARCHABLE_SELECT_SEQ=0;
-var SEARCHABLE_SELECT_IDS=['nr-ent','nr-dept','nr-app-sel','nr-app','nr-dr','nr-cr','sh-payer-ent','sh-payee-ent','inv-ent','inv-app-sel','inv-dept','l-ent','l-dept','l-acct','comp-ent','uent','ud'];
+var SEARCHABLE_SELECT_IDS=['nr-ent','nr-dept','nr-app-sel','nr-app','nr-dr','nr-cr','sh-payer-ent','sh-payee-ent','inv-ent','inv-app-sel','inv-dept','b-ent','b-app-sel','b-dept','b-ent2','rpt-ent','l-ent','l-dept','l-acct','comp-ent','uent','ud'];
 function visibleNavButtons(){
   return Array.from(document.querySelectorAll('nav .ni')).filter(function(btn){
     var st=getComputedStyle(btn);
@@ -4519,7 +4519,10 @@ function buildApprovalSteps(appUser,requestType){
     var pSupervisor=directSupervisorUser(appUser),pDirect=pSupervisor&&pSupervisor.role;
     padd(pDirect,'申請人主管通過'+(pSupervisor?'：'+pSupervisor.n:''),STEP_FOR[pDirect]||'pending_section_chief',pSupervisor);
     var pDeptManager=departmentManagerUser(appUser);
-    if(pDeptManager)padd('dept_manager','申請人部門主任通過：'+pDeptManager.n,'pending_dept_manager',pDeptManager);
+    if(pDeptManager){
+      if(sameApprovalUser(pSupervisor,pDeptManager))pSteps.push(autoMergedDeptManagerStep('申請人部門主任通過：'+pDeptManager.n,pDeptManager,'pending_dept_manager','申請人主管'));
+      else padd('dept_manager','申請人部門主任通過：'+pDeptManager.n,'pending_dept_manager',pDeptManager);
+    }
     padd('accountant','會計通過','pending_accountant');
     padd('ceo','執行長檢視會計科目','pending_ceo');
     padd('cashier','出納放款（目前由執行長代行）','pending_cashier',cashierUser());
@@ -4541,7 +4544,10 @@ function buildApprovalSteps(appUser,requestType){
   var deptManager=departmentManagerUser(appUser);
   if(requestType==='advance_request'){
     add(direct,'主管通過'+(supervisor?'：'+supervisor.n:''),STEP_FOR[direct]||'pending_section_chief',supervisor);
-    if(deptManager)add('dept_manager','部門主管通過：'+deptManager.n,'pending_dept_manager',deptManager);
+    if(deptManager){
+      if(sameApprovalUser(supervisor,deptManager))steps.push(autoMergedDeptManagerStep('部門主管通過：'+deptManager.n,deptManager,'pending_dept_manager','主管通過'));
+      else add('dept_manager','部門主管通過：'+deptManager.n,'pending_dept_manager',deptManager);
+    }
     add('admin_director','行政部門主任','pending_admin_director');
     add('accountant','會計','pending_accountant');
     add('ceo','執行長檢視會計科目','pending_ceo');
@@ -4551,7 +4557,10 @@ function buildApprovalSteps(appUser,requestType){
     return steps;
   }
   add(direct,'上一層級主管：'+(supervisor?supervisor.n:(RL[direct]||direct)),STEP_FOR[direct]||'pending_section_chief',supervisor);
-  if(deptManager)add('dept_manager','部門主管：'+deptManager.n,'pending_dept_manager',deptManager);
+  if(deptManager){
+    if(sameApprovalUser(supervisor,deptManager))steps.push(autoMergedDeptManagerStep('部門主管：'+deptManager.n,deptManager,'pending_dept_manager','上一層級主管'));
+    else add('dept_manager','部門主管：'+deptManager.n,'pending_dept_manager',deptManager);
+  }
   add('admin_director','行政部門主任','pending_admin_director');
   add('accountant','會計','pending_accountant');
   add('ceo','執行長檢視會計科目','pending_ceo');
@@ -4585,13 +4594,17 @@ function buildInvoiceApprovalSteps(appUser){
     supervisor,
     '確認申請內容、開票原因、客戶或開票對象與申請人業務是否相符。'
   );
-  push(
-    '部門主管'+(deptManager?'：'+deptManager.n:''),
-    'dept_manager',
-    'pending_dept_manager',
-    deptManager,
-    '確認部門收入歸屬、品項內容、專案或跨課室影響。'
-  );
+  if(sameApprovalUser(supervisor,deptManager)){
+    steps.push(autoMergedDeptManagerStep('部門主管'+(deptManager?'：'+deptManager.n:''),deptManager,'pending_dept_manager','申請人主管'));
+  }else{
+    push(
+      '部門主管'+(deptManager?'：'+deptManager.n:''),
+      'dept_manager',
+      'pending_dept_manager',
+      deptManager,
+      '確認部門收入歸屬、品項內容、專案或跨課室影響。'
+    );
+  }
   push(
     '行政部門主任',
     'admin_director',
@@ -4827,6 +4840,35 @@ function applicantSubmitStep(appUser,appName){
   appUser=appUser||S.user||USERS[0];
   return {r:'申請人送件',rk:'applicant_submit',uid:appUser.id,n:appName||appUser.n||'',a:'approved',t:todaySlash(),c:'申請人已送出表單，進入簽核流程。',status:'submitted'};
 }
+function sameApprovalUser(a,b){
+  return !!(a&&b&&a.id&&b.id&&a.id===b.id);
+}
+function autoMergedDeptManagerStep(label,user,status,sourceLabel){
+  return {
+    r:label||('部門主管：'+((user&&user.n)||'')),
+    rk:'dept_manager',
+    uid:user&&user.id?user.id:'',
+    n:'系統自動跳關',
+    a:'approved',
+    t:'',
+    c:'申請人上一層級主管與部門主管為同一位；前一關簽核通過時，系統會同步通過本關並直接送往下一關。',
+    status:status||'pending_dept_manager',
+    purpose:'此關與「'+(sourceLabel||'申請人上一層級主管')+'」為同一位簽核人。為避免重複簽核，前一關通過後本關自動同步通過。',
+    autoSkip:true,
+    autoSkipReason:'same_direct_supervisor_and_dept_manager'
+  };
+}
+function autoSkippedStep(s){
+  return !!(s&&s.autoSkip);
+}
+function previousReturnableStepIndex(flow,idx){
+  var steps=(flow&&flow.steps)||[];
+  for(var i=idx-1;i>=0;i--){
+    if(autoSkippedStep(steps[i]))continue;
+    return i;
+  }
+  return -1;
+}
 function countersignStep(uid,comment,files){
   var u=userById(uid);if(!u)return null;
   return {r:'加簽：'+u.n,rk:'assigned_user',uid:u.id,n:'',a:'',t:'',c:comment?('加簽原因：'+comment):'',files:normalizeFiles(files||[]),status:'pending_countersign',requestedBy:S.user?S.user.n:''};
@@ -4914,7 +4956,8 @@ function syncRequestStatus(r){
   if(flowIsTerminal(r))return;
   var s=activeStep(r);
   r.status=s?s.status:'completed';
-  r.step=approvedStepCount(r)+1;
+  var idx=activeStepIndex(r);
+  r.step=idx>-1?idx+1:approvedStepCount(r)+1;
   if(r.status==='completed')r.step=(r.steps||[]).length||8;
 }
 function markRequestCashPosted(r,approvedStep){
@@ -4971,7 +5014,8 @@ function returnRequestToPrevious(r,comment,files){
   var idx=activeStepIndex(r);
   if(idx<0)return false;
   invalidateAccountingLines(r,'簽核退回上一關，內容或附件可能異動，會計科目需重新覆核。');
-  var prev=idx>0?r.steps[idx-1]:null;
+  var prevIdx=previousReturnableStepIndex(r,idx);
+  var prev=prevIdx>-1?r.steps[prevIdx]:null;
   var cur=r.steps[idx];
   if(idx===0||(prev&&prev.rk==='applicant_submit')){
     var applicantUser=USERS.find(function(u){return u.id===r.applicantId||u.n===r.app;})||USERS[0];
@@ -4995,7 +5039,8 @@ function syncInvoiceStatus(i){
   if(flowIsTerminal(i))return;
   var s=activeStep(i);
   i.approvalStatus=s?s.status:'completed';
-  i.approvalStep=approvedStepCount(i)+1;
+  var idx=activeStepIndex(i);
+  i.approvalStep=idx>-1?idx+1:approvedStepCount(i)+1;
   if(i.approvalStatus==='completed')i.approvalStep=8;
 }
 function approveInvoiceStep(i,comment,files,addUid){
@@ -5009,7 +5054,8 @@ function approveInvoiceStep(i,comment,files,addUid){
 function returnInvoiceToPrevious(i,comment,files){
   var idx=activeStepIndex(i);
   if(idx<0)return false;
-  var prev=idx>0?i.steps[idx-1]:null;
+  var prevIdx=previousReturnableStepIndex(i,idx);
+  var prev=prevIdx>-1?i.steps[prevIdx]:null;
   var cur=i.steps[idx];
   if(idx===0||(prev&&prev.rk==='applicant_submit')){
     var revision={r:'申請人補件後重新送出',rk:'applicant_revision',uid:i.applicantId||'',n:'',a:'',t:'',c:'',files:[],status:'pending_invoice_applicant'};
@@ -5528,8 +5574,46 @@ function initFilters(){
   if(la)la.innerHTML='<option value="all">全部科目</option>'+ACCTS.map(function(a){return'<option value="'+a.c+'">'+a.c+' '+a.n+'</option>';}).join('');
   var ve=el('v-ent');
   if(ve)ve.innerHTML='<option value="">全部法人</option>'+ENTS.map(function(e){return'<option value="'+e.id+'">'+e.s+'</option>';}).join('');
-  var ce=el('comp-ent');
-  if(ce)ce.innerHTML=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.s+'</option>';}).join('');
+  refreshEntitySelectors();
+}
+function entityTrackById(id){
+  var ent=ENTS.find(function(e){return e.id===id;})||{};
+  if(ent.track)return ent.track;
+  var m=String(id||'').match(/\d+/);
+  var idx=m?parseInt(m[0],10)-1:ENTS.findIndex(function(e){return e.id===id;});
+  if(idx<0)idx=0;
+  return String.fromCharCode(65+Math.floor(idx/26))+String.fromCharCode(65+(idx%26));
+}
+function entityOptionLabel(e,mode){
+  var base=e.full||e.s||e.id;
+  if(mode==='invoice')return base+'（'+entityTrackById(e.id)+'）';
+  if(mode==='fullTax')return base+(e.taxId?'（'+e.taxId+'）':'');
+  if(mode==='short')return e.s||base;
+  return base;
+}
+function entityOptionsHtml(mode,selected){
+  return ENTS.map(function(e){
+    return '<option value="'+escAttr(e.id)+'" '+(e.id===selected?'selected':'')+'>'+escAttr(entityOptionLabel(e,mode))+'</option>';
+  }).join('');
+}
+function setEntitySelectOptions(id,mode,fallback){
+  var node=el(id);if(!node)return;
+  var current=node.value||fallback||((ENTS[0]||{}).id||'');
+  node.innerHTML=entityOptionsHtml(mode,current);
+  if(!node.value&&ENTS[0])node.value=ENTS[0].id;
+  refreshSearchableSelect(node);
+}
+function refreshEntitySelectors(){
+  setEntitySelectOptions('inv-ent','invoice');
+  setEntitySelectOptions('b-ent','invoice');
+  setEntitySelectOptions('rpt-ent','full');
+  setEntitySelectOptions('b-ent2','full');
+  setEntitySelectOptions('comp-ent','short');
+  var payer=el('sh-payer-ent'),payee=el('sh-payee-ent');
+  var payerVal=payer&&payer.value,payeeVal=payee&&payee.value;
+  setEntitySelectOptions('sh-payer-ent','fullTax',payerVal);
+  setEntitySelectOptions('sh-payee-ent','fullTax',payeeVal);
+  if(payee&&payer&&!payeeVal&&payee.value===payer.value&&payee.options.length>1)payee.selectedIndex=1;
 }
 function initDeptSel(id,eid){
   var e=el(id);
@@ -11188,7 +11272,7 @@ window.buildInvoices=function buildInvoices(){
   if(el('inv-cnt'))el('inv-cnt').textContent='共 '+visibleInvs.length+' 張';
 }
 window.switchInv=function(mode){S.invMode=mode;el('inv-s').style.display=mode==='single'?'block':'none';el('inv-b').style.display=mode==='batch'?'block':'none';el('btn-single').style.cssText=mode==='single'?'background:var(--br);color:#fff;border:none':'';el('btn-batch').style.cssText=mode==='batch'?'background:var(--br);color:#fff;border:none':'';};
-window.updInvTrack=function(){var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:'AF'};var v=(el('inv-ent')||{}).value;if(v)el('inv-no').value=(T[v]||'AA')+'-'+Math.floor(Math.random()*900000+100000);};
+window.updInvTrack=function(){var v=(el('inv-ent')||{}).value;if(v&&el('inv-no'))el('inv-no').value=entityTrackById(v)+'-'+Math.floor(Math.random()*900000+100000);};
 function invoiceApplicantOptions(selected){
   selected=selected||(S.user&&S.user.n)||'';
   return USERS.filter(function(u){return u.active;}).map(function(u){return'<option value="'+escAttr(u.n)+'" '+(u.n===selected?'selected':'')+'>'+escAttr(u.n)+'（'+escAttr(u.rL||RL[u.role]||u.role)+' · '+escAttr(u.dc)+'）</option>';}).join('');
@@ -11483,8 +11567,8 @@ window.issueInv=async function(){
   if(invoiceIdentifierRequiresCode(identifier)&&!identifierCode){alert('開立方式為「'+identifier+'」時，請填寫'+invoiceIdentifierCodeLabel(identifier)+'。');return;}
   var meta=selectedInvoiceApplicant('inv');
   if(!meta.name||!meta.dc){alert('請選擇申請人與組別 / 部門');return;}
-  var eid=(el('inv-ent')||{}).value||'E1';var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:'AF'};
-  var no=(T[eid]||'AA')+'-'+Math.floor(Math.random()*900000+100000);
+  var eid=(el('inv-ent')||{}).value||'E1';
+  var no=entityTrackById(eid)+'-'+Math.floor(Math.random()*900000+100000);
   var rate=parseFloat((el('inv-tax')||{}).value||'0.05');var tax=Math.round(amt*rate);
   var appUser=meta.user||S.user||USERS[0];
   if(!assertApprovalRoute(appUser,'invoice_request'))return;
@@ -11640,7 +11724,6 @@ window.issueBatch=async function(){
   var meta=selectedInvoiceApplicant('b');
   if(!meta.name||!meta.dc){alert('請選擇申請人與組別 / 部門');return;}
   var eid=(el('b-ent')||{}).value||'E1';
-  var T={E1:'AA',E2:'AB',E3:'AC',E4:'AD',E5:'AE',E6:'AF'};
   var rate=parseFloat((el('b-tax')||{}).value||'0.05');
   var en=gE(eid).s;
   var appUser=meta.user||S.user||USERS[0];
@@ -11648,7 +11731,7 @@ window.issueBatch=async function(){
   var batchId='batch_'+Date.now();
   var today=(((el('b-month')||{}).value||todayMonth())+'-01').replace(/-/g,'/');
   var rows=v.map(function(r){
-    var no=(T[eid]||'AA')+'-'+Math.floor(Math.random()*900000+100000);
+    var no=entityTrackById(eid)+'-'+Math.floor(Math.random()*900000+100000);
     var amt=parseFloat(r.amt);
     var tax=Math.round(amt*rate);
     var steps=[applicantSubmitStep(appUser,meta.name)].concat(buildInvoiceApprovalSteps(appUser));
@@ -12046,11 +12129,9 @@ function shareholderAccountCard(side,code,name,amt){
 function buildShareholderCapital(){
   if(!canAccessPage('shareholder'))return;
   var payer=el('sh-payer-ent'),payee=el('sh-payee-ent'),date=el('sh-date');
-  if(payer)payer.innerHTML=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.full+(e.taxId?'（'+e.taxId+'）':'')+'</option>';}).join('');
-  if(payee)payee.innerHTML=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.full+(e.taxId?'（'+e.taxId+'）':'')+'</option>';}).join('');
+  refreshEntitySelectors();
   if(payee&&payer&&payee.value===payer.value&&payee.options.length>1)payee.selectedIndex=1;
   if(date&&!date.value)date.value=todayIso();
-  refreshSearchableSelect(payer);refreshSearchableSelect(payee);
   syncShareholderTxnOptions();
   updateShareholderPreview();
   renderShareholderList();
@@ -12550,7 +12631,7 @@ window.exportReports=function(){
 };
 // FIX 10：繳費單範本
 window.dlBillTemplate=function(fmt){
-  var header=['法人代碼(E1-E6)','費用項目(labor/health/pension/tax/rent/other)','金額','期限日期(YYYY/MM/DD)','方式(銀行轉帳/自動扣款/ATM)','說明'];
+  var header=['法人代碼(依系統設定)','費用項目(labor/health/pension/tax/rent/other)','金額','期限日期(YYYY/MM/DD)','方式(銀行轉帳/自動扣款/ATM)','說明'];
   var rows=[
     ['E1','labor','28340','2026/05/15','銀行轉帳','5月勞保費'],
     ['E1','health','14200','2026/05/15','銀行轉帳','5月健保費'],
@@ -12572,12 +12653,13 @@ window.dlBillTemplate=function(fmt){
 };
 // 覆寫 dlInvTemplate xlsx 邏輯為 Data URI HTML（Excel 可直接開啟）
 window.dlInvTemplate=function(fmt){
-  var header=['法人代碼（E1-E6）','字軌（AA-AF）','買受人','開立方式','統編/載具號碼','品項說明','未稅金額','稅率(0.05/0)','收款狀態(paid/unpaid/partial)'];
+  var firstEnt=ENTS[0]||{id:'E1'},secondEnt=ENTS[1]||firstEnt,thirdEnt=ENTS[2]||firstEnt,fifthEnt=ENTS[4]||firstEnt;
+  var header=['法人代碼（依系統設定）','字軌（依法人設定）','買受人','開立方式','統編/載具號碼','品項說明','未稅金額','稅率(0.05/0)','收款狀態(paid/unpaid/partial)'];
   var rows=[
-    ['E1','AA','新北市政府','統一編號','12345678','長照居家服務費','120000','0.05','paid'],
-    ['E5','AE','臺灣勞工基金','統一編號','87654321','移工培訓服務費','85000','0.05','unpaid'],
-    ['E2','AB','新北市衛生局','電子發票','55566677','日照服務費','50000','0','partial'],
-    ['E3','AC','（請填買受人）','載具','','（請填品項說明）','','0.05','unpaid'],
+    [firstEnt.id,entityTrackById(firstEnt.id),'新北市政府','統一編號','12345678','長照居家服務費','120000','0.05','paid'],
+    [fifthEnt.id,entityTrackById(fifthEnt.id),'臺灣勞工基金','統一編號','87654321','移工培訓服務費','85000','0.05','unpaid'],
+    [secondEnt.id,entityTrackById(secondEnt.id),'新北市衛生局','電子發票','55566677','日照服務費','50000','0','partial'],
+    [thirdEnt.id,entityTrackById(thirdEnt.id),'（請填買受人）','載具','','（請填品項說明）','','0.05','unpaid'],
   ];
   if(fmt==='csv'){
     var lines=[header.join(',')].concat(rows.map(function(r){return r.map(function(c){return'"'+c+'"';}).join(',');}));
