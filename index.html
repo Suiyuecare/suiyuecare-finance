@@ -243,6 +243,27 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .modal-bg{position:fixed;inset:0;background:rgba(30,10,0,.4);display:flex;align-items:center;justify-content:center;z-index:999;border-radius:0}
 .modal{background:#fff;border-radius:14px;border:1px solid #eedfc8;width:400px;max-height:92%;overflow-y:auto;box-shadow:0 20px 60px rgba(100,50,0,.2)}
 .modal-lg{width:620px}
+.receipt-review-card{border:1px solid #efd7b8;background:#fffaf2;border-radius:10px;padding:10px;margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.receipt-review-card strong{display:block;color:#334155;font-size:13px}
+.receipt-review-card span{display:block;color:#8b7358;font-size:11px;line-height:1.5}
+.receipt-viewer-modal{width:min(960px,calc(100vw - 28px));height:min(86vh,860px);max-height:86vh;display:flex;flex-direction:column;overflow:hidden}
+.receipt-viewer-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid #f0e6d6;background:#fffaf2}
+.receipt-viewer-toolbar .btn-g,.receipt-viewer-toolbar .btn-s,.receipt-viewer-toolbar .btn-p{font-size:11px;padding:5px 9px}
+.receipt-viewer-body{flex:1;min-height:0;overflow:auto;background:#f7f0e7;padding:14px}
+.receipt-viewer-stage{min-height:100%;display:flex;align-items:center;justify-content:center}
+.receipt-viewer-img{max-width:100%;max-height:72vh;object-fit:contain;transform-origin:center;transition:transform .15s ease}
+.receipt-viewer-frame{width:100%;height:72vh;border:0;background:#fff;transform-origin:center;transition:transform .15s ease}
+.receipt-viewer-empty{padding:28px;text-align:center;color:#8b7358;background:#fff;border:1px dashed #dfc9b1;border-radius:10px}
+.perm-toolbar-note{padding:10px 12px;border-bottom:1px solid #f0e6d6;background:#fff8ed;color:#6a5840;font-size:11px;line-height:1.6}
+.perm-matrix-wrap{overflow:auto;max-height:62vh}
+.perm-matrix{min-width:1120px;border-collapse:separate;border-spacing:0}
+.perm-matrix th{position:sticky;top:0;background:#fff8ed;z-index:3;white-space:nowrap}
+.perm-matrix th:first-child,.perm-matrix td:first-child{position:sticky;left:0;background:#fff;z-index:2;min-width:220px}
+.perm-matrix th:first-child{z-index:4;background:#fff8ed}
+.perm-matrix .perm-group-row td{position:static;background:#f7ead8;color:#8a4b0f;font-size:11px;font-weight:800;letter-spacing:.04em}
+.perm-name{font-weight:750;color:#334155}
+.perm-desc{font-size:10px;color:#94a3b8;line-height:1.35;margin-top:2px}
+.perm-check{width:19px;height:19px;accent-color:#e78922}
 /* 登入 */
 .login-left{width:40%;background:var(--br);display:flex;flex-direction:column;justify-content:space-between;padding:38px;position:relative;overflow:hidden}
 .login-right{flex:1;display:flex;align-items:center;justify-content:center;background:var(--cream);padding:36px}
@@ -1470,6 +1491,18 @@ input:focus,select:focus,textarea:focus{
     </div>
   </div>
 
+  <!-- 憑據核對 Modal -->
+  <div class="modal-bg" id="m-receipt-viewer" style="display:none" onclick="if(event.target===this)closeReceiptViewer()">
+    <div class="modal receipt-viewer-modal">
+      <div class="chd" style="background:var(--brxxl);flex-shrink:0">
+        <span class="cht" id="receipt-viewer-title">憑據核對</span>
+        <button onclick="closeReceiptViewer()" style="background:none;border:none;cursor:pointer;font-size:22px;color:#c0a080;line-height:1;padding:0 4px">&#215;</button>
+      </div>
+      <div id="receipt-viewer-toolbar" class="receipt-viewer-toolbar"></div>
+      <div id="receipt-viewer-body" class="receipt-viewer-body"></div>
+    </div>
+  </div>
+
   <!-- 股東往來 -->
   <div class="pg" id="pg-shareholder">
     <div style="display:flex;justify-content:space-between;margin-bottom:12px;gap:10px;align-items:flex-start">
@@ -1863,7 +1896,11 @@ input:focus,select:focus,textarea:focus{
     <div id="settings-panel-departments" class="set-panel card" style="margin-bottom:12px;display:none"><div class="chd"><span class="cht">部門資訊</span><div class="settings-write" style="display:flex;gap:6px"><button class="btn-g" onclick="saveDeptSettings()">儲存部門</button><button class="btn-p" onclick="addDeptSetting()">+ 新增部門</button></div></div><div style="overflow-x:auto"><table><thead><tr><th>部門代號</th><th>部門名稱</th><th>公司別</th><th>層級</th><th class="settings-action-head">操作</th></tr></thead><tbody id="settings-depts"></tbody></table></div></div>
     <div id="settings-panel-accounts" class="set-panel card" style="margin-bottom:12px;display:none"><div class="chd"><span class="cht">會計科目</span><div class="settings-write" style="display:flex;gap:6px"><button class="btn-g" onclick="saveAcctSettings()">送出科目異動</button><button class="btn-p" onclick="addAcctSetting()">+ 新增科目</button></div></div><div style="padding:10px 12px;border-bottom:1px solid #f0e6d6;background:#fff8ed"><div style="font-size:11px;color:#6a5840;line-height:1.6">會計科目屬正式帳務設定，新增、編輯、停用或刪除都會產生異動單；非執行長送出後須待執行長核准才會生效。</div><div class="settings-write" style="margin-top:8px"><label class="fl">異動原因 *</label><textarea id="acct-change-reason" rows="2" placeholder="例：配合會計師建議新增科目、停用不再使用科目、修正科目名稱…" style="font-size:12px"></textarea></div></div><div style="overflow-x:auto"><table><thead><tr><th>代號</th><th>名稱</th><th>借/貸</th><th>適用部門</th><th>啟用</th><th class="settings-action-head">操作</th></tr></thead><tbody id="settings-accts"></tbody></table></div></div>
     <div id="settings-panel-fees" class="set-panel card" style="margin-bottom:12px;display:none"><div class="chd"><span class="cht">手續費金額</span><span style="font-size:10px;color:#94a3b8">每間公司可各自設定；非兆豐且己方支出時套用</span></div><div style="overflow-x:auto"><table><thead><tr><th>公司別</th><th>單筆銀行手續費</th><th>說明</th></tr></thead><tbody id="settings-fees"></tbody></table></div><div class="settings-write" style="padding:10px 12px;border-top:1px solid #f0e6d6;justify-content:flex-end"><button class="btn-p" onclick="saveFeeSetting()">儲存手續費</button></div></div>
-    <div id="settings-panel-permissions" class="set-panel card" style="display:none"><div class="chd"><span class="cht">層級功能權限</span><span style="font-size:10px;color:#94a3b8">勾選代表該層級可使用該功能</span></div><div style="overflow:auto"><table><thead id="settings-perm-head"></thead><tbody id="settings-perms"></tbody></table></div></div>
+    <div id="settings-panel-permissions" class="set-panel card" style="display:none">
+      <div class="chd"><span class="cht">層級權限矩陣</span><span style="font-size:10px;color:#94a3b8">頁面功能與簽核編輯集中管理</span></div>
+      <div class="perm-toolbar-note">啟動編輯後可調整權限。收入申請的開立發票、申請繳費單、收款情形開放所有員工建立自己的單據；股東 / 公司間往來與系統設定維持鎖定。</div>
+      <div class="perm-matrix-wrap"><table class="perm-matrix"><thead id="settings-perm-head"></thead><tbody id="settings-perms"></tbody></table></div>
+    </div>
     <div id="settings-panel-versions" class="set-panel card" style="margin-bottom:12px;display:none"></div>
   </div>
 
@@ -2430,9 +2467,17 @@ var PAGE_LABELS={
   ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',orgchart:'組織圖',settings:'系統設定'
 };
 var PERMISSION_PAGES=Object.keys(PAGE_LABELS).filter(function(p){return p!=='detail';});
+var ACTION_PERMISSION_ROWS=[
+  {key:'action_edit_detail_amounts',label:'明細金額編輯',desc:'可在簽核檢核時調整未稅/費用、進項稅額、含稅欄位。'},
+  {key:'action_edit_accounting_subjects',label:'會計科目編輯',desc:'可在簽核檢核時調整每列借方會計科目。'}
+];
+var ACTION_PERMISSION_KEYS=ACTION_PERMISSION_ROWS.map(function(x){return x.key;});
+function roleHasPermission(role,key){return (ROLE_PERMISSIONS[role]||[]).indexOf(key)>-1;}
+function currentUserHasPermission(key){return !!(S.user&&roleHasPermission(currentRoleKey(),key));}
 function defaultRolePermissions(){
   var common=['dashboard','newreq','expenses','approvals','notif','invoices','bills','recv'];
   var finance=PERMISSION_PAGES.filter(function(p){return p!=='settings';});
+  var accountingActions=['action_edit_detail_amounts','action_edit_accounting_subjects'];
   return {
     employee:common.slice(),
     section_chief:common.slice(),
@@ -2440,15 +2485,32 @@ function defaultRolePermissions(){
     admin_director:PERMISSION_PAGES.slice(),
     general_affairs:common.slice(),
     hr:common.concat(['users','orgchart','compliance']),
-    accountant:finance.slice(),
+    accountant:finance.concat(accountingActions),
     cashier:['dashboard','expenses','approvals','notif'],
-    ceo:PERMISSION_PAGES.slice(),
+    ceo:PERMISSION_PAGES.concat(accountingActions),
     external_audit:['dashboard','reports','ledger','vouchers','compliance','notif'],
     board:['dashboard','reports','vouchers','compliance','notif'],
     shareholder:['dashboard','reports','shareholder','notif']
   };
 }
-var ROLE_PERMISSIONS=defaultRolePermissions();
+function normalizeRolePermissionsConfig(saved){
+  var next=Object.assign(defaultRolePermissions(),saved||{});
+  var hasAnyAction=false;
+  Object.keys(next).forEach(function(role){
+    ACTION_PERMISSION_KEYS.forEach(function(k){
+      if((next[role]||[]).indexOf(k)>-1)hasAnyAction=true;
+    });
+  });
+  if(!hasAnyAction){
+    ['accountant','ceo'].forEach(function(role){
+      var list=(next[role]||[]).slice();
+      ACTION_PERMISSION_KEYS.forEach(function(k){if(list.indexOf(k)<0)list.push(k);});
+      next[role]=list;
+    });
+  }
+  return next;
+}
+var ROLE_PERMISSIONS=normalizeRolePermissionsConfig();
 var SEARCHABLE_SELECT_SEQ=0;
 var SEARCHABLE_SELECT_IDS=['nr-ent','nr-dept','nr-app-sel','nr-app','nr-dr','nr-cr','sh-payer-ent','sh-payee-ent','inv-ent','inv-app-sel','inv-dept','l-ent','l-dept','l-acct','comp-ent','uent','ud'];
 function visibleNavButtons(){
@@ -3843,7 +3905,7 @@ function applySystemSettings(rows){
   if(SYSTEM_SETTINGS.bank_transfer_fee!=null)BANK_TRANSFER_FEE=num(SYSTEM_SETTINGS.bank_transfer_fee);
   BANK_TRANSFER_FEES=Object.assign({},SYSTEM_SETTINGS.bank_transfer_fees||{});
   ENTS.forEach(function(e){if(BANK_TRANSFER_FEES[e.id]==null)BANK_TRANSFER_FEES[e.id]=BANK_TRANSFER_FEE;});
-  ROLE_PERMISSIONS=Object.assign(defaultRolePermissions(),SYSTEM_SETTINGS.role_permissions||{});
+  ROLE_PERMISSIONS=normalizeRolePermissionsConfig(SYSTEM_SETTINGS.role_permissions||{});
   ORG_CHART=Array.isArray(SYSTEM_SETTINGS.organization_chart)?SYSTEM_SETTINGS.organization_chart:[];
   if(!SETTINGS_VERSIONS.length)SETTINGS_VERSIONS=safeJsonGet(settingsVersionStoreKey(),[])||[];
 }
@@ -4803,9 +4865,20 @@ function canApplicantEditReturnedAccountingLines(r){
   var cur=activeStep(r);
   return !!(cur&&cur.rk==='applicant_revision'&&r.status==='pending_applicant_confirm'&&isReqOpen(r)&&!requestPostingLocked(r)&&canActRequest(r));
 }
-function canEditRequestAccountingLines(r){
+function canEditRequestAccountingLinesBase(r){
   var cur=activeStep(r);
-  return !!((canActRequest(r)&&cur&&(cur.rk==='accountant'||cur.rk==='accountant_final'))||canCeoEditRequestExcel(r)||canApplicantEditReturnedAccountingLines(r));
+  return !!((canActRequest(r)&&cur&&(cur.rk==='accountant'||cur.rk==='accountant_final'))||canCeoEditRequestExcel(r));
+}
+function canEditAccountingLineAmounts(r){
+  if(canApplicantEditReturnedAccountingLines(r))return true;
+  return !!(canEditRequestAccountingLinesBase(r)&&currentUserHasPermission('action_edit_detail_amounts'));
+}
+function canEditAccountingLineSubjects(r){
+  if(canApplicantEditReturnedAccountingLines(r))return true;
+  return !!(canEditRequestAccountingLinesBase(r)&&currentUserHasPermission('action_edit_accounting_subjects'));
+}
+function canEditRequestAccountingLines(r){
+  return !!(canApplicantEditReturnedAccountingLines(r)||canEditAccountingLineAmounts(r)||canEditAccountingLineSubjects(r));
 }
 function shouldShowRequestAccountingLines(r){
   return !!(isFinance()||canCeoEditRequestExcel(r)||canApplicantEditReturnedAccountingLines(r));
@@ -6284,14 +6357,15 @@ function accountingLinesHtml(r,editable,title){
   var lines=buildAccountingLines(r);
   var head='<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">每一列明細都可以有自己的借方會計科目。系統依申請類型、使用情境、明細品項、資產化與稅務憑證順序給 AI/規則建議，會計仍需覆核；貸方由流程鎖定，避免現金流量表與資產負債表不一致。</div>';
   var rows=lines.map(function(line,i){
-    var amountEditable=editable&&!line.locked;
+    var amountEditable=editable&&canEditAccountingLineAmounts(r)&&!line.locked;
+    var subjectEditable=editable&&canEditAccountingLineSubjects(r)&&!line.locked;
     return'<tr>'
       +'<td style="text-align:center;color:#94a3b8">'+(i+1)+'</td>'
       +'<td><div style="font-size:11px;font-weight:650;color:#334155">'+escAttr(line.description)+'</div><div style="font-size:10px;color:#8b7358;line-height:1.4">'+escAttr(line.aiReason)+'</div></td>'
       +'<td style="text-align:right;font-family:monospace">'+(amountEditable?accountingLineAmountInput(prefix,i,'netAmount',line.netAmount):fmt(line.netAmount))+'</td>'
       +'<td style="text-align:right;font-family:monospace">'+(amountEditable?accountingLineAmountInput(prefix,i,'taxAmount',line.taxAmount):fmt(line.taxAmount))+'</td>'
       +'<td style="text-align:right;font-family:monospace;font-weight:650">'+(amountEditable?accountingLineAmountInput(prefix,i,'grossAmount',line.grossAmount):fmt(line.grossAmount))+'</td>'
-      +'<td>'+(editable&&!line.locked?'<select id="'+prefix+'-dr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.debitAccount,'debit')+'</select>':'<span class="acct-dr">'+line.debitAccount+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+line.debitAccountName+'</div>')+'</td>'
+      +'<td>'+(subjectEditable?'<select id="'+prefix+'-dr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.debitAccount,'debit')+'</select>':'<span class="acct-dr">'+line.debitAccount+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+line.debitAccountName+'</div>')+'</td>'
       +'<td><span class="acct-cr">'+line.creditAccount+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+line.creditAccountName+'（系統鎖定）</div></td>'
       +'</tr>';
   }).join('');
@@ -7874,6 +7948,86 @@ async function receiptBundleAttachment(files,meta){
     +'<table class="meta"><tr><th>申請單號</th><td>'+cell(meta.no)+'</td><th>申請人</th><td>'+cell(meta.app)+'</td></tr><tr><th>申請類型</th><td>'+cell(meta.typeLabel)+'</td><th>附件數</th><td>'+files.length+'</td></tr></table>'
     +rows+'</body></html>';
   return {n:'憑據照片彙整_'+(meta.no||todayIso())+'.html',t:'html',mime:'text/html',size:html.length,url:'data:text/html;charset=utf-8,'+encodeURIComponent(html),uploadedAt:new Date().toISOString()};
+}
+var RECEIPT_VIEWER_STATE={files:[],index:0,zoom:1,rot:0,title:''};
+function requestReceiptFiles(r){
+  if(!r)return [];
+  var files=[];
+  function add(list){
+    normalizeFiles(list||[]).forEach(function(f){if(f&&f.url)files.push(f);});
+  }
+  add(r.files);
+  (r.steps||[]).forEach(function(s){add(s.files);});
+  var fp=r.formPayload||{};
+  add(fp.receiptFiles);add(fp.lazyFiles);add(fp.attachments);add(fp.files);
+  var seen={};
+  return files.filter(function(f){
+    if(!(attachmentLooksImage(f)||attachmentLooksPdf(f)))return false;
+    var id=fileIdentity(f);
+    if(seen[id])return false;
+    seen[id]=true;
+    return true;
+  });
+}
+function receiptReviewWidgetHtml(r){
+  var files=requestReceiptFiles(r);
+  if(!files.length)return '';
+  var img=files.filter(attachmentLooksImage).length;
+  var pdf=files.filter(attachmentLooksPdf).length;
+  return '<div class="receipt-review-card"><div><strong>憑據核對</strong><span>偵測到 '+files.length+' 份可檢視憑據'+(img?'，圖片 '+img+' 份':'')+(pdf?'，PDF '+pdf+' 份':'')+'。可放大、縮小與順時針旋轉。</span></div><button class="btn-p" onclick="openReceiptViewerForRequest(\''+r.id+'\')">開啟核對</button></div>';
+}
+window.openReceiptViewerForRequest=function(rid){
+  var r=REQS.find(function(x){return x.id===rid;})||{};
+  var files=requestReceiptFiles(r);
+  if(!files.length){alert('此單目前沒有可預覽的憑據圖片或 PDF');return;}
+  RECEIPT_VIEWER_STATE={files:files,index:0,zoom:1,rot:0,title:(r.no||'申請單')+' 憑據核對'};
+  var modal=el('m-receipt-viewer');if(modal)modal.style.display='flex';
+  renderReceiptViewer();
+};
+window.closeReceiptViewer=function(){
+  var modal=el('m-receipt-viewer');if(modal)modal.style.display='none';
+};
+window.receiptViewerMove=function(delta){
+  var s=RECEIPT_VIEWER_STATE;if(!s.files.length)return;
+  s.index=(s.index+delta+s.files.length)%s.files.length;
+  s.zoom=1;s.rot=0;renderReceiptViewer();
+};
+window.receiptViewerZoom=function(delta){
+  var s=RECEIPT_VIEWER_STATE;
+  s.zoom=Math.max(.4,Math.min(3,(s.zoom||1)+delta));
+  renderReceiptViewer();
+};
+window.receiptViewerRotate=function(){
+  var s=RECEIPT_VIEWER_STATE;
+  s.rot=((s.rot||0)+90)%360;
+  renderReceiptViewer();
+};
+window.receiptViewerReset=function(){
+  RECEIPT_VIEWER_STATE.zoom=1;RECEIPT_VIEWER_STATE.rot=0;
+  renderReceiptViewer();
+};
+window.receiptViewerDownload=function(){
+  var f=RECEIPT_VIEWER_STATE.files[RECEIPT_VIEWER_STATE.index];
+  if(f)downloadFileMeta(f,{type:'receipt_viewer'});
+};
+async function renderReceiptViewer(){
+  var s=RECEIPT_VIEWER_STATE,files=s.files||[],f=files[s.index];
+  var title=el('receipt-viewer-title'),bar=el('receipt-viewer-toolbar'),body=el('receipt-viewer-body');
+  if(title)title.textContent=s.title||'憑據核對';
+  if(!bar||!body)return;
+  if(!f){bar.innerHTML='';body.innerHTML='<div class="receipt-viewer-empty">沒有可預覽的憑據</div>';return;}
+  bar.innerHTML='<button class="btn-g" onclick="receiptViewerMove(-1)">上一份</button><button class="btn-g" onclick="receiptViewerMove(1)">下一份</button><button class="btn-s" onclick="receiptViewerZoom(-0.2)">縮小</button><button class="btn-s" onclick="receiptViewerZoom(0.2)">放大</button><button class="btn-s" onclick="receiptViewerRotate()">順時針旋轉</button><button class="btn-s" onclick="receiptViewerReset()">重設</button><button class="btn-p" onclick="receiptViewerDownload()">下載原檔</button><span style="margin-left:auto;font-size:11px;color:#8b7358">'+(s.index+1)+' / '+files.length+' · '+escAttr(f.n||'附件')+'</span>';
+  body.innerHTML='<div class="receipt-viewer-empty">載入憑據中...</div>';
+  var url=f.url;
+  try{url=await signAttachmentUrl(f);}catch(err){console.warn('receipt viewer signed url failed',err);}
+  var transform='scale('+(s.zoom||1)+') rotate('+(s.rot||0)+'deg)';
+  if(attachmentLooksImage(f)){
+    body.innerHTML='<div class="receipt-viewer-stage"><img class="receipt-viewer-img" src="'+escAttr(url)+'" alt="'+escAttr(f.n||'憑據')+'" style="transform:'+transform+'"></div>';
+  }else if(attachmentLooksPdf(f)){
+    body.innerHTML='<div class="receipt-viewer-stage"><iframe class="receipt-viewer-frame" src="'+escAttr(url)+'" style="transform:'+transform+'"></iframe></div>';
+  }else{
+    body.innerHTML='<div class="receipt-viewer-empty">此附件無法預覽，請下載原檔查看。</div>';
+  }
 }
 function lazyExcelAttachment(files,meta){
   files=normalizeFiles(files||[]);
@@ -9569,6 +9723,7 @@ window.openDetail=function(rid){
       return'<div class="tl-item"><div class="tl-dot" style="background:'+db+';color:'+(s.done||s.rej||s.cur?'#fff':'#b09070')+';border:1px solid '+(s.cur?'var(--br)':'#e0d0b8')+'">'+(s.done?'OK':s.rej?'NO':i+1)+'</div><div style="flex:1;padding-top:2px"><div style="font-size:12px;font-weight:500;color:'+dc+'">'+s.label+(s.n?' — '+s.n:'')+(s.t?' <span style="font-size:10px;font-weight:400;color:#94a3b8">'+s.t+'</span>':'')+(s.cur?' <span class="badge b-wait" style="font-size:9px;margin-left:4px">進行中</span>':'')+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px;line-height:1.5">'+(s.purpose||'建立申請並送出簽核流程。')+'</div>'+stepAttachmentHtml(s.files)+stepFeedbackHtml(s.c)+'</div></div>';
   }).join('');
   var invoiceReviewCard=expenseInvoiceReviewHtml(r);
+  var receiptReviewCard=receiptReviewWidgetHtml(r);
   var canEditAccountingLines=canEditRequestAccountingLines(r);
   var lineAccountingTitle=accountingLinesTitleForRequest(r);
   var lineAccountingCard=shouldShowRequestAccountingLines(r)?accountingLinesHtml(r,canEditAccountingLines,lineAccountingTitle,'detail-acct-line'):'';
@@ -9580,7 +9735,7 @@ window.openDetail=function(rid){
   var progressTotal=(r.steps||[]).length||8;
   var progressNow=Math.min(((r.steps||[]).filter(function(s){return s.a;}).length+1),progressTotal);
   var progressCard='<div class="card detail-progress-card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">步驟 '+progressNow+'/'+progressTotal+(progressTotal>5?' · 可上下滑動':'')+'</span></div><div class="detail-progress-scroll">'+tl+'</div></div>';
-  el('detail-body').innerHTML=managerCard+infoCard+progressCard+(invoiceReviewCard?'<div class="detail-full-row">'+invoiceReviewCard+'</div>':'')+'<div class="detail-full-row">'+accountingCard+'</div>'+(lineAccountingCard?'<div class="detail-full-row">'+lineAccountingCard+'</div>':'');
+  el('detail-body').innerHTML=managerCard+infoCard+progressCard+(invoiceReviewCard?'<div class="detail-full-row">'+invoiceReviewCard+'</div>':'')+(receiptReviewCard?'<div class="detail-full-row">'+receiptReviewCard+'</div>':'')+'<div class="detail-full-row">'+accountingCard+'</div>'+(lineAccountingCard?'<div class="detail-full-row">'+lineAccountingCard+'</div>':'');
 };
 
 window.doApprove=async function(rid){
@@ -10453,6 +10608,7 @@ function showApprD(r){
   var cur=activeStep(r)||{};
   var isApplicantRevision=cur.rk==='applicant_revision';
   var invoiceReviewH=expenseInvoiceReviewHtml(r);
+  var receiptReviewH=receiptReviewWidgetHtml(r);
   var canEditAccountingReview=canEditRequestAccountingLines(r);
   var accountingReviewTitle=accountingLinesTitleForRequest(r);
   var accountingReviewH=shouldShowRequestAccountingLines(r)?accountingLinesHtml(r,canEditAccountingReview,accountingReviewTitle,'appr-acct-line'):'';
@@ -10480,6 +10636,7 @@ function showApprD(r){
     +(r.type==='petty_cash_request'?'<div style="padding:0 12px 10px">'+pettyAccountingHtml(r)+'</div>':'')
     +'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:7px;padding:7px;font-size:12px">'+r.desc+'</div></div>'
     +(invoiceReviewH?'<div style="padding:0 12px 10px">'+invoiceReviewH+'</div>':'')
+    +(receiptReviewH?'<div style="padding:0 12px 10px">'+receiptReviewH+'</div>':'')
     +(accountingReviewH?'<div style="padding:0 12px 10px">'+accountingReviewH+'</div>':'')
     +'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">主管檢核附件</div>'+requestPrimaryFilesHtml(r)+'</div>'
     +(r.steps.length?'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">簽核進度</div>'+sh+'</div>':"")
@@ -10891,7 +11048,7 @@ window.restoreBackupPackage=async function(){
     DEPTS=Array.isArray(d.settings.departments)?d.settings.departments:DEPTS;
     ACCTS=Array.isArray(d.settings.accounts)?d.settings.accounts:ACCTS;
     BANK_TRANSFER_FEES=Object.assign({},d.settings.bank_transfer_fees||BANK_TRANSFER_FEES);
-    ROLE_PERMISSIONS=Object.assign(defaultRolePermissions(),d.settings.role_permissions||ROLE_PERMISSIONS);
+    ROLE_PERMISSIONS=normalizeRolePermissionsConfig(d.settings.role_permissions||ROLE_PERMISSIONS);
   }
   if(Array.isArray(d.users)&&d.users.length)USERS=d.users.map(mapUser);
   REQS=restoreRows(d.requests,mapReq);
@@ -12703,16 +12860,50 @@ function renderSettingPermissions(){
   var openIncomePages=['invoices','bills','recv'];
   var restrictedIncomePages=['shareholder'];
   var incomeRoles=['ceo','admin_director','accountant'];
-  head.innerHTML='<tr><th>功能</th>'+roles.map(function(r){return'<th>'+RL[r]+'</th>';}).join('')+'</tr>';
-  body.innerHTML=PERMISSION_PAGES.map(function(p){
-    return'<tr><td style="font-weight:650;color:#334155">'+PAGE_LABELS[p]+'</td>'+roles.map(function(r){
-      var openToAll=openIncomePages.indexOf(p)>-1;
-      var isRestrictedIncome=restrictedIncomePages.indexOf(p)>-1,allowedIncome=incomeRoles.indexOf(r)>-1;
-      var checked=openToAll?true:(isRestrictedIncome?allowedIncome:(ROLE_PERMISSIONS[r]||[]).indexOf(p)>-1);
-      var locked=p==='settings'||isRestrictedIncome||openToAll;
-      return'<td style="text-align:center"><input type="checkbox" '+(checked?'checked':'')+' '+(locked||!SETTINGS_EDIT?'disabled':'')+' onchange="toggleRolePermission(\''+r+'\',\''+p+'\',this.checked)"></td>';
+  var pageDesc={
+    dashboard:'登入後總覽與待辦入口',
+    newreq:'建立支出類申請表單',
+    expenses:'查看放款申請與暫存表單',
+    approvals:'處理待簽核、退回、加簽與抽單',
+    vouchers:'查詢正式傳票與附件',
+    shareholder:'處理股東資金與公司間往來',
+    invoices:'提出開立發票或領據申請',
+    bills:'提出繳費單申請',
+    recv:'追蹤發票、繳費單與收款狀態',
+    reports:'查看資產負債表、損益表、現金流量表',
+    ledger:'查看部門分類帳',
+    accounts:'查看會計科目與科目規則',
+    compliance:'月結、鎖帳、備份與稽核功能',
+    notif:'通知中心',
+    users:'人員名單與角色設定',
+    orgchart:'組織圖與直屬主管設定',
+    settings:'系統設定維護'
+  };
+  function checkedFor(role,key,type){
+    if(type==='page'){
+      var openToAll=openIncomePages.indexOf(key)>-1;
+      var isRestrictedIncome=restrictedIncomePages.indexOf(key)>-1,allowedIncome=incomeRoles.indexOf(role)>-1;
+      return openToAll?true:(isRestrictedIncome?allowedIncome:(ROLE_PERMISSIONS[role]||[]).indexOf(key)>-1);
+    }
+    return (ROLE_PERMISSIONS[role]||[]).indexOf(key)>-1;
+  }
+  function lockedFor(key,type){
+    if(type!=='page')return !SETTINGS_EDIT;
+    return key==='settings'||restrictedIncomePages.indexOf(key)>-1||openIncomePages.indexOf(key)>-1||!SETTINGS_EDIT;
+  }
+  function rowHtml(key,label,desc,type){
+    return '<tr><td><div class="perm-name">'+escAttr(label)+'</div><div class="perm-desc">'+escAttr(desc||'')+'</div></td>'+roles.map(function(role){
+      var locked=lockedFor(key,type);
+      var checked=checkedFor(role,key,type);
+      return '<td style="text-align:center"><input class="perm-check" type="checkbox" '+(checked?'checked':'')+' '+(locked?'disabled':'')+' onchange="toggleRolePermission(\''+role+'\',\''+key+'\',this.checked)"></td>';
     }).join('')+'</tr>';
-  }).join('');
+  }
+  head.innerHTML='<tr><th>權限項目</th>'+roles.map(function(r){return'<th>'+escAttr(RL[r]||r)+'</th>';}).join('')+'</tr>';
+  body.innerHTML=
+    '<tr class="perm-group-row"><td colspan="'+(roles.length+1)+'">頁面功能</td></tr>'+
+    PERMISSION_PAGES.map(function(p){return rowHtml(p,PAGE_LABELS[p],pageDesc[p]||'可看見並使用此功能頁面','page');}).join('')+
+    '<tr class="perm-group-row"><td colspan="'+(roles.length+1)+'">簽核與會計編輯</td></tr>'+
+    ACTION_PERMISSION_ROWS.map(function(row){return rowHtml(row.key,row.label,row.desc,'action');}).join('');
 }
 window.saveFeeSetting=async function(){
   if(!ensureSettingsEdit())return;
