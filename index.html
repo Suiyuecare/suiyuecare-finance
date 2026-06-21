@@ -85,6 +85,33 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .combo-option:hover,.combo-option.active{background:#fff3de;color:#7c3f00}
 .combo-option.selected{font-weight:800;color:#1a4080;background:#eaf3ff}
 .combo-empty{padding:12px;text-align:center;font-size:12px;color:#94a3b8}
+.travel-people-field{min-width:0}
+.travel-people-picker{background:#fff;border:1px solid #dfc9b1;border-radius:12px;padding:10px;box-shadow:0 10px 26px rgba(80,52,20,.06)}
+.travel-people-search-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin-bottom:8px}
+.travel-people-search{height:40px;border-radius:10px;font-size:12px;font-weight:650}
+.travel-people-search::placeholder{color:#b79a78}
+.travel-people-count{white-space:nowrap;font-size:11px;font-weight:800;color:#7c3f00;background:#fff7ed;border:1px solid #f0d090;border-radius:999px;padding:6px 10px}
+.travel-people-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:28px}
+.travel-person-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #d9e7fb;background:#eff6ff;color:#1f3d67;border-radius:999px;padding:5px 8px;font-size:11px;font-weight:800}
+.travel-person-chip button{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0;width:auto}
+.travel-person-chip button:hover{color:#8a1010}
+.travel-people-options{max-height:260px;overflow:auto;border:1px solid #f0e6d6;border-radius:10px;background:#fffdf9;padding:5px}
+.travel-person-row{width:100%;display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:9px;align-items:center;text-align:left;border:0;background:transparent;border-radius:9px;padding:8px;cursor:pointer;color:#334155}
+.travel-person-row:hover{background:#fff7ed}
+.travel-person-row.selected{background:#eaf3ff}
+.travel-person-check{width:18px;height:18px;border:1px solid #d6c1aa;border-radius:6px;background:#fff;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:900}
+.travel-person-row.selected .travel-person-check{border-color:#2f6fed;background:#2f6fed}
+.travel-person-main{min-width:0;display:flex;flex-direction:column;gap:2px}
+.travel-person-name{font-size:12px;font-weight:850;color:#263244;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.travel-person-sub{font-size:10px;color:#8ca0b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.travel-person-tier{font-size:10px;font-weight:800;border-radius:999px;padding:3px 7px;background:#f6efe5;color:#7c3f00;white-space:nowrap}
+.travel-person-row.selected .travel-person-tier{background:#dbeafe;color:#1e40af}
+@media(max-width:720px){
+  .travel-people-search-row{grid-template-columns:1fr}
+  .travel-people-count{width:max-content}
+  .travel-person-row{grid-template-columns:22px minmax(0,1fr)}
+  .travel-person-tier{grid-column:2;margin-top:2px;width:max-content}
+}
 .mobile-nav-select{display:none;width:100%;max-width:220px;min-height:38px;font-size:13px;font-weight:650;color:#7c3f00;background:#fff7ed;border-color:#dfc9b1}
 .fl{font-size:11px;color:#a08060;margin-bottom:3px;display:block}
 .fg{margin-bottom:9px}
@@ -12137,7 +12164,7 @@ function receiptUploadPanelHtml(opt){
 function travelAttachmentGuideHtml(){
   return'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%;grid-column:1/-1">'
     +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px"><div><div style="font-size:14px;font-weight:800;color:#263244">差旅附件與同行人員</div><div style="font-size:12px;color:#8b7358;line-height:1.65;margin-top:3px">先選本趟參與差旅的員工，再依住宿、交通、停車、其他四類上傳憑據；每一類都可上傳多份資料。膳什費不用上傳憑據，會依同行人員與 0.5 天單位自動帶入。</div></div><button class="btn-p" onclick="travelAnalyzeReceipts()">OpenAI 解析</button></div>'
-    +'<div class="fr2"><div class="fg"><label class="fl">本趟同行人員 *（可複選）</label><details id="tr-people-dd" style="position:relative"><summary id="tr-people-summary" style="list-style:none;cursor:pointer;background:#fff;border:1px solid #e0d0b8;border-radius:8px;padding:10px 11px;font-size:13px;font-weight:650;color:#334155">選擇同行人員</summary><div id="tr-people-box" style="position:absolute;z-index:50;left:0;right:0;max-height:220px;overflow:auto;background:#fff;border:1px solid #e0d0b8;border-radius:9px;margin-top:5px;padding:7px;box-shadow:0 16px 34px rgba(80,52,20,.16)"></div></details><div style="font-size:11px;color:#8b7358;margin-top:4px">清冊會使用目前系統 / Supabase 載入的啟用帳號。差旅級距只認部門主任與執行長；其他層級皆以一般組員計算。</div></div><div class="fg"><label class="fl">出差天數 *</label><input type="number" min="0.5" step="0.5" id="tr-days-manual" value="'+(travelDaysNum()||1)+'" oninput="syncTravelRows()" onchange="syncTravelRows()"><div style="font-size:11px;color:#8b7358;margin-top:4px">膳什費以 0.5 天為單位計算；住宿晚數採天數無條件捨去，例如 1.5 天以 1 晚計。</div></div></div>'
+    +'<div class="fr2"><div class="fg travel-people-field"><label class="fl">本趟同行人員 *（可複選）</label><div class="travel-people-picker"><div class="travel-people-search-row"><input type="search" id="tr-people-search" class="travel-people-search" autocomplete="off" placeholder="輸入姓名、Email、角色或部門搜尋..." oninput="travelPeopleSearch(this.value)" onfocus="travelPeopleSearch(this.value)"><span id="tr-people-count" class="travel-people-count">已選 0 人</span></div><div id="tr-people-chips" class="travel-people-chips"></div><div id="tr-people-box" class="travel-people-options"></div></div><div style="font-size:11px;color:#8b7358;margin-top:4px">清冊會使用目前系統 / Supabase 載入的啟用帳號。差旅級距只認部門主任與執行長；其他層級皆以一般組員計算。</div></div><div class="fg"><label class="fl">出差天數 *</label><input type="number" min="0.5" step="0.5" id="tr-days-manual" value="'+(travelDaysNum()||1)+'" oninput="syncTravelRows()" onchange="syncTravelRows()"><div style="font-size:11px;color:#8b7358;margin-top:4px">膳什費以 0.5 天為單位計算；住宿晚數採天數無條件捨去，例如 1.5 天以 1 晚計。</div></div></div>'
     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin-top:8px">'
       +travelExpenseItemHtml('lodging','住宿費','住宿憑據')
       +travelExpenseItemHtml('transport','交通費','交通憑據')
@@ -12415,23 +12442,65 @@ function travelPeopleSummary(){
   var people=travelPeople();
   return people.length?people.map(function(u){return u.n;}).join('、'):'選擇同行人員';
 }
+function travelPersonSearchText(u){
+  var d=gD(u.dc||'');
+  return [u.n,u.email,u.rL,RL[u.role]||u.role,u.dc,d&&d.n,travelRateTierLabel(u)].filter(Boolean).join(' ').toLowerCase();
+}
+function travelPeopleFilteredUsers(){
+  var q=String(S.travelPeopleQuery||'').trim().toLowerCase();
+  var rows=activeUniqueUsers();
+  if(!q)return rows;
+  return rows.filter(function(u){return travelPersonSearchText(u).indexOf(q)>-1;});
+}
+function travelPersonDeptLabel(u){
+  var d=gD(u.dc||'');
+  return (u.dc||'未填部門')+(d&&d.n&&d.n!==u.dc?' '+d.n:'');
+}
+function travelPersonRowHtml(u){
+  var selected=(S.travelPeople||[]).indexOf(u.id)>-1;
+  return'<button type="button" class="travel-person-row '+(selected?'selected':'')+'" aria-pressed="'+(selected?'true':'false')+'" onclick="travelPersonToggle('+escAttr(JSON.stringify(u.id))+')">'
+    +'<span class="travel-person-check">'+(selected?'✓':'')+'</span>'
+    +'<span class="travel-person-main"><span class="travel-person-name">'+escAttr(u.n||u.email||'未命名')+'</span><span class="travel-person-sub">'+escAttr((u.rL||RL[u.role]||u.role||'')+' · '+travelPersonDeptLabel(u))+'</span></span>'
+    +'<span class="travel-person-tier">'+escAttr(travelRateTierLabel(u))+'</span>'
+  +'</button>';
+}
 function renderTravelPeople(){
   if(!S.travelPeople||!S.travelPeople.length)S.travelPeople=S.user?[S.user.id]:[];
   var summary=el('tr-people-summary');if(summary)summary.textContent=travelPeopleSummary();
+  var count=el('tr-people-count');if(count)count.textContent='已選 '+travelPeople().length+' 人';
+  var search=el('tr-people-search');
+  if(search&&document.activeElement!==search)search.value=S.travelPeopleQuery||'';
+  var chips=el('tr-people-chips');
+  if(chips){
+    var selected=travelPeople();
+    chips.innerHTML=selected.length?selected.map(function(u){
+      return'<span class="travel-person-chip">'+escAttr(u.n||u.email||'未命名')+'<button type="button" aria-label="移除 '+escAttr(u.n||'同行人員')+'" onclick="travelPersonRemove('+escAttr(JSON.stringify(u.id))+')">×</button></span>';
+    }).join(''):'<span style="font-size:11px;color:#94a3b8;padding:6px 0">尚未選擇同行人員</span>';
+  }
   var box=el('tr-people-box');if(!box)return;
-  box.innerHTML=activeUniqueUsers().map(function(u){
-    var checked=S.travelPeople.indexOf(u.id)>-1;
-    return'<label style="display:flex;gap:6px;align-items:center;padding:7px;border-radius:7px;font-size:11px;color:#334155;cursor:pointer"><input type="checkbox" '+(checked?'checked':'')+' onchange="travelPersonToggle(\''+u.id+'\',this.checked)"> <span style="font-weight:650">'+u.n+'</span><span style="color:#94a3b8">'+u.rL+' · '+u.dc+' · '+travelRateTierLabel(u)+'</span></label>';
-  }).join('');
+  var rows=travelPeopleFilteredUsers();
+  box.innerHTML=rows.length?rows.map(travelPersonRowHtml).join(''):'<div class="combo-empty">沒有符合的同行人員</div>';
 }
+window.travelPeopleSearch=function(q){
+  S.travelPeopleQuery=q||'';
+  renderTravelPeople();
+};
 window.travelPeopleSelectChanged=function(sel){
   S.travelPeople=Array.from(sel.selectedOptions||[]).map(function(o){return o.value;});
   syncTravelRows();
 };
 window.travelPersonToggle=function(id,checked){
   if(!S.travelPeople)S.travelPeople=[];
+  var exists=S.travelPeople.indexOf(id)>-1;
   S.travelPeople=S.travelPeople.filter(function(x){return x!==id;});
-  if(checked)S.travelPeople.push(id);
+  if(typeof checked==='boolean'){if(checked)S.travelPeople.push(id);}
+  else if(!exists)S.travelPeople.push(id);
+  renderTravelPeople();
+  syncTravelRows();
+};
+window.travelPersonRemove=function(id){
+  if(!S.travelPeople)S.travelPeople=[];
+  S.travelPeople=S.travelPeople.filter(function(x){return x!==id;});
   renderTravelPeople();
   syncTravelRows();
 };
