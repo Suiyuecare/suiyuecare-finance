@@ -10527,7 +10527,7 @@ function renderNR(){
   var grid=el('nr-main-grid'),side=el('nr-side-panel');
   if(grid)grid.style.gridTemplateColumns='';
   if(side)side.style.display='flex';
-  if(S.nrStep===3&&(S.nrType==='purchase_request'||S.nrType==='hr_expense_request')){
+  if(S.nrStep===3&&['purchase_request','hr_expense_request','travel_request'].indexOf(S.nrType)>-1){
     if(grid)grid.style.gridTemplateColumns='1fr';
     if(side)side.style.display='none';
   }
@@ -11096,6 +11096,7 @@ function lazyApprovalFlowHtml(title){
   }).join('')+'</div></div></div>';
 }
 function travelApprovalOverviewHtml(){
+  var currentIdx=0;
   var rows=[
     ['申請人送件','送出差旅事由、同行人員、行程時間、費用明細與憑據。'],
     ['主管審核','確認差旅必要性、同行人員、任務成果與費用是否符合辦法。'],
@@ -11108,7 +11109,8 @@ function travelApprovalOverviewHtml(){
     ['會計入帳','依核准金額產生傳票並寫入三表。']
   ];
   return'<div class="card"><div class="chd"><span class="cht">2-5. 簽核流程預覽</span><span style="font-size:10px;color:#94a3b8">每關檢核重點</span></div><div style="padding:12px"><div class="flow-wrap">'+rows.map(function(r,i){
-    return'<div class="flow-step"><div class="flow-dot">'+(i+1)+'</div><div class="flow-body"><div class="flow-label">'+r[0]+'</div><div class="flow-sub">'+r[1]+'</div></div></div>';
+    var isCurrent=i===currentIdx;
+    return'<div class="flow-step"><div class="flow-dot'+(isCurrent?' me':'')+'">'+(i+1)+'</div><div class="flow-body"><div class="flow-label">'+r[0]+(isCurrent?' <span class="flow-badge">您在此</span>':'')+'</div><div class="flow-sub">'+r[1]+'</div></div></div>';
   }).join('')+'</div></div></div>';
 }
 function nrSubmitActionsHtml(includeTravelStep){
