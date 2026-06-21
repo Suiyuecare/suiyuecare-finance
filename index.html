@@ -17,8 +17,8 @@
 </script>
 <link rel="icon" type="image/png" href="assets/suiyue-logo-transparent.png">
 <style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
-:root{--br:#ea880c;--brd:#c97008;--brl:#f5c060;--brxl:#fde8bc;--brxxl:#fff8ed;--brtxt:#5c3800;--cream:#fdf8f2;--warm:#f8f0e4}
+*{box-sizing:border-box;margin:0;padding:0;font-family:var(--font-sans,system-ui,-apple-system,"Segoe UI",sans-serif)}
+:root{--font-sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--br:#ea880c;--brd:#c97008;--brl:#f5c060;--brxl:#fde8bc;--brxxl:#fff8ed;--brtxt:#5c3800;--cream:#fdf8f2;--warm:#f8f0e4}
 html,body{height:100%;background:#e8dcc8}
 body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:12px}
 .app{display:flex;width:100%;max-width:1160px;height:780px;border:1px solid #d8c8a8;border-radius:16px;overflow:hidden;background:var(--cream);box-shadow:0 8px 48px rgba(100,50,0,.14);position:relative}
@@ -72,6 +72,7 @@ tr:hover td{background:var(--brxxl)}
 .acct-dr{background:#e6f4d8;color:#1a5010;border-radius:5px;padding:2px 7px;font-family:monospace;font-size:11px;font-weight:500}
 .acct-cr{background:#fde0e0;color:#8a1010;border-radius:5px;padding:2px 7px;font-family:monospace;font-size:11px;font-weight:500}
 input,select,textarea{width:100%;padding:6px 10px;border-radius:8px;border:1px solid #e0d0b8;font-size:12px;color:#334155;background:#fff;font-family:inherit;transition:border-color .15s}
+button,input,select,textarea,table{font-family:var(--font-sans,system-ui,-apple-system,"Segoe UI",sans-serif)}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-shadow:0 0 0 3px rgba(234,136,12,.08)}
 .combo-native-select{position:absolute!important;opacity:0!important;pointer-events:none!important;width:1px!important;height:1px!important;min-width:0!important;padding:0!important;border:0!important}
 .combo-select{position:relative;width:100%;min-width:180px}
@@ -112,6 +113,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
   .travel-person-row{grid-template-columns:22px minmax(0,1fr)}
   .travel-person-tier{grid-column:2;margin-top:2px;width:max-content}
 }
+.travel-file-card{border:1px solid #efd7b8;border-radius:12px;padding:10px;margin-bottom:8px;background:#fff}
+.travel-file-title{font-size:13px;font-weight:850;color:#263244;margin-bottom:7px}
+.travel-file-control{display:flex;align-items:center;gap:8px;min-height:44px;border:1px solid #ead3b3;border-radius:12px;background:#fffdf9;padding:8px 10px;cursor:pointer;overflow:hidden}
+.travel-file-control:hover{border-color:var(--br);background:#fff7ed}
+.travel-file-btn{font-size:12px;font-weight:850;color:#7c3f00;background:#fff7ed;border:1px solid #f0d090;border-radius:9px;padding:6px 10px;white-space:nowrap;line-height:1}
+.travel-file-text{font-size:12px;font-weight:650;color:#6f5a43;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.travel-file-status{font-size:11px;font-weight:650;color:#8b7358;margin-top:7px;line-height:1.45}
+.travel-file-control input{position:absolute!important;opacity:0!important;pointer-events:none!important;width:1px!important;height:1px!important;min-height:0!important;padding:0!important;border:0!important}
 .mobile-nav-select{display:none;width:100%;max-width:220px;min-height:38px;font-size:13px;font-weight:650;color:#7c3f00;background:#fff7ed;border-color:#dfc9b1}
 .fl{font-size:11px;color:#a08060;margin-bottom:3px;display:block}
 .fg{margin-bottom:9px}
@@ -872,6 +881,7 @@ html,body{overflow-x:hidden}
 
 /* Governance Center visual refresh. Keep this block last so it only adjusts presentation. */
 :root{
+  --font-sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --admin-orange:#f08a24;
   --admin-orange-dark:#c86112;
   --admin-brown:#3d210d;
@@ -897,7 +907,7 @@ html,body{overflow-x:hidden}
 html,body{
   background:#f7f3ec!important;
   color:var(--admin-brown);
-  font-family:"Noto Sans TC",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-family:var(--font-sans);
 }
 body{padding:0!important;align-items:stretch!important;justify-content:stretch!important}
 .app{
@@ -1349,6 +1359,32 @@ input:focus,select:focus,textarea:focus{
   background:transparent!important;
   font-weight:700!important;
 }
+#pg-newreq #travel-sheet table.excel-sheet-table{
+  font-family:var(--font-sans)!important;
+}
+#pg-newreq #travel-sheet table.excel-sheet-table th{
+  font-size:12px!important;
+  font-weight:850!important;
+  letter-spacing:0!important;
+  line-height:1.35!important;
+}
+#pg-newreq #travel-sheet table.excel-sheet-table td{
+  font-size:12px!important;
+  font-weight:650!important;
+  color:#3d210d!important;
+  line-height:1.45!important;
+}
+#pg-newreq #travel-sheet table.excel-sheet-table input{
+  font-family:var(--font-sans)!important;
+  font-size:12px!important;
+  font-weight:650!important;
+  color:#3d210d!important;
+}
+.travel-sheet-item{font-weight:850;color:#3d210d}
+.travel-sheet-limit,.travel-sheet-amount{font-family:var(--font-sans)!important;font-variant-numeric:tabular-nums}
+.travel-sheet-muted{font-size:11px!important;font-weight:650!important;color:#8ca0b8!important;line-height:1.45}
+.travel-sheet-rule{font-size:11px!important;font-weight:650!important;color:#8b7358!important;line-height:1.5}
+.travel-sheet-rule.warn{color:#8a1010!important}
 
 /* Finance-wide shape normalization: keep controls professional, not circular. */
 .btn-p,.btn-s,.btn-g,.tb,.rtab,.google-btn,.manual-download,.version-note-badge,
@@ -12378,10 +12414,14 @@ function travelFieldsHtml(){
 }
 function travelExpenseItemHtml(key,label,fileLabel){
   var names=travelFileNames(key);
-  return'<div style="border:1px solid #efd7b8;border-radius:9px;padding:9px;margin-bottom:8px;background:#fff">'
-    +'<div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:6px">'+label+'</div>'
-    +'<input type="file" id="tr-'+key+'-file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" capture="environment" onchange="travelFileChange(\''+key+'\',this)" style="font-size:11px;width:100%">'
-    +'<div id="tr-'+key+'-files" style="font-size:10px;color:#8b7358;margin-top:5px;line-height:1.45">'+(names||fileLabel+'尚未上傳')+'</div></div>';
+  return'<div class="travel-file-card">'
+    +'<div class="travel-file-title">'+escAttr(label)+'</div>'
+    +'<label class="travel-file-control" for="tr-'+key+'-file">'
+      +'<span class="travel-file-btn">選擇檔案</span>'
+      +'<span class="travel-file-text">'+escAttr(names||'可多選附件')+'</span>'
+      +'<input type="file" id="tr-'+key+'-file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" capture="environment" onchange="travelFileChange(\''+key+'\',this)">'
+    +'</label>'
+    +'<div id="tr-'+key+'-files" class="travel-file-status">'+escAttr(names||fileLabel+'尚未上傳')+'</div></div>';
 }
 function travelSheetHtml(){
   return'<div class="card"><div class="chd"><span class="cht">2-2. 經費明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="travelAddOtherRow()">新增其他項目</button><button class="btn-g" onclick="syncTravelRows()">重新計算上限</button></div></div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">本次申請金額不可大於申請金額上限；其他費用不設上限但須附憑據與說明。</div><div id="travel-sheet"></div></div></div>';
@@ -12587,16 +12627,16 @@ function renderTravelSheet(){
     var cap=r.kind==='other'?'不設上限':fmt(r.limit||0);
     var warn=r.kind!=='other'&&r.limit&&num(r.amount)>r.limit;
     return'<tr>'+cols.map(function(c){
-      if(c==='item')return'<td><strong>'+escAttr(r.label)+'</strong></td>';
-      if(c==='amount')return'<td><input type="number" min="0" step="1" value="'+escAttr(r.amount||0)+'" '+(r.kind==='meal'?'readonly':'')+' oninput="travelEditRow('+i+',\'amount\',this.value)"></td>';
-      if(c==='limit')return'<td style="font-family:monospace;color:'+(warn?'#8a1010':'#334155')+'">'+cap+'</td>';
+      if(c==='item')return'<td><span class="travel-sheet-item">'+escAttr(r.label)+'</span></td>';
+      if(c==='amount')return'<td class="travel-sheet-amount"><input type="number" min="0" step="1" value="'+escAttr(r.amount||0)+'" '+(r.kind==='meal'?'readonly':'')+' oninput="travelEditRow('+i+',\'amount\',this.value)"></td>';
+      if(c==='limit')return'<td class="travel-sheet-limit" style="color:'+(warn?'#8a1010':'#334155')+'">'+cap+'</td>';
       if(c==='note')return'<td><input value="'+escAttr(r.note||'')+'" placeholder="'+escAttr(travelDetailHint('note',r.kind==='other'?'請說明其他費用':'備註'))+'" oninput="travelEditRow('+i+',\'note\',this.value)"></td>';
-      if(c==='files')return'<td style="font-size:10px;color:#94a3b8">'+escAttr(r.files||'尚無憑據')+'</td>';
-      if(c==='rule')return'<td style="font-size:10px;color:'+(warn?'#8a1010':'#8b7358')+'">'+(warn?'已自動限制不得超過上限':travelRowRuleText(r.kind))+'</td>';
+      if(c==='files')return'<td class="travel-sheet-muted">'+escAttr(r.files||'尚無憑據')+'</td>';
+      if(c==='rule')return'<td class="travel-sheet-rule '+(warn?'warn':'')+'">'+(warn?'已自動限制不得超過上限':travelRowRuleText(r.kind))+'</td>';
       return'<td></td>';
     }).join('')+'<td style="width:30px;text-align:center"><button onclick="travelDelRow('+i+')" style="border:none;background:transparent;color:#94a3b8;cursor:pointer">×</button></td></tr>';
   }).join('');
-  box.innerHTML='<style>#travel-sheet table input{border:none;background:transparent;padding:5px 6px;font-size:11px;width:100%;border-radius:0}#travel-sheet td,#travel-sheet th{border:1px solid #e8dcc8;padding:6px;vertical-align:top}#travel-sheet th{background:#f7ead6;color:#7c3f00;font-size:10px;font-weight:650;text-align:left}</style>'
+  box.innerHTML='<style>#travel-sheet table input{border:none;background:transparent;padding:5px 6px;font-size:12px;font-weight:650;font-family:var(--font-sans);width:100%;border-radius:0}#travel-sheet td,#travel-sheet th{border:1px solid #e8dcc8;padding:6px;vertical-align:top}#travel-sheet th{background:#f7ead6;color:#7c3f00;font-size:12px;font-weight:850;text-align:left}</style>'
     +'<div class="sheet-full-scroll" style="overflow:auto;border:1px solid #e8dcc8;border-radius:8px;background:#fff"><table class="excel-sheet-table" style="min-width:'+Math.max(680,cols.length*150+80)+'px;width:100%"><thead><tr>'+cols.map(travelDetailHeaderHtml).join('')+'<th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><div style="font-size:11px;color:#8b7358">'+travelLimitSummary()+'</div><div style="text-align:right"><div style="font-size:10px;color:#94a3b8">差旅申請合計</div><div style="font-size:16px;font-weight:650;color:#1e293b">'+fmt(travelSum())+'</div></div></div>';
 }
