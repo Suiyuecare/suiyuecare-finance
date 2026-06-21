@@ -372,8 +372,23 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .ux-health-card.warn .ux-health-title,.ux-import-review.warn .ux-import-title,.ux-reject-title{color:#8a1010}
 .ux-health-list,.ux-import-list{margin:5px 0 0;padding-left:18px}
 .ux-health-list li,.ux-import-list li{margin:2px 0}
-.ux-route-mini{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
-.ux-route-mini span{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:99px;border:1px solid #e7d6bd;background:#fffaf3;color:#6a5840;font-size:10px}
+.ux-health-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.ux-route-mini{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.ux-route-mini span{display:inline-flex;align-items:center;min-height:26px;border:1px solid #d8ebc4;background:#fff;border-radius:8px;padding:3px 7px;font-size:11px;font-weight:750;color:#2f6b15}
+.nr-submit-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);gap:14px;align-items:stretch;margin-top:12px;padding:14px;border:1px solid #efd7b8;background:#fffaf3;border-radius:14px;box-shadow:0 12px 28px rgba(83,43,11,.06)}
+.nr-submit-main{display:flex;flex-direction:column;gap:10px;min-width:0}
+.nr-submit-eyebrow{font-size:12px;font-weight:950;color:#7c3f00;letter-spacing:.04em}
+.nr-submit-copy{font-size:12px;font-weight:700;color:#836f60;line-height:1.65}
+.nr-route-health .ux-health-card{margin:0;border-radius:12px;padding:11px 12px}
+.nr-route-health .ux-health-card.warn{background:#fff3f4;border-color:#f1a9b2}
+.nr-route-health .ux-health-card.ok{background:#f5fbef;border-color:#bfdfaa}
+.nr-route-health .ux-health-title{font-size:13px;margin-bottom:5px}
+.nr-route-health .ux-health-list{display:grid;gap:3px;margin-top:7px;padding-left:18px}
+.nr-submit-panel{display:flex;flex-direction:column;justify-content:space-between;gap:12px;min-width:0;border:1px solid #efd7b8;background:#fff;border-radius:12px;padding:13px}
+.nr-submit-panel-title{font-size:14px;font-weight:950;color:#3d210d}
+.nr-submit-panel-sub{font-size:11px;font-weight:650;color:#8b7358;line-height:1.55;margin-top:3px}
+.nr-submit-buttons{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}
+.nr-submit-buttons .btn-s,.nr-submit-buttons .btn-p{min-height:48px!important;width:100%;font-size:13px!important}
 .action-busy{pointer-events:none;opacity:.72}
 @keyframes actionSpin{to{transform:rotate(360deg)}}
 @keyframes actionDone{to{transform:scale(1)}}
@@ -583,11 +598,14 @@ nav::-webkit-scrollbar-thumb{background:#3a4657}
   .type-employee-note{font-size:12px;padding:8px 10px}
   .nr-submit-actions{
     position:sticky;bottom:76px;z-index:120;margin:14px -2px 0!important;
-    display:grid!important;grid-template-columns:1fr 1fr;gap:8px!important;
+    display:grid!important;grid-template-columns:1fr!important;gap:9px!important;
     padding:10px!important;border-radius:14px!important;background:rgba(255,248,237,.96)!important;
     box-shadow:0 12px 34px rgba(92,46,0,.18);backdrop-filter:blur(10px)
   }
-  .nr-submit-actions .nr-submit-hint{grid-column:1/-1;font-size:11px!important}
+  .nr-submit-main{gap:8px}
+  .nr-submit-copy{font-size:11px!important;line-height:1.55}
+  .nr-submit-panel{padding:10px!important}
+  .nr-submit-buttons{grid-template-columns:1fr 1fr}
   .nr-submit-actions button{width:100%;min-width:0!important}
   .sheet-full-scroll{max-height:64dvh!important;-webkit-overflow-scrolling:touch}
   #lazy-sheet .lazy-sheet-scroll{max-height:64dvh!important;overflow:auto!important;border:1px solid #e8dcc8!important;background:#fff!important}
@@ -6985,9 +7003,9 @@ function routeHealthPanelHtml(result,steps,opts){
   var title=opts.title||'簽核流程健康檢查';
   if(result.ok){
     var mini=(steps||[]).slice(0,8).map(function(s,i){return'<span>'+(i+1)+'. '+escAttr(routeHealthStepName(s))+'</span>';}).join('');
-    return'<div class="ux-health-card ok"><div class="ux-health-title">'+escAttr(title)+'：可以送出</div><div>系統已確認這張單找得到後續簽核人。送出後會依下列流程往下一關。</div><div class="ux-route-mini">'+mini+'</div></div>';
+    return'<div class="ux-health-card ok"><div class="ux-health-title">'+escAttr(title)+'：可以送出</div><div>系統已確認後續簽核人，送出後會依流程往下一關。</div><div class="ux-route-mini">'+mini+'</div></div>';
   }
-  return'<div class="ux-health-card warn"><div class="ux-health-title">'+escAttr(title)+'：暫時不能送出</div><div>請先修正以下項目，避免送出後卡在主管或會計關卡。</div><ul class="ux-health-list">'+(result.errors||[]).map(function(e){return'<li>'+escAttr(e)+'</li>';}).join('')+'</ul><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px"><button type="button" class="btn-g" onclick="updateNRRouteHealth();renderBillFlow()">重新檢查</button><button type="button" class="btn-s" onclick="nav(\'orgchart\',null)">前往組織圖</button></div></div>';
+  return'<div class="ux-health-card warn"><div class="ux-health-title">'+escAttr(title)+'：暫時不能送出</div><div>請先修正以下項目，避免送出後卡在主管或會計關卡。</div><ul class="ux-health-list">'+(result.errors||[]).map(function(e){return'<li>'+escAttr(e)+'</li>';}).join('')+'</ul><div class="ux-health-actions"><button type="button" class="btn-g" onclick="updateNRRouteHealth();if(typeof renderBillFlow===\'function\')renderBillFlow()">重新檢查</button><button type="button" class="btn-s" onclick="nav(\'orgchart\',null)">前往組織圖</button></div></div>';
 }
 function currentNewReqApplicantUser(){
   var appName=((el('nr-app')||{}).value||'').trim()||(S.user?S.user.n:'');
@@ -11115,11 +11133,11 @@ function travelApprovalOverviewHtml(){
 }
 function nrSubmitActionsHtml(includeTravelStep){
   var msg=includeTravelStep?'確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊、2-4 差旅申請資料都填寫完成後，再暫存或送出簽核。':'確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊都填寫完成後，再暫存或送出簽核。';
-  return'<div class="nr-submit-actions" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,420px);gap:10px;align-items:stretch;margin-top:12px;padding:10px;border:1px solid #f0e0c8;background:#fff8ed;border-radius:10px">'
-    +'<div class="nr-submit-hint" style="display:flex;flex-direction:column;justify-content:center;font-size:11px;color:#8b7358;line-height:1.5"><div>'+msg+' 暫存只會存在你的帳號，不會送主管。</div><div id="nr-route-health" style="margin-top:8px"></div></div>'
-    +'<div style="background:#fff;border:1px solid #efd7b8;border-radius:10px;padding:10px;display:grid;gap:8px">'
-    +'<div style="font-size:12px;font-weight:750;color:#4b2d18;text-align:center">暫存 / 送出簽核</div>'
-    +'<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn-s" style="min-width:130px;justify-content:center" onclick="nrSaveDraftFromButton(this)">暫存</button><button type="button" class="btn-p" style="min-width:160px;justify-content:center" onclick="submitNR()">送出簽核</button></div>'
+  return'<div class="nr-submit-actions">'
+    +'<div class="nr-submit-main"><div><div class="nr-submit-eyebrow">送出前檢查</div><div class="nr-submit-copy">'+msg+' 暫存只會存在你的帳號，不會送主管。</div></div><div id="nr-route-health" class="nr-route-health"></div></div>'
+    +'<div class="nr-submit-panel">'
+      +'<div><div class="nr-submit-panel-title">暫存 / 送出簽核</div><div class="nr-submit-panel-sub">先暫存可稍後再補資料；送出後會正式進入主管簽核。</div></div>'
+      +'<div class="nr-submit-buttons"><button type="button" class="btn-s" onclick="nrSaveDraftFromButton(this)">暫存</button><button type="button" class="btn-p" onclick="submitNR()">送出簽核</button></div>'
     +'</div>'
     +'</div>';
 }
