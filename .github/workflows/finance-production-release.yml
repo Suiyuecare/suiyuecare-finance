@@ -1,0 +1,557 @@
+name: Finance Protected Production Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact current protected-main commit (40 lowercase hex)
+        required: true
+        type: string
+      migration_versions:
+        description: none, 20260826070814 (compatibility phase), or 20260826155840 (authority phase)
+        required: true
+        type: string
+      confirmation:
+        description: Type PROMOTE FINANCE PRODUCTION
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: finance-production-release
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    name: Build and seal the immutable candidate before DB mutation
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment:
+      name: finance-production
+    outputs:
+      deployment_url: ${{ steps.deploy_candidate.outputs.deployment_url }}
+      deployment_id: ${{ steps.deploy_candidate.outputs.deployment_id }}
+      manifest_sha256: ${{ steps.deploy_candidate.outputs.manifest_sha256 }}
+      artifact_digest: ${{ steps.upload_candidate.outputs.artifact-digest }}
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      MIGRATION_VERSIONS: ${{ inputs.migration_versions }}
+      FINANCE_BUILD_TARGET: production
+      VERCEL_ENV: production
+      VERCEL_GIT_COMMIT_SHA: ${{ inputs.candidate_sha }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      FINANCE_SUPABASE_URL: ${{ secrets.FINANCE_PRODUCTION_SUPABASE_URL }}
+      FINANCE_SUPABASE_ANON_KEY: ${{ secrets.FINANCE_PRODUCTION_SUPABASE_ANON_KEY }}
+      FINANCE_PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.FINANCE_PRODUCTION_SUPABASE_PROJECT_REF }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.FINANCE_PRODUCTION_VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.FINANCE_PRODUCTION_VERCEL_PROJECT_ID }}
+      NO_COLOR: "1"
+      VERCEL_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout current protected main without private-repository refetch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          clean: true
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Use fixed Node 22 runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: Use fixed pnpm runtime
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 11.21.0
+          run_install: false
+
+      - name: Fail closed unless source, phase and immutable target are exact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "PROMOTE FINANCE PRODUCTION"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REF_NAME" = "main"
+          test "$GITHUB_SHA" = "$CANDIDATE_SHA"
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(git rev-parse main)" = "$CANDIDATE_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          node scripts/finance_production_release_guard.js validate-target \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --migration-versions "$MIGRATION_VERSIONS" \
+            --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm release:preflight
+
+      - name: Build and fully verify exact production artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm dlx vercel@59.3.0 pull --yes --environment=production
+          node -e 'const f=require("./.vercel/project.json"); if(f.orgId!==process.env.VERCEL_ORG_ID||f.projectId!==process.env.VERCEL_PROJECT_ID) throw new Error("pulled Vercel link differs from immutable catalog")'
+          pnpm dlx vercel@59.3.0 build --prod --standalone
+          pnpm release:verify-artifact
+
+      - name: Deploy unaliased candidate and inspect immutable Vercel target
+        id: deploy_candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEPLOYMENT_URL="$(pnpm dlx vercel@59.3.0 deploy --prebuilt --prod --skip-domain --yes --meta "financeCandidateSha=$CANDIDATE_SHA")"
+          [[ "$DEPLOYMENT_URL" =~ ^https://[a-zA-Z0-9.-]+\.vercel\.app/?$ ]]
+          DEPLOYMENT_URL="${DEPLOYMENT_URL%/}/"
+          DEPLOYMENT_HOST="${DEPLOYMENT_URL#https://}"
+          DEPLOYMENT_HOST="${DEPLOYMENT_HOST%/}"
+          pnpm dlx vercel@59.3.0 inspect "$DEPLOYMENT_URL" --wait --timeout=10m
+          pnpm dlx vercel@59.3.0 api "/v13/deployments/${DEPLOYMENT_HOST}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/candidate-deployment.json"
+          pnpm dlx vercel@59.3.0 api "/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/vercel-project.json"
+          pnpm dlx vercel@59.3.0 api "/v9/projects/${VERCEL_PROJECT_ID}/domains?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/vercel-domains.json"
+          pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "$DEPLOYMENT_URL" -- \
+            --fail --silent --show-error --output "$RUNNER_TEMP/candidate-release-manifest.json"
+          pnpm dlx vercel@59.3.0 curl / --deployment "$DEPLOYMENT_URL" -- \
+            --fail --silent --show-error --output "$RUNNER_TEMP/candidate-index.html"
+          test -s "$RUNNER_TEMP/candidate-index.html"
+          node scripts/finance_production_release_guard.js verify-candidate \
+            --local-manifest www/release-manifest.json \
+            --remote-manifest "$RUNNER_TEMP/candidate-release-manifest.json" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --deployment-url "$DEPLOYMENT_URL"
+          node scripts/finance_production_release_guard.js verify-vercel-target \
+            --deployment-json "$RUNNER_TEMP/candidate-deployment.json" \
+            --project-json "$RUNNER_TEMP/vercel-project.json" \
+            --domains-json "$RUNNER_TEMP/vercel-domains.json" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --deployment-url "$DEPLOYMENT_URL"
+          DEPLOYMENT_ID="$(node -e 'const f=require(process.argv[1]); const id=String(f.id||f.uid||""); if(!/^dpl_[A-Za-z0-9]+$/.test(id)) process.exit(1); process.stdout.write(id)' "$RUNNER_TEMP/candidate-deployment.json")"
+          MANIFEST_SHA256="$(node scripts/finance_production_release_guard.js manifest-sha --manifest www/release-manifest.json)"
+          echo "$DEPLOYMENT_URL" > "$RUNNER_TEMP/candidate-deployment-url.txt"
+          echo "deployment_url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+          echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "manifest_sha256=$MANIFEST_SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Seal exact candidate, DB contracts and migration catalog as immutable artifact
+        shell: bash
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy_candidate.outputs.deployment_url }}
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/finance-verified-candidate"
+          mkdir -p "$BUNDLE/release-tools/scripts" "$BUNDLE/release-tools/supabase/migrations"
+          cp "$RUNNER_TEMP/candidate-deployment-url.txt" "$BUNDLE/deployment-url.txt"
+          cp "$RUNNER_TEMP/candidate-deployment.json" "$BUNDLE/candidate-deployment.json"
+          cp "$RUNNER_TEMP/candidate-release-manifest.json" "$BUNDLE/candidate-release-manifest.json"
+          cp www/release-manifest.json "$BUNDLE/local-release-manifest.json"
+          cp scripts/finance_production_release_guard.js "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_production_db_preflight.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_production_db_postflight.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_production_db_fingerprint.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_production_authenticated_canary.sql "$BUNDLE/release-tools/scripts/"
+          cp supabase/config.toml "$BUNDLE/release-tools/supabase/config.toml"
+          cp supabase/migrations/*.sql "$BUNDLE/release-tools/supabase/migrations/"
+          node scripts/finance_production_release_guard.js create-receipt \
+            --output "$BUNDLE/verified-candidate-receipt.json" \
+            --deployment-json "$BUNDLE/candidate-deployment.json" \
+            --manifest "$BUNDLE/local-release-manifest.json" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --migration-versions "$MIGRATION_VERSIONS" \
+            --deployment-url "$DEPLOYMENT_URL" \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID"
+
+      - name: Upload immutable verified candidate for DB and independently retryable promotion
+        id: upload_candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: finance-verified-candidate-${{ inputs.candidate_sha }}
+          path: ${{ runner.temp }}/finance-verified-candidate
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 9
+
+  database:
+    name: Apply or recover exact DB phase after candidate is sealed
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: finance-production
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      MIGRATION_VERSIONS: ${{ inputs.migration_versions }}
+      EXPECTED_DEPLOYMENT_URL: ${{ needs.candidate.outputs.deployment_url }}
+      EXPECTED_DEPLOYMENT_ID: ${{ needs.candidate.outputs.deployment_id }}
+      EXPECTED_MANIFEST_SHA256: ${{ needs.candidate.outputs.manifest_sha256 }}
+      EXPECTED_ARTIFACT_DIGEST: ${{ needs.candidate.outputs.artifact_digest }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      FINANCE_SUPABASE_URL: ${{ secrets.FINANCE_PRODUCTION_SUPABASE_URL }}
+      FINANCE_SUPABASE_ANON_KEY: ${{ secrets.FINANCE_PRODUCTION_SUPABASE_ANON_KEY }}
+      FINANCE_PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.FINANCE_PRODUCTION_SUPABASE_PROJECT_REF }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.FINANCE_PRODUCTION_VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.FINANCE_PRODUCTION_VERCEL_PROJECT_ID }}
+      FINANCE_PRODUCTION_DOMAIN: finance.suiyuecare.com
+      NO_COLOR: "1"
+      VERCEL_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Use fixed Node 22 runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: Use fixed pnpm runtime
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 11.21.0
+          run_install: false
+
+      - name: Use fixed Supabase CLI
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf
+        with:
+          version: 2.111.0
+
+      - name: Download the sealed candidate from this workflow run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: finance-verified-candidate-${{ inputs.candidate_sha }}
+          path: ${{ runner.temp }}/verified-candidate
+
+      - name: Link the pinned Supabase CLI to the immutable Finance project
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOLS="$RUNNER_TEMP/verified-candidate/release-tools"
+          node "$TOOLS/scripts/finance_production_release_guard.js" validate-target \
+            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
+          supabase link --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF" \
+            --workdir "$TOOLS" --yes
+
+      - name: Prove the sealed browser credential and read-only Supabase runtime before DB mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/verified-candidate"
+          TOOLS="$BUNDLE/release-tools"
+          GUARD="$TOOLS/scripts/finance_production_release_guard.js"
+          (cd "$TOOLS" && supabase projects api-keys \
+            --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF" --output json) > "$RUNNER_TEMP/supabase-api-keys.json"
+          node "$GUARD" verify-supabase-public-key \
+            --api-keys-json "$RUNNER_TEMP/supabase-api-keys.json"
+          SUPABASE_BASE="${FINANCE_SUPABASE_URL%/}"
+          AUTH_HEADER=()
+          if [[ "$FINANCE_SUPABASE_ANON_KEY" == eyJ* ]]; then
+            AUTH_HEADER=(-H "Authorization: Bearer $FINANCE_SUPABASE_ANON_KEY")
+          fi
+          curl --fail --silent --show-error \
+            -H "apikey: $FINANCE_SUPABASE_ANON_KEY" \
+            "$SUPABASE_BASE/auth/v1/settings" \
+            --output "$RUNNER_TEMP/supabase-auth-settings.json"
+          node -e 'const f=require(process.argv[1]); if(f.external?.google!==true) throw new Error("Google OAuth is not enabled in Finance Auth settings")' \
+            "$RUNNER_TEMP/supabase-auth-settings.json"
+          curl --fail --silent --show-error \
+            -H "apikey: $FINANCE_SUPABASE_ANON_KEY" "${AUTH_HEADER[@]}" \
+            "$SUPABASE_BASE/rest/v1/finance_users?select=id&limit=1" \
+            --output "$RUNNER_TEMP/supabase-rest-probe.json"
+          probe_rpc() {
+            local name="$1"
+            local payload="$2"
+            local result="$RUNNER_TEMP/${name}-probe.json"
+            local status
+            status="$(curl --silent --show-error --write-out '%{http_code}' \
+              --request POST -H "apikey: $FINANCE_SUPABASE_ANON_KEY" "${AUTH_HEADER[@]}" \
+              -H 'Content-Type: application/json' --data "$payload" \
+              "$SUPABASE_BASE/rest/v1/rpc/$name" --output "$result")"
+            test "$status" = "401"
+            node -e 'const f=require(process.argv[1]); if(f.code!=="42501") throw new Error("RPC probe did not reach the protected route")' "$result"
+          }
+          probe_rpc finance_submit_expense_request \
+            '{"p_form":{},"p_org_unit_id":null,"p_legal_entity_code":"E1","p_actor_requests":[]}'
+          probe_rpc finance_resubmit_expense_request \
+            '{"p_form_id":"release-probe","p_form_state":{},"p_org_unit_id":null,"p_legal_entity_code":"E1","p_actor_requests":[]}'
+
+      - name: Revalidate receipt, remote manifest and immutable Vercel target
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/verified-candidate"
+          TOOLS="$BUNDLE/release-tools"
+          GUARD="$TOOLS/scripts/finance_production_release_guard.js"
+          DEPLOYMENT_URL="$(tr -d '\r\n' < "$BUNDLE/deployment-url.txt")"
+          test "$DEPLOYMENT_URL" = "$EXPECTED_DEPLOYMENT_URL"
+          test -n "$EXPECTED_ARTIFACT_DIGEST"
+          test "$(node "$GUARD" manifest-sha --manifest "$BUNDLE/local-release-manifest.json")" = "$EXPECTED_MANIFEST_SHA256"
+          node -e 'const f=require(process.argv[1]); if(String(f.id||f.uid||"")!==process.env.EXPECTED_DEPLOYMENT_ID) throw new Error("sealed deployment ID differs from candidate job output")' "$BUNDLE/candidate-deployment.json"
+          node "$GUARD" validate-target \
+            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
+          node "$GUARD" verify-receipt \
+            --receipt "$BUNDLE/verified-candidate-receipt.json" \
+            --deployment-json "$BUNDLE/candidate-deployment.json" \
+            --manifest "$BUNDLE/local-release-manifest.json" \
+            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --deployment-url "$DEPLOYMENT_URL" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID"
+          DEPLOYMENT_HOST="${DEPLOYMENT_URL#https://}"
+          DEPLOYMENT_HOST="${DEPLOYMENT_HOST%/}"
+          pnpm dlx vercel@59.3.0 api "/v13/deployments/${DEPLOYMENT_HOST}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/database-candidate-deployment.json"
+          pnpm dlx vercel@59.3.0 api "/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/database-vercel-project.json"
+          pnpm dlx vercel@59.3.0 api "/v9/projects/${VERCEL_PROJECT_ID}/domains?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/database-vercel-domains.json"
+          pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "$DEPLOYMENT_URL" -- \
+            --fail --silent --show-error --output "$RUNNER_TEMP/database-candidate-manifest.json"
+          node "$GUARD" verify-candidate \
+            --local-manifest "$BUNDLE/local-release-manifest.json" \
+            --remote-manifest "$RUNNER_TEMP/database-candidate-manifest.json" \
+            --candidate-sha "$CANDIDATE_SHA" --deployment-url "$DEPLOYMENT_URL"
+          node "$GUARD" verify-vercel-target \
+            --deployment-json "$RUNNER_TEMP/database-candidate-deployment.json" \
+            --project-json "$RUNNER_TEMP/database-vercel-project.json" \
+            --domains-json "$RUNNER_TEMP/database-vercel-domains.json" \
+            --candidate-sha "$CANDIDATE_SHA" --deployment-url "$DEPLOYMENT_URL"
+          if test "$MIGRATION_VERSIONS" = "20260826155840"; then
+            pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
+              --fail --silent --show-error --output "$RUNNER_TEMP/production-before-v2-manifest.json"
+            node "$GUARD" verify-production-baseline \
+              --production-manifest "$RUNNER_TEMP/production-before-v2-manifest.json" \
+              --candidate-manifest "$BUNDLE/local-release-manifest.json" \
+              --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS"
+          fi
+
+      - name: Prove authenticated submit, supervisor return and applicant resubmit before DB mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOLS="$RUNNER_TEMP/verified-candidate/release-tools"
+          (cd "$TOOLS" && supabase db query --linked \
+            --file scripts/finance_production_authenticated_canary.sql \
+            --output json) > "$RUNNER_TEMP/authenticated-canary-before.json"
+          node -e 'const f=require(process.argv[1]); const r=(f.rows||[]).find(x=>x.authenticated_canary_result)?.authenticated_canary_result; if(!r?.ok||r.rolled_back!==true||r.notifications_enqueued!==false) throw new Error("Authenticated rollback canary did not complete safely")' \
+            "$RUNNER_TEMP/authenticated-canary-before.json"
+
+      - name: Classify ledger and apply only when the exact phase remains pending
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/verified-candidate"
+          TOOLS="$BUNDLE/release-tools"
+          GUARD="$TOOLS/scripts/finance_production_release_guard.js"
+          LEDGER="$RUNNER_TEMP/finance-ledger-before.txt"
+          query_ledger() {
+            local output="$1"
+            (cd "$TOOLS" && supabase db query --linked --output csv \
+              'select version from supabase_migrations.schema_migrations order by version') > "${output}.csv"
+            tail -n +2 "${output}.csv" | sed '/^$/d' > "$output"
+            rm "${output}.csv"
+          }
+          run_gate() {
+            local source="$1"
+            local rendered="$2"
+            local result="$3"
+            node "$GUARD" prepare-gate-query --input "$source" --output "$rendered" \
+              --migration-versions "$MIGRATION_VERSIONS"
+            (cd "$TOOLS" && supabase db query --linked --file "$rendered" --output json) > "$result"
+          }
+          query_ledger "$LEDGER"
+          PHASE_STATE="$(node "$GUARD" classify-ledger --ledger "$LEDGER" --migration-dir "$TOOLS/supabase/migrations" --migration-versions "$MIGRATION_VERSIONS")"
+          if test "$PHASE_STATE" = "pending"; then
+            run_gate "$TOOLS/scripts/finance_production_db_preflight.sql" \
+              "$RUNNER_TEMP/finance-preflight.sql" "$RUNNER_TEMP/finance-preflight.json"
+
+            MIGRATION="$(find "$TOOLS/supabase/migrations" -maxdepth 1 -type f -name "${MIGRATION_VERSIONS}_*.sql" -print)"
+            test "$(printf '%s\n' "$MIGRATION" | sed '/^$/d' | wc -l | tr -d ' ')" = "1"
+            ORIGINAL_SHA="$(sha256sum "$MIGRATION" | awk '{print $1}')"
+            REHEARSAL="$RUNNER_TEMP/${MIGRATION_VERSIONS}_rollback.sql"
+            node "$GUARD" prepare-rehearsal --migration "$MIGRATION" --output "$REHEARSAL" \
+              --migration-version "$MIGRATION_VERSIONS" \
+              --fingerprint "$TOOLS/scripts/finance_production_db_fingerprint.sql" \
+              --authenticated-canary "$TOOLS/scripts/finance_production_authenticated_canary.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$REHEARSAL" --output json) > "$RUNNER_TEMP/rehearsal-result.json"
+            test "$(sha256sum "$MIGRATION" | awk '{print $1}')" = "$ORIGINAL_SHA"
+            if test "$MIGRATION_VERSIONS" = "20260826155840"; then
+              pnpm dlx vercel@59.3.0 curl /release-manifest.json \
+                --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
+                --fail --silent --show-error \
+                --output "$RUNNER_TEMP/production-immediately-before-v2.json"
+              node "$GUARD" verify-production-baseline \
+                --production-manifest "$RUNNER_TEMP/production-immediately-before-v2.json" \
+                --candidate-manifest "$BUNDLE/local-release-manifest.json" \
+                --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS"
+            fi
+            APPLY="$RUNNER_TEMP/${MIGRATION_VERSIONS}_apply.sql"
+            node "$GUARD" prepare-apply --migration "$MIGRATION" --output "$APPLY" \
+              --migration-version "$MIGRATION_VERSIONS" --ledger "$LEDGER"
+            (cd "$TOOLS" && supabase db query --linked --file "$APPLY" --output json) > "$RUNNER_TEMP/apply-result.json"
+          elif test "$PHASE_STATE" = "applied"; then
+            echo "Exact DB phase is already applied; recovering with postflight only and no mutation."
+          elif test "$PHASE_STATE" = "noop" && test "$MIGRATION_VERSIONS" = "none"; then
+            run_gate "$TOOLS/scripts/finance_production_db_preflight.sql" \
+              "$RUNNER_TEMP/finance-preflight.sql" "$RUNNER_TEMP/finance-preflight.json"
+          else
+            echo "Unexpected phase state: $PHASE_STATE" >&2
+            exit 1
+          fi
+
+          query_ledger "$RUNNER_TEMP/finance-ledger-after.txt"
+          node "$GUARD" verify-ledger --mode post \
+            --ledger "$RUNNER_TEMP/finance-ledger-after.txt" \
+            --migration-dir "$TOOLS/supabase/migrations" --migration-versions "$MIGRATION_VERSIONS"
+          run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
+            "$RUNNER_TEMP/finance-postflight.sql" "$RUNNER_TEMP/finance-postflight.json"
+          (cd "$TOOLS" && supabase db query --linked \
+            --file scripts/finance_production_authenticated_canary.sql \
+            --output json) > "$RUNNER_TEMP/authenticated-canary-after.json"
+          node -e 'const f=require(process.argv[1]); const r=(f.rows||[]).find(x=>x.authenticated_canary_result)?.authenticated_canary_result; if(!r?.ok||r.rolled_back!==true||r.notifications_enqueued!==false) throw new Error("Post-migration authenticated rollback canary did not complete safely")' \
+            "$RUNNER_TEMP/authenticated-canary-after.json"
+
+  promote:
+    name: Promote the sealed candidate; independently retryable without build or DB apply
+    needs: [candidate, database]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: finance-production
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      MIGRATION_VERSIONS: ${{ inputs.migration_versions }}
+      EXPECTED_DEPLOYMENT_URL: ${{ needs.candidate.outputs.deployment_url }}
+      EXPECTED_DEPLOYMENT_ID: ${{ needs.candidate.outputs.deployment_id }}
+      EXPECTED_MANIFEST_SHA256: ${{ needs.candidate.outputs.manifest_sha256 }}
+      EXPECTED_ARTIFACT_DIGEST: ${{ needs.candidate.outputs.artifact_digest }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      FINANCE_SUPABASE_URL: ${{ secrets.FINANCE_PRODUCTION_SUPABASE_URL }}
+      FINANCE_SUPABASE_ANON_KEY: ${{ secrets.FINANCE_PRODUCTION_SUPABASE_ANON_KEY }}
+      FINANCE_PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.FINANCE_PRODUCTION_SUPABASE_PROJECT_REF }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.FINANCE_PRODUCTION_VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.FINANCE_PRODUCTION_VERCEL_PROJECT_ID }}
+      FINANCE_PRODUCTION_DOMAIN: finance.suiyuecare.com
+      NO_COLOR: "1"
+      VERCEL_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Use fixed Node 22 runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: Use fixed pnpm runtime
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 11.21.0
+          run_install: false
+
+      - name: Use fixed Supabase CLI for promotion postflight
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf
+        with:
+          version: 2.111.0
+
+      - name: Download the same sealed candidate for retry-safe promotion
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: finance-verified-candidate-${{ inputs.candidate_sha }}
+          path: ${{ runner.temp }}/verified-candidate
+
+      - name: Link the pinned Supabase CLI to the immutable Finance project
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOLS="$RUNNER_TEMP/verified-candidate/release-tools"
+          node "$TOOLS/scripts/finance_production_release_guard.js" validate-target \
+            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
+          supabase link --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF" \
+            --workdir "$TOOLS" --yes
+
+      - name: Revalidate receipt, candidate, exact DB postflight and immutable target
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/verified-candidate"
+          TOOLS="$BUNDLE/release-tools"
+          GUARD="$TOOLS/scripts/finance_production_release_guard.js"
+          DEPLOYMENT_URL="$(tr -d '\r\n' < "$BUNDLE/deployment-url.txt")"
+          test "$DEPLOYMENT_URL" = "$EXPECTED_DEPLOYMENT_URL"
+          test -n "$EXPECTED_ARTIFACT_DIGEST"
+          test "$(node "$GUARD" manifest-sha --manifest "$BUNDLE/local-release-manifest.json")" = "$EXPECTED_MANIFEST_SHA256"
+          node -e 'const f=require(process.argv[1]); if(String(f.id||f.uid||"")!==process.env.EXPECTED_DEPLOYMENT_ID) throw new Error("sealed deployment ID differs from candidate job output")' "$BUNDLE/candidate-deployment.json"
+          node "$GUARD" validate-target \
+            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
+          node "$GUARD" verify-receipt \
+            --receipt "$BUNDLE/verified-candidate-receipt.json" \
+            --deployment-json "$BUNDLE/candidate-deployment.json" \
+            --manifest "$BUNDLE/local-release-manifest.json" \
+            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --deployment-url "$DEPLOYMENT_URL" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID"
+          DEPLOYMENT_HOST="${DEPLOYMENT_URL#https://}"
+          DEPLOYMENT_HOST="${DEPLOYMENT_HOST%/}"
+          pnpm dlx vercel@59.3.0 api "/v13/deployments/${DEPLOYMENT_HOST}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/promote-candidate-deployment.json"
+          pnpm dlx vercel@59.3.0 api "/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/promote-vercel-project.json"
+          pnpm dlx vercel@59.3.0 api "/v9/projects/${VERCEL_PROJECT_ID}/domains?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/promote-vercel-domains.json"
+          pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "$DEPLOYMENT_URL" -- \
+            --fail --silent --show-error --output "$RUNNER_TEMP/promote-candidate-manifest.json"
+          node "$GUARD" verify-candidate \
+            --local-manifest "$BUNDLE/local-release-manifest.json" \
+            --remote-manifest "$RUNNER_TEMP/promote-candidate-manifest.json" \
+            --candidate-sha "$CANDIDATE_SHA" --deployment-url "$DEPLOYMENT_URL"
+          node "$GUARD" verify-vercel-target \
+            --deployment-json "$RUNNER_TEMP/promote-candidate-deployment.json" \
+            --project-json "$RUNNER_TEMP/promote-vercel-project.json" \
+            --domains-json "$RUNNER_TEMP/promote-vercel-domains.json" \
+            --candidate-sha "$CANDIDATE_SHA" --deployment-url "$DEPLOYMENT_URL" \
+            --allow-production-alias true
+          (cd "$TOOLS" && supabase db query --linked --output csv \
+            'select version from supabase_migrations.schema_migrations order by version') > "$RUNNER_TEMP/promotion-ledger.csv"
+          tail -n +2 "$RUNNER_TEMP/promotion-ledger.csv" | sed '/^$/d' > "$RUNNER_TEMP/promotion-ledger.txt"
+          node "$GUARD" verify-ledger --mode post \
+            --ledger "$RUNNER_TEMP/promotion-ledger.txt" \
+            --migration-dir "$TOOLS/supabase/migrations" --migration-versions "$MIGRATION_VERSIONS"
+          node "$GUARD" prepare-gate-query \
+            --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
+            --output "$RUNNER_TEMP/promotion-postflight.sql" \
+            --migration-versions "$MIGRATION_VERSIONS"
+          (cd "$TOOLS" && supabase db query --linked \
+            --file "$RUNNER_TEMP/promotion-postflight.sql" --output json) > "$RUNNER_TEMP/promotion-postflight.json"
+          (cd "$TOOLS" && supabase db query --linked \
+            --file scripts/finance_production_authenticated_canary.sql \
+            --output json) > "$RUNNER_TEMP/promotion-authenticated-canary.json"
+          node -e 'const f=require(process.argv[1]); const r=(f.rows||[]).find(x=>x.authenticated_canary_result)?.authenticated_canary_result; if(!r?.ok||r.rolled_back!==true||r.notifications_enqueued!==false) throw new Error("Promotion authenticated rollback canary did not complete safely")' \
+            "$RUNNER_TEMP/promotion-authenticated-canary.json"
+
+      - name: Promote only the sealed immutable candidate with bounded retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/verified-candidate"
+          DEPLOYMENT_URL="$(tr -d '\r\n' < "$BUNDLE/deployment-url.txt")"
+          PROMOTED=0
+          for ATTEMPT in 1 2 3; do
+            if pnpm dlx vercel@59.3.0 promote "$DEPLOYMENT_URL" --yes; then PROMOTED=1; break; fi
+            echo "Promotion attempt $ATTEMPT failed; retrying the same sealed URL without rebuild." >&2
+            sleep 5
+          done
+          test "$PROMOTED" = "1"
+
+      - name: Read back exact production deployment and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/verified-candidate"
+          GUARD="$BUNDLE/release-tools/scripts/finance_production_release_guard.js"
+          VERIFIED=0
+          for ATTEMPT in 1 2 3 4 5 6; do
+            if pnpm dlx vercel@59.3.0 api "/v13/deployments/${FINANCE_PRODUCTION_DOMAIN}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/promoted-deployment.json" \
+              && pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
+                --fail --silent --show-error --output "$RUNNER_TEMP/production-release-manifest.json" \
+              && node "$GUARD" verify-promotion \
+                --candidate-deployment-json "$BUNDLE/candidate-deployment.json" \
+                --promoted-deployment-json "$RUNNER_TEMP/promoted-deployment.json" \
+                --production-manifest "$RUNNER_TEMP/production-release-manifest.json" \
+                --candidate-manifest "$BUNDLE/local-release-manifest.json"; then VERIFIED=1; break; fi
+            echo "Production alias readback attempt $ATTEMPT has not converged to the sealed candidate." >&2
+            sleep 5
+          done
+          test "$VERIFIED" = "1"

@@ -1,0 +1,65 @@
+/* Mobile operational refinements. Loaded after finance-core.css on purpose. */
+@media(max-width:760px){
+  [data-mobile-bottom-nav="role-primary"] button{flex-direction:column!important;gap:2px!important;padding:4px 3px 3px!important}
+  [data-mobile-bottom-nav="role-primary"] button span{width:25px!important;height:25px!important}
+  [data-mobile-bottom-nav="role-primary"] button span svg{width:25px!important;height:25px!important}
+  [data-mobile-bottom-nav="role-primary"] button b{display:block!important;position:static!important;width:auto!important;height:auto!important;margin:0!important;clip:auto!important;overflow:visible!important;color:inherit!important;font-size:10px!important;font-weight:900!important;line-height:1.15!important;white-space:nowrap!important}
+
+  .mobile-more-backdrop{align-items:stretch!important;justify-content:flex-start!important;background:rgba(49,34,23,.48)!important;pointer-events:auto!important;touch-action:manipulation!important}
+  .mobile-more-sheet{display:flex!important;flex-direction:column!important;width:min(82vw,352px)!important;height:100dvh!important;max-height:none!important;padding:0 14px calc(12px + var(--mobile-safe-bottom))!important;border-radius:0 24px 24px 0!important;background:#fffaf3!important;box-shadow:20px 0 54px rgba(56,39,31,.24)!important;overflow:hidden!important;overscroll-behavior:contain!important;pointer-events:auto!important;touch-action:pan-y!important}
+  .mobile-more-handle{display:none!important}
+  .mobile-more-sheet header{position:relative!important;z-index:2!important;flex:0 0 auto!important;min-height:98px!important;margin:0 -14px 0!important;padding:16px 14px!important;border-bottom:1px solid var(--mobile-line)!important;background:#fffaf3!important}
+  .mobile-more-brand{display:flex!important;align-items:center!important;gap:10px!important;min-width:0!important}
+  .mobile-more-brand>img{width:58px!important;height:58px!important;object-fit:contain!important;border:1px solid var(--mobile-line)!important;border-radius:18px!important;background:#fff!important;padding:3px!important}
+  .mobile-more-brand>div{min-width:0!important}
+  .mobile-more-sheet header strong{font-size:19px!important;color:#e87900!important;white-space:nowrap!important}
+  .mobile-more-sheet header small{font-size:11px!important;color:#66584e!important;white-space:nowrap!important}
+  .mobile-more-sheet header>button{flex:0 0 44px!important;border:0!important;background:transparent!important;font-size:28px!important;pointer-events:auto!important;touch-action:manipulation!important}
+  .mobile-more-menu-title{flex:0 0 auto!important;padding:16px 8px 8px!important;color:#bb5a00!important;font-size:12px!important;font-weight:950!important;letter-spacing:.08em!important}
+  .mobile-more-grid{display:block!important;flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;padding:0 0 8px!important}
+  .mobile-more-grid button{position:relative!important;display:grid!important;grid-template-columns:46px minmax(0,1fr) auto!important;min-height:60px!important;width:100%!important;margin:0 0 4px!important;padding:7px 10px!important;gap:11px!important;align-items:center!important;justify-items:start!important;border:0!important;border-radius:17px!important;background:transparent!important;text-align:left!important;pointer-events:auto!important;touch-action:manipulation!important}
+  .mobile-more-grid button:active,.mobile-more-grid button:focus-visible{background:#fff0dc!important}
+  .mobile-more-grid button .mobile-more-icon{display:flex!important;align-items:center!important;justify-content:center!important;width:44px!important;height:44px!important;border-radius:14px!important;background:#fff!important;color:#c55e00!important}
+  .mobile-more-grid button .mobile-more-icon svg{width:23px!important;height:23px!important;fill:none!important;stroke:currentColor!important;stroke-width:2!important;stroke-linecap:round!important;stroke-linejoin:round!important}
+  .mobile-more-grid button b{font-size:16px!important;color:#66584e!important;line-height:1.35!important}
+  .mobile-more-grid button.on{background:#f58a00!important;box-shadow:0 8px 18px rgba(245,138,0,.18)!important}
+  .mobile-more-grid button.on .mobile-more-icon{background:rgba(255,255,255,.22)!important;color:#fff!important}
+  .mobile-more-grid button.on b{color:#fff!important}
+  .mobile-more-grid button.on em{background:#fff!important;color:#bd5b00!important}
+  .mobile-more-grid button em{justify-self:end!important;min-width:28px!important;padding:3px 7px!important;border-radius:99px!important;background:#fff!important;color:#bc5b00!important;font-size:11px!important;font-style:normal!important;font-weight:900!important;text-align:center!important}
+  .mobile-more-user{display:grid!important;grid-template-columns:42px minmax(0,1fr) 42px!important;align-items:center!important;gap:10px!important;flex:0 0 auto!important;margin:9px 2px 7px!important;padding:10px!important;border:1px solid var(--mobile-line)!important;border-radius:17px!important;background:#fff!important;color:#5f5148!important}
+  .mobile-more-avatar{display:flex!important;align-items:center!important;justify-content:center!important;width:42px!important;height:42px!important;border-radius:50%!important;background:#f58a00!important;color:#fff!important;font-size:15px!important;font-weight:950!important}
+  .mobile-more-user-copy{display:block!important;min-width:0!important}
+  .mobile-more-user-copy strong,.mobile-more-user-copy small{display:block!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+  .mobile-more-user-copy strong{font-size:13px!important;color:#38271f!important}
+  .mobile-more-user-copy small{margin-top:2px!important;font-size:10px!important;color:#8a7868!important}
+  .mobile-more-logout{width:42px!important;height:42px!important;border:0!important;border-radius:13px!important;background:transparent!important;color:#7b6a5f!important;font-size:24px!important;pointer-events:auto!important;touch-action:manipulation!important}
+  .mobile-more-account-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important;flex:0 0 auto!important;margin-top:0!important;padding-top:7px!important}
+
+  .main .content :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea,.combo-select){width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important;font-size:16px!important;line-height:1.35!important;text-align:left!important}
+  .main .content :is(input[type="date"],input[type="datetime-local"],input[type="month"],input[type="time"]){display:block!important;height:48px!important;min-height:48px!important;padding:10px 12px!important;margin:0!important;text-align:left!important}
+  .main .content :is(input[type="date"],input[type="datetime-local"],input[type="month"],input[type="time"])::-webkit-date-and-time-value{min-width:0!important;margin:0!important;text-align:left!important}
+  .main .content input[type="file"]{max-width:100%!important;box-sizing:border-box!important;font-size:14px!important}
+  .upload-zone::before{content:'拍照／相簿／雲端或檔案'!important}
+
+  .nr-submit-actions{position:static!important;bottom:auto!important;z-index:auto!important;margin:18px 0 0!important;clear:both!important}
+  #nr-content .fg:has(#nr-paydate){padding-bottom:4px!important}
+
+  #pg-approvals .approval-tabs-scroll,#pg-approvals .appr-bulkbar{-webkit-overflow-scrolling:touch!important;touch-action:pan-x!important;scroll-snap-type:none!important;overscroll-behavior-x:auto!important;padding-right:28px!important;cursor:grab!important}
+  #pg-approvals .approval-tabs-scroll>.tb{scroll-snap-align:none!important;touch-action:pan-x!important;user-select:none!important}
+  #pg-approvals .appr-bulkbar>*{touch-action:pan-x!important}
+  #pg-approvals .approval-table td.appr-col-purpose{text-align:left!important;justify-items:stretch!important}
+  #pg-approvals .approval-table td.appr-col-purpose .summary-cell{width:100%!important;max-width:none!important;margin:0!important;justify-self:stretch!important;text-align:left!important}
+
+  #pg-invoices .mobile-income-mode,#pg-invoices [data-mobile-single-first="invoice"]{display:none!important}
+  #pg-invoices .invoice-unified-entry{display:block!important;width:100%!important;min-width:0!important}
+  #pg-invoices #invoice-batch-sheet :is(.sheet-full-scroll,.invoice-sheet-scroll){overflow:visible!important;max-width:100%!important}
+  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table{display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;table-layout:auto!important;border:0!important}
+  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table thead{display:none!important}
+  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table tbody{display:grid!important;grid-template-columns:1fr!important;gap:12px!important;width:100%!important}
+  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card]{display:block!important;width:100%!important;padding:10px 14px!important;border:1px solid var(--mobile-line)!important;border-radius:22px!important;background:#fff!important}
+  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card] td{display:grid!important;grid-template-columns:minmax(88px,34%) minmax(0,1fr)!important;align-items:center!important;gap:10px!important;width:100%!important;min-height:44px!important;padding:8px 0!important;border:0!important;border-bottom:1px solid #f1e4d4!important;text-align:left!important;white-space:normal!important}
+  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card] td:last-child{border-bottom:0!important}
+  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table td::before{content:attr(data-mobile-card-label)!important;display:block!important;color:var(--mobile-muted)!important;font-size:11px!important;font-weight:800!important}
+  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table td :is(input,select,textarea,.combo-select){width:100%!important;min-width:0!important;min-height:44px!important;font-size:16px!important}
+}

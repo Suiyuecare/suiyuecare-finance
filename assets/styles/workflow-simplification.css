@@ -1,0 +1,248 @@
+.workflow-ui-generated{display:none}
+
+.workflow-simplification-v1 .workflow-ui-generated{display:block}
+
+.workflow-simplification-v1 [data-workflow-simplified]{
+  --workflow-surface:#fffdfa;
+  --workflow-border:#ead8bf;
+  --workflow-muted:#766b61;
+  --workflow-ink:#2f2924;
+  --workflow-accent:#cf7100;
+}
+
+.workflow-simplification-v1 #pg-newreq[data-workflow-simplified="new-request"] #nr-main-grid{
+  align-items:start;
+  gap:18px!important;
+}
+
+.workflow-simplification-v1 .workflow-newreq-summary{
+  border:1px solid var(--workflow-border);
+  border-radius:18px;
+  background:linear-gradient(145deg,#fffdf8,#fff6e8);
+  box-shadow:0 12px 32px rgba(117,74,21,.08);
+  padding:18px;
+}
+
+.workflow-simplification-v1 .workflow-summary-kicker{
+  color:var(--workflow-accent);
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.08em;
+}
+
+.workflow-simplification-v1 .workflow-newreq-summary h3{
+  color:var(--workflow-ink);
+  font-size:20px;
+  line-height:1.35;
+  margin:6px 0 14px;
+}
+
+.workflow-simplification-v1 .workflow-summary-list{
+  display:grid;
+  gap:0;
+}
+
+.workflow-simplification-v1 .workflow-summary-list>div{
+  align-items:center;
+  border-top:1px solid rgba(211,181,141,.5);
+  display:flex;
+  gap:12px;
+  justify-content:space-between;
+  min-height:47px;
+}
+
+.workflow-simplification-v1 .workflow-summary-list span{
+  color:var(--workflow-muted);
+  font-size:12px;
+}
+
+.workflow-simplification-v1 .workflow-summary-list strong{
+  color:var(--workflow-ink);
+  font-size:13px;
+  text-align:right;
+}
+
+.workflow-simplification-v1 .workflow-newreq-summary p{
+  color:var(--workflow-muted);
+  font-size:11px;
+  line-height:1.7;
+  margin:13px 0 0;
+}
+
+.workflow-simplification-v1 #pg-newreq #nr-content>[data-workflow-section]{
+  background:var(--workflow-surface);
+  border-color:var(--workflow-border)!important;
+  border-radius:18px!important;
+  box-shadow:0 8px 24px rgba(84,56,24,.045);
+  margin-bottom:14px;
+}
+
+.workflow-simplification-v1 #pg-newreq [data-workflow-submit="true"]{
+  border:1px solid var(--workflow-border);
+  border-radius:18px;
+  box-shadow:0 12px 30px rgba(117,74,21,.07);
+  overflow:hidden;
+}
+
+.workflow-simplification-v1 #pg-newreq #nr-side-panel[data-workflow-summary-only]>.card{
+  display:none!important;
+}
+
+.workflow-simplification-v1 .workflow-kpi-strip{
+  display:grid!important;
+  gap:10px;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  margin:0 0 12px;
+}
+
+.workflow-simplification-v1 .workflow-metric{
+  background:var(--workflow-surface);
+  border:1px solid var(--workflow-border);
+  border-radius:15px;
+  display:flex;
+  flex-direction:column;
+  min-height:104px;
+  padding:15px;
+}
+
+.workflow-simplification-v1 .workflow-metric span{
+  color:var(--workflow-muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+.workflow-simplification-v1 .workflow-metric strong{
+  color:var(--workflow-ink);
+  font-size:22px;
+  line-height:1.3;
+  margin-top:8px;
+}
+
+.workflow-simplification-v1 .workflow-metric small{
+  color:#9a8a7d;
+  font-size:10px;
+  margin-top:auto;
+  padding-top:8px;
+}
+
+.workflow-simplification-v1 #pg-expenses .expense-query-panel,
+.workflow-simplification-v1 #pg-approvals .approval-tabs-bar,
+.workflow-simplification-v1 #pg-approvals #approval-bulk-slot>*{
+  border-radius:16px;
+}
+
+.workflow-simplification-v1 #pg-expenses .workflow-record-list,
+.workflow-simplification-v1 #pg-approvals .workflow-record-list>div{
+  border-color:var(--workflow-border);
+  box-shadow:0 10px 26px rgba(84,56,24,.045);
+}
+
+.workflow-simplification-v1 #pg-approvals .approval-tabs-scroll{
+  flex-wrap:nowrap!important;
+  scrollbar-width:none;
+}
+
+.workflow-simplification-v1 #pg-approvals .approval-tabs-scroll::-webkit-scrollbar{display:none}
+
+.workflow-simplification-v1 #approval-bulk-slot.workflow-bulk-empty{opacity:.72}
+.workflow-simplification-v1 #approval-bulk-slot.workflow-bulk-active{opacity:1}
+
+.workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]{
+  background:#f8f3eb;
+}
+
+.workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-head{
+  background:#fff9ef!important;
+}
+
+.workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-decision,
+.workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-purpose,
+.workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-evidence,
+.workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-timeline,
+.workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-secondary,
+.workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-body{
+  background:#fffdfa;
+  border:1px solid #ead8bf!important;
+  border-radius:14px;
+  margin:0!important;
+}
+
+.workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-action{
+  background:#fffdfa;
+  border:1px solid #dfc8a9;
+  border-radius:16px;
+  margin:0;
+}
+
+@media (min-width:901px){
+  .workflow-simplification-v1 #pg-newreq[data-workflow-simplified="new-request"] #nr-main-grid{
+    grid-template-columns:minmax(0,1fr) 310px!important;
+  }
+
+  .workflow-simplification-v1 #pg-newreq #nr-side-panel{
+    position:sticky;
+    top:12px;
+  }
+
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]{
+    align-items:start;
+    display:grid;
+    gap:12px;
+    grid-template-columns:minmax(0,1fr) 310px;
+    padding:12px;
+  }
+
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-head,
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-alert,
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-action{
+    grid-column:1/-1;
+  }
+
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-decision{
+    grid-column:2;
+    grid-row:2/span 4;
+    position:sticky;
+    top:0;
+  }
+
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-purpose,
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-evidence,
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-timeline,
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-secondary,
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-body{
+    grid-column:1;
+  }
+}
+
+@media (max-width:900px){
+  .workflow-simplification-v1 .workflow-kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]{display:block;padding:0}
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>div{margin:10px!important}
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-head{margin:0!important}
+}
+
+@media (max-width:760px){
+  .workflow-simplification-v1 #pg-newreq #nr-main-grid{align-items:stretch!important;display:flex!important;flex-direction:column}
+  .workflow-simplification-v1 #pg-newreq #nr-content{order:2}
+  .workflow-simplification-v1 #pg-newreq #nr-side-panel{margin:0 0 12px;order:1;width:100%!important}
+  .workflow-simplification-v1 #pg-newreq #nr-side-panel>.card{display:none!important}
+  .workflow-simplification-v1 .workflow-newreq-summary{padding:15px}
+  .workflow-simplification-v1 .workflow-newreq-summary h3{font-size:18px}
+  .workflow-simplification-v1 .workflow-metric{min-height:92px;padding:13px}
+  .workflow-simplification-v1 .workflow-metric strong{font-size:19px}
+  .workflow-simplification-v1 #pg-expenses .expense-query-panel{margin-bottom:12px}
+  .workflow-simplification-v1 #pg-expenses .expense-list-table tbody tr,
+  .workflow-simplification-v1 #pg-approvals .approval-table tbody tr{
+    background:#fffdfa!important;
+    border:1px solid #ead8bf!important;
+    border-radius:17px!important;
+    box-shadow:0 8px 22px rgba(84,56,24,.05);
+    padding:14px!important;
+  }
+  .workflow-simplification-v1 #pg-approvals .approval-tabs-scroll{scroll-snap-type:x proximity}
+  .workflow-simplification-v1 #pg-approvals .approval-tabs-scroll>.tb{scroll-snap-align:start;white-space:nowrap}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .workflow-simplification-v1 *{scroll-behavior:auto!important}
+}

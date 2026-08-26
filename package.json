@@ -1,10 +1,33 @@
 {
   "name": "suiyuecare-finance",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "private": true,
-  "description": "歲悅長照集團財務管理系統 V3",
+  "description": "歲悅長照集團財務管理系統 V4",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
-    "build": "node scripts/build_www.js"
+    "build": "node scripts/build_www.js",
+    "release:source-integrity": "node scripts/check_release_source_integrity.js",
+    "release:environment-isolation": "node scripts/check_environment_isolation_contract.js",
+    "release:migration-lineage": "node scripts/check_migration_lineage_contract.js",
+    "release:production-contract": "node scripts/check_finance_production_release_contract.js",
+    "release:root-cause-regressions": "node scripts/check_root_cause_regressions.js && node scripts/check_submission_identity_directory_contract.js && node scripts/check_notification_staff_access_reconciliation_contract.js && node scripts/check_membership_org_expense_submission_contract.js && node scripts/check_submission_applicant_identity_contract.js && node scripts/check_submission_persona_routes.js && node scripts/test_expense_route_authority_v2.js && node scripts/check_incident_account_org_repair.js",
+    "release:preflight": "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions",
+    "release:verify-artifact": "node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js",
+    "release:build": "pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact",
+    "test:persona-routes": "node scripts/check_submission_persona_routes.js",
+    "test:route-authority": "node scripts/test_expense_route_authority_v2.js",
+    "test:notification-access": "node scripts/check_notification_staff_access_reconciliation_contract.js",
+    "test:identity-directory": "node scripts/check_submission_identity_directory_contract.js",
+    "test:applicant-identity": "node scripts/check_submission_applicant_identity_contract.js",
+    "test:membership-submission": "node scripts/check_membership_org_expense_submission_contract.js",
+    "test:incident-account-org": "node scripts/check_incident_account_org_repair.js",
+    "test:finance-login-account-switch": "node scripts/check_finance_login_account_switch_contract.js",
+    "test:attachment-dedup-tax": "node scripts/check_receipt_attachment_dedup_and_labor_tax.js",
+    "test:runtime-contract": "node scripts/check_finance_runtime_contract.js",
+    "test:workflow-simplification": "node scripts/check_workflow_simplification_contract.js",
+    "test:account-selection-scope": "node scripts/check_account_selection_scope_contract.js"
   },
   "dependencies": {},
   "devDependencies": {}

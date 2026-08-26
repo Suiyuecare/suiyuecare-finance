@@ -11,3 +11,10 @@ __pycache__/
 .vercel
 node_modules/
 www/
+.env*
+.DS_Store
+**/.DS_Store
+.pnpm-store/
+deliverables/
+outputs/
+tmp/
