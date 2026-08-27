@@ -22,6 +22,7 @@ scripts/*
 !scripts/check_membership_org_expense_submission_contract.js
 !scripts/check_submission_applicant_identity_contract.js
 !scripts/check_submission_persona_routes.js
+!scripts/check_workflow_simplification_contract.js
 !scripts/test_expense_route_authority_v2.js
 !scripts/check_incident_account_org_repair.js
 !scripts/check_release_artifact.js
