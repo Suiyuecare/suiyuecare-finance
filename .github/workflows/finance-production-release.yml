@@ -329,8 +329,8 @@ jobs:
           (cd "$TOOLS" && supabase db query --linked \
             --file scripts/finance_production_authenticated_canary.sql \
             --output json) > "$RUNNER_TEMP/authenticated-canary-before.json"
-          node -e 'const f=require(process.argv[1]); const r=(f.rows||[]).find(x=>x.authenticated_canary_result)?.authenticated_canary_result; if(!r?.ok||r.rolled_back!==true||r.notifications_enqueued!==false) throw new Error("Authenticated rollback canary did not complete safely")' \
-            "$RUNNER_TEMP/authenticated-canary-before.json"
+          node "$TOOLS/scripts/finance_production_release_guard.js" verify-authenticated-canary \
+            --input "$RUNNER_TEMP/authenticated-canary-before.json"
 
       - name: Classify ledger and apply only when the exact phase remains pending
         shell: bash
@@ -404,8 +404,8 @@ jobs:
           (cd "$TOOLS" && supabase db query --linked \
             --file scripts/finance_production_authenticated_canary.sql \
             --output json) > "$RUNNER_TEMP/authenticated-canary-after.json"
-          node -e 'const f=require(process.argv[1]); const r=(f.rows||[]).find(x=>x.authenticated_canary_result)?.authenticated_canary_result; if(!r?.ok||r.rolled_back!==true||r.notifications_enqueued!==false) throw new Error("Post-migration authenticated rollback canary did not complete safely")' \
-            "$RUNNER_TEMP/authenticated-canary-after.json"
+          node "$GUARD" verify-authenticated-canary \
+            --input "$RUNNER_TEMP/authenticated-canary-after.json"
 
   promote:
     name: Promote the sealed candidate; independently retryable without build or DB apply
@@ -518,8 +518,8 @@ jobs:
           (cd "$TOOLS" && supabase db query --linked \
             --file scripts/finance_production_authenticated_canary.sql \
             --output json) > "$RUNNER_TEMP/promotion-authenticated-canary.json"
-          node -e 'const f=require(process.argv[1]); const r=(f.rows||[]).find(x=>x.authenticated_canary_result)?.authenticated_canary_result; if(!r?.ok||r.rolled_back!==true||r.notifications_enqueued!==false) throw new Error("Promotion authenticated rollback canary did not complete safely")' \
-            "$RUNNER_TEMP/promotion-authenticated-canary.json"
+          node "$GUARD" verify-authenticated-canary \
+            --input "$RUNNER_TEMP/promotion-authenticated-canary.json"
 
       - name: Promote only the sealed immutable candidate with bounded retry
         shell: bash

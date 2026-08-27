@@ -62,6 +62,7 @@ const required = [
   'authenticated-canary-before.json',
   'authenticated-canary-after.json',
   'promotion-authenticated-canary.json',
+  'verify-authenticated-canary',
   'finance_production_db_preflight.sql',
   'supabase db query --linked --output csv',
   'prepare-rehearsal',
@@ -134,6 +135,26 @@ assert.match(promoteJob, /finance_production_db_postflight\.sql[\s\S]+promotion-
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'finance-release-contract-'));
 try {
+  const canaryWrapped = path.join(temp, 'canary-wrapped.json');
+  const canaryDirect = path.join(temp, 'canary-direct.json');
+  const canaryString = path.join(temp, 'canary-string.json');
+  const canaryUnsafe = path.join(temp, 'canary-unsafe.json');
+  const canaryResult = {
+    canary: 'authenticated_submit_return_resubmit',
+    notifications_enqueued: false,
+    ok: true,
+    rolled_back: true
+  };
+  fs.writeFileSync(canaryWrapped, JSON.stringify({ boundary: 'x', rows: [{ authenticated_canary_result: canaryResult }] }));
+  fs.writeFileSync(canaryDirect, JSON.stringify([{ authenticated_canary_result: canaryResult }]));
+  fs.writeFileSync(canaryString, JSON.stringify({ data: [{ authenticated_canary_result: JSON.stringify(canaryResult) }] }));
+  fs.writeFileSync(canaryUnsafe, JSON.stringify({ rows: [{ authenticated_canary_result: { ...canaryResult, rolled_back: false } }] }));
+  guard.verifyAuthenticatedCanary(canaryWrapped);
+  guard.verifyAuthenticatedCanary(canaryDirect);
+  guard.verifyAuthenticatedCanary(canaryString);
+  assert.throws(() => guard.verifyAuthenticatedCanary(canaryUnsafe), /did not complete safely/);
+  assert.throws(() => guard.verifyAuthenticatedCanary(path.join(temp, 'missing-canary.json')), /not valid JSON/);
+
   const apiKeys = path.join(temp, 'api-keys.json');
   fs.writeFileSync(apiKeys, JSON.stringify([
     { name: 'anon', type: 'legacy', api_key: 'legacy-anon-test' },

@@ -309,6 +309,47 @@ function normalizeQueryRows(inputPath, outputPath) {
   return true;
 }
 
+function verifyAuthenticatedCanary(inputPath) {
+  let payload;
+  try { payload = JSON.parse(fs.readFileSync(inputPath, 'utf8')); }
+  catch (error) { fail(`${path.basename(inputPath)} is not valid JSON: ${error.message}`); }
+
+  const matches = [];
+  const visit = (value) => {
+    if (!value || typeof value !== 'object') return;
+    if (!Array.isArray(value)
+        && Object.prototype.hasOwnProperty.call(value, 'authenticated_canary_result')) {
+      matches.push(value.authenticated_canary_result);
+    }
+    if (Array.isArray(value)) value.forEach(visit);
+    else Object.values(value).forEach(visit);
+  };
+  visit(payload);
+
+  if (matches.length !== 1) {
+    fail(`authenticated canary output must contain exactly one result, found ${matches.length}`);
+  }
+  let result = matches[0];
+  if (typeof result === 'string') {
+    try { result = JSON.parse(result); }
+    catch (error) { fail(`authenticated canary result is not valid JSON: ${error.message}`); }
+  }
+  const expected = {
+    canary: 'authenticated_submit_return_resubmit',
+    notifications_enqueued: false,
+    ok: true,
+    rolled_back: true
+  };
+  try { assert.deepStrictEqual(result, expected); }
+  catch {
+    const safeResult = result && typeof result === 'object'
+      ? Object.fromEntries(Object.entries(result).filter(([key]) => Object.hasOwn(expected, key)))
+      : { type: typeof result };
+    fail(`authenticated rollback canary did not complete safely: ${JSON.stringify(safeResult)}`);
+  }
+  return true;
+}
+
 function verifyCandidate(localPath, remotePath, candidate, deploymentUrl) {
   candidate = canonicalSha(candidate);
   const deployment = new URL(deploymentUrl);
@@ -429,6 +470,7 @@ const api = {
   migrationVersions, migrationPhase, validateTarget, verifySupabasePublicKey, migrationFiles, classifyLedger, verifyLedger,
   ledgerSha256, readLedgerVersions, assertProductionLedgerBaseline, assertCliAtomicMigration,
   prepareRehearsal, prepareGateQuery, prepareReadOnlyQuery, prepareApply, normalizeQueryRows,
+  verifyAuthenticatedCanary,
   verifyCandidate, verifyVercelTarget, verifyProductionBaseline, verifyPromotion,
   createReceipt, verifyReceipt, manifestSha
 };
@@ -444,6 +486,7 @@ if (require.main === module) {
     else if (command === 'prepare-read-only-query') prepareReadOnlyQuery(arg('input'), arg('output'));
     else if (command === 'prepare-apply') prepareApply(arg('migration'), arg('output'), arg('migration-version'), arg('ledger'));
     else if (command === 'normalize-query-rows') normalizeQueryRows(arg('input'), arg('output'));
+    else if (command === 'verify-authenticated-canary') verifyAuthenticatedCanary(arg('input'));
     else if (command === 'verify-supabase-public-key') verifySupabasePublicKey(arg('api-keys-json'), process.env.FINANCE_SUPABASE_ANON_KEY);
     else if (command === 'verify-candidate') verifyCandidate(arg('local-manifest'), arg('remote-manifest'), arg('candidate-sha'), arg('deployment-url'));
     else if (command === 'verify-vercel-target') verifyVercelTarget(arg('deployment-json'), arg('project-json'), arg('domains-json'), arg('candidate-sha'), arg('deployment-url'), optionalBooleanArg('allow-production-alias'));
