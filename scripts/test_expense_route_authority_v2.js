@@ -12,8 +12,13 @@ const v3Path = path.join(root, 'supabase/migrations/20260827052447_expense_route
 const v1 = fs.readFileSync(deployedV1Path, 'utf8');
 const sql = fs.readFileSync(v2Path, 'utf8');
 const v3 = fs.readFileSync(v3Path, 'utf8');
+const dbPostflight = fs.readFileSync(
+  path.join(root, 'scripts/finance_production_db_postflight.sql'),
+  'utf8',
+);
 const staleAttemptBranch = v3.match(/if v_attempt_id is null then([\s\S]*?)end if;/)?.[1] || '';
 const futureRouteGuard = v3.match(/create function private\.finance_expense_assert_applicant_revision_future_route_v3\([\s\S]*?\$function\$;/)?.[0] || '';
+const managerAutoSkipGuard = v3.match(/create function private\.finance_expense_assert_dept_manager_autoskip_v3\([\s\S]*?\$function\$;/)?.[0] || '';
 let passed = 0;
 let failed = 0;
 
@@ -26,6 +31,12 @@ function check(name, predicate) {
   process.stdout.write(`${ok ? 'PASS' : 'FAIL'} ${name}\n`);
   if (ok) passed += 1;
   else failed += 1;
+}
+
+function matchesSqlILike(value, pattern) {
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = escaped.replaceAll('%', '[\\s\\S]*').replaceAll('_', '[\\s\\S]');
+  return new RegExp(`^${regex}$`, 'i').test(value);
 }
 
 const SELF_PENDING_ALLOWED = new Set([
@@ -201,6 +212,13 @@ check('v3 independently re-resolves direct supervisor and a unique department ma
     && /v_submitted_direct_uid is distinct from v_direct_uid/.test(v3)
     && /v_submitted_manager_uid is distinct from v_manager_uid/.test(v3)
     && !/v_route -> 'actor_snapshots'/.test(v3));
+check('v3 manager semantic postflights tolerate formatted resolver calls without weakening role literals',
+  matchesSqlILike(managerAutoSkipGuard, "%finance_org_resolve_actor(%'direct_supervisor'%")
+    && matchesSqlILike(managerAutoSkipGuard, "%finance_org_resolve_actor(%'dept_manager'%")
+    && v3.includes("v_definition not ilike '%finance_org_resolve_actor(%''direct_supervisor''%'")
+    && v3.includes("v_definition not ilike '%finance_org_resolve_actor(%''dept_manager''%'")
+    && dbPostflight.includes("v_definition not ilike '%finance_org_resolve_actor(%''direct_supervisor''%'")
+    && dbPostflight.includes("v_definition not ilike '%finance_org_resolve_actor(%''dept_manager''%'"));
 check('v3 focused guard is a no-op for a valid shareholder route without a manager stage',
   /if v_manager_count = 0 then[\s\S]*?'dept_manager_step_present', false[\s\S]*?'auto_skip_validated', false/.test(v3)
     && v3.indexOf('if v_manager_count = 0 then') < v3.indexOf('into v_direct_count, v_direct_actual')

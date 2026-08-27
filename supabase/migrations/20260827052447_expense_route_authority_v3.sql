@@ -1671,8 +1671,8 @@ begin
   v_definition := pg_catalog.pg_get_functiondef(
     'private.finance_expense_assert_dept_manager_autoskip_v3(uuid,text,text,jsonb,boolean)'::regprocedure
   );
-  if v_definition not ilike '%finance_org_resolve_actor(''direct_supervisor''%'
-     or v_definition not ilike '%finance_org_resolve_actor(''dept_manager''%'
+  if v_definition not ilike '%finance_org_resolve_actor(%''direct_supervisor''%'
+     or v_definition not ilike '%finance_org_resolve_actor(%''dept_manager''%'
      or v_definition not ilike '%if v_manager_count = 0 then%'
      or v_definition not ilike '%dept_manager_step_present%'
      or v_definition not ilike '%v_manager_resolution -> ''candidates''% = 1%'
