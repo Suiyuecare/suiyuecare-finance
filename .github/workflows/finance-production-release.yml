@@ -544,11 +544,13 @@ jobs:
           VERIFIED=0
           for ATTEMPT in 1 2 3 4 5 6; do
             if pnpm dlx vercel@59.3.0 api "/v13/deployments/${FINANCE_PRODUCTION_DOMAIN}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/promoted-deployment.json" \
+              && pnpm dlx vercel@59.3.0 api "/v4/aliases/${FINANCE_PRODUCTION_DOMAIN}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/production-alias.json" \
               && pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
                 --fail --silent --show-error --output "$RUNNER_TEMP/production-release-manifest.json" \
               && node "$GUARD" verify-promotion \
                 --candidate-deployment-json "$BUNDLE/candidate-deployment.json" \
                 --promoted-deployment-json "$RUNNER_TEMP/promoted-deployment.json" \
+                --production-alias-json "$RUNNER_TEMP/production-alias.json" \
                 --production-manifest "$RUNNER_TEMP/production-release-manifest.json" \
                 --candidate-manifest "$BUNDLE/local-release-manifest.json"; then VERIFIED=1; break; fi
             echo "Production alias readback attempt $ATTEMPT has not converged to the sealed candidate." >&2

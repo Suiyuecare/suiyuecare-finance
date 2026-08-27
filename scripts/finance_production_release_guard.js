@@ -405,15 +405,19 @@ function verifyProductionBaseline(productionPath, candidatePath, candidate, vers
   return true;
 }
 
-function verifyPromotion(candidateDeploymentPath, promotedDeploymentPath, productionManifestPath, candidateManifestPath) {
+function verifyPromotion(candidateDeploymentPath, promotedDeploymentPath, productionAliasPath, productionManifestPath, candidateManifestPath) {
   const candidate = readJson(candidateDeploymentPath);
   const promoted = readJson(promotedDeploymentPath);
+  const productionAlias = readJson(productionAliasPath);
   if (!deploymentId(candidate) || deploymentId(promoted) !== deploymentId(candidate)) fail('production domain does not resolve to the verified candidate deployment ID');
   if (promoted.projectId !== PRODUCTION_CATALOG.vercelProjectId || promoted.target !== 'production' || promoted.readyState !== 'READY') {
     fail('promoted deployment target/project/state is invalid');
   }
-  const aliases = Array.isArray(promoted.alias) ? promoted.alias.map((item) => typeof item === 'string' ? item : item && item.alias).filter(Boolean) : [];
-  if (!aliases.includes(PRODUCTION_CATALOG.productionDomain)) fail('promoted deployment does not own the immutable Finance production domain');
+  if (productionAlias.alias !== PRODUCTION_CATALOG.productionDomain
+      || productionAlias.projectId !== PRODUCTION_CATALOG.vercelProjectId
+      || productionAlias.deploymentId !== deploymentId(candidate)) {
+    fail('immutable Finance production alias does not point to the verified candidate deployment');
+  }
   assert.deepStrictEqual(readJson(productionManifestPath), readJson(candidateManifestPath), 'production domain manifest differs after promotion');
   return true;
 }
@@ -491,7 +495,7 @@ if (require.main === module) {
     else if (command === 'verify-candidate') verifyCandidate(arg('local-manifest'), arg('remote-manifest'), arg('candidate-sha'), arg('deployment-url'));
     else if (command === 'verify-vercel-target') verifyVercelTarget(arg('deployment-json'), arg('project-json'), arg('domains-json'), arg('candidate-sha'), arg('deployment-url'), optionalBooleanArg('allow-production-alias'));
     else if (command === 'verify-production-baseline') verifyProductionBaseline(arg('production-manifest'), arg('candidate-manifest'), arg('candidate-sha'), arg('migration-versions'));
-    else if (command === 'verify-promotion') verifyPromotion(arg('candidate-deployment-json'), arg('promoted-deployment-json'), arg('production-manifest'), arg('candidate-manifest'));
+    else if (command === 'verify-promotion') verifyPromotion(arg('candidate-deployment-json'), arg('promoted-deployment-json'), arg('production-alias-json'), arg('production-manifest'), arg('candidate-manifest'));
     else if (command === 'create-receipt') createReceipt(arg('output'), arg('deployment-json'), arg('manifest'), arg('candidate-sha'), arg('migration-versions'), arg('deployment-url'), arg('repository'), arg('run-id'));
     else if (command === 'verify-receipt') verifyReceipt(arg('receipt'), arg('deployment-json'), arg('manifest'), arg('candidate-sha'), arg('migration-versions'), arg('deployment-url'), arg('repository'), arg('run-id'));
     else if (command === 'manifest-sha') process.stdout.write(`${manifestSha(arg('manifest'))}\n`);

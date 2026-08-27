@@ -87,7 +87,9 @@ const required = [
   '--allow-production-alias true',
   'for ATTEMPT in 1 2 3',
   'promote "$DEPLOYMENT_URL" --yes',
-  'verify-promotion'
+  'verify-promotion',
+  '/v4/aliases/${FINANCE_PRODUCTION_DOMAIN}?teamId=${VERCEL_ORG_ID}',
+  '--production-alias-json "$RUNNER_TEMP/production-alias.json"'
 ];
 for (const marker of required) assert.ok(workflow.includes(marker), `workflow missing ${marker}`);
 assert.ok(!workflow.includes('git fetch'), 'private-repository release must not fetch after checkout');
@@ -296,8 +298,41 @@ try {
   assert.throws(() => guard.verifyReceipt(receiptPath, deploymentPath, localManifest, 'a'.repeat(40), '20260826155840', 'https://candidate.vercel.app/', 'owner/repository', '12345'), /differs/);
   assert.throws(() => guard.verifyReceipt(receiptPath, deploymentPath, localManifest, 'a'.repeat(40), '20260826070814', 'https://candidate.vercel.app/', 'owner/repository', '99999'), /differs/);
   const promotedPath = path.join(temp, 'promoted.json');
-  fs.writeFileSync(promotedPath, JSON.stringify({ ...deployment, alias: [catalog.productionDomain] }));
-  guard.verifyPromotion(deploymentPath, promotedPath, remoteManifest, localManifest);
+  const productionAliasPath = path.join(temp, 'production-alias.json');
+  fs.writeFileSync(promotedPath, JSON.stringify(deployment));
+  fs.writeFileSync(productionAliasPath, JSON.stringify({
+    alias: catalog.productionDomain,
+    projectId: catalog.vercelProjectId,
+    deploymentId: deployment.id
+  }));
+  guard.verifyPromotion(deploymentPath, promotedPath, productionAliasPath, remoteManifest, localManifest);
+  fs.writeFileSync(productionAliasPath, JSON.stringify({
+    alias: catalog.productionDomain,
+    projectId: catalog.vercelProjectId,
+    deploymentId: 'dpl_Other'
+  }));
+  assert.throws(
+    () => guard.verifyPromotion(deploymentPath, promotedPath, productionAliasPath, remoteManifest, localManifest),
+    /production alias does not point/
+  );
+  fs.writeFileSync(productionAliasPath, JSON.stringify({
+    alias: 'other.example.com',
+    projectId: catalog.vercelProjectId,
+    deploymentId: deployment.id
+  }));
+  assert.throws(
+    () => guard.verifyPromotion(deploymentPath, promotedPath, productionAliasPath, remoteManifest, localManifest),
+    /production alias does not point/
+  );
+  fs.writeFileSync(productionAliasPath, JSON.stringify({
+    alias: catalog.productionDomain,
+    projectId: 'prj_other',
+    deploymentId: deployment.id
+  }));
+  assert.throws(
+    () => guard.verifyPromotion(deploymentPath, promotedPath, productionAliasPath, remoteManifest, localManifest),
+    /production alias does not point/
+  );
 } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 
 for (const sql of ['preflight', 'postflight', 'fingerprint']) {
