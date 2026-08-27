@@ -175,6 +175,30 @@
 }
 
 @media (min-width:901px){
+  /* The dedicated approval detail is a reading-and-decision flow, not a
+     dashboard.  Keep every section full width and place the decision summary
+     first so it never becomes a detached right-hand sidebar. */
+  .workflow-simplification-v1 #pg-detail #detail-body{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+
+  .workflow-simplification-v1 #pg-detail #detail-body>.detail-full-row,
+  .workflow-simplification-v1 #pg-detail #detail-body>.detail-info-card,
+  .workflow-simplification-v1 #pg-detail #detail-body>.detail-progress-card{
+    grid-column:1/-1!important;
+    width:100%!important;
+  }
+
+  .workflow-simplification-v1 #pg-detail #detail-body>.detail-progress-card{
+    max-height:none!important;
+    overflow:visible!important;
+  }
+
+  .workflow-simplification-v1 #pg-detail #detail-body .detail-progress-scroll{
+    max-height:none!important;
+    overflow:visible!important;
+  }
+
   .workflow-simplification-v1 #pg-newreq[data-workflow-simplified="new-request"] #nr-main-grid{
     grid-template-columns:minmax(0,1fr) 310px!important;
   }
@@ -188,21 +212,20 @@
     align-items:start;
     display:grid;
     gap:12px;
-    grid-template-columns:minmax(0,1fr) 310px;
+    grid-template-columns:minmax(0,1fr);
     padding:12px;
   }
 
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-head,
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-alert,
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-action{
-    grid-column:1/-1;
+    grid-column:1;
   }
 
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-decision{
-    grid-column:2;
-    grid-row:2/span 4;
-    position:sticky;
-    top:0;
+    grid-column:1;
+    grid-row:auto;
+    position:static;
   }
 
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-purpose,
@@ -222,6 +245,16 @@
 }
 
 @media (max-width:760px){
+  .workflow-simplification-v1 #pg-detail .supervisor-review-summary.is-full{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  .workflow-simplification-v1 #pg-detail .supervisor-review-summary>*{
+    min-width:0;
+    overflow-wrap:anywhere;
+  }
+  .workflow-simplification-v1 #pg-detail .supervisor-review-issues.is-full{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
   .workflow-simplification-v1 #pg-newreq #nr-main-grid{align-items:stretch!important;display:flex!important;flex-direction:column}
   .workflow-simplification-v1 #pg-newreq #nr-content{order:2}
   .workflow-simplification-v1 #pg-newreq #nr-side-panel{margin:0 0 12px;order:1;width:100%!important}

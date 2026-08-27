@@ -419,7 +419,7 @@
       + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px"><div><div style="font-size:12px;font-weight:650;color:#334155">預支申請書下載與上傳</div><div style="font-size:10px;color:#8b7358;margin-top:2px;line-height:1.5">請先下載預支申請書填寫完成，再把填好的 Word / Excel / PDF 上傳回本區；這裡不是上傳消費憑據。</div></div><div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-s" onclick="dlAdvanceTemplate(\'doc\')">Word</button><button class="btn-s" onclick="dlAdvanceTemplate(\'xls\')">Excel</button></div></div>'
       + '<div class="upload-zone" id="nr-dz" data-mobile-upload-source="camera-photo-files" onclick="document.getElementById(\'nr-file\').click()" ondragover="event.preventDefault();el(\'nr-dz\').classList.add(\'drag\')" ondragleave="el(\'nr-dz\').classList.remove(\'drag\')" ondrop="event.preventDefault();nrFileDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:3px">UPLOAD ADVANCE FORM</div><div style="font-size:13px;font-weight:650;color:#334155;margin-bottom:3px">上傳已填寫的預支申請書</div><div style="font-size:11px;color:#94a3b8;line-height:1.5">可從雲端硬碟、手機檔案、相簿或相機選取 Word、Excel、PDF 或掃描圖片；最後實際花費的發票憑據請於第 8 關再補上。</div><input type="file" id="nr-file" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" onchange="nrFileChange(this)"></div>'
       + '<div id="nr-flist" style="margin-top:7px">' + fileList + '</div>'
-      + '<div style="font-size:11px;color:#8b7358;margin-top:8px">預支款核准撥付後會先列為暫付款；出納放款通過時計入現金流（目前由執行長代行），最後會計依第 8 關補上的正確憑據調整三表。</div>'
+      + '<div style="font-size:11px;color:#8b7358;margin-top:8px">預支款核准撥付後會先列為暫付款；正式出納放款通過時計入現金流，最後會計依第 8 關補上的正確憑據調整三表。</div>'
     + '</div>';
   }
 

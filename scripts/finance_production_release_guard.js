@@ -15,17 +15,28 @@ const PRODUCTION_CATALOG = Object.freeze({
 });
 const MIGRATION_V1 = '20260826070814';
 const MIGRATION_V2 = '20260826155840';
+const MIGRATION_V3 = '20260827052447';
+const MIGRATION_CHAIN = Object.freeze([MIGRATION_V1, MIGRATION_V2, MIGRATION_V3]);
+const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
+const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
+const RELEASE_PHASES = Object.freeze({
+  [RELEASE_PHASE_FRONTEND_COMPAT]: 'none',
+  [RELEASE_PHASE_DATABASE_V3]: MIGRATION_V3
+});
+const FRONTEND_RELEASE_CONTRACT = 'expense-submit-resilience-v3-20260827';
 const PRODUCTION_BASELINE_LEDGER = Object.freeze({
   count: 120,
   lastVersion: '20260825103034',
   sha256: '23680167bee6cfefcdbd7eb951907da61955019e24368d6e13e9ac1282422cd6'
 });
-// Live production uses two explicit phases. A rollback rehearsal on the live
-// database is not a shadow database and cannot prove cross-version atomicity.
+// The SQL gate catalog retains historical v1/v2 contracts for exact-state
+// verification. The protected workflow itself only accepts releasePlan's two
+// explicit frontend_compat/database_v3 pairs.
 const SUPPORTED_GATE_PHASES = Object.freeze([
   Object.freeze([]),
   Object.freeze([MIGRATION_V1]),
-  Object.freeze([MIGRATION_V2])
+  Object.freeze([MIGRATION_V2]),
+  Object.freeze([MIGRATION_V3])
 ]);
 const SUPPORTED_GATE_SUFFIXES = SUPPORTED_GATE_PHASES;
 
@@ -59,12 +70,23 @@ function migrationVersions(value) {
 function migrationPhase(value) {
   const versions = migrationVersions(value);
   if (!SUPPORTED_GATE_PHASES.some((phase) => phase.join(',') === versions.join(','))) {
-    if (versions.join(',') === `${MIGRATION_V1},${MIGRATION_V2}`) {
-      fail('v1 and v2 must be released in two phases; a live rollback rehearsal is not a shadow database or an atomic compatibility proof');
+    if (versions.length > 1 && versions.every((version) => MIGRATION_CHAIN.includes(version))) {
+      fail('v1, v2, and v3 must be released as separate phases; a live rollback rehearsal is not a shadow database or an atomic compatibility proof');
     }
     fail('database gate has no exact catalog contract for this migration phase');
   }
   return versions;
+}
+function releasePlan(releasePhase, versionsText) {
+  releasePhase = String(releasePhase || '');
+  if (!Object.hasOwn(RELEASE_PHASES, releasePhase)) {
+    fail(`release_phase must be ${RELEASE_PHASE_FRONTEND_COMPAT} or ${RELEASE_PHASE_DATABASE_V3}`);
+  }
+  migrationPhase(versionsText);
+  if (versionsText !== RELEASE_PHASES[releasePhase]) {
+    fail(`${releasePhase} must use migration_versions=${RELEASE_PHASES[releasePhase]}`);
+  }
+  return Object.freeze({ releasePhase, migrationVersions: versionsText });
 }
 function canonicalSha(value) {
   if (!/^[0-9a-f]{40}$/.test(String(value || ''))) fail('candidate SHA must be 40 lowercase hex characters');
@@ -85,9 +107,9 @@ function sha256File(file) { return crypto.createHash('sha256').update(fs.readFil
 function deploymentId(record) { return String(record.id || record.uid || '').trim(); }
 function deploymentHost(record) { return String(record.url || '').replace(/^https?:\/\//, '').replace(/\/$/, ''); }
 
-function validateTarget(env, candidate, versionsText, expectedRef) {
+function validateTarget(env, candidate, releasePhase, versionsText, expectedRef) {
   canonicalSha(candidate);
-  migrationPhase(versionsText);
+  releasePlan(releasePhase, versionsText);
   expectedRef = projectRef(expectedRef);
   if (expectedRef !== PRODUCTION_CATALOG.supabaseProjectRef) fail('Supabase project ref is not the immutable Finance production catalog target');
   for (const name of ['SUPABASE_ACCESS_TOKEN', 'FINANCE_SUPABASE_URL', 'FINANCE_SUPABASE_ANON_KEY', 'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']) {
@@ -127,7 +149,7 @@ function migrationFiles(directory) {
   const versions = files.map((name) => name.slice(0, 14));
   const duplicate = versions.find((version, index) => versions.indexOf(version) !== index);
   if (duplicate) fail(`local migration version is duplicated: ${duplicate}`);
-  for (const version of [MIGRATION_V1, MIGRATION_V2]) {
+  for (const version of MIGRATION_CHAIN) {
     const file = files.find((name) => name.startsWith(`${version}_`));
     if (file) assertCliAtomicMigration(fs.readFileSync(path.join(directory, file), 'utf8'), file);
   }
@@ -154,32 +176,43 @@ function assertProductionLedgerBaseline(remote, baseline = PRODUCTION_BASELINE_L
       || ledgerSha256(baselineVersions) !== baseline.sha256) {
     fail('remote production migration baseline differs from the reviewed immutable ledger');
   }
-  const unexpected = remote.filter((version) => version >= MIGRATION_V1 && ![MIGRATION_V1, MIGRATION_V2].includes(version));
+  const unexpected = remote.filter((version) => version >= MIGRATION_V1 && !MIGRATION_CHAIN.includes(version));
   if (unexpected.length) fail(`remote ledger contains an unreviewed post-baseline migration: ${unexpected.join(',')}`);
   return true;
 }
-function classifyLedger(ledgerPath, directory, versionsText, baseline = PRODUCTION_BASELINE_LEDGER) {
+function classifyLedger(ledgerPath, directory, releasePhase, versionsText, baseline = PRODUCTION_BASELINE_LEDGER) {
+  const plan = releasePlan(releasePhase, versionsText);
   const requested = migrationPhase(versionsText);
   const local = migrationFiles(directory);
   if (!local.length) fail('local migration catalog is empty');
   const remote = readLedgerVersions(ledgerPath);
   assertProductionLedgerBaseline(remote, baseline);
-  const missing = [MIGRATION_V1, MIGRATION_V2].filter((version) => !remote.includes(version));
+  const missing = MIGRATION_CHAIN.filter((version) => !remote.includes(version));
+  if (plan.releasePhase === RELEASE_PHASE_FRONTEND_COMPAT) {
+    if (missing.join(',') !== MIGRATION_V3) {
+      fail(`frontend_compat requires exact v1/v2 ledger with v3 pending, found pending: ${missing.length ? missing.join(',') : 'none'}`);
+    }
+    return 'compat';
+  }
   if (!requested.length) {
     if (missing.length) fail(`none phase requires zero local pending migrations, found: ${missing.join(',')}`);
     return 'noop';
   }
-  const pending = requested[0] === MIGRATION_V1 ? [MIGRATION_V1, MIGRATION_V2] : [MIGRATION_V2];
-  const applied = requested[0] === MIGRATION_V1 ? [MIGRATION_V2] : [];
+  const targetIndex = MIGRATION_CHAIN.indexOf(requested[0]);
+  const pending = MIGRATION_CHAIN.slice(targetIndex);
+  const applied = MIGRATION_CHAIN.slice(targetIndex + 1);
   if (missing.join(',') === pending.join(',')) return 'pending';
   if (missing.join(',') === applied.join(',')) return 'applied';
   fail(`ledger is neither the exact pending nor applied state for this phase: ${missing.length ? missing.join(',') : 'none'}`);
 }
-function verifyLedger(mode, ledgerPath, directory, versionsText, baseline = PRODUCTION_BASELINE_LEDGER) {
+function verifyLedger(mode, ledgerPath, directory, releasePhase, versionsText, baseline = PRODUCTION_BASELINE_LEDGER) {
+  const plan = releasePlan(releasePhase, versionsText);
   const requested = migrationPhase(versionsText);
   if (!['pre', 'post'].includes(mode)) fail('ledger mode must be pre or post');
-  const state = classifyLedger(ledgerPath, directory, versionsText, baseline);
-  const expectedState = requested.length ? (mode === 'pre' ? 'pending' : 'applied') : 'noop';
+  const state = classifyLedger(ledgerPath, directory, releasePhase, versionsText, baseline);
+  const expectedState = plan.releasePhase === RELEASE_PHASE_FRONTEND_COMPAT
+    ? 'compat'
+    : (requested.length ? (mode === 'pre' ? 'pending' : 'applied') : 'noop');
   if (state !== expectedState) fail(`${mode}-apply ledger state must be ${expectedState}, found ${state}`);
   return true;
 }
@@ -272,6 +305,20 @@ function prepareGateQuery(sourcePath, outputPath, versionsText) {
   writeExclusive(outputPath, `begin read only;\nset local statement_timeout = '60s';\n${source.trimEnd()}\nrollback;\n`);
   return true;
 }
+function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
+  const plan = releasePlan(releasePhase, versionsText);
+  const sourceName = path.basename(sourcePath);
+  if (plan.releasePhase === RELEASE_PHASE_FRONTEND_COMPAT) {
+    if (sourceName !== 'finance_production_db_postflight.sql') {
+      fail('frontend_compat may only render the reviewed v2 read-only compatibility postflight');
+    }
+    return prepareGateQuery(sourcePath, outputPath, MIGRATION_V2);
+  }
+  if (!['finance_production_db_preflight.sql', 'finance_production_db_postflight.sql'].includes(sourceName)) {
+    fail('database_v3 may only render the reviewed v3 preflight or postflight');
+  }
+  return prepareGateQuery(sourcePath, outputPath, MIGRATION_V3);
+}
 function prepareReadOnlyQuery(sourcePath, outputPath) {
   const source = stripPsqlDirectives(fs.readFileSync(sourcePath, 'utf8'), path.basename(sourcePath));
   if (/:'migration_versions'/.test(source)) fail(`${path.basename(sourcePath)} requires prepare-gate-query`);
@@ -286,7 +333,9 @@ function prepareApply(sourcePath, outputPath, target, ledgerPath, baseline = PRO
   assertCliAtomicMigration(source, filename);
   const remote = readLedgerVersions(ledgerPath);
   assertProductionLedgerBaseline(remote, baseline);
-  const expectedSuffix = target === MIGRATION_V1 ? [] : [MIGRATION_V1];
+  const targetIndex = MIGRATION_CHAIN.indexOf(target);
+  if (targetIndex < 0) fail('migration target is not in the reviewed Finance chain');
+  const expectedSuffix = MIGRATION_CHAIN.slice(0, targetIndex);
   const actualSuffix = remote.filter((version) => version >= MIGRATION_V1);
   if (actualSuffix.join(',') !== expectedSuffix.join(',')) {
     fail(`captured ledger is not the exact pending state for ${target}`);
@@ -336,6 +385,7 @@ function verifyAuthenticatedCanary(inputPath) {
   }
   const expected = {
     canary: 'authenticated_submit_return_resubmit',
+    notification_worker_contract_verified: true,
     notifications_enqueued: false,
     ok: true,
     rolled_back: true
@@ -368,6 +418,33 @@ function verifyCandidate(localPath, remotePath, candidate, deploymentUrl) {
   return true;
 }
 
+function htmlAttribute(tag, name) {
+  const match = String(tag).match(new RegExp(`\\b${name}\\s*=\\s*(["'])((?:(?!\\1).)*)\\1`, 'i'));
+  return match ? match[2] : null;
+}
+function verifyFrontendContract(indexPath, manifestPath, candidate) {
+  candidate = canonicalSha(candidate);
+  const manifest = readJson(manifestPath);
+  if (manifest.schema_version !== 2
+      || manifest.contract !== 'finance-release-artifact-v2'
+      || manifest.build_target !== 'production'
+      || manifest.runtime_mode !== 'production-supabase'
+      || manifest.source_commit !== candidate) {
+    fail('frontend release manifest contract or candidate SHA is invalid');
+  }
+  const source = fs.readFileSync(indexPath, 'utf8');
+  const values = (source.match(/<meta\b[^>]*>/gi) || [])
+    .filter((tag) => htmlAttribute(tag, 'name') === 'finance-release-contract')
+    .map((tag) => htmlAttribute(tag, 'content'));
+  if (values.length !== 1 || values[0] !== FRONTEND_RELEASE_CONTRACT) {
+    fail(`frontend must contain exactly one finance-release-contract=${FRONTEND_RELEASE_CONTRACT} meta`);
+  }
+  if (!/\bsubmissionAttemptId\b/.test(source)) {
+    fail('frontend does not contain the required submissionAttemptId contract');
+  }
+  return true;
+}
+
 function verifyVercelTarget(deploymentPath, projectPath, domainsPath, candidate, deploymentUrl, allowProductionAlias = false) {
   if (typeof allowProductionAlias !== 'boolean') fail('allowProductionAlias must be boolean');
   candidate = canonicalSha(candidate);
@@ -394,14 +471,21 @@ function verifyVercelTarget(deploymentPath, projectPath, domainsPath, candidate,
   return true;
 }
 
-function verifyProductionBaseline(productionPath, candidatePath, candidate, versionsText) {
-  const requested = migrationPhase(versionsText);
-  if (requested.join(',') !== MIGRATION_V2) fail('production candidate baseline is only valid for the v2 phase');
+function verifyProductionBaseline(productionPath, candidatePath, productionIndexPath, candidateIndexPath, candidate, releasePhase, versionsText) {
+  const plan = releasePlan(releasePhase, versionsText);
+  if (plan.releasePhase !== RELEASE_PHASE_DATABASE_V3) {
+    fail('production frontend baseline is only valid before database_v3 mutation');
+  }
   candidate = canonicalSha(candidate);
   const production = readJson(productionPath);
   const candidateManifest = readJson(candidatePath);
-  if (production.source_commit !== candidate) fail('v2 requires the exact candidate SHA to already be live from the v1 compatibility phase');
-  assert.deepStrictEqual(production, candidateManifest, 'v2 requires the exact deterministic candidate artifact to already be live');
+  if (production.source_commit !== candidate) fail('database_v3 requires the exact candidate SHA to already be live from frontend_compat');
+  assert.deepStrictEqual(production, candidateManifest, 'database_v3 requires the exact deterministic candidate manifest to already be live');
+  verifyFrontendContract(candidateIndexPath, candidatePath, candidate);
+  verifyFrontendContract(productionIndexPath, productionPath, candidate);
+  if (sha256File(productionIndexPath) !== sha256File(candidateIndexPath)) {
+    fail('database_v3 requires production index.html bytes to match the exact frontend_compat candidate');
+  }
   return true;
 }
 
@@ -422,22 +506,24 @@ function verifyPromotion(candidateDeploymentPath, promotedDeploymentPath, produc
   return true;
 }
 
-function createReceipt(outputPath, deploymentPath, manifestPath, candidate, versionsText, deploymentUrl, repository, runId) {
+function createReceipt(outputPath, deploymentPath, manifestPath, indexPath, candidate, releasePhase, versionsText, deploymentUrl, repository, runId) {
   candidate = canonicalSha(candidate);
-  migrationPhase(versionsText);
+  releasePlan(releasePhase, versionsText);
   const deployment = readJson(deploymentPath);
   const parsedUrl = new URL(deploymentUrl);
   if (!deploymentId(deployment) || deploymentHost(deployment) !== parsedUrl.hostname) fail('cannot bind receipt to a different candidate deployment');
   if (!/^\d+$/.test(String(runId || ''))) fail('GitHub run ID must be numeric');
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repository || ''))) fail('GitHub repository is malformed');
   const receipt = {
-    schema_version: 1,
-    contract: 'finance-verified-candidate-v1',
+    schema_version: 2,
+    contract: 'finance-verified-candidate-v2',
     candidate_sha: candidate,
+    release_phase: releasePhase,
     migration_versions: versionsText,
     deployment_id: deploymentId(deployment),
     deployment_url: `${parsedUrl.origin}/`,
     manifest_sha256: sha256File(manifestPath),
+    index_sha256: sha256File(indexPath),
     github_repository: repository,
     github_run_id: String(runId)
   };
@@ -445,20 +531,22 @@ function createReceipt(outputPath, deploymentPath, manifestPath, candidate, vers
   return receipt;
 }
 
-function verifyReceipt(receiptPath, deploymentPath, manifestPath, candidate, versionsText, deploymentUrl, repository, runId) {
+function verifyReceipt(receiptPath, deploymentPath, manifestPath, indexPath, candidate, releasePhase, versionsText, deploymentUrl, repository, runId) {
   candidate = canonicalSha(candidate);
-  migrationPhase(versionsText);
+  releasePlan(releasePhase, versionsText);
   const receipt = readJson(receiptPath);
   const deployment = readJson(deploymentPath);
   const parsedUrl = new URL(deploymentUrl);
   const expected = {
-    schema_version: 1,
-    contract: 'finance-verified-candidate-v1',
+    schema_version: 2,
+    contract: 'finance-verified-candidate-v2',
     candidate_sha: candidate,
+    release_phase: releasePhase,
     migration_versions: versionsText,
     deployment_id: deploymentId(deployment),
     deployment_url: `${parsedUrl.origin}/`,
     manifest_sha256: sha256File(manifestPath),
+    index_sha256: sha256File(indexPath),
     github_repository: repository,
     github_run_id: String(runId)
   };
@@ -470,34 +558,38 @@ function verifyReceipt(receiptPath, deploymentPath, manifestPath, candidate, ver
 function manifestSha(file) { return sha256File(file); }
 
 const api = {
-  PRODUCTION_CATALOG, PRODUCTION_BASELINE_LEDGER, MIGRATION_V1, MIGRATION_V2, SUPPORTED_GATE_PHASES, SUPPORTED_GATE_SUFFIXES,
-  migrationVersions, migrationPhase, validateTarget, verifySupabasePublicKey, migrationFiles, classifyLedger, verifyLedger,
+  PRODUCTION_CATALOG, PRODUCTION_BASELINE_LEDGER, MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_CHAIN,
+  RELEASE_PHASE_FRONTEND_COMPAT, RELEASE_PHASE_DATABASE_V3, RELEASE_PHASES, FRONTEND_RELEASE_CONTRACT,
+  SUPPORTED_GATE_PHASES, SUPPORTED_GATE_SUFFIXES,
+  migrationVersions, migrationPhase, releasePlan, validateTarget, verifySupabasePublicKey, migrationFiles, classifyLedger, verifyLedger,
   ledgerSha256, readLedgerVersions, assertProductionLedgerBaseline, assertCliAtomicMigration,
-  prepareRehearsal, prepareGateQuery, prepareReadOnlyQuery, prepareApply, normalizeQueryRows,
+  prepareRehearsal, prepareGateQuery, preparePhaseQuery, prepareReadOnlyQuery, prepareApply, normalizeQueryRows,
   verifyAuthenticatedCanary,
-  verifyCandidate, verifyVercelTarget, verifyProductionBaseline, verifyPromotion,
+  verifyCandidate, verifyFrontendContract, verifyVercelTarget, verifyProductionBaseline, verifyPromotion,
   createReceipt, verifyReceipt, manifestSha
 };
 module.exports = api;
 if (require.main === module) {
   try {
     const command = process.argv[2];
-    if (command === 'validate-target') validateTarget(process.env, arg('candidate-sha'), arg('migration-versions'), arg('project-ref'));
-    else if (command === 'classify-ledger') process.stdout.write(`${classifyLedger(arg('ledger'), arg('migration-dir'), arg('migration-versions'))}\n`);
-    else if (command === 'verify-ledger') verifyLedger(arg('mode'), arg('ledger'), arg('migration-dir'), arg('migration-versions'));
+    if (command === 'validate-target') validateTarget(process.env, arg('candidate-sha'), arg('release-phase'), arg('migration-versions'), arg('project-ref'));
+    else if (command === 'classify-ledger') process.stdout.write(`${classifyLedger(arg('ledger'), arg('migration-dir'), arg('release-phase'), arg('migration-versions'))}\n`);
+    else if (command === 'verify-ledger') verifyLedger(arg('mode'), arg('ledger'), arg('migration-dir'), arg('release-phase'), arg('migration-versions'));
     else if (command === 'prepare-rehearsal') prepareRehearsal(arg('migration'), arg('output'), arg('migration-version'), arg('fingerprint'), arg('authenticated-canary'));
     else if (command === 'prepare-gate-query') prepareGateQuery(arg('input'), arg('output'), arg('migration-versions'));
+    else if (command === 'prepare-phase-query') preparePhaseQuery(arg('input'), arg('output'), arg('release-phase'), arg('migration-versions'));
     else if (command === 'prepare-read-only-query') prepareReadOnlyQuery(arg('input'), arg('output'));
     else if (command === 'prepare-apply') prepareApply(arg('migration'), arg('output'), arg('migration-version'), arg('ledger'));
     else if (command === 'normalize-query-rows') normalizeQueryRows(arg('input'), arg('output'));
     else if (command === 'verify-authenticated-canary') verifyAuthenticatedCanary(arg('input'));
     else if (command === 'verify-supabase-public-key') verifySupabasePublicKey(arg('api-keys-json'), process.env.FINANCE_SUPABASE_ANON_KEY);
     else if (command === 'verify-candidate') verifyCandidate(arg('local-manifest'), arg('remote-manifest'), arg('candidate-sha'), arg('deployment-url'));
+    else if (command === 'verify-frontend-contract') verifyFrontendContract(arg('index'), arg('manifest'), arg('candidate-sha'));
     else if (command === 'verify-vercel-target') verifyVercelTarget(arg('deployment-json'), arg('project-json'), arg('domains-json'), arg('candidate-sha'), arg('deployment-url'), optionalBooleanArg('allow-production-alias'));
-    else if (command === 'verify-production-baseline') verifyProductionBaseline(arg('production-manifest'), arg('candidate-manifest'), arg('candidate-sha'), arg('migration-versions'));
+    else if (command === 'verify-production-baseline') verifyProductionBaseline(arg('production-manifest'), arg('candidate-manifest'), arg('production-index'), arg('candidate-index'), arg('candidate-sha'), arg('release-phase'), arg('migration-versions'));
     else if (command === 'verify-promotion') verifyPromotion(arg('candidate-deployment-json'), arg('promoted-deployment-json'), arg('production-alias-json'), arg('production-manifest'), arg('candidate-manifest'));
-    else if (command === 'create-receipt') createReceipt(arg('output'), arg('deployment-json'), arg('manifest'), arg('candidate-sha'), arg('migration-versions'), arg('deployment-url'), arg('repository'), arg('run-id'));
-    else if (command === 'verify-receipt') verifyReceipt(arg('receipt'), arg('deployment-json'), arg('manifest'), arg('candidate-sha'), arg('migration-versions'), arg('deployment-url'), arg('repository'), arg('run-id'));
+    else if (command === 'create-receipt') createReceipt(arg('output'), arg('deployment-json'), arg('manifest'), arg('index'), arg('candidate-sha'), arg('release-phase'), arg('migration-versions'), arg('deployment-url'), arg('repository'), arg('run-id'));
+    else if (command === 'verify-receipt') verifyReceipt(arg('receipt'), arg('deployment-json'), arg('manifest'), arg('index'), arg('candidate-sha'), arg('release-phase'), arg('migration-versions'), arg('deployment-url'), arg('repository'), arg('run-id'));
     else if (command === 'manifest-sha') process.stdout.write(`${manifestSha(arg('manifest'))}\n`);
     else fail('unknown command');
     if (!['manifest-sha','classify-ledger'].includes(command)) process.stdout.write(`PASS finance production release guard: ${command}\n`);

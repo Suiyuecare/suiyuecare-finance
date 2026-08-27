@@ -7,8 +7,15 @@ on:
         description: Exact current protected-main commit (40 lowercase hex)
         required: true
         type: string
+      release_phase:
+        description: frontend_compat must run before database_v3
+        required: true
+        type: choice
+        options:
+          - frontend_compat
+          - database_v3
       migration_versions:
-        description: none, 20260826070814 (compatibility phase), or 20260826155840 (authority phase)
+        description: frontend_compat requires none; database_v3 requires 20260827052447
         required: true
         type: string
       confirmation:
@@ -35,10 +42,11 @@ jobs:
       deployment_url: ${{ steps.deploy_candidate.outputs.deployment_url }}
       deployment_id: ${{ steps.deploy_candidate.outputs.deployment_id }}
       manifest_sha256: ${{ steps.deploy_candidate.outputs.manifest_sha256 }}
-      artifact_digest: ${{ steps.upload_candidate.outputs.artifact-digest }}
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      RELEASE_PHASE: ${{ inputs.release_phase }}
       MIGRATION_VERSIONS: ${{ inputs.migration_versions }}
+      RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
       FINANCE_BUILD_TARGET: production
       VERCEL_ENV: production
       VERCEL_GIT_COMMIT_SHA: ${{ inputs.candidate_sha }}
@@ -75,7 +83,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${{ inputs.confirmation }}" = "PROMOTE FINANCE PRODUCTION"
+          test "$RELEASE_CONFIRMATION" = "PROMOTE FINANCE PRODUCTION"
           test "$GITHUB_REF" = "refs/heads/main"
           test "$GITHUB_REF_NAME" = "main"
           test "$GITHUB_SHA" = "$CANDIDATE_SHA"
@@ -84,6 +92,7 @@ jobs:
           test -z "$(git status --porcelain --untracked-files=all)"
           node scripts/finance_production_release_guard.js validate-target \
             --candidate-sha "$CANDIDATE_SHA" \
+            --release-phase "$RELEASE_PHASE" \
             --migration-versions "$MIGRATION_VERSIONS" \
             --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
           pnpm install --frozen-lockfile --ignore-scripts
@@ -122,6 +131,10 @@ jobs:
             --remote-manifest "$RUNNER_TEMP/candidate-release-manifest.json" \
             --candidate-sha "$CANDIDATE_SHA" \
             --deployment-url "$DEPLOYMENT_URL"
+          node scripts/finance_production_release_guard.js verify-frontend-contract \
+            --index "$RUNNER_TEMP/candidate-index.html" \
+            --manifest "$RUNNER_TEMP/candidate-release-manifest.json" \
+            --candidate-sha "$CANDIDATE_SHA"
           node scripts/finance_production_release_guard.js verify-vercel-target \
             --deployment-json "$RUNNER_TEMP/candidate-deployment.json" \
             --project-json "$RUNNER_TEMP/vercel-project.json" \
@@ -146,6 +159,7 @@ jobs:
           cp "$RUNNER_TEMP/candidate-deployment-url.txt" "$BUNDLE/deployment-url.txt"
           cp "$RUNNER_TEMP/candidate-deployment.json" "$BUNDLE/candidate-deployment.json"
           cp "$RUNNER_TEMP/candidate-release-manifest.json" "$BUNDLE/candidate-release-manifest.json"
+          cp "$RUNNER_TEMP/candidate-index.html" "$BUNDLE/candidate-index.html"
           cp www/release-manifest.json "$BUNDLE/local-release-manifest.json"
           cp scripts/finance_production_release_guard.js "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_production_db_preflight.sql "$BUNDLE/release-tools/scripts/"
@@ -158,7 +172,9 @@ jobs:
             --output "$BUNDLE/verified-candidate-receipt.json" \
             --deployment-json "$BUNDLE/candidate-deployment.json" \
             --manifest "$BUNDLE/local-release-manifest.json" \
+            --index "$BUNDLE/candidate-index.html" \
             --candidate-sha "$CANDIDATE_SHA" \
+            --release-phase "$RELEASE_PHASE" \
             --migration-versions "$MIGRATION_VERSIONS" \
             --deployment-url "$DEPLOYMENT_URL" \
             --repository "$GITHUB_REPOSITORY" \
@@ -183,11 +199,11 @@ jobs:
       name: finance-production
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      RELEASE_PHASE: ${{ inputs.release_phase }}
       MIGRATION_VERSIONS: ${{ inputs.migration_versions }}
       EXPECTED_DEPLOYMENT_URL: ${{ needs.candidate.outputs.deployment_url }}
       EXPECTED_DEPLOYMENT_ID: ${{ needs.candidate.outputs.deployment_id }}
       EXPECTED_MANIFEST_SHA256: ${{ needs.candidate.outputs.manifest_sha256 }}
-      EXPECTED_ARTIFACT_DIGEST: ${{ needs.candidate.outputs.artifact_digest }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       FINANCE_SUPABASE_URL: ${{ secrets.FINANCE_PRODUCTION_SUPABASE_URL }}
       FINANCE_SUPABASE_ANON_KEY: ${{ secrets.FINANCE_PRODUCTION_SUPABASE_ANON_KEY }}
@@ -227,7 +243,8 @@ jobs:
           set -euo pipefail
           TOOLS="$RUNNER_TEMP/verified-candidate/release-tools"
           node "$TOOLS/scripts/finance_production_release_guard.js" validate-target \
-            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --candidate-sha "$CANDIDATE_SHA" --release-phase "$RELEASE_PHASE" \
+            --migration-versions "$MIGRATION_VERSIONS" \
             --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
           supabase link --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF" \
             --workdir "$TOOLS" --yes
@@ -284,17 +301,19 @@ jobs:
           GUARD="$TOOLS/scripts/finance_production_release_guard.js"
           DEPLOYMENT_URL="$(tr -d '\r\n' < "$BUNDLE/deployment-url.txt")"
           test "$DEPLOYMENT_URL" = "$EXPECTED_DEPLOYMENT_URL"
-          test -n "$EXPECTED_ARTIFACT_DIGEST"
           test "$(node "$GUARD" manifest-sha --manifest "$BUNDLE/local-release-manifest.json")" = "$EXPECTED_MANIFEST_SHA256"
           node -e 'const f=require(process.argv[1]); if(String(f.id||f.uid||"")!==process.env.EXPECTED_DEPLOYMENT_ID) throw new Error("sealed deployment ID differs from candidate job output")' "$BUNDLE/candidate-deployment.json"
           node "$GUARD" validate-target \
-            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --candidate-sha "$CANDIDATE_SHA" --release-phase "$RELEASE_PHASE" \
+            --migration-versions "$MIGRATION_VERSIONS" \
             --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
           node "$GUARD" verify-receipt \
             --receipt "$BUNDLE/verified-candidate-receipt.json" \
             --deployment-json "$BUNDLE/candidate-deployment.json" \
             --manifest "$BUNDLE/local-release-manifest.json" \
-            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --index "$BUNDLE/candidate-index.html" \
+            --candidate-sha "$CANDIDATE_SHA" --release-phase "$RELEASE_PHASE" \
+            --migration-versions "$MIGRATION_VERSIONS" \
             --deployment-url "$DEPLOYMENT_URL" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID"
           DEPLOYMENT_HOST="${DEPLOYMENT_URL#https://}"
           DEPLOYMENT_HOST="${DEPLOYMENT_HOST%/}"
@@ -303,22 +322,34 @@ jobs:
           pnpm dlx vercel@59.3.0 api "/v9/projects/${VERCEL_PROJECT_ID}/domains?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/database-vercel-domains.json"
           pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "$DEPLOYMENT_URL" -- \
             --fail --silent --show-error --output "$RUNNER_TEMP/database-candidate-manifest.json"
+          pnpm dlx vercel@59.3.0 curl / --deployment "$DEPLOYMENT_URL" -- \
+            --fail --silent --show-error --output "$RUNNER_TEMP/database-candidate-index.html"
           node "$GUARD" verify-candidate \
             --local-manifest "$BUNDLE/local-release-manifest.json" \
             --remote-manifest "$RUNNER_TEMP/database-candidate-manifest.json" \
             --candidate-sha "$CANDIDATE_SHA" --deployment-url "$DEPLOYMENT_URL"
+          cmp -s "$BUNDLE/candidate-index.html" "$RUNNER_TEMP/database-candidate-index.html"
+          node "$GUARD" verify-frontend-contract \
+            --index "$RUNNER_TEMP/database-candidate-index.html" \
+            --manifest "$RUNNER_TEMP/database-candidate-manifest.json" \
+            --candidate-sha "$CANDIDATE_SHA"
           node "$GUARD" verify-vercel-target \
             --deployment-json "$RUNNER_TEMP/database-candidate-deployment.json" \
             --project-json "$RUNNER_TEMP/database-vercel-project.json" \
             --domains-json "$RUNNER_TEMP/database-vercel-domains.json" \
             --candidate-sha "$CANDIDATE_SHA" --deployment-url "$DEPLOYMENT_URL"
-          if test "$MIGRATION_VERSIONS" = "20260826155840"; then
+          if test "$RELEASE_PHASE" = "database_v3"; then
             pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
-              --fail --silent --show-error --output "$RUNNER_TEMP/production-before-v2-manifest.json"
+              --fail --silent --show-error --output "$RUNNER_TEMP/production-before-db-contract-manifest.json"
+            pnpm dlx vercel@59.3.0 curl / --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
+              --fail --silent --show-error --output "$RUNNER_TEMP/production-before-db-contract-index.html"
             node "$GUARD" verify-production-baseline \
-              --production-manifest "$RUNNER_TEMP/production-before-v2-manifest.json" \
+              --production-manifest "$RUNNER_TEMP/production-before-db-contract-manifest.json" \
               --candidate-manifest "$BUNDLE/local-release-manifest.json" \
-              --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS"
+              --production-index "$RUNNER_TEMP/production-before-db-contract-index.html" \
+              --candidate-index "$BUNDLE/candidate-index.html" \
+              --candidate-sha "$CANDIDATE_SHA" --release-phase "$RELEASE_PHASE" \
+              --migration-versions "$MIGRATION_VERSIONS"
           fi
 
       - name: Prove authenticated submit, supervisor return and applicant resubmit before DB mutation
@@ -351,13 +382,16 @@ jobs:
             local source="$1"
             local rendered="$2"
             local result="$3"
-            node "$GUARD" prepare-gate-query --input "$source" --output "$rendered" \
-              --migration-versions "$MIGRATION_VERSIONS"
+            node "$GUARD" prepare-phase-query --input "$source" --output "$rendered" \
+              --release-phase "$RELEASE_PHASE" --migration-versions "$MIGRATION_VERSIONS"
             (cd "$TOOLS" && supabase db query --linked --file "$rendered" --output json) > "$result"
           }
           query_ledger "$LEDGER"
-          PHASE_STATE="$(node "$GUARD" classify-ledger --ledger "$LEDGER" --migration-dir "$TOOLS/supabase/migrations" --migration-versions "$MIGRATION_VERSIONS")"
-          if test "$PHASE_STATE" = "pending"; then
+          PHASE_STATE="$(node "$GUARD" classify-ledger --ledger "$LEDGER" --migration-dir "$TOOLS/supabase/migrations" --release-phase "$RELEASE_PHASE" --migration-versions "$MIGRATION_VERSIONS")"
+          if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then
+            run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
+              "$RUNNER_TEMP/finance-compatibility-gate.sql" "$RUNNER_TEMP/finance-compatibility-gate.json"
+          elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_v3"; then
             run_gate "$TOOLS/scripts/finance_production_db_preflight.sql" \
               "$RUNNER_TEMP/finance-preflight.sql" "$RUNNER_TEMP/finance-preflight.json"
 
@@ -371,25 +405,27 @@ jobs:
               --authenticated-canary "$TOOLS/scripts/finance_production_authenticated_canary.sql"
             (cd "$TOOLS" && supabase db query --linked --file "$REHEARSAL" --output json) > "$RUNNER_TEMP/rehearsal-result.json"
             test "$(sha256sum "$MIGRATION" | awk '{print $1}')" = "$ORIGINAL_SHA"
-            if test "$MIGRATION_VERSIONS" = "20260826155840"; then
-              pnpm dlx vercel@59.3.0 curl /release-manifest.json \
-                --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
-                --fail --silent --show-error \
-                --output "$RUNNER_TEMP/production-immediately-before-v2.json"
-              node "$GUARD" verify-production-baseline \
-                --production-manifest "$RUNNER_TEMP/production-immediately-before-v2.json" \
-                --candidate-manifest "$BUNDLE/local-release-manifest.json" \
-                --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS"
-            fi
+            pnpm dlx vercel@59.3.0 curl /release-manifest.json \
+              --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
+              --fail --silent --show-error \
+              --output "$RUNNER_TEMP/production-immediately-before-db-contract-manifest.json"
+            pnpm dlx vercel@59.3.0 curl / \
+              --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
+              --fail --silent --show-error \
+              --output "$RUNNER_TEMP/production-immediately-before-db-contract-index.html"
+            node "$GUARD" verify-production-baseline \
+              --production-manifest "$RUNNER_TEMP/production-immediately-before-db-contract-manifest.json" \
+              --candidate-manifest "$BUNDLE/local-release-manifest.json" \
+              --production-index "$RUNNER_TEMP/production-immediately-before-db-contract-index.html" \
+              --candidate-index "$BUNDLE/candidate-index.html" \
+              --candidate-sha "$CANDIDATE_SHA" --release-phase "$RELEASE_PHASE" \
+              --migration-versions "$MIGRATION_VERSIONS"
             APPLY="$RUNNER_TEMP/${MIGRATION_VERSIONS}_apply.sql"
             node "$GUARD" prepare-apply --migration "$MIGRATION" --output "$APPLY" \
               --migration-version "$MIGRATION_VERSIONS" --ledger "$LEDGER"
             (cd "$TOOLS" && supabase db query --linked --file "$APPLY" --output json) > "$RUNNER_TEMP/apply-result.json"
-          elif test "$PHASE_STATE" = "applied"; then
+          elif test "$PHASE_STATE" = "applied" && test "$RELEASE_PHASE" = "database_v3"; then
             echo "Exact DB phase is already applied; recovering with postflight only and no mutation."
-          elif test "$PHASE_STATE" = "noop" && test "$MIGRATION_VERSIONS" = "none"; then
-            run_gate "$TOOLS/scripts/finance_production_db_preflight.sql" \
-              "$RUNNER_TEMP/finance-preflight.sql" "$RUNNER_TEMP/finance-preflight.json"
           else
             echo "Unexpected phase state: $PHASE_STATE" >&2
             exit 1
@@ -398,7 +434,8 @@ jobs:
           query_ledger "$RUNNER_TEMP/finance-ledger-after.txt"
           node "$GUARD" verify-ledger --mode post \
             --ledger "$RUNNER_TEMP/finance-ledger-after.txt" \
-            --migration-dir "$TOOLS/supabase/migrations" --migration-versions "$MIGRATION_VERSIONS"
+            --migration-dir "$TOOLS/supabase/migrations" --release-phase "$RELEASE_PHASE" \
+            --migration-versions "$MIGRATION_VERSIONS"
           run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
             "$RUNNER_TEMP/finance-postflight.sql" "$RUNNER_TEMP/finance-postflight.json"
           (cd "$TOOLS" && supabase db query --linked \
@@ -416,11 +453,11 @@ jobs:
       name: finance-production
     env:
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      RELEASE_PHASE: ${{ inputs.release_phase }}
       MIGRATION_VERSIONS: ${{ inputs.migration_versions }}
       EXPECTED_DEPLOYMENT_URL: ${{ needs.candidate.outputs.deployment_url }}
       EXPECTED_DEPLOYMENT_ID: ${{ needs.candidate.outputs.deployment_id }}
       EXPECTED_MANIFEST_SHA256: ${{ needs.candidate.outputs.manifest_sha256 }}
-      EXPECTED_ARTIFACT_DIGEST: ${{ needs.candidate.outputs.artifact_digest }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       FINANCE_SUPABASE_URL: ${{ secrets.FINANCE_PRODUCTION_SUPABASE_URL }}
       FINANCE_SUPABASE_ANON_KEY: ${{ secrets.FINANCE_PRODUCTION_SUPABASE_ANON_KEY }}
@@ -460,7 +497,8 @@ jobs:
           set -euo pipefail
           TOOLS="$RUNNER_TEMP/verified-candidate/release-tools"
           node "$TOOLS/scripts/finance_production_release_guard.js" validate-target \
-            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --candidate-sha "$CANDIDATE_SHA" --release-phase "$RELEASE_PHASE" \
+            --migration-versions "$MIGRATION_VERSIONS" \
             --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
           supabase link --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF" \
             --workdir "$TOOLS" --yes
@@ -474,17 +512,19 @@ jobs:
           GUARD="$TOOLS/scripts/finance_production_release_guard.js"
           DEPLOYMENT_URL="$(tr -d '\r\n' < "$BUNDLE/deployment-url.txt")"
           test "$DEPLOYMENT_URL" = "$EXPECTED_DEPLOYMENT_URL"
-          test -n "$EXPECTED_ARTIFACT_DIGEST"
           test "$(node "$GUARD" manifest-sha --manifest "$BUNDLE/local-release-manifest.json")" = "$EXPECTED_MANIFEST_SHA256"
           node -e 'const f=require(process.argv[1]); if(String(f.id||f.uid||"")!==process.env.EXPECTED_DEPLOYMENT_ID) throw new Error("sealed deployment ID differs from candidate job output")' "$BUNDLE/candidate-deployment.json"
           node "$GUARD" validate-target \
-            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --candidate-sha "$CANDIDATE_SHA" --release-phase "$RELEASE_PHASE" \
+            --migration-versions "$MIGRATION_VERSIONS" \
             --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
           node "$GUARD" verify-receipt \
             --receipt "$BUNDLE/verified-candidate-receipt.json" \
             --deployment-json "$BUNDLE/candidate-deployment.json" \
             --manifest "$BUNDLE/local-release-manifest.json" \
-            --candidate-sha "$CANDIDATE_SHA" --migration-versions "$MIGRATION_VERSIONS" \
+            --index "$BUNDLE/candidate-index.html" \
+            --candidate-sha "$CANDIDATE_SHA" --release-phase "$RELEASE_PHASE" \
+            --migration-versions "$MIGRATION_VERSIONS" \
             --deployment-url "$DEPLOYMENT_URL" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID"
           DEPLOYMENT_HOST="${DEPLOYMENT_URL#https://}"
           DEPLOYMENT_HOST="${DEPLOYMENT_HOST%/}"
@@ -493,10 +533,17 @@ jobs:
           pnpm dlx vercel@59.3.0 api "/v9/projects/${VERCEL_PROJECT_ID}/domains?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/promote-vercel-domains.json"
           pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "$DEPLOYMENT_URL" -- \
             --fail --silent --show-error --output "$RUNNER_TEMP/promote-candidate-manifest.json"
+          pnpm dlx vercel@59.3.0 curl / --deployment "$DEPLOYMENT_URL" -- \
+            --fail --silent --show-error --output "$RUNNER_TEMP/promote-candidate-index.html"
           node "$GUARD" verify-candidate \
             --local-manifest "$BUNDLE/local-release-manifest.json" \
             --remote-manifest "$RUNNER_TEMP/promote-candidate-manifest.json" \
             --candidate-sha "$CANDIDATE_SHA" --deployment-url "$DEPLOYMENT_URL"
+          cmp -s "$BUNDLE/candidate-index.html" "$RUNNER_TEMP/promote-candidate-index.html"
+          node "$GUARD" verify-frontend-contract \
+            --index "$RUNNER_TEMP/promote-candidate-index.html" \
+            --manifest "$RUNNER_TEMP/promote-candidate-manifest.json" \
+            --candidate-sha "$CANDIDATE_SHA"
           node "$GUARD" verify-vercel-target \
             --deployment-json "$RUNNER_TEMP/promote-candidate-deployment.json" \
             --project-json "$RUNNER_TEMP/promote-vercel-project.json" \
@@ -508,11 +555,12 @@ jobs:
           tail -n +2 "$RUNNER_TEMP/promotion-ledger.csv" | sed '/^$/d' > "$RUNNER_TEMP/promotion-ledger.txt"
           node "$GUARD" verify-ledger --mode post \
             --ledger "$RUNNER_TEMP/promotion-ledger.txt" \
-            --migration-dir "$TOOLS/supabase/migrations" --migration-versions "$MIGRATION_VERSIONS"
-          node "$GUARD" prepare-gate-query \
+            --migration-dir "$TOOLS/supabase/migrations" --release-phase "$RELEASE_PHASE" \
+            --migration-versions "$MIGRATION_VERSIONS"
+          node "$GUARD" prepare-phase-query \
             --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
             --output "$RUNNER_TEMP/promotion-postflight.sql" \
-            --migration-versions "$MIGRATION_VERSIONS"
+            --release-phase "$RELEASE_PHASE" --migration-versions "$MIGRATION_VERSIONS"
           (cd "$TOOLS" && supabase db query --linked \
             --file "$RUNNER_TEMP/promotion-postflight.sql" --output json) > "$RUNNER_TEMP/promotion-postflight.json"
           (cd "$TOOLS" && supabase db query --linked \
@@ -547,12 +595,18 @@ jobs:
               && pnpm dlx vercel@59.3.0 api "/v4/aliases/${FINANCE_PRODUCTION_DOMAIN}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/production-alias.json" \
               && pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
                 --fail --silent --show-error --output "$RUNNER_TEMP/production-release-manifest.json" \
+              && pnpm dlx vercel@59.3.0 curl / --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
+                --fail --silent --show-error --output "$RUNNER_TEMP/production-index.html" \
               && node "$GUARD" verify-promotion \
                 --candidate-deployment-json "$BUNDLE/candidate-deployment.json" \
                 --promoted-deployment-json "$RUNNER_TEMP/promoted-deployment.json" \
                 --production-alias-json "$RUNNER_TEMP/production-alias.json" \
                 --production-manifest "$RUNNER_TEMP/production-release-manifest.json" \
-                --candidate-manifest "$BUNDLE/local-release-manifest.json"; then VERIFIED=1; break; fi
+                --candidate-manifest "$BUNDLE/local-release-manifest.json" \
+              && node "$GUARD" verify-frontend-contract \
+                --index "$RUNNER_TEMP/production-index.html" \
+                --manifest "$RUNNER_TEMP/production-release-manifest.json" \
+                --candidate-sha "$CANDIDATE_SHA"; then VERIFIED=1; break; fi
             echo "Production alias readback attempt $ATTEMPT has not converged to the sealed candidate." >&2
             sleep 5
           done

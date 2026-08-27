@@ -183,6 +183,10 @@
     if (lower.indexOf('目前角色或動作不可修訂申請單會計明細') > -1) {
       return '目前簽核關卡只允許處理核准，不允許同時修改會計明細。請重新整理後再試；若仍發生，請通知系統管理員檢查前台簽核資料。';
     }
+    var routeAuthorityMatch = raw.match(/(?:第\s*\d+\s*關[^\uff1b\n]*不是正式組織指定的簽核人|簽核人請求與正式解析結果不一致|正式組織找不到[^\uff1b\n]*關卡|簽核關卡數量與正式流程不一致)/);
+    if (routeAuthorityMatch) {
+      return '送出前的簽核人與正式組織設定不一致，系統已停止送出，不會建立申請單。請重新整理後再試；若仍失敗，請通知系統管理員檢查組織簽核設定（' + routeAuthorityMatch[0] + '）。';
+    }
     if (lower.indexOf('row-level security') > -1 || lower.indexOf('permission denied') > -1 || lower.indexOf('rls') > -1 || lower.indexOf('42501') > -1) {
       return '目前帳號沒有權限完成這個動作。請確認是否輪到你處理這張單，或請主管／人資確認帳號角色與簽核設定。';
     }

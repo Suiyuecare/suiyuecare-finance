@@ -61,9 +61,17 @@ with schema_rows as (
     from unnest(array[
       'public.finance_submit_expense_request(jsonb,uuid,text,jsonb)',
       'public.finance_resubmit_expense_request(text,jsonb,uuid,text,jsonb)',
+      'public.finance_expense_resubmit_applicant_revision(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)',
+      'public.claim_approval_notification_delivery_events(integer,text,integer)',
       'private.finance_expense_assert_authoritative_route_v2(uuid,text,text,text,numeric,jsonb,jsonb,jsonb,boolean)',
+      'private.finance_expense_assert_authoritative_route_v3(uuid,text,text,text,numeric,jsonb,jsonb,jsonb,boolean)',
+      'private.finance_expense_assert_dept_manager_autoskip_v3(uuid,text,text,jsonb,boolean)',
+      'private.finance_expense_assert_applicant_revision_future_route_v3(uuid,text,text,text,numeric,jsonb,jsonb,integer)',
+      'private.finance_expense_submission_payload_sha256_v3(jsonb,uuid,text)',
+      'private.finance_expense_idempotent_replay_result_v3(public.expense_requests)',
       'private.finance_submit_expense_request_v1_unsafe(jsonb,uuid,text,jsonb)',
       'private.finance_resubmit_expense_request_v1_unsafe(text,jsonb,uuid,text,jsonb)',
+      'private.finance_expense_resubmit_applicant_revision_v1_unsafe(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)',
       'public.finance_org_resolve_actor(text,text,text,text,text)',
       'private.finance_income_step_role(jsonb)',
       'public.finance_user_is_approval_identity_ready(uuid,text)'
@@ -101,7 +109,8 @@ parts as (
     where oid in (
       'public.notifications'::regclass,
       'public.finance_portal_roles'::regclass,
-      'public.file_attachments'::regclass
+      'public.file_attachments'::regclass,
+      'private.approval_notification_assignment_state'::regclass
     )
   ) x
 
