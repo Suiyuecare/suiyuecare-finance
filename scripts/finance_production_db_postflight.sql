@@ -271,7 +271,7 @@ begin
          or v_definition not ilike '%historical_prefix_preserved%'
          or v_definition not ilike '%into v_historical_key_count, v_historical_anchor_index%'
          or v_definition not ilike '%if v_historical_key_count > 1 then%'
-         or v_definition not ilike '%v_expected_index := pg_catalog.greatest(%'
+         or v_definition not ilike '%v_expected_index := greatest(%'
          or v_definition not ilike '%v_historical_anchor_index + 1%'
          or v_definition not ilike '%fixed_user%'
          or v_definition not ilike '%future_steps_validated%'

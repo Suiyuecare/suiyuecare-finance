@@ -901,7 +901,9 @@ begin
         raise exception '目前正式流程的歷史定位關卡 % 重複，請由管理者重建',
           v_actual_key using errcode = '55000';
       elsif v_historical_key_count = 1 then
-        v_expected_index := pg_catalog.greatest(
+        -- GREATEST is a PostgreSQL conditional expression rather than an
+        -- ordinary pg_catalog function, so it must not be schema-qualified.
+        v_expected_index := greatest(
           v_expected_index,
           v_historical_anchor_index + 1
         );
@@ -1722,7 +1724,7 @@ begin
      or v_definition not ilike '%historical_prefix_preserved%'
      or v_definition not ilike '%into v_historical_key_count, v_historical_anchor_index%'
      or v_definition not ilike '%if v_historical_key_count > 1 then%'
-     or v_definition not ilike '%v_expected_index := pg_catalog.greatest(%'
+     or v_definition not ilike '%v_expected_index := greatest(%'
      or v_definition not ilike '%v_historical_anchor_index + 1%'
      or v_definition not ilike '%fixed_user%'
      or v_definition not ilike '%case when v_kind = ''fixed_user'' then v_actor_ref else null end%'

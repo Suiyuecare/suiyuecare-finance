@@ -284,7 +284,8 @@ check('v3 applicant-revision guard resolves only future actors and pins fixed us
     && /v_actual_uid is distinct from v_expected_uid/.test(v3));
 check('v3 preserves completed history and anchors only the current future suffix',
   futureRouteGuard.includes('into v_historical_key_count, v_historical_anchor_index')
-    && futureRouteGuard.includes('v_expected_index := pg_catalog.greatest(')
+    && futureRouteGuard.includes('v_expected_index := greatest(')
+    && !futureRouteGuard.includes('pg_catalog.greatest(')
     && futureRouteGuard.includes('v_historical_anchor_index + 1')
     && futureRouteGuard.indexOf('if v_actual_index < p_active_index then')
       < futureRouteGuard.indexOf('if v_expected_index >= pg_catalog.jsonb_array_length(v_expected_steps)')
