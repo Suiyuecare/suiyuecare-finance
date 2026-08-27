@@ -17,6 +17,8 @@ const ROOT = path.resolve(__dirname, '..');
 const MIGRATIONS_DIR = path.join(ROOT, 'supabase/migrations');
 const FIRST_ADOPTED_MIGRATION = '20260820052216_repair_account_and_new_taipei_runtime.sql';
 const CURRENT_RELEASE_MIGRATION = '20260827052447_expense_route_authority_v3.sql';
+const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
+  /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 
 let passed = 0;
 let failed = 0;
@@ -77,6 +79,19 @@ check('current release migration leaves transaction and ledger atomicity to the 
     && !/^\s*(?:(?:create(?:\s+unique)?\s+index|drop\s+index)\s+concurrently\b|reindex\b[^;]*\bconcurrently\b|vacuum\b|alter\s+system\b|cluster\b)/im.test(releaseSql)
     && /set local lock_timeout/.test(releaseSql)
     && /set local statement_timeout/.test(releaseSql));
+check('conditional-expression lint covers spacing, line breaks, and quoted identifiers',
+  [
+    'pg_catalog.greatest(1, 2)',
+    'pg_catalog . least(1, 2)',
+    'pg_catalog.\n coalesce(1, 2)',
+    '"pg_catalog"."nullif"(1, 2)',
+  ].every((source) => SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION.test(source))
+    && [
+      'greatest(1, 2)',
+      'pg_catalog.btrim(value)',
+    ].every((source) => !SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION.test(source)));
+check('current release does not schema-qualify PostgreSQL conditional expressions',
+  !SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION.test(releaseSql));
 check('current release migration contains fail-closed preflight and postflight',
   /do \$preflight\$/.test(releaseSql)
     && /do \$postflight\$/.test(releaseSql)
@@ -93,7 +108,8 @@ check('current v3 release independently guards manager auto-skip and rejects sta
     && /finance_expense_resubmit_applicant_revision_v1_unsafe/.test(releaseSql));
 check('current v3 release preserves completed applicant-revision history and validates only the current future suffix',
   futureRouteGuard.includes('into v_historical_key_count, v_historical_anchor_index')
-    && futureRouteGuard.includes('v_expected_index := pg_catalog.greatest(')
+    && futureRouteGuard.includes('v_expected_index := greatest(')
+    && !futureRouteGuard.includes('pg_catalog.greatest(')
     && futureRouteGuard.includes('v_historical_anchor_index + 1')
     && futureRouteGuard.indexOf('if v_actual_index < p_active_index then')
       < futureRouteGuard.indexOf('if v_expected_index >= pg_catalog.jsonb_array_length(v_expected_steps)'));
