@@ -246,8 +246,8 @@ begin
         if not exists (select 1 from pg_catalog.pg_proc where oid=v_oid and prosecdef) then raise exception 'v3 route guards must remain SECURITY DEFINER'; end if;
       end loop;
       v_definition := pg_catalog.pg_get_functiondef('private.finance_expense_assert_dept_manager_autoskip_v3(uuid,text,text,jsonb,boolean)'::regprocedure);
-      if v_definition not ilike '%finance_org_resolve_actor(%''direct_supervisor''%'
-         or v_definition not ilike '%finance_org_resolve_actor(%''dept_manager''%'
+      if v_definition !~* $resolver$finance_org_resolve_actor\(\s*'direct_supervisor'$resolver$
+         or v_definition !~* $resolver$finance_org_resolve_actor\(\s*'dept_manager'$resolver$
          or v_definition not ilike '%v_manager_resolution -> ''candidates''% = 1%'
          or v_definition not ilike '%v_submitted_direct_uid is distinct from v_direct_uid%'
          or v_definition not ilike '%v_submitted_manager_uid is distinct from v_manager_uid%'

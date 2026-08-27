@@ -305,8 +305,8 @@ begin
            or pg_catalog.has_function_privilege('service_role',v_oid,'EXECUTE') then raise exception 'none phase v3 private helper ACL is invalid'; end if;
       end loop;
       v_definition := pg_catalog.pg_get_functiondef('private.finance_expense_assert_dept_manager_autoskip_v3(uuid,text,text,jsonb,boolean)'::regprocedure);
-      if v_definition not ilike '%finance_org_resolve_actor(''direct_supervisor''%'
-         or v_definition not ilike '%finance_org_resolve_actor(''dept_manager''%'
+      if v_definition !~* $resolver$finance_org_resolve_actor\(\s*'direct_supervisor'$resolver$
+         or v_definition !~* $resolver$finance_org_resolve_actor\(\s*'dept_manager'$resolver$
          or v_definition not ilike '%if v_manager_count = 0 then%'
          or v_definition not ilike '%same_direct_supervisor_and_dept_manager_runtime%'
          or v_definition not ilike '%autoSkipAudit%'
