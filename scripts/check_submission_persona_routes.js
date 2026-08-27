@@ -7,6 +7,7 @@ const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
 const approvalSource = fs.readFileSync(path.join(root, 'assets/engines/approval-engine.js'), 'utf8');
+const formSource = fs.readFileSync(path.join(root, 'assets/engines/form-engine.js'), 'utf8');
 const organizationSource = fs.readFileSync(path.join(root, 'assets/engines/organization-engine.js'), 'utf8');
 const indexSource = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
@@ -197,5 +198,34 @@ check('正式送件先同步 canonical directory，再重建 exact route', canon
 check('正式送件 exact route 重建後才執行 DB actor resolver', runtimeResolve > canonicalRebuild);
 check('正式送件 DB actor resolver 後才做 fail-closed route validation', runtimeValidate > runtimeResolve);
 check('正式 routing policy 不會為避開申請人而偷偷改選另一帳號', /function approvalRoutingPolicyAssignee\([^)]*\)\{\s*return firstUserByRole\(role\)\|\|null;\s*\}/.test(indexSource));
+check('出納 fallback 僅能使用正式出納或總務，不得回退到執行長',
+  /function cashierUser\(\)\{\s*return firstUserByRole\('cashier'\)\|\|firstUserByRole\('general_affairs'\);\s*\}/.test(indexSource)
+    && !/function cashierUser\(\)[\s\S]{0,160}firstUserByRole\('ceo'\)/.test(indexSource));
+const runtimeResolverStart = indexSource.indexOf('async function resolveApprovalStepsWithRuntime');
+const runtimeResolverEnd = indexSource.indexOf('async function prepareApprovalRouteForSubmit', runtimeResolverStart);
+const runtimeResolverBody = indexSource.slice(runtimeResolverStart, runtimeResolverEnd);
+check('正式送件不可被健康狀態旗標跳過 DB actor resolver',
+  runtimeResolverBody.includes("client.rpc('finance_org_resolve_actor'")
+    && !runtimeResolverBody.includes('approvalRuntimeLikelyAvailable()')
+    && !runtimeResolverBody.includes('membershipOrgRuntimeGraph()'));
+check('已標示自動跳關的部門主任仍必須重新走正式 DB resolver',
+  !approvalSource.slice(approvalSource.indexOf('function approvalRuntimeShouldResolveStep'), approvalSource.indexOf('function numValue')).includes('approvalStepAutoClosed')
+    && runtimeResolverBody.includes('reconcileResolvedDeptManagerAutoSkip'));
+check('角色型關卡不把前端 UID 當成權威來源',
+  /p_actor_ref:actorKind==='fixed_user'\?\(step\.uid\|\|null\):null/.test(runtimeResolverBody));
+check('正式 resolver 的 effective UID 不會被本機舊人員資料覆寫',
+  runtimeResolverBody.includes('var uid=approvalRuntimeCandidateId(picked)')
+    && indexSource.includes("if(u)return Object.assign({},u,{id:effectiveId||originalId||u.id});"));
+check('解析器若沒有 actor kind 或有候選資料卻沒有身分，不得沿用舊 UID',
+  runtimeResolverBody.includes('缺少正式簽核人解析類型')
+    && runtimeResolverBody.includes("if(!uid)throw new Error('正式組織回傳的簽核人無有效身分')"));
+check('解析失敗必須 fail closed，並明確保證不上傳附件、不建單',
+  runtimeResolverBody.includes("throw new Error('正式簽核人解析未完成：'")
+    && /runtimeResolutionFailed:true/.test(prepareBody)
+    && prepareBody.includes('系統尚未上傳附件，也沒有建立申請單'));
+check('前台文案不再把出納說成執行長代行',
+  !indexSource.includes('目前由執行長代行')
+    && !approvalSource.includes('目前由執行長代行')
+    && !formSource.includes('目前由執行長代行'));
 
 console.log(`\nSubmission persona route regression: ${passed} checks passed.`);

@@ -166,6 +166,23 @@ check('backend independently requires exact id, email, name, and applicant first
 check('permission error explains an applicant-login mismatch before generic RLS copy',
   dataEngine.indexOf('申請人資料必須與目前登入身分完全一致') > -1
     && dataEngine.indexOf('申請人資料必須與目前登入身分完全一致') < dataEngine.indexOf("lower.indexOf('row-level security')"));
+const registeredDataEngines = {};
+const dataWindow = {
+  FinanceV4Engines: {
+    register(name, engine) { registeredDataEngines[name] = engine; }
+  },
+  console
+};
+dataWindow.window = dataWindow;
+vm.runInNewContext(dataEngine, { window: dataWindow, console }, { filename: 'data-engine.js' });
+const authorityCopy = dataWindow.FinanceDataEngine.friendlyErrorMessage({
+  code: '42501',
+  message: '第 7 關 cashier 不是正式組織指定的簽核人'
+}, { action: '送出申請' });
+check('正式簽核人不一致會顯示可行動原因，不會被泛用權限訊息蓋掉',
+  /簽核人與正式組織設定不一致/.test(authorityCopy)
+    && /第 7 關 cashier/.test(authorityCopy)
+    && !/目前帳號沒有權限/.test(authorityCopy));
 
 if (passed !== checks.length) {
   process.stderr.write(`\n${passed}/${checks.length} checks passed\n`);

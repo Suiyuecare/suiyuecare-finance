@@ -660,7 +660,7 @@
     if (!requestRequiresCashierStep(record, deps)) return false;
     var cashier = callDep(deps, 'cashierUser') || {};
     var cashStep = {
-      r: '出納放款（目前由執行長代行）',
+      r: '出納放款',
       rk: 'cashier',
       uid: cashier.id || '',
       n: '',
@@ -765,7 +765,6 @@
 
   function approvalRuntimeShouldResolveStep(step, deps) {
     if (!step) return false;
-    if (approvalStepAutoClosed(step) && step.autoSkipReason !== 'canonical_actor_is_applicant') return false;
     var key = stepWorkflowKeyForRuntime(step, deps || {}) || step.rk || '';
     return !!key && key !== 'applicant_submit';
   }
@@ -1687,7 +1686,7 @@
     appendDeptManagerStep(steps, appUser, supervisor, deptManager, '申請人部門主任通過', 'pending_dept_manager', '申請人主管', deps, '申請人部門主任（未設定）');
     approvalAddRoleStep(steps, 'accountant', '會計通過', 'pending_accountant', null, appUser, deps);
     approvalAddRoleStep(steps, 'ceo', '執行長檢視會計科目', 'pending_ceo', null, appUser, deps);
-    approvalAddRoleStep(steps, 'cashier', '出納放款（目前由執行長代行）', 'pending_cashier', approvalCashierUser(deps), appUser, deps);
+    approvalAddRoleStep(steps, 'cashier', '出納放款', 'pending_cashier', approvalCashierUser(deps), appUser, deps);
     steps.push(approvalStep('申請人確認收到採購商品', 'applicant_confirm', 'pending_applicant_confirm', appUser, '申請人確認總務採購的商品或服務已實際收到，確認後才進入總務補憑據。'));
     steps.push(approvalStep('總務提供採購憑據', 'procurement_receipt', 'pending_procurement', generalAffairs, '總務採購完成後上傳發票或憑據，並填入最後正確採購金額；會計將依此銷帳。'));
     steps.push(approvalStep('會計銷帳入帳', 'accountant_final', 'pending_voucher', approvalFirstUser('accountant', deps), '會計確認憑據與最後金額，通過後才產生傳票並連動三表。'));
@@ -1706,7 +1705,7 @@
       approvalAddRoleStep(steps, 'admin_director', '行政部門主任', 'pending_admin_director', null, appUser, deps);
       approvalAddRoleStep(steps, 'accountant', '會計', 'pending_accountant', null, appUser, deps);
       approvalAddRoleStep(steps, 'ceo', '執行長檢視會計科目', 'pending_ceo', null, appUser, deps);
-      approvalAddRoleStep(steps, 'cashier', '出納放款（目前由執行長代行）', 'pending_cashier', approvalCashierUser(deps), appUser, deps);
+      approvalAddRoleStep(steps, 'cashier', '出納放款', 'pending_cashier', approvalCashierUser(deps), appUser, deps);
       steps.push(approvalStep('申請人提供最後支出最正確的憑據', 'applicant_confirm', 'pending_applicant_confirm', appUser, '請申請人上傳最後實際花費的發票、憑據照片與即時 Excel 明細，作為核銷依據。'));
       steps.push(approvalStep('會計收到最後憑據並入帳調整', 'accountant_final', 'pending_voucher', approvalFirstUser('accountant', deps), '會計收回實體憑據，確認多退少補，並以最後正確費用調整入帳；三表以本關最終金額認列。'));
       return normalizeApplicantSelfSteps(steps, appUser, requestType, deps);
@@ -1716,7 +1715,7 @@
     approvalAddRoleStep(steps, 'admin_director', '行政部門主任', 'pending_admin_director', null, appUser, deps);
     approvalAddRoleStep(steps, 'accountant', '會計', 'pending_accountant', null, appUser, deps);
     approvalAddRoleStep(steps, 'ceo', '執行長檢視會計科目', 'pending_ceo', null, appUser, deps);
-    approvalAddRoleStep(steps, 'cashier', '出納放款（目前由執行長代行）', 'pending_cashier', approvalCashierUser(deps), appUser, deps);
+    approvalAddRoleStep(steps, 'cashier', '出納放款', 'pending_cashier', approvalCashierUser(deps), appUser, deps);
     steps.push(approvalStep('申請人確認：確認已撥款', 'applicant_confirm', 'pending_applicant_confirm', appUser));
     steps.push(approvalStep('會計確認入帳', 'accountant_final', 'pending_voucher', approvalFirstUser('accountant', deps)));
     return normalizeApplicantSelfSteps(steps, appUser, requestType, deps);

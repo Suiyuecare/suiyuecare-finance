@@ -8,13 +8,16 @@ declare
   v_relation regclass;
   v_oid oid;
   v_definition text;
+  v_source_sha256 text;
+  v_definition_sha256 text;
 begin
   if v_phase = 'none' then v_versions := array[]::text[];
   else v_versions := pg_catalog.string_to_array(v_phase, ',');
   end if;
   if v_versions is distinct from array[]::text[]
      and v_versions is distinct from array['20260826070814']::text[]
-     and v_versions is distinct from array['20260826155840']::text[] then
+     and v_versions is distinct from array['20260826155840']::text[]
+     and v_versions is distinct from array['20260827052447']::text[] then
     raise exception 'this exact preflight has no contract for the requested migration phase';
   end if;
   if pg_catalog.to_regclass('supabase_migrations.schema_migrations') is null then raise exception 'Supabase migration ledger is missing'; end if;
@@ -22,7 +25,7 @@ begin
   if cardinality(v_versions) > 0 and exists (select 1 from supabase_migrations.schema_migrations where version = any(v_versions)) then raise exception 'a requested migration is already recorded'; end if;
 
   if v_phase = '20260826070814' then
-    if exists (select 1 from supabase_migrations.schema_migrations where version in ('20260826070814','20260826155840')) then raise exception 'v1 compatibility phase ledger is not pristine'; end if;
+    if exists (select 1 from supabase_migrations.schema_migrations where version in ('20260826070814','20260826155840','20260827052447')) then raise exception 'v1 compatibility phase ledger is not pristine'; end if;
     if pg_catalog.to_regclass('public.notifications') is null
        or pg_catalog.to_regclass('public.file_attachments') is null
        or pg_catalog.to_regclass('public.finance_portal_roles') is null
@@ -55,7 +58,7 @@ begin
     if not exists (select 1 from supabase_migrations.schema_migrations where version='20260826070814') then raise exception 'v1 baseline is not recorded'; end if;
     if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='notifications' and column_name='data_environment' and data_type='text' and is_nullable='NO' and column_default='''production''::text')
        or not exists (select 1 from information_schema.columns where table_schema='public' and table_name='notifications' and column_name='tenant_id' and data_type='uuid' and is_nullable='NO' and column_default like '%default_tenant_id%') then raise exception 'v1 notification columns/defaults are invalid'; end if;
-    if v_phase in ('20260826155840', 'none') then
+    if v_phase in ('20260826155840', '20260827052447', 'none') then
       if not exists (
         select 1
         from pg_catalog.pg_attribute attribute_row
@@ -98,6 +101,7 @@ begin
 
   if pg_catalog.to_regprocedure('public.finance_submit_expense_request(jsonb,uuid,text,jsonb)') is null
      or pg_catalog.to_regprocedure('public.finance_resubmit_expense_request(text,jsonb,uuid,text,jsonb)') is null
+     or pg_catalog.to_regprocedure('public.finance_expense_resubmit_applicant_revision(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)') is null
      or pg_catalog.to_regprocedure('public.finance_org_resolve_actor(text,text,text,text,text)') is null
      or pg_catalog.to_regprocedure('private.finance_income_step_role(jsonb)') is null
      or pg_catalog.to_regprocedure('public.finance_user_is_approval_identity_ready(uuid,text)') is null
@@ -108,13 +112,131 @@ begin
      or pg_catalog.to_regclass('public.employee_department_roles') is null
      or pg_catalog.to_regclass('public.expense_requests') is null then raise exception 'route-authority prerequisites are missing'; end if;
 
+  if v_phase in ('20260827052447','none') then
+    if pg_catalog.to_regprocedure(
+         'public.claim_approval_notification_delivery_events(integer,text,integer)'
+       ) is null
+       or pg_catalog.to_regclass(
+         'private.approval_notification_assignment_state'
+       ) is null
+       or pg_catalog.to_regprocedure('extensions.digest(bytea,text)') is null then
+      raise exception 'approval notification claim worker prerequisites are missing';
+    end if;
+    select pg_catalog.encode(
+             extensions.digest(proc_row.prosrc::bytea, 'sha256'),
+             'hex'
+           ),
+           pg_catalog.encode(
+             extensions.digest(
+               pg_catalog.convert_to(
+                 pg_catalog.pg_get_functiondef(proc_row.oid),
+                 'UTF8'
+               ),
+               'sha256'
+             ),
+             'hex'
+           )
+      into v_source_sha256, v_definition_sha256
+    from pg_catalog.pg_proc proc_row
+    where proc_row.oid =
+      'public.claim_approval_notification_delivery_events(integer,text,integer)'::regprocedure::oid;
+    if v_source_sha256 is distinct from
+         '5f70ec460e9dcc611419097e28084d1916b0ca2bf908e25d35a4aa55d8f437a0'
+       or not exists (
+         select 1
+         from pg_catalog.pg_proc proc_row
+         where proc_row.oid =
+           'public.claim_approval_notification_delivery_events(integer,text,integer)'::regprocedure::oid
+           and pg_catalog.pg_get_userbyid(proc_row.proowner) = 'postgres'
+           and proc_row.proacl::text =
+             '{postgres=X/postgres,service_role=X/postgres}'
+           and (
+             (
+               v_phase = '20260827052447'
+               and not proc_row.prosecdef
+               and proc_row.proconfig =
+                 array['search_path=pg_catalog, public']::text[]
+               and v_definition_sha256 =
+                 '718831e956151360ff813565c91808c4390b160c83bd72554de71ad8259e5d06'
+             )
+             or (
+               v_phase = 'none'
+               and proc_row.prosecdef
+               and proc_row.proconfig = array['search_path=""']::text[]
+             )
+           )
+       )
+       or pg_catalog.has_function_privilege(
+         'public',
+         'public.claim_approval_notification_delivery_events(integer,text,integer)'::regprocedure,
+         'EXECUTE'
+       )
+       or pg_catalog.has_function_privilege(
+         'anon',
+         'public.claim_approval_notification_delivery_events(integer,text,integer)'::regprocedure,
+         'EXECUTE'
+       )
+       or pg_catalog.has_function_privilege(
+         'authenticated',
+         'public.claim_approval_notification_delivery_events(integer,text,integer)'::regprocedure,
+         'EXECUTE'
+       )
+       or not pg_catalog.has_function_privilege(
+         'service_role',
+         'public.claim_approval_notification_delivery_events(integer,text,integer)'::regprocedure,
+         'EXECUTE'
+       ) then
+      raise exception 'approval notification claim worker baseline is invalid';
+    end if;
+    if not exists (
+         select 1
+         from pg_catalog.pg_class relation_row
+         where relation_row.oid =
+           'private.approval_notification_assignment_state'::regclass
+           and relation_row.relkind = 'r'
+           and pg_catalog.pg_get_userbyid(relation_row.relowner) = 'postgres'
+           and relation_row.relacl::text =
+             '{postgres=arwdDxtm/postgres}'
+           and not relation_row.relrowsecurity
+           and not relation_row.relforcerowsecurity
+       )
+       or pg_catalog.has_table_privilege(
+         'service_role',
+         'private.approval_notification_assignment_state',
+         'SELECT'
+       )
+       or pg_catalog.has_table_privilege(
+         'authenticated',
+         'private.approval_notification_assignment_state',
+         'SELECT'
+       )
+       or pg_catalog.has_table_privilege(
+         'anon',
+         'private.approval_notification_assignment_state',
+         'SELECT'
+       ) then
+      raise exception 'private approval notification assignment-state ACL is invalid';
+    end if;
+  end if;
+
   if v_phase in ('20260826070814','20260826155840') then
     if pg_catalog.to_regprocedure('private.finance_expense_assert_authoritative_route_v2(uuid,text,text,text,numeric,jsonb,jsonb,jsonb,boolean)') is not null
        or pg_catalog.to_regprocedure('private.finance_submit_expense_request_v1_unsafe(jsonb,uuid,text,jsonb)') is not null
        or pg_catalog.to_regprocedure('private.finance_resubmit_expense_request_v1_unsafe(text,jsonb,uuid,text,jsonb)') is not null then raise exception 'route-authority migration is already partially installed'; end if;
   else
-    -- none is a frontend-only release and therefore requires the complete v2 baseline too.
-    if not exists (select 1 from supabase_migrations.schema_migrations where version='20260826155840') then raise exception 'none phase requires v2 to be recorded'; end if;
+    -- v3 and none require the complete, private v2 baseline.
+    if not exists (select 1 from supabase_migrations.schema_migrations where version='20260826155840') then raise exception 'v3 authority baseline requires v2 to be recorded'; end if;
+    foreach v_oid in array array[
+      'public.finance_submit_expense_request(jsonb,uuid,text,jsonb)'::regprocedure::oid,
+      'public.finance_resubmit_expense_request(text,jsonb,uuid,text,jsonb)'::regprocedure::oid,
+      'public.finance_expense_resubmit_applicant_revision(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)'::regprocedure::oid
+    ] loop
+      if not exists (select 1 from pg_catalog.pg_proc where oid=v_oid and pg_catalog.pg_get_userbyid(proowner)='postgres' and prosecdef and proconfig=array['search_path=""']::text[])
+         or pg_catalog.has_function_privilege('public',v_oid,'EXECUTE')
+         or pg_catalog.has_function_privilege('anon',v_oid,'EXECUTE')
+         or not pg_catalog.has_function_privilege('authenticated',v_oid,'EXECUTE')
+         or not pg_catalog.has_function_privilege('service_role',v_oid,'EXECUTE') then raise exception 'public route wrapper baseline ACL is invalid'; end if;
+    end loop;
     foreach v_oid in array array[
       'private.finance_expense_assert_authoritative_route_v2(uuid,text,text,text,numeric,jsonb,jsonb,jsonb,boolean)'::regprocedure::oid,
       'private.finance_submit_expense_request_v1_unsafe(jsonb,uuid,text,jsonb)'::regprocedure::oid,
@@ -124,14 +246,99 @@ begin
          or pg_catalog.has_function_privilege('public',v_oid,'EXECUTE')
          or pg_catalog.has_function_privilege('anon',v_oid,'EXECUTE')
          or pg_catalog.has_function_privilege('authenticated',v_oid,'EXECUTE')
-         or pg_catalog.has_function_privilege('service_role',v_oid,'EXECUTE') then raise exception 'none phase private route baseline ACL is invalid'; end if;
+         or pg_catalog.has_function_privilege('service_role',v_oid,'EXECUTE') then raise exception 'v2 private route baseline ACL is invalid'; end if;
     end loop;
     v_definition := pg_catalog.pg_get_functiondef('private.finance_expense_assert_authoritative_route_v2(uuid,text,text,text,numeric,jsonb,jsonb,jsonb,boolean)'::regprocedure);
     if v_definition not ilike '%private.finance_membership_org_versions_v1%'
        or v_definition not ilike '%workflow_templates%'
        or v_definition not ilike '%approval_routing_policy%'
        or v_definition not ilike '%finance_org_resolve_actor%'
-       or v_definition not ilike '%finance_user_is_approval_identity_ready%' then raise exception 'none phase route-authority definition is incomplete'; end if;
+       or v_definition not ilike '%finance_user_is_approval_identity_ready%' then raise exception 'v2 route-authority definition is incomplete'; end if;
+    if v_phase = '20260827052447' then
+      if exists (select 1 from supabase_migrations.schema_migrations where version='20260827052447') then raise exception 'v3 is already recorded'; end if;
+      if pg_catalog.to_regprocedure('private.finance_expense_assert_authoritative_route_v3(uuid,text,text,text,numeric,jsonb,jsonb,jsonb,boolean)') is not null
+         or pg_catalog.to_regprocedure('private.finance_expense_assert_dept_manager_autoskip_v3(uuid,text,text,jsonb,boolean)') is not null
+         or pg_catalog.to_regprocedure('private.finance_expense_assert_applicant_revision_future_route_v3(uuid,text,text,text,numeric,jsonb,jsonb,integer)') is not null
+         or pg_catalog.to_regprocedure('private.finance_expense_submission_payload_sha256_v3(jsonb,uuid,text)') is not null
+         or pg_catalog.to_regprocedure('private.finance_expense_idempotent_replay_result_v3(public.expense_requests)') is not null
+         or pg_catalog.to_regprocedure('private.finance_expense_resubmit_applicant_revision_v1_unsafe(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)') is not null then raise exception 'v3 is already partially installed'; end if;
+      v_definition := pg_catalog.pg_get_functiondef('public.finance_submit_expense_request(jsonb,uuid,text,jsonb)'::regprocedure);
+      if v_definition not ilike '%private.finance_expense_assert_authoritative_route_v2%'
+         or v_definition not ilike '%private.finance_submit_expense_request_v1_unsafe%' then raise exception 'v3 preflight submit wrapper is not the reviewed v2 baseline'; end if;
+      if pg_catalog.to_regprocedure('extensions.digest(bytea,text)') is null then raise exception 'v3 preflight digest extension is unavailable'; end if;
+      select pg_catalog.encode(extensions.digest(proc_row.prosrc::bytea,'sha256'),'hex'),
+             pg_catalog.encode(extensions.digest(pg_catalog.convert_to(pg_catalog.pg_get_functiondef(proc_row.oid),'UTF8'),'sha256'),'hex')
+        into v_source_sha256, v_definition_sha256
+      from pg_catalog.pg_proc proc_row
+      where proc_row.oid='public.finance_expense_resubmit_applicant_revision(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)'::regprocedure::oid;
+      if v_source_sha256 is distinct from '012297096ad81638aae4fc26e9fe23a2009e576a5bff5a67ae3166eff9cac17e'
+         or v_definition_sha256 is distinct from 'e9a1cc1fa6a5679f615950886427b5f7c31081c323a319f8f75be8068dfb2bbb' then raise exception 'actual applicant-revision RPC baseline drifted'; end if;
+    else
+      -- none is frontend-only and requires the complete v3 contract.
+      if not exists (select 1 from supabase_migrations.schema_migrations where version='20260827052447') then raise exception 'none phase requires v3 to be recorded'; end if;
+      if pg_catalog.to_regprocedure('private.finance_expense_assert_authoritative_route_v3(uuid,text,text,text,numeric,jsonb,jsonb,jsonb,boolean)') is null
+         or pg_catalog.to_regprocedure('private.finance_expense_assert_dept_manager_autoskip_v3(uuid,text,text,jsonb,boolean)') is null
+         or pg_catalog.to_regprocedure('private.finance_expense_assert_applicant_revision_future_route_v3(uuid,text,text,text,numeric,jsonb,jsonb,integer)') is null
+         or pg_catalog.to_regprocedure('private.finance_expense_submission_payload_sha256_v3(jsonb,uuid,text)') is null
+         or pg_catalog.to_regprocedure('private.finance_expense_idempotent_replay_result_v3(public.expense_requests)') is null
+         or pg_catalog.to_regprocedure('private.finance_expense_resubmit_applicant_revision_v1_unsafe(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)') is null then raise exception 'none phase v3 contract is incomplete'; end if;
+      foreach v_oid in array array[
+        'private.finance_expense_assert_dept_manager_autoskip_v3(uuid,text,text,jsonb,boolean)'::regprocedure::oid,
+        'private.finance_expense_assert_authoritative_route_v3(uuid,text,text,text,numeric,jsonb,jsonb,jsonb,boolean)'::regprocedure::oid,
+        'private.finance_expense_assert_applicant_revision_future_route_v3(uuid,text,text,text,numeric,jsonb,jsonb,integer)'::regprocedure::oid,
+        'private.finance_expense_resubmit_applicant_revision_v1_unsafe(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)'::regprocedure::oid
+      ] loop
+        if not exists (select 1 from pg_catalog.pg_proc where oid=v_oid and pg_catalog.pg_get_userbyid(proowner)='postgres' and prosecdef and proconfig=array['search_path=""']::text[])
+           or pg_catalog.has_function_privilege('public',v_oid,'EXECUTE')
+           or pg_catalog.has_function_privilege('anon',v_oid,'EXECUTE')
+           or pg_catalog.has_function_privilege('authenticated',v_oid,'EXECUTE')
+           or pg_catalog.has_function_privilege('service_role',v_oid,'EXECUTE') then raise exception 'none phase v3 security-definer private ACL is invalid'; end if;
+      end loop;
+      foreach v_oid in array array[
+        'private.finance_expense_submission_payload_sha256_v3(jsonb,uuid,text)'::regprocedure::oid,
+        'private.finance_expense_idempotent_replay_result_v3(public.expense_requests)'::regprocedure::oid
+      ] loop
+        if not exists (select 1 from pg_catalog.pg_proc where oid=v_oid and pg_catalog.pg_get_userbyid(proowner)='postgres' and proconfig=array['search_path=""']::text[])
+           or pg_catalog.has_function_privilege('public',v_oid,'EXECUTE')
+           or pg_catalog.has_function_privilege('anon',v_oid,'EXECUTE')
+           or pg_catalog.has_function_privilege('authenticated',v_oid,'EXECUTE')
+           or pg_catalog.has_function_privilege('service_role',v_oid,'EXECUTE') then raise exception 'none phase v3 private helper ACL is invalid'; end if;
+      end loop;
+      v_definition := pg_catalog.pg_get_functiondef('private.finance_expense_assert_dept_manager_autoskip_v3(uuid,text,text,jsonb,boolean)'::regprocedure);
+      if v_definition not ilike '%finance_org_resolve_actor(''direct_supervisor''%'
+         or v_definition not ilike '%finance_org_resolve_actor(''dept_manager''%'
+         or v_definition not ilike '%if v_manager_count = 0 then%'
+         or v_definition not ilike '%same_direct_supervisor_and_dept_manager_runtime%'
+         or v_definition not ilike '%autoSkipAudit%'
+         or v_definition not ilike '%errcode = ''42501''%' then raise exception 'none phase v3 manager guard semantics are incomplete'; end if;
+      v_definition := pg_catalog.pg_get_functiondef('public.finance_submit_expense_request(jsonb,uuid,text,jsonb)'::regprocedure);
+      if v_definition not ilike '%private.finance_expense_assert_authoritative_route_v3%'
+         or v_definition not ilike '%submissionAttemptId%'
+         or v_definition not ilike '%idempotent_replay%'
+         or v_definition not ilike '%if v_attempt_id is null then%'
+         or v_definition not ilike '%頁面版本已過期，請重新整理後再送出%' then raise exception 'none phase submit wrapper is not v3 authoritative'; end if;
+      v_definition := pg_catalog.pg_get_functiondef('public.finance_resubmit_expense_request(text,jsonb,uuid,text,jsonb)'::regprocedure);
+      if v_definition not ilike '%private.finance_expense_assert_authoritative_route_v3%'
+         or v_definition not ilike '%_submissionPayloadSha256V3%' then raise exception 'none phase resubmit wrapper is not v3 authoritative'; end if;
+      v_definition := pg_catalog.pg_get_functiondef('private.finance_expense_assert_applicant_revision_future_route_v3(uuid,text,text,text,numeric,jsonb,jsonb,integer)'::regprocedure);
+      if v_definition not ilike '%workflow_templates%'
+         or v_definition not ilike '%historical_prefix_preserved%'
+         or v_definition not ilike '%fixed_user%'
+         or v_definition not ilike '%future_steps_validated%'
+         or v_definition not ilike '%auto_skip_audit%'
+         or v_definition not ilike '%自動跳關不得保持待簽狀態%'
+         or v_definition not ilike '%作業關卡 % 必須由指定人實際處理%' then raise exception 'none phase applicant-revision future-route guard is incomplete'; end if;
+      v_definition := pg_catalog.pg_get_functiondef('public.finance_expense_resubmit_applicant_revision(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)'::regprocedure);
+      if v_definition not ilike '%pending_applicant_confirm%'
+         or v_definition not ilike '%private.finance_expense_assert_applicant_revision_future_route_v3%'
+         or v_definition not ilike '%private.finance_expense_resubmit_applicant_revision_v1_unsafe%'
+         or v_definition not ilike '%for update%' then raise exception 'none phase actual applicant-revision wrapper is incomplete'; end if;
+      select pg_catalog.encode(extensions.digest(proc_row.prosrc::bytea,'sha256'),'hex')
+        into v_source_sha256
+      from pg_catalog.pg_proc proc_row
+      where proc_row.oid='private.finance_expense_resubmit_applicant_revision_v1_unsafe(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)'::regprocedure::oid;
+      if v_source_sha256 is distinct from '012297096ad81638aae4fc26e9fe23a2009e576a5bff5a67ae3166eff9cac17e' then raise exception 'none phase applicant-revision delegate source drifted'; end if;
+    end if;
   end if;
 end $gate$;
 select 'PASS finance production database preflight' as result;
