@@ -11044,6 +11044,11 @@ function approvalRuntimeOriginalCandidateId(candidate){
   if(engine&&typeof engine.approvalRuntimeOriginalCandidateId==='function')return engine.approvalRuntimeOriginalCandidateId(candidate);
   return candidate&&candidate.id||'';
 }
+function approvalRuntimeTopLevelSelfCandidate(payload,key,actorKind,appUser,departmentCode){
+  var engine=financeApprovalEngine();
+  if(engine&&typeof engine.approvalRuntimeTopLevelSelfCandidate==='function')return engine.approvalRuntimeTopLevelSelfCandidate(payload,key,actorKind,appUser,departmentCode);
+  return null;
+}
 function approvalRuntimeCandidateUser(candidate){
   if(!candidate)return null;
   var effectiveId=approvalRuntimeCandidateId(candidate);
@@ -11131,6 +11136,11 @@ async function resolveApprovalStepsWithRuntime(appUser,requestType,departmentCod
       if(res.error)throw res.error;
       var payload=res.data||{};
       var candidates=Array.isArray(payload.candidates)?payload.candidates:[];
+      var topLevelSelf=approvalRuntimeTopLevelSelfCandidate(payload,key,actorKind,appUser,departmentCode||opts&&opts.departmentCode||appUser.dc||'');
+      if(topLevelSelf){
+        candidates=[topLevelSelf];
+        payload=Object.assign({},payload,{ok:true,actor_kind:'top_level_self',role_key:'ceo',candidates:candidates});
+      }
       if(!payload.ok||!candidates.length){
         throw new Error(payload.error||payload.missing_reason||'正式組織找不到有效簽核人');
       }
@@ -22108,7 +22118,7 @@ function supervisorReviewCardHtml(r,compact){
     var bg=x.level==='high'?'#fff1f1':(x.level==='warn'?'#fff8ed':'#f8fafc');
     return'<div style="border:1px solid #efd7b8;background:'+bg+';border-radius:8px;padding:7px"><div style="font-size:11px;font-weight:900;color:'+color+'">'+escAttr(x.label)+'</div><div style="font-size:11px;color:#334155;line-height:1.55;margin-top:2px">'+escAttr(x.text)+'</div></div>';
   }).join(''):'<div style="font-size:12px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px">目前未偵測到明顯風險，仍請依附件與申請目的確認合理性。</div>';
-  return'<div class="card" style="'+(compact?'margin:10px 12px 0':'margin-bottom:10px')+';border-color:#f0c982;background:#fffaf2">'
+  return'<div class="card supervisor-review-card" style="'+(compact?'margin:10px 12px 0':'margin-bottom:10px')+';border-color:#f0c982;background:#fffaf2">'
     +'<div class="chd"><span class="cht">主管檢核重點</span><span style="font-size:11px;color:#a08060">附件 '+fileCount+' 份</span></div>'
     +'<div style="padding:12px"><div class="supervisor-review-summary '+(compact?'is-compact':'is-full')+'" style="display:grid;grid-template-columns:'+summaryCols+';gap:7px;margin-bottom:8px">'
     +'<div style="background:#fff;border:2px solid var(--br);border-radius:8px;padding:7px"><div style="font-size:10px;color:#a08060">表單編號</div><div style="font-family:var(--font-sans);font-size:15px;font-weight:950;color:#3b2410;margin-top:2px;word-break:break-word">'+escAttr(requestNo)+'</div></div>'

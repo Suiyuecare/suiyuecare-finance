@@ -188,6 +188,7 @@ async function runBehaviorRegressions() {
     stepWorkflowKey:(step)=>step.workflowStepKey,
     approvalRuntimeActorKindForStep:()=> 'dept_manager',
     approvalRuntimeRoleKeyForStep:()=> 'dept_manager',
+    approvalRuntimeTopLevelSelfCandidate:()=>null,
     approvalRuntimeCandidateId:(candidate)=>candidate.effective_finance_user_id,
     approvalRuntimeCandidateUser:(candidate)=>({id:candidate.effective_finance_user_id,n:candidate.name}),
     approvalRuntimeStepLabel:(step,key,user)=>'部門主管：'+user.n,

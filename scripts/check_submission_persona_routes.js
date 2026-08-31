@@ -109,6 +109,25 @@ function noRuntimeErrors(applicant, requestType, route) {
 function noPendingRequestFor(route, key) {
   return !organization.actorRequestsFromSteps(route).some((request) => request.role_key === key || request.step_key === key || request.key === key);
 }
+function topLevelMissingPayload(applicant, key, overrides = {}) {
+  const departmentCode = overrides.departmentCode || applicant.dc;
+  const chainKey = key === 'direct_supervisor'
+    ? 'direct_supervisor_finance_user_id'
+    : 'department_manager_finance_user_id';
+  return {
+    ok: false,
+    missing_reason: overrides.missingReason || 'NO_MATCHING_ACTOR',
+    department_code: departmentCode,
+    candidates: [],
+    applicant_context: {
+      ok: true,
+      finance_user: { id: applicant.id, name: applicant.n, email: applicant.email, role: applicant.role, department_code: departmentCode },
+      primary_role: { role_key: overrides.contextRole || applicant.role, department_code: departmentCode, can_approve: overrides.canApprove !== false },
+      department: { code: departmentCode },
+      approval_chain: { [chainKey]: overrides.chainUserId || null },
+    },
+  };
+}
 
 const expectedExpenseKeys = [
   'direct_supervisor', 'dept_manager', 'admin_director', 'accountant',
@@ -132,6 +151,15 @@ check('執行長 A1000：dept_manager formal fallback 保留 audited auto-skip',
 check('執行長 A1000：ceo review 保留 audited auto-skip', exactAuditedSelfSkip(step(ceoRoute, 'ceo'), users.ceo));
 check('執行長 A1000：cashier 仍由正式 u8 待辦', step(ceoRoute, 'cashier').uid === users.zhu.id && !step(ceoRoute, 'cashier').a);
 check('執行長 A1000：前端正式流程檢核通過', noRuntimeErrors(users.ceo, 'expense_reimbursement', ceoRoute));
+check('執行長 A1000：DB 回傳 NO_MATCHING_ACTOR 時，直屬主管解析為本人 audited fallback',
+  approval.approvalRuntimeTopLevelSelfCandidate(topLevelMissingPayload(users.ceo, 'direct_supervisor'), 'direct_supervisor', 'direct_supervisor', users.ceo, 'A1000').finance_user_id === users.ceo.id);
+check('執行長 A1000：DB 回傳 NO_MATCHING_ACTOR 時，部門主任解析為本人 audited fallback',
+  approval.approvalRuntimeTopLevelSelfCandidate(topLevelMissingPayload(users.ceo, 'dept_manager'), 'dept_manager', 'dept_manager', users.ceo, 'A1000').finance_user_id === users.ceo.id);
+check('最高層 fallback 不接受一般員工',
+  approval.approvalRuntimeTopLevelSelfCandidate(topLevelMissingPayload(users.su, 'direct_supervisor'), 'direct_supervisor', 'direct_supervisor', users.su, users.su.dc) === null);
+check('最高層 fallback 不接受跨部門或已有主管的資料',
+  approval.approvalRuntimeTopLevelSelfCandidate(topLevelMissingPayload(users.ceo, 'direct_supervisor', { chainUserId: users.liuAdmin.id }), 'direct_supervisor', 'direct_supervisor', users.ceo, 'A1000') === null
+    && approval.approvalRuntimeTopLevelSelfCandidate(topLevelMissingPayload(users.ceo, 'dept_manager'), 'dept_manager', 'dept_manager', users.ceo, 'OTHER') === null);
 
 const suRoute = templateExpense(users.su);
 check('蘇之瑄：主管與部門主任由不同正式人員承辦', step(suRoute, 'direct_supervisor').uid === users.suSupervisor.id && step(suRoute, 'dept_manager').uid === users.suManager.id);
@@ -198,6 +226,13 @@ check('正式送件先同步 canonical directory，再重建 exact route', canon
 check('正式送件 exact route 重建後才執行 DB actor resolver', runtimeResolve > canonicalRebuild);
 check('正式送件 DB actor resolver 後才做 fail-closed route validation', runtimeValidate > runtimeResolve);
 check('正式 routing policy 不會為避開申請人而偷偷改選另一帳號', /function approvalRoutingPolicyAssignee\([^)]*\)\{\s*return firstUserByRole\(role\)\|\|null;\s*\}/.test(indexSource));
+const resolverStart = indexSource.indexOf('async function resolveApprovalStepsWithRuntime');
+const resolverEnd = indexSource.indexOf('var SUBMISSION_ROUTE_SMOKE_OVERRIDE', resolverStart);
+const resolverBody = indexSource.slice(resolverStart, resolverEnd);
+check('正式 actor resolver 先套用最高層本人例外，再判斷 NO_MATCHING_ACTOR',
+  resolverStart > -1
+    && resolverBody.indexOf('approvalRuntimeTopLevelSelfCandidate') > -1
+    && resolverBody.indexOf('approvalRuntimeTopLevelSelfCandidate') < resolverBody.indexOf('if(!payload.ok||!candidates.length)'));
 check('出納 fallback 僅能使用正式出納或總務，不得回退到執行長',
   /function cashierUser\(\)\{\s*return firstUserByRole\('cashier'\)\|\|firstUserByRole\('general_affairs'\);\s*\}/.test(indexSource)
     && !/function cashierUser\(\)[\s\S]{0,160}firstUserByRole\('ceo'\)/.test(indexSource));

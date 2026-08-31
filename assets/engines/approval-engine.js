@@ -752,6 +752,51 @@
     return candidate && (candidate.finance_user_id || candidate.financeUserId || candidate.id) || '';
   }
 
+  function approvalRuntimeTopLevelSelfCandidate(payload, key, actorKind, appUser, requestedDepartmentCode) {
+    payload = payload || {};
+    var candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+    var missingReason = String(payload.missing_reason || payload.error || '').trim().toUpperCase();
+    var stepKey = String(key || '').trim();
+    var normalizedActorKind = String(actorKind || '').trim();
+    if (payload.ok === true || candidates.length || missingReason !== 'NO_MATCHING_ACTOR') return null;
+    if (['direct_supervisor', 'dept_manager'].indexOf(stepKey) < 0) return null;
+    if (['direct_supervisor', 'dept_manager', 'department_manager'].indexOf(normalizedActorKind) < 0) return null;
+    if (!appUser || !appUser.id || String(appUser.role || '').trim().toLowerCase() !== 'ceo') return null;
+
+    var context = payload.applicant_context || payload.applicantContext || {};
+    var financeUser = context.finance_user || context.financeUser || {};
+    var primaryRole = context.primary_role || context.primaryRole || {};
+    var department = context.department || {};
+    var chain = context.approval_chain || context.approvalChain || {};
+    var contextUserId = String(financeUser.id || '').trim();
+    var contextRole = String(primaryRole.role_key || primaryRole.roleKey || financeUser.role || '').trim().toLowerCase();
+    var contextDepartmentCode = String(
+      payload.department_code || payload.departmentCode || department.code
+      || primaryRole.department_code || primaryRole.departmentCode || financeUser.department_code || financeUser.departmentCode || ''
+    ).trim();
+    var expectedDepartmentCode = String(requestedDepartmentCode || appUser.dc || appUser.department_code || '').trim();
+    var unresolvedChainId = stepKey === 'direct_supervisor'
+      ? (chain.direct_supervisor_finance_user_id || chain.directSupervisorFinanceUserId)
+      : (chain.department_manager_finance_user_id || chain.departmentManagerFinanceUserId);
+
+    if (context.ok !== true || contextUserId !== String(appUser.id)) return null;
+    if (contextRole !== 'ceo' || primaryRole.can_approve === false || primaryRole.canApprove === false) return null;
+    if (!contextDepartmentCode || !expectedDepartmentCode || contextDepartmentCode !== expectedDepartmentCode) return null;
+    if (String(unresolvedChainId || '').trim()) return null;
+
+    return {
+      finance_user_id: String(appUser.id),
+      effective_finance_user_id: String(appUser.id),
+      name: financeUser.name || appUser.n || appUser.name || appUser.email || '執行長',
+      email: financeUser.email || appUser.email || '',
+      role: 'ceo',
+      role_label: financeUser.role_label || financeUser.roleLabel || appUser.roleLabel || '執行長',
+      entity_id: financeUser.entity_id || financeUser.entityId || appUser.eid || '',
+      department_code: contextDepartmentCode,
+      source: 'top_level_self',
+    };
+  }
+
   function approvalRuntimeStepLabel(step, key, user, deps) {
     var name = user && (user.n || user.email);
     if (!name) return (step && (step.r || step.rk)) || '簽核';
@@ -1967,6 +2012,7 @@
     approvalRuntimeRoleKeyForStep: approvalRuntimeRoleKeyForStep,
     approvalRuntimeCandidateId: approvalRuntimeCandidateId,
     approvalRuntimeOriginalCandidateId: approvalRuntimeOriginalCandidateId,
+    approvalRuntimeTopLevelSelfCandidate: approvalRuntimeTopLevelSelfCandidate,
     approvalRuntimeStepLabel: approvalRuntimeStepLabel,
     approvalRuntimeShouldResolveStep: approvalRuntimeShouldResolveStep,
     approvalRuntimeSourceTableForRecord: approvalRuntimeSourceTableForRecord,

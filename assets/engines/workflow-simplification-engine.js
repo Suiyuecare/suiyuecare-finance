@@ -82,26 +82,9 @@
     page.setAttribute('data-workflow-simplified','new-request');
     var side=byId('nr-side-panel');
     if(!side)return;
-    var state=window.S||{};
-    var shouldShowSummary=!!(state.lazyMode||Number(state.nrStep)>=3);
-    var summaryOnly=!!(state.lazyMode||['purchase_request','hr_expense_request','travel_request'].indexOf(state.nrType)>-1);
-    side.toggleAttribute('data-workflow-summary-only',summaryOnly);
-    if(shouldShowSummary)side.style.display='flex';
-    var summary=generated('section','workflow-newreq-summary','workflow-newreq-summary');
-    summary.setAttribute('aria-label','申請摘要');
-    if(summary.parentNode!==side)side.insertBefore(summary,side.firstChild);
-    var files=(Array.isArray(state.nrFiles)?state.nrFiles.length:0)+(state.nrPassbookFile?1:0);
-    var amount=newRequestAmount(page);
-    updateHtml(summary,
-      '<div class="workflow-summary-kicker">送出摘要</div>'+
-      '<h3>'+currentNewRequestType(page)+'</h3>'+
-      '<div class="workflow-summary-list">'+
-        '<div><span>目前金額</span><strong>'+(amount?formatMoney(amount):'尚未填寫')+'</strong></div>'+
-        '<div><span>附件</span><strong>'+files+' 份</strong></div>'+
-        '<div><span>流程狀態</span><strong>'+currentRouteState()+'</strong></div>'+
-      '</div>'+
-      '<p>送出前只需再次確認金額、附件與簽核路徑。</p>'
-    );
+    side.removeAttribute('data-workflow-summary-only');
+    var obsoleteSummary=byId('workflow-newreq-summary');
+    if(obsoleteSummary)obsoleteSummary.remove();
     var content=byId('nr-content');
     if(content)content.querySelectorAll(':scope > .card').forEach(function(card,index){
       card.setAttribute('data-workflow-section',String(index+1));
@@ -200,7 +183,7 @@
       if(index===0){child.classList.add('workflow-detail-head');return;}
       if(child.classList.contains('approval-action-section')){child.classList.add('workflow-detail-action');return;}
       if(child.classList.contains('ux-reject-card')||/已被駁回|尚未完成載入/.test(label)){child.classList.add('workflow-detail-alert');return;}
-      if(/主管檢核重點|申請摘要/.test(label)){child.classList.add('workflow-detail-decision');return;}
+      if(child.classList.contains('supervisor-review-card')||/主管檢核重點|申請摘要/.test(label)){child.classList.add('workflow-detail-decision');return;}
       if(/^目的|申請目的/.test(label)){child.classList.add('workflow-detail-purpose');return;}
       if(/主管檢核附件|附件與佐證/.test(label)){child.classList.add('workflow-detail-evidence');return;}
       if(/簽核進度|流程進度/.test(label)){child.classList.add('workflow-detail-timeline');return;}
