@@ -9,9 +9,11 @@ const root = path.resolve(__dirname, '..');
 const deployedV1Path = path.join(root, 'supabase/migrations/20260821170000_membership_org_expense_submission_v1.sql');
 const v2Path = path.join(root, 'supabase/migrations/20260826155840_expense_route_authority_v2.sql');
 const v3Path = path.join(root, 'supabase/migrations/20260827052447_expense_route_authority_v3.sql');
+const topLevelCeoRoutePath = path.join(root, 'supabase/migrations/20260831041705_top_level_ceo_self_route.sql');
 const v1 = fs.readFileSync(deployedV1Path, 'utf8');
 const sql = fs.readFileSync(v2Path, 'utf8');
 const v3 = fs.readFileSync(v3Path, 'utf8');
+const topLevelCeoRoute = fs.readFileSync(topLevelCeoRoutePath, 'utf8');
 const dbPostflight = fs.readFileSync(
   path.join(root, 'scripts/finance_production_db_postflight.sql'),
   'utf8',
@@ -432,6 +434,13 @@ check('v2 derives each assignee from the database resolver and compares the subm
     && /v_actual_uid is distinct from v_expected_uid/.test(sql));
 check('top-level missing-superior fallback is restricted to a formal CEO in the same department',
   /v_key in \('direct_supervisor','dept_manager'\)[\s\S]*role_row\.department_code = p_department_code[\s\S]*role_row\.role_key = 'ceo'[\s\S]*v_kind := 'top_level_self'/.test(sql));
+check('canonical department director is the fail-closed fallback for both top-level supervisor steps',
+  /direct_supervisor_finance_user_id[\s\S]*department_director_finance_user_id/.test(topLevelCeoRoute)
+    && /department_manager_finance_user_id[\s\S]*department_director_finance_user_id/.test(topLevelCeoRoute)
+    && topLevelCeoRoute.includes('c5b8ac8042c4df045589a5f25ec05ee3c5d660b9692efe0182c17f07c0cf25eb')
+    && topLevelCeoRoute.includes("not pg_catalog.has_function_privilege('public'")
+    && topLevelCeoRoute.includes("not pg_catalog.has_function_privilege('anon'")
+    && !/insert\s+into\s+public\.employee_department_roles/i.test(topLevelCeoRoute));
 check('published organization, workflow template, and routing policy are locked as authority',
   /finance_membership_org_versions_v1[\s\S]*status = 'published'[\s\S]*effective_at is null[\s\S]*for share/.test(sql)
     && /key = 'workflow_templates'[\s\S]*for share/.test(sql)
