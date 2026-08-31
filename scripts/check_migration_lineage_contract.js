@@ -19,7 +19,7 @@ const FIRST_ADOPTED_MIGRATION = '20260820052216_repair_account_and_new_taipei_ru
 const ROUTE_AUTHORITY_MIGRATION = '20260827052447_expense_route_authority_v3.sql';
 const LATEST_ADOPTED_MIGRATION = '20260828015718_repair_admin_ntpc_portal_employee_link_20260828.sql';
 const TOP_LEVEL_ROUTE_HOTFIX = '20260831042040_top_level_ceo_self_route.sql';
-const EXPENSE_STATUS_HOTFIX = '20260831043051_expense_submit_derived_status.sql';
+const EXPENSE_STATUS_HOTFIX = '20260831043517_expense_submit_derived_status.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 

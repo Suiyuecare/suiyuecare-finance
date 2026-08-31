@@ -20,10 +20,10 @@ assert.deepEqual(guard.SUPPORTED_GATE_PHASES, [
 assert.deepEqual(guard.MIGRATION_CHAIN, ['20260826070814', '20260826155840', '20260827052447']);
 assert.equal(guard.MIGRATION_PORTAL_LINK_REPAIR, '20260828015718');
 assert.equal(guard.MIGRATION_TOP_LEVEL_CEO_ROUTE, '20260831042040');
-assert.equal(guard.MIGRATION_EXPENSE_DERIVED_STATUS, '20260831043051');
-assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20260831042040', '20260831043051']);
+assert.equal(guard.MIGRATION_EXPENSE_DERIVED_STATUS, '20260831043517');
+assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20260831042040', '20260831043517']);
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
-  '20260826070814', '20260826155840', '20260827052447', '20260828015718', '20260831042040', '20260831043051'
+  '20260826070814', '20260826155840', '20260827052447', '20260828015718', '20260831042040', '20260831043517'
 ]);
 assert.deepEqual(guard.RELEASE_PHASES, {
   frontend_compat: 'none',
@@ -253,7 +253,7 @@ try {
   const v3Target = path.join(migrations, '20260827052447_route_v3.sql');
   const portalLinkRepair = path.join(migrations, '20260828015718_portal_link_repair.sql');
   const topLevelCeoRoute = path.join(migrations, '20260831042040_top_level_ceo_self_route.sql');
-  const expenseDerivedStatus = path.join(migrations, '20260831043051_expense_submit_derived_status.sql');
+  const expenseDerivedStatus = path.join(migrations, '20260831043517_expense_submit_derived_status.sql');
   fs.writeFileSync(notification, '-- comment\nselect 1;\n');
   fs.writeFileSync(target, '-- comment\nselect 2;\n');
   fs.writeFileSync(v3Target, '-- comment\nselect 3;\n');
@@ -278,7 +278,7 @@ try {
   assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /reviewed adopted migration/);
   fs.appendFileSync(ledger, '20260831042040\n');
   assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /reviewed adopted migration/);
-  fs.appendFileSync(ledger, '20260831043051\n');
+  fs.appendFileSync(ledger, '20260831043517\n');
   assert.equal(guard.classifyLedger(ledger, migrations, 'database_v3', '20260827052447', syntheticBaseline), 'applied');
   guard.verifyLedger('post', ledger, migrations, 'database_v3', '20260827052447', syntheticBaseline);
   assert.equal(guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), 'compat');
