@@ -17,6 +17,12 @@ const MIGRATION_V1 = '20260826070814';
 const MIGRATION_V2 = '20260826155840';
 const MIGRATION_V3 = '20260827052447';
 const MIGRATION_CHAIN = Object.freeze([MIGRATION_V1, MIGRATION_V2, MIGRATION_V3]);
+const MIGRATION_PORTAL_LINK_REPAIR = '20260828015718';
+const REVIEWED_POST_BASELINE_MIGRATIONS = Object.freeze([MIGRATION_PORTAL_LINK_REPAIR]);
+const REVIEWED_MIGRATION_CATALOG = Object.freeze([
+  ...MIGRATION_CHAIN,
+  ...REVIEWED_POST_BASELINE_MIGRATIONS
+]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
 const RELEASE_PHASES = Object.freeze({
@@ -149,7 +155,7 @@ function migrationFiles(directory) {
   const versions = files.map((name) => name.slice(0, 14));
   const duplicate = versions.find((version, index) => versions.indexOf(version) !== index);
   if (duplicate) fail(`local migration version is duplicated: ${duplicate}`);
-  for (const version of MIGRATION_CHAIN) {
+  for (const version of REVIEWED_MIGRATION_CATALOG) {
     const file = files.find((name) => name.startsWith(`${version}_`));
     if (file) assertCliAtomicMigration(fs.readFileSync(path.join(directory, file), 'utf8'), file);
   }
@@ -176,8 +182,15 @@ function assertProductionLedgerBaseline(remote, baseline = PRODUCTION_BASELINE_L
       || ledgerSha256(baselineVersions) !== baseline.sha256) {
     fail('remote production migration baseline differs from the reviewed immutable ledger');
   }
-  const unexpected = remote.filter((version) => version >= MIGRATION_V1 && !MIGRATION_CHAIN.includes(version));
+  const unexpected = remote.filter((version) => version >= MIGRATION_V1 && !REVIEWED_MIGRATION_CATALOG.includes(version));
   if (unexpected.length) fail(`remote ledger contains an unreviewed post-baseline migration: ${unexpected.join(',')}`);
+  return true;
+}
+function assertReviewedAdoptedMigrations(remote) {
+  const missing = REVIEWED_POST_BASELINE_MIGRATIONS.filter((version) => !remote.includes(version));
+  if (missing.length) {
+    fail(`remote ledger is missing a reviewed adopted migration: ${missing.join(',')}`);
+  }
   return true;
 }
 function classifyLedger(ledgerPath, directory, releasePhase, versionsText, baseline = PRODUCTION_BASELINE_LEDGER) {
@@ -189,9 +202,10 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
   assertProductionLedgerBaseline(remote, baseline);
   const missing = MIGRATION_CHAIN.filter((version) => !remote.includes(version));
   if (plan.releasePhase === RELEASE_PHASE_FRONTEND_COMPAT) {
-    if (missing.join(',') !== MIGRATION_V3) {
-      fail(`frontend_compat requires exact v1/v2 ledger with v3 pending, found pending: ${missing.length ? missing.join(',') : 'none'}`);
+    if (missing.length) {
+      fail(`frontend_compat requires the complete v1/v2/v3 authority chain, found pending: ${missing.join(',')}`);
     }
+    assertReviewedAdoptedMigrations(remote);
     return 'compat';
   }
   if (!requested.length) {
@@ -202,7 +216,10 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
   const pending = MIGRATION_CHAIN.slice(targetIndex);
   const applied = MIGRATION_CHAIN.slice(targetIndex + 1);
   if (missing.join(',') === pending.join(',')) return 'pending';
-  if (missing.join(',') === applied.join(',')) return 'applied';
+  if (missing.join(',') === applied.join(',')) {
+    assertReviewedAdoptedMigrations(remote);
+    return 'applied';
+  }
   fail(`ledger is neither the exact pending nor applied state for this phase: ${missing.length ? missing.join(',') : 'none'}`);
 }
 function verifyLedger(mode, ledgerPath, directory, releasePhase, versionsText, baseline = PRODUCTION_BASELINE_LEDGER) {
@@ -310,9 +327,9 @@ function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
   const sourceName = path.basename(sourcePath);
   if (plan.releasePhase === RELEASE_PHASE_FRONTEND_COMPAT) {
     if (sourceName !== 'finance_production_db_postflight.sql') {
-      fail('frontend_compat may only render the reviewed v2 read-only compatibility postflight');
+      fail('frontend_compat may only render the reviewed v3 read-only compatibility postflight');
     }
-    return prepareGateQuery(sourcePath, outputPath, MIGRATION_V2);
+    return prepareGateQuery(sourcePath, outputPath, MIGRATION_V3);
   }
   if (!['finance_production_db_preflight.sql', 'finance_production_db_postflight.sql'].includes(sourceName)) {
     fail('database_v3 may only render the reviewed v3 preflight or postflight');
@@ -559,10 +576,11 @@ function manifestSha(file) { return sha256File(file); }
 
 const api = {
   PRODUCTION_CATALOG, PRODUCTION_BASELINE_LEDGER, MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_CHAIN,
+  MIGRATION_PORTAL_LINK_REPAIR, REVIEWED_POST_BASELINE_MIGRATIONS, REVIEWED_MIGRATION_CATALOG,
   RELEASE_PHASE_FRONTEND_COMPAT, RELEASE_PHASE_DATABASE_V3, RELEASE_PHASES, FRONTEND_RELEASE_CONTRACT,
   SUPPORTED_GATE_PHASES, SUPPORTED_GATE_SUFFIXES,
   migrationVersions, migrationPhase, releasePlan, validateTarget, verifySupabasePublicKey, migrationFiles, classifyLedger, verifyLedger,
-  ledgerSha256, readLedgerVersions, assertProductionLedgerBaseline, assertCliAtomicMigration,
+  ledgerSha256, readLedgerVersions, assertProductionLedgerBaseline, assertReviewedAdoptedMigrations, assertCliAtomicMigration,
   prepareRehearsal, prepareGateQuery, preparePhaseQuery, prepareReadOnlyQuery, prepareApply, normalizeQueryRows,
   verifyAuthenticatedCanary,
   verifyCandidate, verifyFrontendContract, verifyVercelTarget, verifyProductionBaseline, verifyPromotion,

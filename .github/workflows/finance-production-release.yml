@@ -8,14 +8,14 @@ on:
         required: true
         type: string
       release_phase:
-        description: frontend_compat must run before database_v3
+        description: frontend_compat publishes UI; database_v3 is existing-v3 recovery only
         required: true
         type: choice
         options:
           - frontend_compat
           - database_v3
       migration_versions:
-        description: frontend_compat requires none; database_v3 requires 20260827052447
+        description: frontend_compat requires none; database_v3 recovery requires 20260827052447
         required: true
         type: string
       confirmation:
