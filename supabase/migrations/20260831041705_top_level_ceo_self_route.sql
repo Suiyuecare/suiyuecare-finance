@@ -77,8 +77,8 @@ begin
        extensions.digest(v_expected_source::bytea, 'sha256') then
     raise exception 'finance_org_resolve_actor postflight source differs from the reviewed patch';
   end if;
-  if pg_catalog.position(v_new_direct in v_actual_source) = 0
-     or pg_catalog.position(v_new_manager in v_actual_source) = 0 then
+  if pg_catalog.strpos(v_actual_source, v_new_direct) = 0
+     or pg_catalog.strpos(v_actual_source, v_new_manager) = 0 then
     raise exception 'finance_org_resolve_actor did not install the department-director fallback';
   end if;
 end;
