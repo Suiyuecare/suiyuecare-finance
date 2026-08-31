@@ -39,7 +39,7 @@ begin
     raise exception 'finance_org_resolve_actor owner, security, search_path or ACL baseline drifted';
   end if;
   if extensions.digest(v_source::bytea, 'sha256') <>
-       extensions.decode('c5b8ac8042c4df045589a5f25ec05ee3c5d660b9692efe0182c17f07c0cf25eb', 'hex') then
+       pg_catalog.decode('c5b8ac8042c4df045589a5f25ec05ee3c5d660b9692efe0182c17f07c0cf25eb', 'hex') then
     raise exception 'finance_org_resolve_actor source is not the reviewed production baseline';
   end if;
   if (pg_catalog.length(v_source) - pg_catalog.length(pg_catalog.replace(v_source, v_old_direct, '')))
