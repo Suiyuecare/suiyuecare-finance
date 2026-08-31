@@ -19,6 +19,7 @@ const FIRST_ADOPTED_MIGRATION = '20260820052216_repair_account_and_new_taipei_ru
 const ROUTE_AUTHORITY_MIGRATION = '20260827052447_expense_route_authority_v3.sql';
 const LATEST_ADOPTED_MIGRATION = '20260828015718_repair_admin_ntpc_portal_employee_link_20260828.sql';
 const TOP_LEVEL_ROUTE_HOTFIX = '20260831042040_top_level_ceo_self_route.sql';
+const EXPENSE_STATUS_HOTFIX = '20260831043051_expense_submit_derived_status.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 
@@ -76,12 +77,15 @@ const adoptedRepairIndex = migrations.indexOf(LATEST_ADOPTED_MIGRATION);
 const adoptedRepairSql = adoptedRepairIndex >= 0 ? read(`supabase/migrations/${LATEST_ADOPTED_MIGRATION}`) : '';
 const routeHotfixIndex = migrations.indexOf(TOP_LEVEL_ROUTE_HOTFIX);
 const routeHotfixSql = routeHotfixIndex >= 0 ? read(`supabase/migrations/${TOP_LEVEL_ROUTE_HOTFIX}`) : '';
+const statusHotfixIndex = migrations.indexOf(EXPENSE_STATUS_HOTFIX);
+const statusHotfixSql = statusHotfixIndex >= 0 ? read(`supabase/migrations/${EXPENSE_STATUS_HOTFIX}`) : '';
 const staleAttemptBranch = releaseSql.match(/if v_attempt_id is null then([\s\S]*?)end if;/)?.[1] || '';
 const futureRouteGuard = releaseSql.match(/create function private\.finance_expense_assert_applicant_revision_future_route_v3\([\s\S]*?\$function\$;/)?.[0] || '';
-check('route authority, adopted repair, and reviewed top-level hotfix are the exact lineage suffix',
-  releaseIndex === migrations.length - 3
-    && adoptedRepairIndex === migrations.length - 2
-    && routeHotfixIndex === migrations.length - 1,
+check('route authority and reviewed production hotfixes are the exact lineage suffix',
+  releaseIndex === migrations.length - 4
+    && adoptedRepairIndex === migrations.length - 3
+    && routeHotfixIndex === migrations.length - 2
+    && statusHotfixIndex === migrations.length - 1,
   migrations[migrations.length - 1] || '(none)');
 check('current release migration leaves transaction and ledger atomicity to the pinned CLI',
   !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(releaseSql)
@@ -141,6 +145,15 @@ check('top-level route hotfix is atomic-safe, hash-pinned, and cannot alter orga
     && routeHotfixSql.includes('department_director_finance_user_id')
     && !/insert\s+into\s+public\.employee_department_roles/i.test(routeHotfixSql)
     && !/update\s+public\.employee_department_roles/i.test(routeHotfixSql));
+check('expense status hotfix derives projections server-side without changing workflow authority',
+  !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(statusHotfixSql)
+    && statusHotfixSql.includes('4c309af8e1cd1384fe6121a452d2a378d1f3ed07cf3a32c0618b97913b1f6927')
+    && statusHotfixSql.includes('private.finance_income_status_from_steps')
+    && statusHotfixSql.includes("''status'', v_derived ->> ''approval_status''")
+    && statusHotfixSql.includes("''step'', (v_derived ->> ''approval_step'')::integer")
+    && !/insert\s+into\s+public\.expense_requests/i.test(statusHotfixSql)
+    && !/update\s+public\.expense_requests/i.test(statusHotfixSql)
+    && !/employee_department_roles/i.test(statusHotfixSql));
 
 check('release guide requires controlled remote rehearsal before promotion',
   releaseGuide.includes('transaction-control')

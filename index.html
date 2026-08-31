@@ -21139,7 +21139,8 @@ window.submitNR=async function(){
     requestNo:no,
     startedAt:new Date().toISOString()
   };
-  var nextStep=steps.find(function(s){return !s.a;})||null;
+  var nextStepIndex=steps.findIndex(function(s){return !s.a;});
+  var nextStep=nextStepIndex>-1?steps[nextStepIndex]:null;
   var confirmed=await showSubmitConfirm({
     typeLabel:tL,
     app:appName,
@@ -21243,7 +21244,7 @@ window.submitNR=async function(){
   var applicantProfile=applicantProfileData();
   var newReq={id:submissionContext.requestId,no:no,eid:eid,dc:dc,app:appName,applicantId:appUser.id||applicantProfile.id||'',applicantEmail:appUser.email||applicantProfile.email||'',type:S.nrType,tL:tL,amt:amt,desc:desc,
     payee:pay.payee,bankName:pay.bankName,bankBranch:pay.bankBranch,bankNo:pay.bankNo,expectedPayDate:pay.expectedPayDate?pay.expectedPayDate.replace(/-/g,'/'):'',
-    feeBearer:pay.feeBearer,bankType:pay.bankType,bankFeeAmount:bankFeeAmount,bankAcc:bank,pettyMode:S.pettyMode||'',status:nextStep?nextStep.status:'completed',step:nextStep?2:requestWorkflowStepCount(steps),ver:1,date:requestDateIso.replace(/-/g,'/'),
+    feeBearer:pay.feeBearer,bankType:pay.bankType,bankFeeAmount:bankFeeAmount,bankAcc:bank,pettyMode:S.pettyMode||'',status:nextStep?nextStep.status:'completed',step:nextStepIndex>-1?nextStepIndex+1:requestWorkflowStepCount(steps),ver:1,date:requestDateIso.replace(/-/g,'/'),
     dr:a.dr,drN:a.drN,cr:a.cr,crN:a.crN,
     files:attachments,
     passbookFiles:passbookAttachments,
