@@ -18,6 +18,7 @@ const MIGRATIONS_DIR = path.join(ROOT, 'supabase/migrations');
 const FIRST_ADOPTED_MIGRATION = '20260820052216_repair_account_and_new_taipei_runtime.sql';
 const ROUTE_AUTHORITY_MIGRATION = '20260827052447_expense_route_authority_v3.sql';
 const LATEST_ADOPTED_MIGRATION = '20260828015718_repair_admin_ntpc_portal_employee_link_20260828.sql';
+const TOP_LEVEL_ROUTE_HOTFIX = '20260831041705_top_level_ceo_self_route.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 
@@ -73,11 +74,14 @@ const releaseIndex = migrations.indexOf(ROUTE_AUTHORITY_MIGRATION);
 const releaseSql = releaseIndex >= 0 ? read(`supabase/migrations/${ROUTE_AUTHORITY_MIGRATION}`) : '';
 const adoptedRepairIndex = migrations.indexOf(LATEST_ADOPTED_MIGRATION);
 const adoptedRepairSql = adoptedRepairIndex >= 0 ? read(`supabase/migrations/${LATEST_ADOPTED_MIGRATION}`) : '';
+const routeHotfixIndex = migrations.indexOf(TOP_LEVEL_ROUTE_HOTFIX);
+const routeHotfixSql = routeHotfixIndex >= 0 ? read(`supabase/migrations/${TOP_LEVEL_ROUTE_HOTFIX}`) : '';
 const staleAttemptBranch = releaseSql.match(/if v_attempt_id is null then([\s\S]*?)end if;/)?.[1] || '';
 const futureRouteGuard = releaseSql.match(/create function private\.finance_expense_assert_applicant_revision_future_route_v3\([\s\S]*?\$function\$;/)?.[0] || '';
-check('route-authority migration immediately precedes the latest adopted production repair',
-  releaseIndex === migrations.length - 2
-    && adoptedRepairIndex === migrations.length - 1,
+check('route authority, adopted repair, and reviewed top-level hotfix are the exact lineage suffix',
+  releaseIndex === migrations.length - 3
+    && adoptedRepairIndex === migrations.length - 2
+    && routeHotfixIndex === migrations.length - 1,
   migrations[migrations.length - 1] || '(none)');
 check('current release migration leaves transaction and ledger atomicity to the pinned CLI',
   !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(releaseSql)
@@ -128,6 +132,15 @@ check('latest adopted repair is atomic-safe and tied to the exact verified admin
     && adoptedRepairSql.includes("v_active_company_id uuid := 'd114b583-824e-42c9-9d4e-5ab3cf17ac65'::uuid")
     && adoptedRepairSql.includes("employee_no = 'u_1785138353548'")
     && adoptedRepairSql.includes('Portal user did not converge to active employee projection'));
+check('top-level route hotfix is atomic-safe, hash-pinned, and cannot alter organization assignments',
+  !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(routeHotfixSql)
+    && !/^\s*(?:(?:create(?:\s+unique)?\s+index|drop\s+index)\s+concurrently\b|reindex\b[^;]*\bconcurrently\b|vacuum\b|alter\s+system\b|cluster\b)/im.test(routeHotfixSql)
+    && routeHotfixSql.includes('c5b8ac8042c4df045589a5f25ec05ee3c5d660b9692efe0182c17f07c0cf25eb')
+    && routeHotfixSql.includes('direct_supervisor_finance_user_id')
+    && routeHotfixSql.includes('department_manager_finance_user_id')
+    && routeHotfixSql.includes('department_director_finance_user_id')
+    && !/insert\s+into\s+public\.employee_department_roles/i.test(routeHotfixSql)
+    && !/update\s+public\.employee_department_roles/i.test(routeHotfixSql));
 
 check('release guide requires controlled remote rehearsal before promotion',
   releaseGuide.includes('transaction-control')
