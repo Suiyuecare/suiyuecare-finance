@@ -13,60 +13,7 @@
 .workflow-simplification-v1 #pg-newreq[data-workflow-simplified="new-request"] #nr-main-grid{
   align-items:start;
   gap:18px!important;
-}
-
-.workflow-simplification-v1 .workflow-newreq-summary{
-  border:1px solid var(--workflow-border);
-  border-radius:18px;
-  background:linear-gradient(145deg,#fffdf8,#fff6e8);
-  box-shadow:0 12px 32px rgba(117,74,21,.08);
-  padding:18px;
-}
-
-.workflow-simplification-v1 .workflow-summary-kicker{
-  color:var(--workflow-accent);
-  font-size:12px;
-  font-weight:800;
-  letter-spacing:.08em;
-}
-
-.workflow-simplification-v1 .workflow-newreq-summary h3{
-  color:var(--workflow-ink);
-  font-size:20px;
-  line-height:1.35;
-  margin:6px 0 14px;
-}
-
-.workflow-simplification-v1 .workflow-summary-list{
-  display:grid;
-  gap:0;
-}
-
-.workflow-simplification-v1 .workflow-summary-list>div{
-  align-items:center;
-  border-top:1px solid rgba(211,181,141,.5);
-  display:flex;
-  gap:12px;
-  justify-content:space-between;
-  min-height:47px;
-}
-
-.workflow-simplification-v1 .workflow-summary-list span{
-  color:var(--workflow-muted);
-  font-size:12px;
-}
-
-.workflow-simplification-v1 .workflow-summary-list strong{
-  color:var(--workflow-ink);
-  font-size:13px;
-  text-align:right;
-}
-
-.workflow-simplification-v1 .workflow-newreq-summary p{
-  color:var(--workflow-muted);
-  font-size:11px;
-  line-height:1.7;
-  margin:13px 0 0;
+  grid-template-columns:minmax(0,1fr)!important;
 }
 
 .workflow-simplification-v1 #pg-newreq #nr-content>[data-workflow-section]{
@@ -82,10 +29,6 @@
   border-radius:18px;
   box-shadow:0 12px 30px rgba(117,74,21,.07);
   overflow:hidden;
-}
-
-.workflow-simplification-v1 #pg-newreq #nr-side-panel[data-workflow-summary-only]>.card{
-  display:none!important;
 }
 
 .workflow-simplification-v1 .workflow-kpi-strip{
@@ -200,20 +143,26 @@
   }
 
   .workflow-simplification-v1 #pg-newreq[data-workflow-simplified="new-request"] #nr-main-grid{
-    grid-template-columns:minmax(0,1fr) 310px!important;
+    grid-template-columns:minmax(0,1fr)!important;
   }
 
-  .workflow-simplification-v1 #pg-newreq #nr-side-panel{
-    position:sticky;
-    top:12px;
+  .workflow-simplification-v1 #m-appr>.modal[role="dialog"]{
+    width:calc(100vw - 28px)!important;
+    max-width:none!important;
   }
 
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]{
-    align-items:start;
-    display:grid;
+    align-items:stretch;
+    display:flex;
+    flex-direction:column;
     gap:12px;
-    grid-template-columns:minmax(0,1fr);
     padding:12px;
+  }
+
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>*{
+    flex:0 0 auto;
+    min-width:0;
+    width:100%;
   }
 
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-head,
@@ -223,9 +172,10 @@
   }
 
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-decision{
-    grid-column:1;
+    grid-column:1/-1;
     grid-row:auto;
     position:static;
+    top:auto;
   }
 
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-purpose,
@@ -233,7 +183,16 @@
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-timeline,
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-secondary,
   .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"]>.workflow-detail-body{
-    grid-column:1;
+    grid-column:1/-1;
+    width:100%;
+  }
+
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"] .supervisor-review-summary{
+    grid-template-columns:1.25fr repeat(3,minmax(0,1fr))!important;
+  }
+
+  .workflow-simplification-v1 #appr-inner[data-workflow-simplified="approval-detail"] .supervisor-review-issues{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
   }
 }
 
@@ -259,8 +218,6 @@
   .workflow-simplification-v1 #pg-newreq #nr-content{order:2}
   .workflow-simplification-v1 #pg-newreq #nr-side-panel{margin:0 0 12px;order:1;width:100%!important}
   .workflow-simplification-v1 #pg-newreq #nr-side-panel>.card{display:none!important}
-  .workflow-simplification-v1 .workflow-newreq-summary{padding:15px}
-  .workflow-simplification-v1 .workflow-newreq-summary h3{font-size:18px}
   .workflow-simplification-v1 .workflow-metric{min-height:92px;padding:13px}
   .workflow-simplification-v1 .workflow-metric strong{font-size:19px}
   .workflow-simplification-v1 #pg-expenses .expense-query-panel{margin-bottom:12px}
