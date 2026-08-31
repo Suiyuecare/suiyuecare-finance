@@ -258,6 +258,14 @@ check('解析失敗必須 fail closed，並明確保證不上傳附件、不建�
   runtimeResolverBody.includes("throw new Error('正式簽核人解析未完成：'")
     && /runtimeResolutionFailed:true/.test(prepareBody)
     && prepareBody.includes('系統尚未上傳附件，也沒有建立申請單'));
+const expenseSubmitStart = indexSource.indexOf('window.submitNR=async function(){');
+const expenseSubmitEnd = indexSource.indexOf('function expenseStatusKey', expenseSubmitStart);
+const expenseSubmitBody = indexSource.slice(expenseSubmitStart, expenseSubmitEnd);
+check('新送件狀態與關卡取自 canonical route 的第一個實際待簽位置',
+  expenseSubmitStart > -1
+    && expenseSubmitBody.includes("var nextStepIndex=steps.findIndex(function(s){return !s.a;});")
+    && expenseSubmitBody.includes("step:nextStepIndex>-1?nextStepIndex+1:requestWorkflowStepCount(steps)")
+    && !expenseSubmitBody.includes('step:nextStep?2:'));
 check('前台文案不再把出納說成執行長代行',
   !indexSource.includes('目前由執行長代行')
     && !approvalSource.includes('目前由執行長代行')
