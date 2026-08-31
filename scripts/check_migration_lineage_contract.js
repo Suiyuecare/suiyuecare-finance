@@ -16,7 +16,8 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const MIGRATIONS_DIR = path.join(ROOT, 'supabase/migrations');
 const FIRST_ADOPTED_MIGRATION = '20260820052216_repair_account_and_new_taipei_runtime.sql';
-const CURRENT_RELEASE_MIGRATION = '20260827052447_expense_route_authority_v3.sql';
+const ROUTE_AUTHORITY_MIGRATION = '20260827052447_expense_route_authority_v3.sql';
+const LATEST_ADOPTED_MIGRATION = '20260828015718_repair_admin_ntpc_portal_employee_link_20260828.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 
@@ -68,12 +69,16 @@ check('configured seed is absent and therefore cannot simulate production data',
 check('CI does not run a misleading empty-database reset',
   !/(?:supabase\s+(?:start|stop)|supabase\s+db\s+reset)/i.test(workflow));
 
-const releaseIndex = migrations.indexOf(CURRENT_RELEASE_MIGRATION);
-const releaseSql = releaseIndex >= 0 ? read(`supabase/migrations/${CURRENT_RELEASE_MIGRATION}`) : '';
+const releaseIndex = migrations.indexOf(ROUTE_AUTHORITY_MIGRATION);
+const releaseSql = releaseIndex >= 0 ? read(`supabase/migrations/${ROUTE_AUTHORITY_MIGRATION}`) : '';
+const adoptedRepairIndex = migrations.indexOf(LATEST_ADOPTED_MIGRATION);
+const adoptedRepairSql = adoptedRepairIndex >= 0 ? read(`supabase/migrations/${LATEST_ADOPTED_MIGRATION}`) : '';
 const staleAttemptBranch = releaseSql.match(/if v_attempt_id is null then([\s\S]*?)end if;/)?.[1] || '';
 const futureRouteGuard = releaseSql.match(/create function private\.finance_expense_assert_applicant_revision_future_route_v3\([\s\S]*?\$function\$;/)?.[0] || '';
-check('current release migration is the final ordered migration',
-  releaseIndex === migrations.length - 1, migrations[migrations.length - 1] || '(none)');
+check('route-authority migration immediately precedes the latest adopted production repair',
+  releaseIndex === migrations.length - 2
+    && adoptedRepairIndex === migrations.length - 1,
+  migrations[migrations.length - 1] || '(none)');
 check('current release migration leaves transaction and ledger atomicity to the pinned CLI',
   !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(releaseSql)
     && !/^\s*(?:(?:create(?:\s+unique)?\s+index|drop\s+index)\s+concurrently\b|reindex\b[^;]*\bconcurrently\b|vacuum\b|alter\s+system\b|cluster\b)/im.test(releaseSql)
@@ -113,6 +118,16 @@ check('current v3 release preserves completed applicant-revision history and val
     && futureRouteGuard.includes('v_historical_anchor_index + 1')
     && futureRouteGuard.indexOf('if v_actual_index < p_active_index then')
       < futureRouteGuard.indexOf('if v_expected_index >= pg_catalog.jsonb_array_length(v_expected_steps)'));
+check('latest adopted repair is atomic-safe and tied to the exact verified admin.ntpc identities',
+  !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(adoptedRepairSql)
+    && !/^\s*(?:(?:create(?:\s+unique)?\s+index|drop\s+index)\s+concurrently\b|reindex\b[^;]*\bconcurrently\b|vacuum\b|alter\s+system\b|cluster\b)/im.test(adoptedRepairSql)
+    && adoptedRepairSql.includes("v_auth_user_id uuid := 'c50e9e4f-0b63-44e9-b445-9dd5fe7d9f2e'::uuid")
+    && adoptedRepairSql.includes("v_portal_user_id uuid := 'b1f0c6bd-3e22-45c0-b6f4-81d7ebd3d369'::uuid")
+    && adoptedRepairSql.includes("v_retired_employee_id uuid := '6c101aa3-b91d-4590-ae7a-5df070af2793'::uuid")
+    && adoptedRepairSql.includes("v_active_employee_id uuid := '73c0ce88-c0f7-4276-ba0e-938cea9d53ce'::uuid")
+    && adoptedRepairSql.includes("v_active_company_id uuid := 'd114b583-824e-42c9-9d4e-5ab3cf17ac65'::uuid")
+    && adoptedRepairSql.includes("employee_no = 'u_1785138353548'")
+    && adoptedRepairSql.includes('Portal user did not converge to active employee projection'));
 
 check('release guide requires controlled remote rehearsal before promotion',
   releaseGuide.includes('transaction-control')

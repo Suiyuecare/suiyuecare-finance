@@ -24,14 +24,16 @@ Environment `finance-production` 必須設定：
 
 Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權該 team/project 的 pull、build、candidate deploy、inspect/API/curl 與 promote；資料庫帳號只授權目標 Supabase project 的 migration 權限。
 
-## 固定兩階段：先相容前台，再套 v3 資料庫
+## 固定兩個受控入口：日常前台發布與既有 v3 復原
 
 此版本只接受以下兩組輸入，`release_phase` 與 `migration_versions` 任何不相符都在建置或資料庫連線前立即拒絕：
 
 | 順序 | `release_phase` | `migration_versions` | 允許的動作 |
 |---|---|---|---|
-| 1 | `frontend_compat` | `none` | 建立、驗證並提升新前台；資料庫不得提交變更，只能做唯讀 gate 與整筆回滾 canary |
-| 2 | `database_v3` | `20260827052447` | 先證明同一 candidate SHA 的新前台已在正式網域，再套 v3 |
+| 1 | `frontend_compat` | `none` | 日常前台發布：建立、驗證並提升新前台；資料庫不得提交變更，只能做唯讀 gate 與整筆回滾 canary |
+| 2 | `database_v3` | `20260827052447` | v3 復原入口：目前正式庫已完成 v3，只允許核對既有狀態並執行 postflight，不會重新套版 |
+
+正式資料庫目前受控 lineage 為 v1 `20260826070814`、v2 `20260826155840`、v3 `20260827052447`，以及已採納回版本庫的單筆人員主檔修復 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`。任何其他未審查的 post-baseline migration 仍會 fail closed；採納修復不代表流程會再次執行該 SQL。
 
 ### Phase 1：`frontend_compat`
 
@@ -39,17 +41,17 @@ Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權�
 2. 跑完整 `release:preflight` 與 production artifact 驗證，只建立一次 `--prod --skip-domain` 的 unaliased candidate。
 3. 候選首頁必須恰有一個 `finance-release-contract=expense-submit-resilience-v3-20260827` meta，並實際包含 `submissionAttemptId`；release manifest 的 `source_commit` 必須等於 candidate SHA。
 4. sealed receipt v2 同時綁定 release phase、`migration_versions`、deployment ID／URL、manifest hash、首頁 hash、candidate SHA 與 GitHub run ID。下載 artifact 的後續 jobs 逐欄重算，不宣稱或依賴未比較的 artifact digest。
-5. 正式資料庫 ledger 必須恰為 v1、v2 已套用且 v3 尚未套用；workflow 以 v2 唯讀 postflight、authenticated rollback canary 與 immutable project 檢查證明現況，不會提交任何資料庫變更，`prepare-apply` 不可能出現在此分支。
+5. 正式資料庫 ledger 必須恰有完整 v1／v2／v3 與已審查的 `20260828015718` 修復；workflow 以 v3 唯讀 postflight、精確的人員連結檢查、authenticated rollback canary 與 immutable project 檢查證明現況，不會提交任何資料庫變更，`prepare-apply` 不可能出現在此分支。
 6. 提升封存的同一 deployment URL 後，從 `finance.suiyuecare.com` 重新讀回 deployment ID、manifest 與首頁；只有 exact candidate SHA、release meta 與 `submissionAttemptId` 全部一致才算 Phase 1 完成。
 
-### Phase 2：`database_v3`
+### Phase 2：`database_v3`（既有版次復原／核對）
 
-1. 必須再次使用 Phase 1 的同一 candidate SHA。可以建立同 SHA 的新 unaliased deployment 供本次 receipt 使用，但不得使用不同 source commit。
-2. 在任何 DB mutation 前，workflow 會先從正式網域讀回 manifest 與首頁，證明正式網域已是本次 candidate SHA，且 release meta 與 `submissionAttemptId` 均存在；不相符時 v3 一個 statement 都不會執行。
-3. authenticated rollback canary、exact v3 preflight 與 rollback rehearsal 通過後，workflow 會在正式交易前一刻再次讀回正式 manifest／首頁並重做同一證明，以防檢查後 alias 漂移。
-4. 正式套版只把 migration `20260827052447` 與 ledger insert 放在同一個 SQL transaction。交易先取得 advisory lock 與 ledger table lock，再比較 transaction 內 ledger 與已審查快照；任何 drift 都在 migration statement 前中止。
-5. apply 後重跑 ledger、v3 postflight 與 authenticated canary。若 job 在 apply 後中斷，重跑只允許 `applied` recovery 路徑，不會再次 mutation。
-6. `promote` 可以把同 SHA 的封存候選重新指向正式 alias；若 alias 已是同一 artifact，等同安全的同 SHA no-op。最終仍須重新讀回 deployment、manifest 與首頁驗證。
+1. 必須再次使用已在正式網域驗證過的同一 candidate SHA；不得使用不同 source commit。
+2. workflow 會先從正式網域讀回 manifest 與首頁，證明 release meta 與 `submissionAttemptId` 均存在。
+3. ledger 必須顯示 v3 與 `20260828015718` 都已存在；目前只接受 `applied` recovery 路徑，重跑 v3 或人員修復都會被拒絕。
+4. 以 v3 postflight 驗證函式、ACL、RLS、組織簽核語意，以及 `admin.ntpc@suiyuecare.com` 仍連結到指定的在職 employee/company；已離職重複人員必須保持停用。
+5. authenticated rollback canary 通過後才可繼續；整段核對不提交正式資料庫變更。
+6. `promote` 只處理同 SHA 的封存候選；最終仍須重新讀回 deployment、manifest 與首頁驗證。
 
 v3 會重新解析正式直屬主管與唯一部門主管，只有可稽核的同一人情形才能跳關；補件時已完成的歷史簽核人與已移除的舊金額關卡保持不可變。新送件必須帶穩定 `submissionAttemptId`；缺少該欄位的舊分頁一律以 `55000` 要求重新整理。同一申請單、登入申請人、attempt 與 SHA-256 payload 必須一致，不同 attempt 或 payload 一律 fail closed。
 
@@ -64,11 +66,11 @@ v3 會重新解析正式直屬主管與唯一部門主管，只有可稽核的�
 在 GitHub Actions 手動選擇 `Finance Protected Production Release`，輸入：
 
 - `candidate_sha`：當下 protected `main` 的完整 SHA。
-- `release_phase`：先選 `frontend_compat`，完成且 readback 通過後才可選 `database_v3`。
+- `release_phase`：一般前台上線選 `frontend_compat`；只有既有 v3 發布復原需要才選 `database_v3`。
 - `migration_versions`：`frontend_compat` 僅能填 `none`；`database_v3` 僅能填 `20260827052447`。
 - `confirmation`：`PROMOTE FINANCE PRODUCTION`。
 
-任一步失敗即 fail closed。Phase 1 失敗時不會變更資料庫；Phase 2 在正式前台證明失敗時不會執行 v3。資料庫成功後若提升或 readback 遇到暫時錯誤，應在同一 GitHub Actions run 使用 **Re-run failed jobs**，讓獨立 `promote` job 消費同一 sealed artifact，不重新建置或套版。`candidate` artifact 保留 14 天；超過保留期不得把另一個 deployment 冒充原候選，必須另開完整受審發布。
+任一步失敗即 fail closed。`frontend_compat` 不會變更資料庫；目前的 `database_v3` 也只核對已套用狀態，不會重跑 v3 或 `20260828015718`。若提升或 readback 遇到暫時錯誤，應在同一 GitHub Actions run 使用 **Re-run failed jobs**，讓獨立 `promote` job 消費同一 sealed artifact，不重新建置或套版。`candidate` artifact 保留 14 天；超過保留期不得把另一個 deployment 冒充原候選，必須另開完整受審發布。
 
 若整個 workflow 被人為選擇「Re-run all jobs」，會建立新的候選；這不等同原 candidate 的復原路徑。DB ledger 已套用時仍會阻止重複 mutation，但操作上應一律優先使用 **Re-run failed jobs** 續跑原 `promote` job。
 

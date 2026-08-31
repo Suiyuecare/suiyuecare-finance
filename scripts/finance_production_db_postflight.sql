@@ -22,6 +22,41 @@ begin
   if v_phase in ('20260826155840','20260827052447','none') and not exists (select 1 from supabase_migrations.schema_migrations where version='20260826155840') then raise exception 'v2 authority baseline is absent from ledger'; end if;
   if v_phase = '20260826155840' and exists (select 1 from supabase_migrations.schema_migrations where version='20260827052447') then raise exception 'v2 authority phase unexpectedly installed v3'; end if;
   if v_phase in ('20260827052447','none') and not exists (select 1 from supabase_migrations.schema_migrations where version='20260827052447') then raise exception 'v3 authority baseline is absent from ledger'; end if;
+  if v_phase in ('20260827052447','none') then
+    if not exists (
+      select 1
+      from supabase_migrations.schema_migrations
+      where version='20260828015718'
+        and name='repair_admin_ntpc_portal_employee_link_20260828'
+    ) then raise exception 'reviewed admin.ntpc Portal employee-link repair is absent from ledger'; end if;
+    if not exists (
+      select 1
+      from auth.users auth_user
+      join public.users portal_user
+        on portal_user.auth_user_id=auth_user.id
+      join public.employees employee_row
+        on employee_row.id=portal_user.employee_id
+      where auth_user.id='c50e9e4f-0b63-44e9-b445-9dd5fe7d9f2e'::uuid
+        and pg_catalog.lower(auth_user.email)='admin.ntpc@suiyuecare.com'
+        and portal_user.id='b1f0c6bd-3e22-45c0-b6f4-81d7ebd3d369'::uuid
+        and portal_user.company_id='d114b583-824e-42c9-9d4e-5ab3cf17ac65'::uuid
+        and portal_user.status='active'
+        and portal_user.deleted_at is null
+        and employee_row.id='73c0ce88-c0f7-4276-ba0e-938cea9d53ce'::uuid
+        and employee_row.employee_no='u_1785138353548'
+        and employee_row.company_id=portal_user.company_id
+        and employee_row.employment_status='active'
+        and employee_row.deleted_at is null
+    ) then raise exception 'admin.ntpc Portal identity did not retain the reviewed active employee projection'; end if;
+    if not exists (
+      select 1
+      from public.employees
+      where id='6c101aa3-b91d-4590-ae7a-5df070af2793'::uuid
+        and pg_catalog.lower(email)='admin.ntpc@suiyuecare.com'
+        and employment_status='terminated'
+        and deleted_at is not null
+    ) then raise exception 'admin.ntpc retired duplicate employee fingerprint drifted'; end if;
+  end if;
 
   if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='notifications' and column_name='data_environment' and data_type='text' and is_nullable='NO' and column_default='''production''::text')
      or not exists (select 1 from information_schema.columns where table_schema='public' and table_name='notifications' and column_name='tenant_id' and data_type='uuid' and is_nullable='NO' and column_default like '%default_tenant_id%') then raise exception 'v1 notification columns/defaults are invalid'; end if;
