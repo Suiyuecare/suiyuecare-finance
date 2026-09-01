@@ -26,6 +26,7 @@ scripts/*
 !scripts/test_expense_route_authority_v2.js
 !scripts/check_incident_account_org_repair.js
 !scripts/check_final_accountant_self_post_contract.js
+!scripts/check_formal_cashier_self_disbursement_contract.js
 !scripts/check_release_artifact.js
 !scripts/check_finance_login_account_switch_contract.js
 !scripts/check_receipt_attachment_dedup_and_labor_tax.js
