@@ -20,6 +20,7 @@ const ROUTE_AUTHORITY_MIGRATION = '20260827052447_expense_route_authority_v3.sql
 const LATEST_ADOPTED_MIGRATION = '20260828015718_repair_admin_ntpc_portal_employee_link_20260828.sql';
 const TOP_LEVEL_ROUTE_HOTFIX = '20260831042040_top_level_ceo_self_route.sql';
 const EXPENSE_STATUS_HOTFIX = '20260831043517_expense_submit_derived_status.sql';
+const FINAL_ACCOUNTANT_SELF_POST_HOTFIX = '20260901030000_final_accountant_self_post.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 
@@ -79,13 +80,18 @@ const routeHotfixIndex = migrations.indexOf(TOP_LEVEL_ROUTE_HOTFIX);
 const routeHotfixSql = routeHotfixIndex >= 0 ? read(`supabase/migrations/${TOP_LEVEL_ROUTE_HOTFIX}`) : '';
 const statusHotfixIndex = migrations.indexOf(EXPENSE_STATUS_HOTFIX);
 const statusHotfixSql = statusHotfixIndex >= 0 ? read(`supabase/migrations/${EXPENSE_STATUS_HOTFIX}`) : '';
+const finalAccountantHotfixIndex = migrations.indexOf(FINAL_ACCOUNTANT_SELF_POST_HOTFIX);
+const finalAccountantHotfixSql = finalAccountantHotfixIndex >= 0
+  ? read(`supabase/migrations/${FINAL_ACCOUNTANT_SELF_POST_HOTFIX}`)
+  : '';
 const staleAttemptBranch = releaseSql.match(/if v_attempt_id is null then([\s\S]*?)end if;/)?.[1] || '';
 const futureRouteGuard = releaseSql.match(/create function private\.finance_expense_assert_applicant_revision_future_route_v3\([\s\S]*?\$function\$;/)?.[0] || '';
 check('route authority and reviewed production hotfixes are the exact lineage suffix',
-  releaseIndex === migrations.length - 4
-    && adoptedRepairIndex === migrations.length - 3
-    && routeHotfixIndex === migrations.length - 2
-    && statusHotfixIndex === migrations.length - 1,
+  releaseIndex === migrations.length - 5
+    && adoptedRepairIndex === migrations.length - 4
+    && routeHotfixIndex === migrations.length - 3
+    && statusHotfixIndex === migrations.length - 2
+    && finalAccountantHotfixIndex === migrations.length - 1,
   migrations[migrations.length - 1] || '(none)');
 check('current release migration leaves transaction and ledger atomicity to the pinned CLI',
   !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(releaseSql)
@@ -154,6 +160,14 @@ check('expense status hotfix derives projections server-side without changing wo
     && !/insert\s+into\s+public\.expense_requests/i.test(statusHotfixSql)
     && !/update\s+public\.expense_requests/i.test(statusHotfixSql)
     && !/employee_department_roles/i.test(statusHotfixSql));
+check('final-accountant hotfix permits only the explicitly frozen final posting actor',
+  !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(finalAccountantHotfixSql)
+    && finalAccountantHotfixSql.includes('5ec7df359d84b46c7824f57b8d96dd1d1b0300c197f4d68e31ee22157450c0dd')
+    && finalAccountantHotfixSql.includes("p_expense.status = 'pending_voucher'")
+    && finalAccountantHotfixSql.includes("v_role_key in ('accountant_final', 'accounting')")
+    && finalAccountantHotfixSql.includes('p_step_index =')
+    && finalAccountantHotfixSql.includes('v_explicit_user_id = p_actor_finance_user_id')
+    && !/(?:insert\s+into|update|delete\s+from)\s+public\.(?:expense_requests|employee_department_roles|finance_users)/i.test(finalAccountantHotfixSql));
 
 check('release guide requires controlled remote rehearsal before promotion',
   releaseGuide.includes('transaction-control')
