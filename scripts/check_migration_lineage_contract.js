@@ -20,7 +20,7 @@ const ROUTE_AUTHORITY_MIGRATION = '20260827052447_expense_route_authority_v3.sql
 const LATEST_ADOPTED_MIGRATION = '20260828015718_repair_admin_ntpc_portal_employee_link_20260828.sql';
 const TOP_LEVEL_ROUTE_HOTFIX = '20260831042040_top_level_ceo_self_route.sql';
 const EXPENSE_STATUS_HOTFIX = '20260831043517_expense_submit_derived_status.sql';
-const FINAL_ACCOUNTANT_SELF_POST_HOTFIX = '20260901030000_final_accountant_self_post.sql';
+const FINAL_ACCOUNTANT_SELF_POST_HOTFIX = '20260901024020_final_accountant_self_post.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 

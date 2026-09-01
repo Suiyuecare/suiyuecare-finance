@@ -8,7 +8,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const migration = fs.readFileSync(path.join(
   root,
-  'supabase/migrations/20260901030000_final_accountant_self_post.sql'
+  'supabase/migrations/20260901024020_final_accountant_self_post.sql'
 ), 'utf8');
 
 assert.match(migration,
