@@ -22,6 +22,7 @@ const TOP_LEVEL_ROUTE_HOTFIX = '20260831042040_top_level_ceo_self_route.sql';
 const EXPENSE_STATUS_HOTFIX = '20260831043517_expense_submit_derived_status.sql';
 const FINAL_ACCOUNTANT_SELF_POST_HOTFIX = '20260901024020_final_accountant_self_post.sql';
 const FORMAL_CASHIER_REPAIR = '20260901073241_assign_ceo_cashier_and_reassign_pending_cashier.sql';
+const FORMAL_CASHIER_SELF_DISBURSEMENT = '20260901081807_allow_formal_cashier_self_disbursement.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 
@@ -87,15 +88,20 @@ const finalAccountantHotfixSql = finalAccountantHotfixIndex >= 0
   : '';
 const cashierRepairIndex = migrations.indexOf(FORMAL_CASHIER_REPAIR);
 const cashierRepairSql = cashierRepairIndex >= 0 ? read(`supabase/migrations/${FORMAL_CASHIER_REPAIR}`) : '';
+const cashierSelfDisbursementIndex = migrations.indexOf(FORMAL_CASHIER_SELF_DISBURSEMENT);
+const cashierSelfDisbursementSql = cashierSelfDisbursementIndex >= 0
+  ? read(`supabase/migrations/${FORMAL_CASHIER_SELF_DISBURSEMENT}`)
+  : '';
 const staleAttemptBranch = releaseSql.match(/if v_attempt_id is null then([\s\S]*?)end if;/)?.[1] || '';
 const futureRouteGuard = releaseSql.match(/create function private\.finance_expense_assert_applicant_revision_future_route_v3\([\s\S]*?\$function\$;/)?.[0] || '';
 check('route authority and all reviewed production hotfixes are the exact lineage suffix',
-  releaseIndex === migrations.length - 6
-    && adoptedRepairIndex === migrations.length - 5
-    && routeHotfixIndex === migrations.length - 4
-    && statusHotfixIndex === migrations.length - 3
-    && finalAccountantHotfixIndex === migrations.length - 2
-    && cashierRepairIndex === migrations.length - 1,
+  releaseIndex === migrations.length - 7
+    && adoptedRepairIndex === migrations.length - 6
+    && routeHotfixIndex === migrations.length - 5
+    && statusHotfixIndex === migrations.length - 4
+    && finalAccountantHotfixIndex === migrations.length - 3
+    && cashierRepairIndex === migrations.length - 2
+    && cashierSelfDisbursementIndex === migrations.length - 1,
   migrations[migrations.length - 1] || '(none)');
 check('current release migration leaves transaction and ledger atomicity to the pinned CLI',
   !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(releaseSql)
@@ -185,6 +191,18 @@ check('formal cashier repair is atomic-safe, hash-pinned, removes the GA fallbac
     && cashierRepairSql.includes("'reassignmentHistory'")
     && cashierRepairSql.includes('if v_request_count <> 3 then')
     && cashierRepairSql.includes('if v_audit_count <> 3 then'));
+
+check('formal cashier self-disbursement hotfix is narrow, hash-pinned, and data preserving',
+  !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(cashierSelfDisbursementSql)
+    && cashierSelfDisbursementSql.includes('36c621ce91d061a58b56453321980a19e75d4bc0f521ad1340641e70c2c59938')
+    && cashierSelfDisbursementSql.includes("p_expense.status = 'pending_cashier'")
+    && cashierSelfDisbursementSql.includes('p_expense.cash_posted_at is null')
+    && cashierSelfDisbursementSql.includes("v_role_key = 'cashier'")
+    && cashierSelfDisbursementSql.includes('v_explicit_user_id = p_actor_finance_user_id')
+    && cashierSelfDisbursementSql.includes("cashier_role.role_key = 'cashier'")
+    && cashierSelfDisbursementSql.includes('cashier_role.active is true')
+    && cashierSelfDisbursementSql.includes('cashier_role.can_approve is true')
+    && !/(?:insert\s+into|update|delete\s+from)\s+public\.(?:expense_requests|employee_department_roles|finance_users)/i.test(cashierSelfDisbursementSql));
 
 check('release guide requires controlled remote rehearsal before promotion',
   releaseGuide.includes('transaction-control')

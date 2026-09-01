@@ -23,9 +23,10 @@ assert.equal(guard.MIGRATION_TOP_LEVEL_CEO_ROUTE, '20260831042040');
 assert.equal(guard.MIGRATION_EXPENSE_DERIVED_STATUS, '20260831043517');
 assert.equal(guard.MIGRATION_FINAL_ACCOUNTANT_SELF_POST, '20260901024020');
 assert.equal(guard.MIGRATION_FORMAL_CASHIER_REPAIR, '20260901073241');
-assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20260831042040', '20260831043517', '20260901024020', '20260901073241']);
+assert.equal(guard.MIGRATION_FORMAL_CASHIER_SELF_DISBURSEMENT, '20260901081807');
+assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20260831042040', '20260831043517', '20260901024020', '20260901073241', '20260901081807']);
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
-  '20260826070814', '20260826155840', '20260827052447', '20260828015718', '20260831042040', '20260831043517', '20260901024020', '20260901073241'
+  '20260826070814', '20260826155840', '20260827052447', '20260828015718', '20260831042040', '20260831043517', '20260901024020', '20260901073241', '20260901081807'
 ]);
 assert.deepEqual(guard.RELEASE_PHASES, {
   frontend_compat: 'none',
@@ -259,6 +260,7 @@ try {
   const expenseDerivedStatus = path.join(migrations, '20260831043517_expense_submit_derived_status.sql');
   const finalAccountantSelfPost = path.join(migrations, '20260901024020_final_accountant_self_post.sql');
   const formalCashierRepair = path.join(migrations, '20260901073241_assign_ceo_cashier_and_reassign_pending_cashier.sql');
+  const formalCashierSelfDisbursement = path.join(migrations, '20260901081807_allow_formal_cashier_self_disbursement.sql');
   fs.writeFileSync(notification, '-- comment\nselect 1;\n');
   fs.writeFileSync(target, '-- comment\nselect 2;\n');
   fs.writeFileSync(v3Target, '-- comment\nselect 3;\n');
@@ -267,6 +269,7 @@ try {
   fs.writeFileSync(expenseDerivedStatus, '-- comment\nselect 6;\n');
   fs.writeFileSync(finalAccountantSelfPost, '-- comment\nselect 7;\n');
   fs.writeFileSync(formalCashierRepair, '-- comment\nselect 8;\n');
+  fs.writeFileSync(formalCashierSelfDisbursement, '-- comment\nselect 9;\n');
   const ledger = path.join(temp, 'ledger');
   fs.writeFileSync(ledger, '20260825000000\n');
   const syntheticVersions = ['20260825000000'];
@@ -290,6 +293,8 @@ try {
   fs.appendFileSync(ledger, '20260901024020\n');
   assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /reviewed adopted migration/);
   fs.appendFileSync(ledger, '20260901073241\n');
+  assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /reviewed adopted migration/);
+  fs.appendFileSync(ledger, '20260901081807\n');
   assert.equal(guard.classifyLedger(ledger, migrations, 'database_v3', '20260827052447', syntheticBaseline), 'applied');
   guard.verifyLedger('post', ledger, migrations, 'database_v3', '20260827052447', syntheticBaseline);
   assert.equal(guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), 'compat');

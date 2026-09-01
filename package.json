@@ -12,7 +12,7 @@
     "release:environment-isolation": "node scripts/check_environment_isolation_contract.js",
     "release:migration-lineage": "node scripts/check_migration_lineage_contract.js",
     "release:production-contract": "node scripts/check_finance_production_release_contract.js",
-    "release:root-cause-regressions": "node scripts/check_root_cause_regressions.js && node scripts/check_submission_identity_directory_contract.js && node scripts/check_notification_staff_access_reconciliation_contract.js && node scripts/check_membership_org_expense_submission_contract.js && node scripts/check_submission_applicant_identity_contract.js && node scripts/check_submission_persona_routes.js && node scripts/test_expense_route_authority_v2.js && node scripts/check_incident_account_org_repair.js && node scripts/check_final_accountant_self_post_contract.js",
+    "release:root-cause-regressions": "node scripts/check_root_cause_regressions.js && node scripts/check_submission_identity_directory_contract.js && node scripts/check_notification_staff_access_reconciliation_contract.js && node scripts/check_membership_org_expense_submission_contract.js && node scripts/check_submission_applicant_identity_contract.js && node scripts/check_submission_persona_routes.js && node scripts/test_expense_route_authority_v2.js && node scripts/check_incident_account_org_repair.js && node scripts/check_final_accountant_self_post_contract.js && node scripts/check_formal_cashier_self_disbursement_contract.js",
     "release:preflight": "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification",
     "release:verify-artifact": "node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js",
     "release:build": "pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact",
@@ -28,7 +28,8 @@
     "test:runtime-contract": "node scripts/check_finance_runtime_contract.js",
     "test:workflow-simplification": "node scripts/check_workflow_simplification_contract.js",
     "test:account-selection-scope": "node scripts/check_account_selection_scope_contract.js",
-    "test:final-accountant-self-post": "node scripts/check_final_accountant_self_post_contract.js"
+    "test:final-accountant-self-post": "node scripts/check_final_accountant_self_post_contract.js",
+    "test:formal-cashier-self-disbursement": "node scripts/check_formal_cashier_self_disbursement_contract.js"
   },
   "dependencies": {},
   "devDependencies": {}
