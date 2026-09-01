@@ -21,7 +21,7 @@ const LATEST_ADOPTED_MIGRATION = '20260828015718_repair_admin_ntpc_portal_employ
 const TOP_LEVEL_ROUTE_HOTFIX = '20260831042040_top_level_ceo_self_route.sql';
 const EXPENSE_STATUS_HOTFIX = '20260831043517_expense_submit_derived_status.sql';
 const FINAL_ACCOUNTANT_SELF_POST_HOTFIX = '20260901024020_final_accountant_self_post.sql';
-const FORMAL_CASHIER_REPAIR = '20260901072349_assign_ceo_cashier_and_reassign_pending_cashier.sql';
+const FORMAL_CASHIER_REPAIR = '20260901073241_assign_ceo_cashier_and_reassign_pending_cashier.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 

@@ -1,3 +1,4 @@
+-- Adopted production ledger version: 20260901073241.
 -- Assign the canonical CEO account as the formal cashier secondary role,
 -- remove the historical general-affairs fallback from both database actor
 -- resolvers, and move the three currently pending cashier tasks from u8 to the

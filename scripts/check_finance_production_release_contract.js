@@ -22,10 +22,10 @@ assert.equal(guard.MIGRATION_PORTAL_LINK_REPAIR, '20260828015718');
 assert.equal(guard.MIGRATION_TOP_LEVEL_CEO_ROUTE, '20260831042040');
 assert.equal(guard.MIGRATION_EXPENSE_DERIVED_STATUS, '20260831043517');
 assert.equal(guard.MIGRATION_FINAL_ACCOUNTANT_SELF_POST, '20260901024020');
-assert.equal(guard.MIGRATION_FORMAL_CASHIER_REPAIR, '20260901072349');
-assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20260831042040', '20260831043517', '20260901024020', '20260901072349']);
+assert.equal(guard.MIGRATION_FORMAL_CASHIER_REPAIR, '20260901073241');
+assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20260831042040', '20260831043517', '20260901024020', '20260901073241']);
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
-  '20260826070814', '20260826155840', '20260827052447', '20260828015718', '20260831042040', '20260831043517', '20260901024020', '20260901072349'
+  '20260826070814', '20260826155840', '20260827052447', '20260828015718', '20260831042040', '20260831043517', '20260901024020', '20260901073241'
 ]);
 assert.deepEqual(guard.RELEASE_PHASES, {
   frontend_compat: 'none',
@@ -132,7 +132,7 @@ assert.ok(releaseGuide.includes('`frontend_compat` | `none`'));
 assert.ok(releaseGuide.includes('`database_v3` | `20260827052447`'));
 assert.ok(releaseGuide.includes('目前正式庫已完成 v3'));
 assert.ok(releaseGuide.includes('20260828015718_repair_admin_ntpc_portal_employee_link_20260828'));
-assert.ok(releaseGuide.includes('20260901072349_assign_ceo_cashier_and_reassign_pending_cashier'));
+assert.ok(releaseGuide.includes('20260901073241_assign_ceo_cashier_and_reassign_pending_cashier'));
 assert.ok(releaseGuide.includes('目前只接受 `applied` recovery 路徑'));
 assert.ok(releaseGuide.includes('不宣稱或依賴未比較的 artifact digest'));
 assert.ok(!releaseGuide.includes('## 四種 migration phase'));
@@ -258,7 +258,7 @@ try {
   const topLevelCeoRoute = path.join(migrations, '20260831042040_top_level_ceo_self_route.sql');
   const expenseDerivedStatus = path.join(migrations, '20260831043517_expense_submit_derived_status.sql');
   const finalAccountantSelfPost = path.join(migrations, '20260901024020_final_accountant_self_post.sql');
-  const formalCashierRepair = path.join(migrations, '20260901072349_assign_ceo_cashier_and_reassign_pending_cashier.sql');
+  const formalCashierRepair = path.join(migrations, '20260901073241_assign_ceo_cashier_and_reassign_pending_cashier.sql');
   fs.writeFileSync(notification, '-- comment\nselect 1;\n');
   fs.writeFileSync(target, '-- comment\nselect 2;\n');
   fs.writeFileSync(v3Target, '-- comment\nselect 3;\n');
@@ -289,7 +289,7 @@ try {
   assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /reviewed adopted migration/);
   fs.appendFileSync(ledger, '20260901024020\n');
   assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /reviewed adopted migration/);
-  fs.appendFileSync(ledger, '20260901072349\n');
+  fs.appendFileSync(ledger, '20260901073241\n');
   assert.equal(guard.classifyLedger(ledger, migrations, 'database_v3', '20260827052447', syntheticBaseline), 'applied');
   guard.verifyLedger('post', ledger, migrations, 'database_v3', '20260827052447', syntheticBaseline);
   assert.equal(guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), 'compat');

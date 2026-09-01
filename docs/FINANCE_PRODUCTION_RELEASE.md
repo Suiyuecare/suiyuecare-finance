@@ -33,7 +33,7 @@ Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權�
 | 1 | `frontend_compat` | `none` | 日常前台發布：建立、驗證並提升新前台；資料庫不得提交變更，只能做唯讀 gate 與整筆回滾 canary |
 | 2 | `database_v3` | `20260827052447` | v3 復原入口：目前正式庫已完成 v3，只允許核對既有狀態並執行 postflight，不會重新套版 |
 
-正式資料庫目前受控 lineage 為 v1 `20260826070814`、v2 `20260826155840`、v3 `20260827052447`，以及已採納回版本庫的修復 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`、`20260831042040_top_level_ceo_self_route`、`20260831043517_expense_submit_derived_status`、`20260901024020_final_accountant_self_post`、`20260901072349_assign_ceo_cashier_and_reassign_pending_cashier`。最後一筆指定李佳泰為正式出納、移除總務備援，並以稽核紀錄轉派三張待放款單。任何其他未審查的 post-baseline migration 仍會 fail closed；採納修復不代表流程會再次執行該 SQL。
+正式資料庫目前受控 lineage 為 v1 `20260826070814`、v2 `20260826155840`、v3 `20260827052447`，以及已採納回版本庫的修復 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`、`20260831042040_top_level_ceo_self_route`、`20260831043517_expense_submit_derived_status`、`20260901024020_final_accountant_self_post`、`20260901073241_assign_ceo_cashier_and_reassign_pending_cashier`。最後一筆指定李佳泰為正式出納、移除總務備援，並以稽核紀錄轉派三張待放款單。任何其他未審查的 post-baseline migration 仍會 fail closed；採納修復不代表流程會再次執行該 SQL。
 
 ### Phase 1：`frontend_compat`
 
@@ -41,14 +41,14 @@ Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權�
 2. 跑完整 `release:preflight` 與 production artifact 驗證，只建立一次 `--prod --skip-domain` 的 unaliased candidate。
 3. 候選首頁必須恰有一個 `finance-release-contract=expense-submit-resilience-v3-20260827` meta，並實際包含 `submissionAttemptId`；release manifest 的 `source_commit` 必須等於 candidate SHA。
 4. sealed receipt v2 同時綁定 release phase、`migration_versions`、deployment ID／URL、manifest hash、首頁 hash、candidate SHA 與 GitHub run ID。下載 artifact 的後續 jobs 逐欄重算，不宣稱或依賴未比較的 artifact digest。
-5. 正式資料庫 ledger 必須恰有完整 v1／v2／v3 與上列全部已審查修復（含 `20260901072349` 正式出納修復）；workflow 以 v3 唯讀 postflight、精確的人員連結檢查、authenticated rollback canary 與 immutable project 檢查證明現況，不會提交任何資料庫變更，`prepare-apply` 不可能出現在此分支。
+5. 正式資料庫 ledger 必須恰有完整 v1／v2／v3 與上列全部已審查修復（含 `20260901073241` 正式出納修復）；workflow 以 v3 唯讀 postflight、精確的人員連結檢查、authenticated rollback canary 與 immutable project 檢查證明現況，不會提交任何資料庫變更，`prepare-apply` 不可能出現在此分支。
 6. 提升封存的同一 deployment URL 後，從 `finance.suiyuecare.com` 重新讀回 deployment ID、manifest 與首頁；只有 exact candidate SHA、release meta 與 `submissionAttemptId` 全部一致才算 Phase 1 完成。
 
 ### Phase 2：`database_v3`（既有版次復原／核對）
 
 1. 必須再次使用已在正式網域驗證過的同一 candidate SHA；不得使用不同 source commit。
 2. workflow 會先從正式網域讀回 manifest 與首頁，證明 release meta 與 `submissionAttemptId` 均存在。
-3. ledger 必須顯示 v3 與所有已審查修復（含 `20260901072349`）都已存在；目前只接受 `applied` recovery 路徑，重跑 v3 或任何已採納修復都會被拒絕。
+3. ledger 必須顯示 v3 與所有已審查修復（含 `20260901073241`）都已存在；目前只接受 `applied` recovery 路徑，重跑 v3 或任何已採納修復都會被拒絕。
 4. 以 v3 postflight 驗證函式、ACL、RLS、組織簽核語意，以及 `admin.ntpc@suiyuecare.com` 仍連結到指定的在職 employee/company；已離職重複人員必須保持停用。
 5. authenticated rollback canary 通過後才可繼續；整段核對不提交正式資料庫變更。
 6. `promote` 只處理同 SHA 的封存候選；最終仍須重新讀回 deployment、manifest 與首頁驗證。
