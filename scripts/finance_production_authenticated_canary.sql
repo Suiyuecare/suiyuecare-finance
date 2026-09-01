@@ -245,7 +245,7 @@ begin
     ),
     pg_catalog.jsonb_build_object(
       'a', '', 'c', '', 'n', '', 'r', '出納放款', 't', '',
-      'rk', 'cashier', 'uid', v_applicant_id,
+      'rk', 'cashier', 'uid', v_ceo_id,
       'files', '[]'::jsonb, 'status', 'pending_cashier'
     ),
     pg_catalog.jsonb_build_object(
@@ -265,7 +265,7 @@ begin
     pg_catalog.jsonb_build_object('step_key', 'admin_director', 'finance_user_id', v_supervisor_id),
     pg_catalog.jsonb_build_object('step_key', 'accountant', 'finance_user_id', v_accountant_id),
     pg_catalog.jsonb_build_object('step_key', 'ceo', 'finance_user_id', v_ceo_id),
-    pg_catalog.jsonb_build_object('step_key', 'cashier', 'finance_user_id', v_applicant_id),
+    pg_catalog.jsonb_build_object('step_key', 'cashier', 'finance_user_id', v_ceo_id),
     pg_catalog.jsonb_build_object('step_key', 'applicant_confirm', 'finance_user_id', v_applicant_id),
     pg_catalog.jsonb_build_object('step_key', 'accountant_final', 'finance_user_id', v_accountant_id)
   );
@@ -964,7 +964,7 @@ begin
     ),
     pg_catalog.jsonb_build_object(
       'a', '', 'c', '', 'n', '', 'r', '出納放款', 't', '',
-      'rk', 'cashier', 'uid', v_applicant_id,
+      'rk', 'cashier', 'uid', v_ceo_id,
       'files', '[]'::jsonb, 'status', 'pending_cashier'
     ),
     pg_catalog.jsonb_build_object(
@@ -983,7 +983,7 @@ begin
     pg_catalog.jsonb_build_object('step_key', 'admin_director', 'finance_user_id', v_supervisor_id),
     pg_catalog.jsonb_build_object('step_key', 'accountant', 'finance_user_id', v_accountant_id),
     pg_catalog.jsonb_build_object('step_key', 'ceo', 'finance_user_id', v_ceo_id),
-    pg_catalog.jsonb_build_object('step_key', 'cashier', 'finance_user_id', v_applicant_id),
+    pg_catalog.jsonb_build_object('step_key', 'cashier', 'finance_user_id', v_ceo_id),
     pg_catalog.jsonb_build_object('step_key', 'applicant_confirm', 'finance_user_id', v_xu_applicant_id),
     pg_catalog.jsonb_build_object('step_key', 'accountant_final', 'finance_user_id', v_accountant_id)
   );

@@ -538,6 +538,21 @@ for (const marker of [
   'u_1779419399401', 'B1302', 'E5', '徐靖雯 authenticated public submit canary failed',
   'rollback;', 'rolled_back', 'notifications_enqueued'
 ]) assert.ok(authenticatedCanary.includes(marker), `authenticated canary missing ${marker}`);
+assert.equal(
+  [...authenticatedCanary.matchAll(/'rk', 'cashier', 'uid', v_ceo_id/g)].length,
+  2,
+  'both authenticated canary routes must use the formal cashier'
+);
+assert.equal(
+  [...authenticatedCanary.matchAll(/'step_key', 'cashier', 'finance_user_id', v_ceo_id/g)].length,
+  2,
+  'both authenticated canary actor requests must use the formal cashier'
+);
+assert.doesNotMatch(
+  authenticatedCanary,
+  /'rk', 'cashier', 'uid', v_applicant_id|\'step_key\', \'cashier\', \'finance_user_id\', v_applicant_id/,
+  'authenticated canary must not reintroduce the general-affairs applicant as cashier'
+);
 const canaryResultSelect = authenticatedCanary.match(
   /select pg_catalog\.jsonb_build_object\(([\s\S]*?)\) as authenticated_canary_result;/
 );
