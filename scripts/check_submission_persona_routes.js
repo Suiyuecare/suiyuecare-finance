@@ -62,12 +62,12 @@ const deps = {
     if (role === 'accountant') return users.liuAccountant;
     if (role === 'ceo') return users.ceo;
     if (role === 'general_affairs') return users.zhu;
-    // Formal role bindings resolve u8 as cashier even though their primary
-    // personnel role is general affairs.
-    if (role === 'cashier') return users.zhu;
+    // The CEO keeps the CEO primary role and holds cashier as a formal
+    // secondary approval role in employee_department_roles.
+    if (role === 'cashier') return users.ceo;
     return allUsers.find((user) => user.role === role) || null;
   },
-  cashierUser() { return users.zhu; },
+  cashierUser() { return users.ceo; },
   directSupervisorUser(applicant) { return directSupervisorByApplicant[applicant.id] || null; },
   approvalDeptManagerUser(applicant) { return deptManagerByApplicant[applicant.id] || null; },
   scopedApprovalRole(role) { return ['section_chief', 'dept_manager'].includes(role); },
@@ -149,7 +149,7 @@ const ceoRoute = templateExpense(users.ceo);
 check('執行長 A1000：direct_supervisor formal fallback 保留 audited auto-skip', exactAuditedSelfSkip(step(ceoRoute, 'direct_supervisor'), users.ceo));
 check('執行長 A1000：dept_manager formal fallback 保留 audited auto-skip', exactAuditedSelfSkip(step(ceoRoute, 'dept_manager'), users.ceo));
 check('執行長 A1000：ceo review 保留 audited auto-skip', exactAuditedSelfSkip(step(ceoRoute, 'ceo'), users.ceo));
-check('執行長 A1000：cashier 仍由正式 u8 待辦', step(ceoRoute, 'cashier').uid === users.zhu.id && !step(ceoRoute, 'cashier').a);
+check('執行長 A1000：兼任出納仍保留 operational pending', step(ceoRoute, 'cashier').uid === users.ceo.id && !step(ceoRoute, 'cashier').a && !step(ceoRoute, 'cashier').autoSkip);
 check('執行長 A1000：前端正式流程檢核通過', noRuntimeErrors(users.ceo, 'expense_reimbursement', ceoRoute));
 check('執行長 A1000：DB 回傳 NO_MATCHING_ACTOR 時，直屬主管解析為本人 audited fallback',
   approval.approvalRuntimeTopLevelSelfCandidate(topLevelMissingPayload(users.ceo, 'direct_supervisor'), 'direct_supervisor', 'direct_supervisor', users.ceo, 'A1000').finance_user_id === users.ceo.id);
@@ -167,12 +167,12 @@ check('蘇之瑄：一般員工流程沒有偽造的 canonical auto-skip', !suRo
 check('蘇之瑄：前端正式流程檢核通過', noRuntimeErrors(users.su, 'expense_reimbursement', suRoute));
 
 const zhuExpenseRoute = templateExpense(users.zhu);
-check('朱夏欣：cashier 是本人時仍保留為 operational pending', step(zhuExpenseRoute, 'cashier').uid === users.zhu.id && !step(zhuExpenseRoute, 'cashier').a && !step(zhuExpenseRoute, 'cashier').autoSkip);
+check('朱夏欣：cashier 指向正式出納李佳泰，不再由總務承辦', step(zhuExpenseRoute, 'cashier').uid === users.ceo.id && !step(zhuExpenseRoute, 'cashier').a && !step(zhuExpenseRoute, 'cashier').autoSkip);
 check('朱夏欣：一般費用流程檢核通過', noRuntimeErrors(users.zhu, 'expense_reimbursement', zhuExpenseRoute));
 const zhuPurchaseRoute = approval.buildWorkflowTemplateSteps(users.zhu, 'purchase_request', { amount: 100000, is_purchase: true, requires_general_affairs: true }, deps);
 check('朱夏欣採購：procurement_payment 本人作業維持 pending', step(zhuPurchaseRoute, 'procurement_payment').uid === users.zhu.id && !step(zhuPurchaseRoute, 'procurement_payment').a);
 check('朱夏欣採購：procurement_receipt 本人作業維持 pending', step(zhuPurchaseRoute, 'procurement_receipt').uid === users.zhu.id && !step(zhuPurchaseRoute, 'procurement_receipt').a);
-check('朱夏欣採購：cashier 本人作業維持 pending', step(zhuPurchaseRoute, 'cashier').uid === users.zhu.id && !step(zhuPurchaseRoute, 'cashier').a);
+check('朱夏欣採購：cashier 由正式出納李佳泰承辦', step(zhuPurchaseRoute, 'cashier').uid === users.ceo.id && !step(zhuPurchaseRoute, 'cashier').a);
 check('朱夏欣採購：前端正式流程檢核通過', noRuntimeErrors(users.zhu, 'purchase_request', zhuPurchaseRoute));
 
 // All builder families use the same self-review contract.
@@ -233,9 +233,13 @@ check('正式 actor resolver 先套用最高層本人例外，再判斷 NO_MATCH
   resolverStart > -1
     && resolverBody.indexOf('approvalRuntimeTopLevelSelfCandidate') > -1
     && resolverBody.indexOf('approvalRuntimeTopLevelSelfCandidate') < resolverBody.indexOf('if(!payload.ok||!candidates.length)'));
-check('出納 fallback 僅能使用正式出納或總務，不得回退到執行長',
-  /function cashierUser\(\)\{\s*return firstUserByRole\('cashier'\)\|\|firstUserByRole\('general_affairs'\);\s*\}/.test(indexSource)
-    && !/function cashierUser\(\)[\s\S]{0,160}firstUserByRole\('ceo'\)/.test(indexSource));
+const cashierResolverStart = indexSource.indexOf('function cashierUser()');
+const cashierResolverEnd = indexSource.indexOf('function activeUniqueUsers', cashierResolverStart);
+const cashierResolverBody = indexSource.slice(cashierResolverStart, cashierResolverEnd);
+check('出納只能使用正式主角色或 employee_department_roles 副角色，不再回退總務',
+  cashierResolverBody.includes("firstUserByRole('cashier')||firstUserByRuntimeRole('cashier')")
+    && !cashierResolverBody.includes("firstUserByRole('general_affairs')")
+    && !cashierResolverBody.includes("firstUserByRole('ceo')"));
 const runtimeResolverStart = indexSource.indexOf('async function resolveApprovalStepsWithRuntime');
 const runtimeResolverEnd = indexSource.indexOf('async function prepareApprovalRouteForSubmit', runtimeResolverStart);
 const runtimeResolverBody = indexSource.slice(runtimeResolverStart, runtimeResolverEnd);

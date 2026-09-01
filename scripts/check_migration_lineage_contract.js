@@ -21,6 +21,7 @@ const LATEST_ADOPTED_MIGRATION = '20260828015718_repair_admin_ntpc_portal_employ
 const TOP_LEVEL_ROUTE_HOTFIX = '20260831042040_top_level_ceo_self_route.sql';
 const EXPENSE_STATUS_HOTFIX = '20260831043517_expense_submit_derived_status.sql';
 const FINAL_ACCOUNTANT_SELF_POST_HOTFIX = '20260901024020_final_accountant_self_post.sql';
+const FORMAL_CASHIER_REPAIR = '20260901073241_assign_ceo_cashier_and_reassign_pending_cashier.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 
@@ -84,14 +85,17 @@ const finalAccountantHotfixIndex = migrations.indexOf(FINAL_ACCOUNTANT_SELF_POST
 const finalAccountantHotfixSql = finalAccountantHotfixIndex >= 0
   ? read(`supabase/migrations/${FINAL_ACCOUNTANT_SELF_POST_HOTFIX}`)
   : '';
+const cashierRepairIndex = migrations.indexOf(FORMAL_CASHIER_REPAIR);
+const cashierRepairSql = cashierRepairIndex >= 0 ? read(`supabase/migrations/${FORMAL_CASHIER_REPAIR}`) : '';
 const staleAttemptBranch = releaseSql.match(/if v_attempt_id is null then([\s\S]*?)end if;/)?.[1] || '';
 const futureRouteGuard = releaseSql.match(/create function private\.finance_expense_assert_applicant_revision_future_route_v3\([\s\S]*?\$function\$;/)?.[0] || '';
-check('route authority and reviewed production hotfixes are the exact lineage suffix',
-  releaseIndex === migrations.length - 5
-    && adoptedRepairIndex === migrations.length - 4
-    && routeHotfixIndex === migrations.length - 3
-    && statusHotfixIndex === migrations.length - 2
-    && finalAccountantHotfixIndex === migrations.length - 1,
+check('route authority and all reviewed production hotfixes are the exact lineage suffix',
+  releaseIndex === migrations.length - 6
+    && adoptedRepairIndex === migrations.length - 5
+    && routeHotfixIndex === migrations.length - 4
+    && statusHotfixIndex === migrations.length - 3
+    && finalAccountantHotfixIndex === migrations.length - 2
+    && cashierRepairIndex === migrations.length - 1,
   migrations[migrations.length - 1] || '(none)');
 check('current release migration leaves transaction and ledger atomicity to the pinned CLI',
   !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(releaseSql)
@@ -168,6 +172,19 @@ check('final-accountant hotfix permits only the explicitly frozen final posting 
     && finalAccountantHotfixSql.includes('p_step_index =')
     && finalAccountantHotfixSql.includes('v_explicit_user_id = p_actor_finance_user_id')
     && !/(?:insert\s+into|update|delete\s+from)\s+public\.(?:expense_requests|employee_department_roles|finance_users)/i.test(finalAccountantHotfixSql));
+check('formal cashier repair is atomic-safe, hash-pinned, removes the GA fallback, and audits all three transfers',
+  !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(cashierRepairSql)
+    && !/^\s*(?:(?:create(?:\s+unique)?\s+index|drop\s+index)\s+concurrently\b|reindex\b[^;]*\bconcurrently\b|vacuum\b|alter\s+system\b|cluster\b)/im.test(cashierRepairSql)
+    && cashierRepairSql.includes('52e4fe984d2ee7bbadb72a6d96dfe443caf9de91b08eba689e21249a78a33213')
+    && cashierRepairSql.includes('1fff070fc78f2d0182647f496b51119ecfa072a7b189bc25fb767567d99c874a')
+    && cashierRepairSql.includes(`v_old_cashier_normalization constant text := 'when ''cashier'' then ''general_affairs'''`)
+    && cashierRepairSql.includes("v_old_general_affairs_fallback constant text := 'or (p_role_key = ''cashier'' and fu.role = ''general_affairs'')'")
+    && cashierRepairSql.includes("v_cashier_user_id constant text := 'u_entrepreneur'")
+    && cashierRepairSql.includes("v_target_nos constant text[] := array['20260827012','20260831007','20260831008']")
+    && cashierRepairSql.includes("'cashier_reassigned'")
+    && cashierRepairSql.includes("'reassignmentHistory'")
+    && cashierRepairSql.includes('if v_request_count <> 3 then')
+    && cashierRepairSql.includes('if v_audit_count <> 3 then'));
 
 check('release guide requires controlled remote rehearsal before promotion',
   releaseGuide.includes('transaction-control')

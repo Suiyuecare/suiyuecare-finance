@@ -10342,7 +10342,8 @@ function syncSidebarSectionVisibility(){
 }
 var PREFERRED_ROLE_EMAILS={
   accountant:'suiyue.acct@suiyuecare.com',
-  ceo:'entrepreneur@suiyuecare.com'
+  ceo:'entrepreneur@suiyuecare.com',
+  cashier:'entrepreneur@suiyuecare.com'
 };
 function preferredRoleEmail(role){
   return PREFERRED_ROLE_EMAILS[role]||'';
@@ -10357,8 +10358,29 @@ function firstUserByRole(role){
   }
   return USERS.find(function(u){return u.role===role&&u.active!==false&&orgCanApprove(u);})||null;
 }
+function firstUserByRuntimeRole(role){
+  role=String(role||'').trim().toLowerCase();
+  if(!role)return null;
+  var assignments=((ORG_ADMIN_RUNTIME&&ORG_ADMIN_RUNTIME.employeeRoles)||[]).filter(function(row){
+    if(!row||row.active===false||row.is_active===false||row.can_approve===false||row.canApprove===false)return false;
+    return String(runtimeField(row,['role_key','roleKey','role_type','roleType'])||'').trim().toLowerCase()===role;
+  });
+  var preferredEmail=preferredRoleEmail(role);
+  var candidates=assignments.map(function(row){
+    var uid=String(runtimeField(row,['finance_user_id','financeUserId','user_id','userId'])||'').trim();
+    var email=normEmail(runtimeField(row,['finance_user_email','financeUserEmail','user_email','userEmail','email']));
+    var user=uid?userById(uid):null;
+    if(!user&&email)user=userByEmail(email);
+    return user&&user.active!==false&&orgCanApprove(user)?user:null;
+  }).filter(Boolean);
+  if(preferredEmail){
+    var preferred=candidates.find(function(user){return normEmail(user.email)===preferredEmail;});
+    if(preferred)return preferred;
+  }
+  return candidates[0]||null;
+}
 function cashierUser(){
-  return firstUserByRole('cashier')||firstUserByRole('general_affairs');
+  return firstUserByRole('cashier')||firstUserByRuntimeRole('cashier');
 }
 function activeUniqueUsers(){
   var groups={};
