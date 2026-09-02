@@ -189,6 +189,13 @@
       var paused = !!(afterReturnPause && !current && !rejected);
       var cls = current ? 'current' : (rejected ? 'rejected' : (done ? 'done' : (paused ? 'paused' : 'future')));
       var purpose = callDep(deps, 'stepPurpose', step) || '';
+      var assignedUser = step.uid ? callDep(deps, 'userById', step.uid) : null;
+      var assignedName = String(
+        (assignedUser && (assignedUser.n || assignedUser.name))
+        || step.assigneeName
+        || step.assignee_name
+        || ''
+      ).trim();
       if (paused && autoSkipped(step)) purpose = '待申請人補件重新送出後，系統會依重複主管規則自動略過。';
       else if (paused) purpose = '待申請人補件重新送出後，流程才會繼續回到本關。';
       rows.push({
@@ -200,6 +207,7 @@
         files: callDep(deps, 'normalizeFiles', step.files || []) || [],
         comment: stepDisplayComment(step, state),
         name: step.n || '',
+        assignedName: assignedName,
         time: step.t || '',
         done: done,
         rejected: rejected,
@@ -283,7 +291,10 @@
     else if (row.paused) badges += '<span class="approval-step-badge">' + (row.auto ? '待補件後自動跳關' : '待補件後繼續') + '</span>';
     else if (row.auto && row.done) badges += '<span class="approval-step-badge">系統自動跳關</span>';
     else if (row.rejected) badges += '<span class="approval-step-badge">已駁回</span>';
-    var meta = (row.name ? ' — ' + htmlEscape(row.name, deps) : '') + (row.time ? ' <span class="approval-step-meta">' + htmlEscape(row.time, deps) + '</span>' : '');
+    var personMeta = '';
+    if (row.name) personMeta = ' — 已由：' + htmlEscape(row.name, deps);
+    else if (row.assignedName) personMeta = ' — 待處理：' + htmlEscape(row.assignedName, deps);
+    var meta = personMeta + (row.time ? ' <span class="approval-step-meta">' + htmlEscape(row.time, deps) + '</span>' : '');
     return '<div class="approval-step-row ' + htmlEscape(row.className || '', deps) + '"><div class="approval-step-dot">' + htmlEscape(dot, deps) + '</div><div class="approval-step-body">'
       + '<div class="approval-step-title">' + htmlEscape(row.title || '簽核關卡', deps) + meta + badges + '</div>'
       + '<div class="approval-step-purpose">' + htmlEscape(row.purpose || '依流程檢核此關資料。', deps) + '</div>'

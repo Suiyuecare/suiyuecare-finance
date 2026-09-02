@@ -30,7 +30,8 @@
     "test:workflow-simplification": "node scripts/check_workflow_simplification_contract.js",
     "test:account-selection-scope": "node scripts/check_account_selection_scope_contract.js",
     "test:final-accountant-self-post": "node scripts/check_final_accountant_self_post_contract.js",
-    "test:formal-cashier-self-disbursement": "node scripts/check_formal_cashier_self_disbursement_contract.js"
+    "test:formal-cashier-self-disbursement": "node scripts/check_formal_cashier_self_disbursement_contract.js",
+    "test:approval-timeline-assignee": "node scripts/check_approval_timeline_assignee_contract.js"
   },
   "dependencies": {},
   "devDependencies": {}
