@@ -394,8 +394,13 @@ jobs:
             run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
               "$RUNNER_TEMP/finance-compatibility-gate.sql" "$RUNNER_TEMP/finance-compatibility-gate.json"
           elif test "$PHASE_STATE" = "pending" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then
-            run_gate "$TOOLS/scripts/finance_production_db_preflight.sql" \
-              "$RUNNER_TEMP/finance-preflight.sql" "$RUNNER_TEMP/finance-preflight.json"
+            if test "$RELEASE_PHASE" = "database_human_accounting"; then
+              run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
+                "$RUNNER_TEMP/finance-existing-v3-gate.sql" "$RUNNER_TEMP/finance-existing-v3-gate.json"
+            else
+              run_gate "$TOOLS/scripts/finance_production_db_preflight.sql" \
+                "$RUNNER_TEMP/finance-preflight.sql" "$RUNNER_TEMP/finance-preflight.json"
+            fi
 
             MIGRATION="$(find "$TOOLS/supabase/migrations" -maxdepth 1 -type f -name "${MIGRATION_VERSIONS}_*.sql" -print)"
             test "$(printf '%s\n' "$MIGRATION" | sed '/^$/d' | wc -l | tr -d ' ')" = "1"

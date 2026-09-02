@@ -365,8 +365,9 @@ try {
   guard.preparePhaseQuery(phasePreflightSource, v3GateOutput, 'database_v3', '20260827052447');
   assert.match(fs.readFileSync(v3GateOutput, 'utf8'), /'20260827052447'/);
   const humanGateOutput = path.join(temp, 'human-gate-rendered.sql');
-  guard.preparePhaseQuery(phasePreflightSource, humanGateOutput, 'database_human_accounting', '20260902054834');
+  guard.preparePhaseQuery(phasePostflightSource, humanGateOutput, 'database_human_accounting', '20260902054834');
   assert.match(fs.readFileSync(humanGateOutput, 'utf8'), /'20260827052447'/);
+  assert.throws(() => guard.preparePhaseQuery(phasePreflightSource, path.join(temp, 'bad-human-gate.sql'), 'database_human_accounting', '20260902054834'), /may only render/);
   assert.throws(() => guard.preparePhaseQuery(phasePreflightSource, path.join(temp, 'bad-compat-gate.sql'), 'frontend_compat', 'none'), /may only render/);
   assert.throws(() => guard.preparePhaseQuery(phasePostflightSource, path.join(temp, 'bad-pair-gate.sql'), 'database_v3', 'none'), /must use/);
   const readOnlySource = path.join(temp, 'read-only.sql');

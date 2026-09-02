@@ -359,8 +359,8 @@ function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
     return prepareGateQuery(sourcePath, outputPath, MIGRATION_V3);
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
-    if (!['finance_production_db_preflight.sql', 'finance_production_db_postflight.sql'].includes(sourceName)) {
-      fail('database_human_accounting may only render the reviewed compatibility preflight or postflight');
+    if (sourceName !== 'finance_production_db_postflight.sql') {
+      fail('database_human_accounting may only render the reviewed existing-v3 compatibility postflight');
     }
     return prepareGateQuery(sourcePath, outputPath, MIGRATION_V3);
   }
