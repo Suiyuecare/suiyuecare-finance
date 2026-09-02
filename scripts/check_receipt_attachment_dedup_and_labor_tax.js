@@ -55,6 +55,8 @@ function functionSource(name){
 }
 const laborRuntime=new Function('num','BUSINESS_TAX_RATE',[
   functionSource('accountingLaborFeeDetected'),
+  functionSource('accountingManualFieldNames'),
+  functionSource('accountingLineManualFields'),
   functionSource('lazyHasValue'),
   functionSource('normalizeLazyTaxMode'),
   functionSource('lazyTaxMode'),
@@ -72,9 +74,9 @@ check('receipt write avoids appending the same physical file twice',/nextFiles:u
 
 check('labor-fee OCR rows are forced to exempt mode',/if\(laborFee\)\{[\s\S]{0,180}tax=0;[\s\S]{0,100}taxMode='exempt';/.test(indexSource));
 check('6221 is an explicit labor-fee detection signal',/if\(code==='6221'\)return true;/.test(indexSource));
-check('historical labor-fee accounting lines are normalized to zero input tax',/\|\|laborFee\)\{tax=0;net=gross;\}/.test(indexSource));
-check('saving a reviewed labor-fee line keeps tax at zero',/var tax=\(r&&r\.type==='hr_expense_request'\)\|\|laborFee\?0:/.test(indexSource));
+check('historical AI labor-fee lines default to zero input tax unless a human reviewed the amounts',/\|\|laborFee\)&&!humanTax&&!humanNet\)\{tax=0;net=gross;\}/.test(indexSource));
+check('saving a reviewed labor-fee line keeps the human tax input',/var tax=taxEl\?Math\.max\(0,Math\.round\(num\(taxEl\.value\)\)\):num\(line\.taxAmount\)/.test(indexSource));
 check('built frontend includes unique receipt attachment handling',builtIndexSource.includes('receiptFilesForInvoiceRows')&&builtAttachmentSource.includes('function uniqueFiles'));
-check('built frontend includes the labor fee no-tax guard',builtIndexSource.includes("if(code==='6221')return true")&&builtIndexSource.includes("taxMode='exempt'"));
+check('built frontend includes the labor fee AI default and human override guard',builtIndexSource.includes("if(code==='6221')return true")&&builtIndexSource.includes('humanAmount=accountingLineManualFields'));
 
 process.stdout.write('OK: '+passed+' receipt attachment and labor tax checks passed\n');

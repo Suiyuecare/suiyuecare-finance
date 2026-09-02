@@ -23,6 +23,7 @@ const EXPENSE_STATUS_HOTFIX = '20260831043517_expense_submit_derived_status.sql'
 const FINAL_ACCOUNTANT_SELF_POST_HOTFIX = '20260901024020_final_accountant_self_post.sql';
 const FORMAL_CASHIER_REPAIR = '20260901073241_assign_ceo_cashier_and_reassign_pending_cashier.sql';
 const FORMAL_CASHIER_SELF_DISBURSEMENT = '20260901081807_allow_formal_cashier_self_disbursement.sql';
+const HUMAN_ACCOUNTING_AUTHORITY = '20260902054834_preserve_human_accounting_authority_v1.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
 
@@ -92,16 +93,19 @@ const cashierSelfDisbursementIndex = migrations.indexOf(FORMAL_CASHIER_SELF_DISB
 const cashierSelfDisbursementSql = cashierSelfDisbursementIndex >= 0
   ? read(`supabase/migrations/${FORMAL_CASHIER_SELF_DISBURSEMENT}`)
   : '';
+const humanAccountingIndex = migrations.indexOf(HUMAN_ACCOUNTING_AUTHORITY);
+const humanAccountingSql = humanAccountingIndex >= 0 ? read(`supabase/migrations/${HUMAN_ACCOUNTING_AUTHORITY}`) : '';
 const staleAttemptBranch = releaseSql.match(/if v_attempt_id is null then([\s\S]*?)end if;/)?.[1] || '';
 const futureRouteGuard = releaseSql.match(/create function private\.finance_expense_assert_applicant_revision_future_route_v3\([\s\S]*?\$function\$;/)?.[0] || '';
 check('route authority and all reviewed production hotfixes are the exact lineage suffix',
-  releaseIndex === migrations.length - 7
-    && adoptedRepairIndex === migrations.length - 6
-    && routeHotfixIndex === migrations.length - 5
-    && statusHotfixIndex === migrations.length - 4
-    && finalAccountantHotfixIndex === migrations.length - 3
-    && cashierRepairIndex === migrations.length - 2
-    && cashierSelfDisbursementIndex === migrations.length - 1,
+  releaseIndex === migrations.length - 8
+    && adoptedRepairIndex === migrations.length - 7
+    && routeHotfixIndex === migrations.length - 6
+    && statusHotfixIndex === migrations.length - 5
+    && finalAccountantHotfixIndex === migrations.length - 4
+    && cashierRepairIndex === migrations.length - 3
+    && cashierSelfDisbursementIndex === migrations.length - 2
+    && humanAccountingIndex === migrations.length - 1,
   migrations[migrations.length - 1] || '(none)');
 check('current release migration leaves transaction and ledger atomicity to the pinned CLI',
   !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(releaseSql)
@@ -191,6 +195,18 @@ check('formal cashier repair is atomic-safe, hash-pinned, removes the GA fallbac
     && cashierRepairSql.includes("'reassignmentHistory'")
     && cashierRepairSql.includes('if v_request_count <> 3 then')
     && cashierRepairSql.includes('if v_audit_count <> 3 then'));
+check('human accounting authority is atomic-safe, fail-closed, audited, and synchronizes normalized lines',
+  !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(humanAccountingSql)
+    && !/^\s*(?:(?:create(?:\s+unique)?\s+index|drop\s+index)\s+concurrently\b|reindex\b[^;]*\bconcurrently\b|vacuum\b|alter\s+system\b|cluster\b)/im.test(humanAccountingSql)
+    && /set local lock_timeout/.test(humanAccountingSql)
+    && /set local statement_timeout/.test(humanAccountingSql)
+    && /do \$preflight\$/.test(humanAccountingSql)
+    && /do \$postflight\$/.test(humanAccountingSql)
+    && /notify pgrst, 'reload schema'/.test(humanAccountingSql)
+    && humanAccountingSql.includes('trg_zz_finance_preserve_human_accounting_authority')
+    && humanAccountingSql.includes('trg_zz_finance_sync_request_accounting_lines')
+    && humanAccountingSql.includes("'HUMAN_ACCOUNTING_SYNC'")
+    && humanAccountingSql.includes('on conflict (request_id, line_index) do update'));
 
 check('formal cashier self-disbursement hotfix is narrow, hash-pinned, and data preserving',
   !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(cashierSelfDisbursementSql)

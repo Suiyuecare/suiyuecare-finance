@@ -24,7 +24,7 @@ Environment `finance-production` 必須設定：
 
 Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權該 team/project 的 pull、build、candidate deploy、inspect/API/curl 與 promote；資料庫帳號只授權目標 Supabase project 的 migration 權限。
 
-## 固定兩個受控入口：日常前台發布與既有 v3 復原
+## 固定三個受控入口：日常前台發布、既有 v3 復原與人工會計權威
 
 此版本只接受以下兩組輸入，`release_phase` 與 `migration_versions` 任何不相符都在建置或資料庫連線前立即拒絕：
 
@@ -32,8 +32,9 @@ Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權�
 |---|---|---|---|
 | 1 | `frontend_compat` | `none` | 日常前台發布：建立、驗證並提升新前台；資料庫不得提交變更，只能做唯讀 gate 與整筆回滾 canary |
 | 2 | `database_v3` | `20260827052447` | v3 復原入口：目前正式庫已完成 v3，只允許核對既有狀態並執行 postflight，不會重新套版 |
+| 3 | `database_human_accounting` | `20260902054834` | 先原子套用「人工修改優先」資料庫保護並完成唯讀 canary，再提升同一份封存前台候選 |
 
-正式資料庫目前受控 lineage 為 v1 `20260826070814`、v2 `20260826155840`、v3 `20260827052447`，以及已採納回版本庫的修復 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`、`20260831042040_top_level_ceo_self_route`、`20260831043517_expense_submit_derived_status`、`20260901024020_final_accountant_self_post`、`20260901073241_assign_ceo_cashier_and_reassign_pending_cashier`。最後一筆指定李佳泰為正式出納、移除總務備援，並以稽核紀錄轉派三張待放款單。任何其他未審查的 post-baseline migration 仍會 fail closed；採納修復不代表流程會再次執行該 SQL。
+正式資料庫目前受控 lineage 為 v1 `20260826070814`、v2 `20260826155840`、v3 `20260827052447`，以及已採納回版本庫的修復 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`、`20260831042040_top_level_ceo_self_route`、`20260831043517_expense_submit_derived_status`、`20260901024020_final_accountant_self_post`、`20260901073241_assign_ceo_cashier_and_reassign_pending_cashier`、`20260901081807_allow_formal_cashier_self_disbursement`。其中正式出納固定為李佳泰、總務備援已移除，且三張待放款單保留稽核轉派紀錄。任何其他未審查的 post-baseline migration 仍會 fail closed；採納既有版次不代表流程會再次執行其 SQL。
 
 ### Phase 1：`frontend_compat`
 
@@ -53,6 +54,13 @@ Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權�
 5. authenticated rollback canary 通過後才可繼續；整段核對不提交正式資料庫變更。
 6. `promote` 只處理同 SHA 的封存候選；最終仍須重新讀回 deployment、manifest 與首頁驗證。
 
+### Phase 3：`database_human_accounting`
+
+1. ledger 必須逐筆符合上述已採納 lineage，且 `20260902054834` 尚未套用或已完整套用；其他狀態一律拒絕。
+2. 先在回滾交易中演練 migration，再以鎖定 ledger 的單一交易同時套用 SQL 與寫入 migration 紀錄。
+3. 套用後以唯讀 canary 驗證人工修改的未稅、稅額、含稅、借方科目與貸方科目不會被過期 AI 結果覆蓋，並確認兩個同步 trigger 都存在。
+4. 資料庫驗收通過後才提升同一份封存前台候選；正式網域仍須重新讀回相同 deployment、manifest 與前端合約。
+
 v3 會重新解析正式直屬主管與唯一部門主管，只有可稽核的同一人情形才能跳關；補件時已完成的歷史簽核人與已移除的舊金額關卡保持不可變。新送件必須帶穩定 `submissionAttemptId`；缺少該欄位的舊分頁一律以 `55000` 要求重新整理。同一申請單、登入申請人、attempt 與 SHA-256 payload 必須一致，不同 attempt 或 payload 一律 fail closed。
 
 ## ROLLBACK rehearsal 的真實邊界
@@ -66,8 +74,8 @@ v3 會重新解析正式直屬主管與唯一部門主管，只有可稽核的�
 在 GitHub Actions 手動選擇 `Finance Protected Production Release`，輸入：
 
 - `candidate_sha`：當下 protected `main` 的完整 SHA。
-- `release_phase`：一般前台上線選 `frontend_compat`；只有既有 v3 發布復原需要才選 `database_v3`。
-- `migration_versions`：`frontend_compat` 僅能填 `none`；`database_v3` 僅能填 `20260827052447`。
+- `release_phase`：一般前台上線選 `frontend_compat`；既有 v3 復原選 `database_v3`；本次人工會計權威上線選 `database_human_accounting`。
+- `migration_versions`：分別只能填 `none`、`20260827052447` 或 `20260902054834`。
 - `confirmation`：`PROMOTE FINANCE PRODUCTION`。
 
 任一步失敗即 fail closed。`frontend_compat` 不會變更資料庫；目前的 `database_v3` 也只核對已套用狀態，不會重跑 v3 或任何已採納修復。若提升或 readback 遇到暫時錯誤，應在同一 GitHub Actions run 使用 **Re-run failed jobs**，讓獨立 `promote` job 消費同一 sealed artifact，不重新建置或套版。`candidate` artifact 保留 14 天；超過保留期不得把另一個 deployment 冒充原候選，必須另開完整受審發布。

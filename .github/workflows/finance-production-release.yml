@@ -8,14 +8,15 @@ on:
         required: true
         type: string
       release_phase:
-        description: frontend_compat publishes UI; database_v3 is existing-v3 recovery only
+        description: frontend_compat publishes UI; database_v3 recovers v3; database_human_accounting releases reviewed human authority
         required: true
         type: choice
         options:
           - frontend_compat
           - database_v3
+          - database_human_accounting
       migration_versions:
-        description: frontend_compat requires none; database_v3 recovery requires 20260827052447
+        description: frontend_compat=none; database_v3=20260827052447; database_human_accounting=20260902054834
         required: true
         type: string
       confirmation:
@@ -166,6 +167,7 @@ jobs:
           cp scripts/finance_production_db_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_production_db_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_production_authenticated_canary.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_production_human_accounting_canary.sql "$BUNDLE/release-tools/scripts/"
           cp supabase/config.toml "$BUNDLE/release-tools/supabase/config.toml"
           cp supabase/migrations/*.sql "$BUNDLE/release-tools/supabase/migrations/"
           node scripts/finance_production_release_guard.js create-receipt \
@@ -391,7 +393,7 @@ jobs:
           if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then
             run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
               "$RUNNER_TEMP/finance-compatibility-gate.sql" "$RUNNER_TEMP/finance-compatibility-gate.json"
-          elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_v3"; then
+          elif test "$PHASE_STATE" = "pending" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then
             run_gate "$TOOLS/scripts/finance_production_db_preflight.sql" \
               "$RUNNER_TEMP/finance-preflight.sql" "$RUNNER_TEMP/finance-preflight.json"
 
@@ -405,26 +407,28 @@ jobs:
               --authenticated-canary "$TOOLS/scripts/finance_production_authenticated_canary.sql"
             (cd "$TOOLS" && supabase db query --linked --file "$REHEARSAL" --output json) > "$RUNNER_TEMP/rehearsal-result.json"
             test "$(sha256sum "$MIGRATION" | awk '{print $1}')" = "$ORIGINAL_SHA"
-            pnpm dlx vercel@59.3.0 curl /release-manifest.json \
-              --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
-              --fail --silent --show-error \
-              --output "$RUNNER_TEMP/production-immediately-before-db-contract-manifest.json"
-            pnpm dlx vercel@59.3.0 curl / \
-              --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
-              --fail --silent --show-error \
-              --output "$RUNNER_TEMP/production-immediately-before-db-contract-index.html"
-            node "$GUARD" verify-production-baseline \
-              --production-manifest "$RUNNER_TEMP/production-immediately-before-db-contract-manifest.json" \
-              --candidate-manifest "$BUNDLE/local-release-manifest.json" \
-              --production-index "$RUNNER_TEMP/production-immediately-before-db-contract-index.html" \
-              --candidate-index "$BUNDLE/candidate-index.html" \
-              --candidate-sha "$CANDIDATE_SHA" --release-phase "$RELEASE_PHASE" \
-              --migration-versions "$MIGRATION_VERSIONS"
+            if test "$RELEASE_PHASE" = "database_v3"; then
+              pnpm dlx vercel@59.3.0 curl /release-manifest.json \
+                --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
+                --fail --silent --show-error \
+                --output "$RUNNER_TEMP/production-immediately-before-db-contract-manifest.json"
+              pnpm dlx vercel@59.3.0 curl / \
+                --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
+                --fail --silent --show-error \
+                --output "$RUNNER_TEMP/production-immediately-before-db-contract-index.html"
+              node "$GUARD" verify-production-baseline \
+                --production-manifest "$RUNNER_TEMP/production-immediately-before-db-contract-manifest.json" \
+                --candidate-manifest "$BUNDLE/local-release-manifest.json" \
+                --production-index "$RUNNER_TEMP/production-immediately-before-db-contract-index.html" \
+                --candidate-index "$BUNDLE/candidate-index.html" \
+                --candidate-sha "$CANDIDATE_SHA" --release-phase "$RELEASE_PHASE" \
+                --migration-versions "$MIGRATION_VERSIONS"
+            fi
             APPLY="$RUNNER_TEMP/${MIGRATION_VERSIONS}_apply.sql"
             node "$GUARD" prepare-apply --migration "$MIGRATION" --output "$APPLY" \
               --migration-version "$MIGRATION_VERSIONS" --ledger "$LEDGER"
             (cd "$TOOLS" && supabase db query --linked --file "$APPLY" --output json) > "$RUNNER_TEMP/apply-result.json"
-          elif test "$PHASE_STATE" = "applied" && test "$RELEASE_PHASE" = "database_v3"; then
+          elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then
             echo "Exact DB phase is already applied; recovering with postflight only and no mutation."
           else
             echo "Unexpected phase state: $PHASE_STATE" >&2
@@ -443,6 +447,14 @@ jobs:
             --output json) > "$RUNNER_TEMP/authenticated-canary-after.json"
           node "$GUARD" verify-authenticated-canary \
             --input "$RUNNER_TEMP/authenticated-canary-after.json"
+          if test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "frontend_compat"; then
+            node "$GUARD" prepare-read-only-query \
+              --input "$TOOLS/scripts/finance_production_human_accounting_canary.sql" \
+              --output "$RUNNER_TEMP/human-accounting-canary.sql"
+            (cd "$TOOLS" && supabase db query --linked \
+              --file "$RUNNER_TEMP/human-accounting-canary.sql" \
+              --output json) > "$RUNNER_TEMP/human-accounting-canary.json"
+          fi
 
   promote:
     name: Promote the sealed candidate; independently retryable without build or DB apply
@@ -568,6 +580,14 @@ jobs:
             --output json) > "$RUNNER_TEMP/promotion-authenticated-canary.json"
           node "$GUARD" verify-authenticated-canary \
             --input "$RUNNER_TEMP/promotion-authenticated-canary.json"
+          if test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "frontend_compat"; then
+            node "$GUARD" prepare-read-only-query \
+              --input "$TOOLS/scripts/finance_production_human_accounting_canary.sql" \
+              --output "$RUNNER_TEMP/promotion-human-accounting-canary.sql"
+            (cd "$TOOLS" && supabase db query --linked \
+              --file "$RUNNER_TEMP/promotion-human-accounting-canary.sql" \
+              --output json) > "$RUNNER_TEMP/promotion-human-accounting-canary.json"
+          fi
 
       - name: Promote only the sealed immutable candidate with bounded retry
         shell: bash

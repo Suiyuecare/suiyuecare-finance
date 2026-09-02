@@ -23,6 +23,7 @@ const MIGRATION_EXPENSE_DERIVED_STATUS = '20260831043517';
 const MIGRATION_FINAL_ACCOUNTANT_SELF_POST = '20260901024020';
 const MIGRATION_FORMAL_CASHIER_REPAIR = '20260901073241';
 const MIGRATION_FORMAL_CASHIER_SELF_DISBURSEMENT = '20260901081807';
+const MIGRATION_HUMAN_ACCOUNTING_AUTHORITY = '20260902054834';
 const REVIEWED_POST_BASELINE_MIGRATIONS = Object.freeze([
   MIGRATION_PORTAL_LINK_REPAIR,
   MIGRATION_TOP_LEVEL_CEO_ROUTE,
@@ -33,13 +34,16 @@ const REVIEWED_POST_BASELINE_MIGRATIONS = Object.freeze([
 ]);
 const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...MIGRATION_CHAIN,
-  ...REVIEWED_POST_BASELINE_MIGRATIONS
+  ...REVIEWED_POST_BASELINE_MIGRATIONS,
+  MIGRATION_HUMAN_ACCOUNTING_AUTHORITY
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
+const RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING = 'database_human_accounting';
 const RELEASE_PHASES = Object.freeze({
   [RELEASE_PHASE_FRONTEND_COMPAT]: 'none',
-  [RELEASE_PHASE_DATABASE_V3]: MIGRATION_V3
+  [RELEASE_PHASE_DATABASE_V3]: MIGRATION_V3,
+  [RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING]: MIGRATION_HUMAN_ACCOUNTING_AUTHORITY
 });
 const FRONTEND_RELEASE_CONTRACT = 'expense-submit-resilience-v3-20260827';
 const PRODUCTION_BASELINE_LEDGER = Object.freeze({
@@ -54,7 +58,8 @@ const SUPPORTED_GATE_PHASES = Object.freeze([
   Object.freeze([]),
   Object.freeze([MIGRATION_V1]),
   Object.freeze([MIGRATION_V2]),
-  Object.freeze([MIGRATION_V3])
+  Object.freeze([MIGRATION_V3]),
+  Object.freeze([MIGRATION_HUMAN_ACCOUNTING_AUTHORITY])
 ]);
 const SUPPORTED_GATE_SUFFIXES = SUPPORTED_GATE_PHASES;
 
@@ -98,7 +103,7 @@ function migrationPhase(value) {
 function releasePlan(releasePhase, versionsText) {
   releasePhase = String(releasePhase || '');
   if (!Object.hasOwn(RELEASE_PHASES, releasePhase)) {
-    fail(`release_phase must be ${RELEASE_PHASE_FRONTEND_COMPAT} or ${RELEASE_PHASE_DATABASE_V3}`);
+    fail(`release_phase must be one of: ${Object.keys(RELEASE_PHASES).join(', ')}`);
   }
   migrationPhase(versionsText);
   if (versionsText !== RELEASE_PHASES[releasePhase]) {
@@ -218,7 +223,17 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
       fail(`frontend_compat requires the complete v1/v2/v3 authority chain, found pending: ${missing.join(',')}`);
     }
     assertReviewedAdoptedMigrations(remote);
+    if (!remote.includes(MIGRATION_HUMAN_ACCOUNTING_AUTHORITY)) {
+      fail(`frontend_compat requires applied migration ${MIGRATION_HUMAN_ACCOUNTING_AUTHORITY}`);
+    }
     return 'compat';
+  }
+  if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
+    if (missing.length) {
+      fail(`database_human_accounting requires the complete v1/v2/v3 authority chain, found pending: ${missing.join(',')}`);
+    }
+    assertReviewedAdoptedMigrations(remote);
+    return remote.includes(MIGRATION_HUMAN_ACCOUNTING_AUTHORITY) ? 'applied' : 'pending';
   }
   if (!requested.length) {
     if (missing.length) fail(`none phase requires zero local pending migrations, found: ${missing.join(',')}`);
@@ -343,6 +358,12 @@ function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
     }
     return prepareGateQuery(sourcePath, outputPath, MIGRATION_V3);
   }
+  if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
+    if (!['finance_production_db_preflight.sql', 'finance_production_db_postflight.sql'].includes(sourceName)) {
+      fail('database_human_accounting may only render the reviewed compatibility preflight or postflight');
+    }
+    return prepareGateQuery(sourcePath, outputPath, MIGRATION_V3);
+  }
   if (!['finance_production_db_preflight.sql', 'finance_production_db_postflight.sql'].includes(sourceName)) {
     fail('database_v3 may only render the reviewed v3 preflight or postflight');
   }
@@ -363,8 +384,13 @@ function prepareApply(sourcePath, outputPath, target, ledgerPath, baseline = PRO
   const remote = readLedgerVersions(ledgerPath);
   assertProductionLedgerBaseline(remote, baseline);
   const targetIndex = MIGRATION_CHAIN.indexOf(target);
-  if (targetIndex < 0) fail('migration target is not in the reviewed Finance chain');
-  const expectedSuffix = MIGRATION_CHAIN.slice(0, targetIndex);
+  let expectedSuffix;
+  if (target === MIGRATION_HUMAN_ACCOUNTING_AUTHORITY) {
+    expectedSuffix = [...MIGRATION_CHAIN, ...REVIEWED_POST_BASELINE_MIGRATIONS];
+  } else {
+    if (targetIndex < 0) fail('migration target is not in the reviewed Finance chain');
+    expectedSuffix = MIGRATION_CHAIN.slice(0, targetIndex);
+  }
   const actualSuffix = remote.filter((version) => version >= MIGRATION_V1);
   if (actualSuffix.join(',') !== expectedSuffix.join(',')) {
     fail(`captured ledger is not the exact pending state for ${target}`);
@@ -591,8 +617,10 @@ const api = {
   MIGRATION_PORTAL_LINK_REPAIR, MIGRATION_TOP_LEVEL_CEO_ROUTE, MIGRATION_EXPENSE_DERIVED_STATUS,
   MIGRATION_FINAL_ACCOUNTANT_SELF_POST, MIGRATION_FORMAL_CASHIER_REPAIR,
   MIGRATION_FORMAL_CASHIER_SELF_DISBURSEMENT,
+  MIGRATION_HUMAN_ACCOUNTING_AUTHORITY,
   REVIEWED_POST_BASELINE_MIGRATIONS, REVIEWED_MIGRATION_CATALOG,
-  RELEASE_PHASE_FRONTEND_COMPAT, RELEASE_PHASE_DATABASE_V3, RELEASE_PHASES, FRONTEND_RELEASE_CONTRACT,
+  RELEASE_PHASE_FRONTEND_COMPAT, RELEASE_PHASE_DATABASE_V3, RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING,
+  RELEASE_PHASES, FRONTEND_RELEASE_CONTRACT,
   SUPPORTED_GATE_PHASES, SUPPORTED_GATE_SUFFIXES,
   migrationVersions, migrationPhase, releasePlan, validateTarget, verifySupabasePublicKey, migrationFiles, classifyLedger, verifyLedger,
   ledgerSha256, readLedgerVersions, assertProductionLedgerBaseline, assertReviewedAdoptedMigrations, assertCliAtomicMigration,

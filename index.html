@@ -15540,8 +15540,86 @@ function resolveRequestAccountingMap(defaultMap,departmentCode,entityId){
       drN:debit.n,
       cr:credit.c,
       crN:credit.n
+    },
+    manualDefaults:{
+      debitAccount:debitOverride?debit.c:'',
+      debitAccountName:debitOverride?debit.n:'',
+      creditAccount:creditOverride?credit.c:'',
+      creditAccountName:creditOverride?credit.n:'',
+      manualFields:[].concat(debitOverride?['debitAccount']:[],creditOverride?['creditAccount']:[]),
+      actor:accountingManualActorSnapshot(),
+      changedAt:new Date().toISOString(),
+      source:'new_request_account_override'
     }
   };
+}
+function accountingManualActorSnapshot(){
+  var user=S.user||{};
+  return {
+    id:user.id||user.financeUserId||'',
+    name:user.n||user.name||'',
+    email:user.email||'',
+    role:user.role||user.roleKey||''
+  };
+}
+function accountingManualFieldNames(){
+  return ['netAmount','taxAmount','grossAmount','debitAccount','creditAccount'];
+}
+function accountingLineManualFields(line){
+  line=line||{};
+  var fields=Array.isArray(line.manualFields)?line.manualFields:[];
+  return fields.filter(function(field){return accountingManualFieldNames().indexOf(field)>-1;}).filter(function(field,i,rows){return rows.indexOf(field)===i;});
+}
+function accountingLineFieldIsHuman(line,field){
+  return !!(line&&(line.manualOverride===true||line.valueAuthority==='human')&&accountingLineManualFields(line).indexOf(field)>-1);
+}
+function accountingComparableValue(field,value){
+  return ['netAmount','taxAmount','grossAmount'].indexOf(field)>-1?Math.round(num(value)):String(value||'');
+}
+function accountingChangedFields(before,after,fields){
+  before=before||{};after=after||{};
+  return (fields||accountingManualFieldNames()).filter(function(field){
+    return accountingComparableValue(field,before[field])!==accountingComparableValue(field,after[field]);
+  });
+}
+function preserveAccountingManualAuthority(source,target){
+  source=source||{};target=target||{};
+  var fields=accountingLineManualFields(source);
+  if(!fields.length)return target;
+  target.manualOverride=true;
+  target.valueAuthority='human';
+  target.manualFields=fields;
+  target.manualOverrideBy=cloneSettingValue(source.manualOverrideBy||{});
+  target.manualOverrideAt=source.manualOverrideAt||'';
+  target.manualOverrideSource=source.manualOverrideSource||'';
+  target.manualOverrideHistory=cloneSettingValue(Array.isArray(source.manualOverrideHistory)?source.manualOverrideHistory:[]);
+  return target;
+}
+function markAccountingManualAuthority(before,after,source,forcedFields,actorOverride){
+  before=before||{};after=after||{};
+  preserveAccountingManualAuthority(before,after);
+  var changed=Array.isArray(forcedFields)&&forcedFields.length?forcedFields:accountingChangedFields(before,after);
+  changed=changed.filter(function(field){return accountingManualFieldNames().indexOf(field)>-1;});
+  if(!changed.length)return after;
+  var at=new Date().toISOString();
+  var actor=cloneSettingValue(actorOverride||accountingManualActorSnapshot());
+  var fields=accountingLineManualFields(after).concat(changed).filter(function(field,i,rows){return rows.indexOf(field)===i;});
+  var changes={};
+  changed.forEach(function(field){
+    changes[field]={before:before[field],after:after[field]};
+  });
+  var history=Array.isArray(after.manualOverrideHistory)?after.manualOverrideHistory.slice():[];
+  history.push({at:at,source:source||'accounting_review',actor:actor,changes:changes});
+  after.manualOverride=true;
+  after.valueAuthority='human';
+  after.manualFields=fields;
+  after.manualOverrideBy=actor;
+  after.manualOverrideAt=at;
+  after.manualOverrideSource=source||'accounting_review';
+  after.manualOverrideHistory=history.slice(-50);
+  after.reviewedBy=actor.name||actor.email||'';
+  after.reviewedAt=at;
+  return after;
 }
 function controlledCreditAccountForRequest(r){
   if(r&&r.type==='advance_request'&&r.status==='pending_voucher')return {c:'1191',n:'暫付款'};
@@ -15557,18 +15635,27 @@ function defaultCreditAccountForLine(row,type,r){
   return controlledCreditAccountForRequest(r);
 }
 function accountingLineCreditAccount(line,r){
+  if(line&&accountingLineFieldIsHuman(line,'creditAccount')&&line.creditAccount){
+    return accountByCode(line.creditAccount)||{c:line.creditAccount,n:line.creditAccountName||acctName(line.creditAccount)};
+  }
   if(r&&r.type==='hr_expense_request'&&line&&line.creditAccount){
     return accountByCode(line.creditAccount)||{c:line.creditAccount,n:line.creditAccountName||acctName(line.creditAccount)};
   }
   return controlledCreditAccountForRequest(r);
 }
-function invalidateAccountingLines(r,reason){
+function invalidateAccountingLines(r,reason,replaceWithNewEvidence){
   if(!r)return;
   var fp=Object.assign({},r.formPayload||{});
-  delete fp.accountingLines;
+  var lines=Array.isArray(fp.accountingLines)?fp.accountingLines:[];
+  var hasHumanAuthority=lines.some(function(line){return accountingLineManualFields(line).length>0;});
+  if(replaceWithNewEvidence){
+    delete fp.accountingLines;
+    hasHumanAuthority=false;
+  }else if(!hasHumanAuthority)delete fp.accountingLines;
   fp.accountingLinesNeedReview=true;
+  fp.accountingLinesPreservedForReview=hasHumanAuthority;
   fp.accountingLinesInvalidatedAt=new Date().toISOString();
-  fp.accountingLinesInvalidatedReason=reason||'內容或流程異動，需會計重新覆核科目';
+  fp.accountingLinesInvalidatedReason=reason||(hasHumanAuthority?'內容或流程異動，保留人工數值並請會計重新覆核':'內容或流程異動，需會計重新覆核科目');
   r.formPayload=fp;
 }
 function requestTypeAccountingLabel(type){
@@ -15752,24 +15839,39 @@ function buildAccountingLines(r){
     var tax=Math.min(gross,Math.max(0,lazyTaxAmount(row)||num(row.taxAmount||row.tax)));
     var net=Math.max(0,gross-tax);
     var inf=inferDebitAccountForLine(row,r.type,r)||{code:(r&&r.dr)||'6299',name:(r&&r.drN)||acctName((r&&r.dr)||'6299')||'待指定',reason:'系統找不到可用借方科目，暫以申請類型預設科目建立，待會計覆核。'};
-    if(accountingLaborFeeDetected(Object.assign({},row,{debitAccount:inf.code,debitAccountName:inf.name}))){tax=0;net=gross;}
+    var rowManualFields=accountingLineManualFields(row);
+    var manualDefaults=fp.accountingManualDefaults||{};
+    var defaultManualFields=Array.isArray(manualDefaults.manualFields)?manualDefaults.manualFields:[];
+    if(accountingLaborFeeDetected(Object.assign({},row,{debitAccount:inf.code,debitAccountName:inf.name}))
+      &&rowManualFields.indexOf('taxAmount')<0&&rowManualFields.indexOf('netAmount')<0){tax=0;net=gross;}
     var cr=defaultCreditAccountForLine(row,r.type,r)||controlledCreditAccountForRequest(r)||{c:(r&&r.cr)||'1112',n:(r&&r.crN)||acctName((r&&r.cr)||'1112')||'銀行存款'};
-    return normalizeAccountingLine({
+    var line={
       id:'line_'+(i+1),
       source:row.source||'detail',
       description:row.item||row.label||row.description||('明細 '+(i+1)),
       grossAmount:gross,
       netAmount:net,
       taxAmount:tax,
-      debitAccount:inf.code,
-      debitAccountName:inf.name,
-      creditAccount:cr.c,
-      creditAccountName:cr.n,
+      debitAccount:defaultManualFields.indexOf('debitAccount')>-1?manualDefaults.debitAccount:inf.code,
+      debitAccountName:defaultManualFields.indexOf('debitAccount')>-1?manualDefaults.debitAccountName:inf.name,
+      creditAccount:defaultManualFields.indexOf('creditAccount')>-1?manualDefaults.creditAccount:cr.c,
+      creditAccountName:defaultManualFields.indexOf('creditAccount')>-1?manualDefaults.creditAccountName:cr.n,
       departmentCode:r.dc,
       aiReason:inf.reason,
       systemFee:!!row.systemFee,
       locked:!!row.systemFee
-    },r,i);
+    };
+    preserveAccountingManualAuthority(row,line);
+    if(defaultManualFields.length){
+      var beforeManualDefaults=Object.assign({},line,{
+        debitAccount:inf.code,
+        debitAccountName:inf.name,
+        creditAccount:cr.c,
+        creditAccountName:cr.n
+      });
+      markAccountingManualAuthority(beforeManualDefaults,line,manualDefaults.source||'new_request_account_override',defaultManualFields,manualDefaults.actor||{});
+    }
+    return normalizeAccountingLine(line,r,i);
   }).filter(function(x){return num(x.grossAmount)>0;});
 }
 function accountingLineIsSystemFee(line){
@@ -15785,15 +15887,18 @@ function principalAccountingLines(lines){
 }
 function normalizeAccountingLine(line,r,i){
   line=line||{};
-  var gross=num(line.grossAmount||line.total||line.amount);
-  var tax=Math.min(gross,Math.max(0,num(line.taxAmount||line.tax)));
-  var net=num(line.netAmount);
+  var gross=Object.prototype.hasOwnProperty.call(line,'grossAmount')?num(line.grossAmount):num(line.total||line.amount);
+  var tax=Object.prototype.hasOwnProperty.call(line,'taxAmount')?num(line.taxAmount):num(line.tax);
+  tax=Math.min(gross,Math.max(0,tax));
+  var net=Object.prototype.hasOwnProperty.call(line,'netAmount')?num(line.netAmount):Math.max(0,gross-tax);
   var dr=accountByCode(line.debitAccount)||accountByCode((r&&r.dr)||'')||accountByCode('6233')||expenseDebitAccounts()[0]||{};
   var laborFee=accountingLaborFeeDetected(Object.assign({},line,{debitAccount:dr.c||line.debitAccount,debitAccountName:dr.n||line.debitAccountName}));
-  if((r&&r.type==='hr_expense_request')||laborFee){tax=0;net=gross;}
-  if(!net)net=Math.max(0,gross-tax);
+  var humanTax=accountingLineFieldIsHuman(line,'taxAmount');
+  var humanNet=accountingLineFieldIsHuman(line,'netAmount');
+  if(((r&&r.type==='hr_expense_request')||laborFee)&&!humanTax&&!humanNet){tax=0;net=gross;}
+  if(!Object.prototype.hasOwnProperty.call(line,'netAmount'))net=Math.max(0,gross-tax);
   var cr=accountingLineCreditAccount(line,r);
-  return {
+  var normalized={
     id:line.id||('line_'+(i+1)),
     source:line.source||'detail',
     description:line.description||line.item||('明細 '+(i+1)),
@@ -15809,6 +15914,9 @@ function normalizeAccountingLine(line,r,i){
     systemFee:accountingLineIsSystemFee(line),
     locked:!!line.locked||accountingLineIsSystemFee(line)
   };
+  normalized.reviewedBy=line.reviewedBy||'';
+  normalized.reviewedAt=line.reviewedAt||null;
+  return preserveAccountingManualAuthority(line,normalized);
 }
 function accountingLineAmountInput(prefix,i,field,value){
   var label={netAmount:'未稅/費用',taxAmount:'進項稅額',grossAmount:'含稅'}[field]||field;
@@ -15832,14 +15940,8 @@ window.syncAccountingLineAmountInputs=function(prefix,i,field){
   grossEl.value=gross;
 };
 window.syncAccountingLineSubjectTax=function(prefix,i){
-  var drEl=el(prefix+'-dr-'+i);
-  if(!drEl||String(drEl.value)!=='6221')return;
-  var netEl=el(prefix+'-net-'+i),taxEl=el(prefix+'-tax-'+i),grossEl=el(prefix+'-gross-'+i);
-  if(!netEl||!taxEl||!grossEl)return;
-  var gross=Math.max(0,Math.round(num(grossEl.value)||num(netEl.value)+num(taxEl.value)));
-  netEl.value=gross;
-  taxEl.value=0;
-  grossEl.value=gross;
+  // 科目變更後保留畫面上的人工金額；6221 只作為 AI 預設免稅依據，
+  // 不得再次覆寫人工輸入的未稅、營業稅或含稅金額。
 };
 function accountingLinesHtml(r,editable,title){
   var prefix=arguments.length>3&&arguments[3]?arguments[3]:'acct-line';
@@ -15851,12 +15953,11 @@ function accountingLinesHtml(r,editable,title){
   var rows=lines.map(function(line,i){
     var amountEditable=editable&&canEditAccountingLineAmounts(r)&&!line.locked;
     var subjectEditable=editable&&canEditAccountingLineSubjects(r)&&!line.locked;
-    var hrTaxLocked=(r&&r.type==='hr_expense_request')||accountingLaborFeeDetected(line);
     return'<tr>'
       +'<td style="text-align:center;color:#94a3b8">'+(i+1)+'</td>'
       +'<td><div style="font-size:11px;font-weight:650;color:#334155">'+escAttr(line.description)+'</div></td>'
       +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'netAmount',line.netAmount):fmt(line.netAmount))+'</td>'
-      +'<td style="text-align:right;font-family:var(--font-sans)">'+(hrTaxLocked?'<span title="人事費用不自動列入進項稅額">0</span>':(amountEditable?accountingLineAmountInput(prefix,i,'taxAmount',line.taxAmount):fmt(line.taxAmount)))+'</td>'
+      +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'taxAmount',line.taxAmount):fmt(line.taxAmount))+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);font-weight:650">'+(amountEditable?accountingLineAmountInput(prefix,i,'grossAmount',line.grossAmount):fmt(line.grossAmount))+'</td>'
       +'<td>'+(subjectEditable?'<select id="'+prefix+'-dr-'+i+'" style="font-size:11px" onchange="syncAccountingLineSubjectTax(\''+prefix+'\','+i+')">'+accountOptionsHtml(line.debitAccount,'debit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-dr">'+line.debitAccount+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+line.debitAccountName+'</div>')+'</td>'
       +'<td>'+(subjectEditable?'<select id="'+prefix+'-cr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.creditAccount,'credit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-cr">'+line.creditAccount+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+line.creditAccountName+'（系統鎖定）</div>')+'</td>'
@@ -15939,36 +16040,35 @@ function collectAccountingLinesFromDom(r){
   var prefix=arguments.length>1&&arguments[1]?arguments[1]:'acct-line';
   var lines=buildAccountingLines(r);
   lines=lines.map(function(line,i){
+    var before=cloneSettingValue(line);
     var dr=accountByCode((el(prefix+'-dr-'+i)||{}).value||line.debitAccount)||{};
     var cr=accountByCode((el(prefix+'-cr-'+i)||{}).value||line.creditAccount)||accountingLineCreditAccount(line,r);
     var netEl=el(prefix+'-net-'+i),taxEl=el(prefix+'-tax-'+i),grossEl=el(prefix+'-gross-'+i);
     var net=netEl?Math.max(0,Math.round(num(netEl.value))):num(line.netAmount);
-    var laborFee=accountingLaborFeeDetected(Object.assign({},line,{debitAccount:dr.c||line.debitAccount,debitAccountName:dr.n||line.debitAccountName}));
-    var tax=(r&&r.type==='hr_expense_request')||laborFee?0:(taxEl?Math.max(0,Math.round(num(taxEl.value))):num(line.taxAmount));
+    var tax=taxEl?Math.max(0,Math.round(num(taxEl.value))):num(line.taxAmount);
     var gross=grossEl?Math.max(0,Math.round(num(grossEl.value))):(net+tax||num(line.grossAmount));
     if(tax>gross)tax=gross;
-    if((r&&r.type==='hr_expense_request')||laborFee)net=gross;
-    else if(grossEl&&Math.abs(gross-(net+tax))>0.5)net=Math.max(0,gross-tax);
+    if(grossEl&&Math.abs(gross-(net+tax))>0.5)net=Math.max(0,gross-tax);
     else gross=net+tax;
-    return Object.assign({},line,{
+    var next=Object.assign({},line,{
       netAmount:net,
       taxAmount:tax,
       grossAmount:gross,
       debitAccount:dr.c||line.debitAccount,
       debitAccountName:dr.n||line.debitAccountName,
       creditAccount:(cr&&cr.c)||line.creditAccount,
-      creditAccountName:(cr&&cr.n)||line.creditAccountName,
-      reviewedBy:S.user?S.user.n:'',
-      reviewedAt:new Date().toISOString()
+      creditAccountName:(cr&&cr.n)||line.creditAccountName
     });
+    return markAccountingManualAuthority(before,next,prefix.indexOf('detail-')===0?'approval_detail_review':'approval_modal_review');
   });
   var principalLines=principalAccountingLines(lines);
   var principalGrossTotal=principalLines.reduce(function(sum,line){return sum+num(line.grossAmount);},0);
   r.formPayload=Object.assign({},r.formPayload||{},
-    {accountingLines:principalLines,accountingLinePolicy:'usage_context_item_tax_asset_v3',accountingPrincipalTotal:principalGrossTotal});
-  // 申請金額是送單時已鎖定的正式本金；銀行手續費另由 bank_fee_amount
-  // 唯一管理。會計明細覆核不可把系統手續費加回本金，也不可在前端改寫
-  // 已鎖定金額，否則會與伺服器的正式金額保護衝突。
+    {accountingLines:principalLines,accountingLinePolicy:'human_override_authoritative_v1',accountingPrincipalTotal:principalGrossTotal});
+  // 人工覆核後，正式申請本金必須和人工會計明細的含稅合計一致；銀行
+  // 手續費仍只由 bank_fee_amount 管理，不混入本金。
+  r.amt=principalGrossTotal;
+  r.total=principalGrossTotal;
   var primaryLine=principalLines[0];
   if(primaryLine){
     r.dr=primaryLine.debitAccount;r.drN=primaryLine.debitAccountName;
@@ -16055,11 +16155,12 @@ function entriesFromAccountingLines(r,totalFallback,bankFee){
   if(!lines.length)return null;
   var target=num(totalFallback);
   var current=lines.reduce(function(s,line){return s+num(line.grossAmount);},0);
-  var factor=(target&&current&&Math.abs(target-current)>0.5)?target/current:1;
+  var hasHumanAmounts=lines.some(function(line){return ['netAmount','taxAmount','grossAmount'].some(function(field){return accountingLineFieldIsHuman(line,field);});});
+  var factor=!hasHumanAmounts&&target&&current&&Math.abs(target-current)>0.5?target/current:1;
   lines.forEach(function(line){
     var net=Math.round(num(line.netAmount)*factor);
     var tax=Math.round(num(line.taxAmount)*factor);
-    if(r&&r.type==='hr_expense_request'){
+    if(r&&r.type==='hr_expense_request'&&!accountingLineFieldIsHuman(line,'taxAmount')&&!accountingLineFieldIsHuman(line,'netAmount')){
       tax=0;
       net=Math.round(num(line.grossAmount)*factor);
     }
@@ -17513,7 +17614,8 @@ function normalizeLazyTaxMode(v){
 }
 function lazyTaxMode(r){
   if(!r)return 'exempt';
-  if(accountingLaborFeeDetected(r))return 'exempt';
+  var humanAmount=accountingLineManualFields(r).some(function(field){return ['netAmount','taxAmount','grossAmount'].indexOf(field)>-1;});
+  if(accountingLaborFeeDetected(r)&&!humanAmount)return 'exempt';
   var mode=normalizeLazyTaxMode(r.taxMode||r.amountTaxMode||r.tax_mode);
   if(mode)return mode;
   if(r.systemFee)return 'exempt';
@@ -17530,6 +17632,19 @@ function lazyAmountParts(r){
   var hasGross=lazyHasValue(r,'grossAmount')||lazyHasValue(r,'total')||lazyHasValue(r,'amount');
   var hasNet=lazyHasValue(r,'netAmount')||lazyHasValue(r,'subtotal');
   var hasTax=lazyHasValue(r,'taxAmount')||lazyHasValue(r,'tax');
+  var manualFields=accountingLineManualFields(r);
+  var manualNet=manualFields.indexOf('netAmount')>-1;
+  var manualTax=manualFields.indexOf('taxAmount')>-1;
+  var manualGross=manualFields.indexOf('grossAmount')>-1;
+  if(manualNet||manualTax||manualGross){
+    net=Math.max(0,net);tax=Math.max(0,tax);gross=Math.max(0,gross);
+    if(manualGross&&manualTax)net=Math.max(0,gross-tax);
+    else if(manualNet&&manualTax)gross=net+tax;
+    else if(manualGross&&manualNet)tax=Math.max(0,gross-net);
+    else if(manualGross){tax=Math.min(gross,tax);net=Math.max(0,gross-tax);}
+    else gross=net+tax;
+    return {net:net,tax:tax,gross:gross,mode:mode};
+  }
   if(mode==='exempt'){
     var base=gross||net||Math.max(0,(num(r.qty)||1)*num(r.unitPrice||r.unit||0));
     return {net:Math.max(0,base),tax:0,gross:Math.max(0,base),mode:'exempt'};
@@ -17616,9 +17731,9 @@ function renderLazySheet(){
       +'<td><input value="'+escAttr(r.unitName||'')+'" placeholder="個" onchange="lazyEdit('+i+',\'unitName\',this.value)"></td>'
       +'<td><input type="number" min="0" step="1" value="'+escAttr(r.unitPrice||r.unit||0)+'" onchange="lazyEdit('+i+',\'unitPrice\',this.value)"></td>'
       +'<td><select onchange="lazyEdit('+i+',\'taxMode\',this.value)">'+lazyTaxModeOptions(r)+'</select></td>'
-      +'<td><input type="number" min="0" step="1" value="'+escAttr(lazyNetAmount(r))+'" onchange="lazyEdit('+i+',\'netAmount\',this.value)"></td>'
-      +'<td><input type="number" min="0" step="1" value="'+escAttr(lazyTaxAmount(r))+'" onchange="lazyEdit('+i+',\'taxAmount\',this.value)"></td>'
-      +'<td><input type="number" min="0" step="1" value="'+escAttr(lazyRowTotal(r))+'" onchange="lazyEdit('+i+',\'grossAmount\',this.value)"></td>'
+      +'<td><input id="lazy-net-'+i+'" type="number" min="0" step="1" value="'+escAttr(lazyNetAmount(r))+'" oninput="lazyDraftEdit('+i+',\'netAmount\',this.value)" onchange="lazyEdit('+i+',\'netAmount\',this.value)"></td>'
+      +'<td><input id="lazy-tax-'+i+'" type="number" min="0" step="1" value="'+escAttr(lazyTaxAmount(r))+'" oninput="lazyDraftEdit('+i+',\'taxAmount\',this.value)" onchange="lazyEdit('+i+',\'taxAmount\',this.value)"></td>'
+      +'<td><input id="lazy-gross-'+i+'" type="number" min="0" step="1" value="'+escAttr(lazyRowTotal(r))+'" oninput="lazyDraftEdit('+i+',\'grossAmount\',this.value)" onchange="lazyEdit('+i+',\'grossAmount\',this.value)"></td>'
       +'<td style="font-size:10px;color:#94a3b8;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(r.file||'')+'</td>'
       +'<td style="width:30px;text-align:center"><button onclick="lazyDel('+i+')" style="border:none;background:transparent;color:#94a3b8;cursor:pointer">×</button></td>'
       +'</tr>';
@@ -17630,9 +17745,17 @@ function renderLazySheet(){
   var nextScroll=box.querySelector('.lazy-sheet-scroll');
   if(nextScroll){nextScroll.scrollLeft=oldLeft;nextScroll.scrollTop=oldTop;}
 }
-window.lazyEdit=function(i,k,v){
+function syncLazyAmountDraftDom(i,row){
+  [['net',row.netAmount],['tax',row.taxAmount],['gross',row.grossAmount]].forEach(function(pair){
+    var input=el('lazy-'+pair[0]+'-'+i);
+    if(input&&document.activeElement!==input)input.value=Math.round(num(pair[1]));
+  });
+}
+function applyLazyEditValue(i,k,v,finalize,render){
   var r=S.lazyRows[i];if(!r)return;
   if(r.systemFee){syncLazyBankFeeRow(true);alert('銀行手續費由系統依法人與銀行設定自動計算，不可手動修改。');return;}
+  var amountFields=['netAmount','taxAmount','grossAmount'];
+  if(amountFields.concat(['qty','unitPrice','taxMode']).indexOf(k)>-1&&!r._manualDraftBefore)r._manualDraftBefore=cloneSettingValue(r);
   r[k]=(k==='qty'||k==='unitPrice'||k==='total'||k==='netAmount'||k==='taxAmount'||k==='grossAmount')?num(v):v;
   if(k==='qty'||k==='unitPrice'){
     var base=Math.max(0,(num(r.qty)||1)*num(r.unitPrice||r.unit||0));
@@ -17647,7 +17770,7 @@ window.lazyEdit=function(i,k,v){
   }else if(k==='netAmount'){
     r.taxMode='net_exclusive';
     r.netAmount=Math.max(0,num(r.netAmount));
-    r.taxAmount=0;
+    r.taxAmount=Math.max(0,num(r.taxAmount));
     r.grossAmount=r.netAmount+r.taxAmount;
     r.total=r.grossAmount;
   }else if(k==='taxAmount'){
@@ -17657,16 +17780,38 @@ window.lazyEdit=function(i,k,v){
   }else if(k==='grossAmount'){
     r.taxMode='gross_inclusive';
     r.grossAmount=Math.max(0,num(r.grossAmount));
-    r.netAmount=Math.round(r.grossAmount/(1+BUSINESS_TAX_RATE));
-    r.taxAmount=Math.max(0,r.grossAmount-r.netAmount);
+    r.taxAmount=Math.min(r.grossAmount,Math.max(0,num(r.taxAmount)));
+    r.netAmount=Math.max(0,r.grossAmount-r.taxAmount);
     r.total=r.grossAmount;
   }else if(k==='taxMode'){
     r.taxMode=normalizeLazyTaxMode(v)||'gross_inclusive';
     var p=lazyAmountParts(r);
     r.netAmount=p.net;r.taxAmount=p.tax;r.grossAmount=p.gross;r.total=p.gross;
   }
-  renderLazySheet();applyLazySummary();
+  if(finalize&&r._manualDraftBefore){
+    var before=r._manualDraftBefore;
+    delete r._manualDraftBefore;
+    markAccountingManualAuthority(before,r,'new_request_detail_edit',accountingChangedFields(before,r,amountFields));
+  }
+  syncLazyAmountDraftDom(i,r);
+  if(render)renderLazySheet();
+  applyLazySummary();
+}
+window.lazyDraftEdit=function(i,k,v){applyLazyEditValue(i,k,v,false,false);};
+window.lazyEdit=function(i,k,v){
+  // 編輯期間不重建整張表，避免已脫離 DOM 的舊輸入框在稍後事件中把
+  // 人工值寫回舊狀態。只同步本列金額與摘要即可。
+  applyLazyEditValue(i,k,v,true,false);
 };
+function finalizeLazyAccountingDrafts(){
+  (S.lazyRows||[]).forEach(function(row){
+    if(!row||!row._manualDraftBefore)return;
+    var before=row._manualDraftBefore;
+    delete row._manualDraftBefore;
+    markAccountingManualAuthority(before,row,'new_request_submit_flush',accountingChangedFields(before,row,['netAmount','taxAmount','grossAmount']));
+  });
+  applyLazySummary();
+}
 window.lazyAdd=function(){S.lazyRows=S.lazyRows||[];S.lazyRows.push({no:'',date:todayIso(),buyerTaxId:'',sellerTaxId:'',item:'',qty:1,unitName:'',unitPrice:0,netAmount:0,taxAmount:0,grossAmount:0,total:0,taxMode:'gross_inclusive',file:''});syncLazyBankFeeRow(true);applyLazySummary();};
 window.lazyDel=function(i){var row=S.lazyRows[i];if(row&&row.systemFee){alert('銀行手續費由系統自動計算，不可刪除。');return;}S.lazyRows.splice(i,1);syncLazyBankFeeRow(true);applyLazySummary();};
 function cleanLazyTaxId(v){
@@ -21011,6 +21156,7 @@ window.submitNR=async function(){
   }
   if(!await guardSubmissionIdentityDirectory('費用申請'))return;
   if(!S.nrType||!S.nrRec||!S.nrPay){alert('請先完成申請類型、憑證類型與付款方式');return;}
+  finalizeLazyAccountingDrafts();
   var amt=parseFloat((el('nr-amt')||{}).value||'0');
   var purpose=(el('nr-desc-purpose')||{}).value||'';
   var note=(el('nr-desc')||{}).value||'';
@@ -21272,7 +21418,7 @@ window.submitNR=async function(){
     passbookFiles:passbookAttachments,
     steps:steps,voucherId:'',
     dataEnv:activeDataEnvironment(),
-    formPayload:{submissionAttemptId:submissionContext.attemptId,submissionStartedAt:submissionContext.startedAt,clientReleaseContract:currentFinanceReleaseContract(),applicantProfile:applicantProfile,expenseEntity:eid,expenseDepartment:dc,dataEnvironment:activeDataEnvironment(),requestPurpose:purpose,requestNote:note,receiptType:S.nrRec||'',paymentType:S.nrPay||'',isFixedExpense:isFixedExpense,is_fixed_expense:isFixedExpense,lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:passbookAttachments,travelInfo:travelInfo||null,refundInfo:refundInfo||null,purchaseInfo:purchaseInfo||null,hrInfo:hrInfo||null}};
+    formPayload:{submissionAttemptId:submissionContext.attemptId,submissionStartedAt:submissionContext.startedAt,clientReleaseContract:currentFinanceReleaseContract(),applicantProfile:applicantProfile,expenseEntity:eid,expenseDepartment:dc,dataEnvironment:activeDataEnvironment(),requestPurpose:purpose,requestNote:note,receiptType:S.nrRec||'',paymentType:S.nrPay||'',isFixedExpense:isFixedExpense,is_fixed_expense:isFixedExpense,lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:passbookAttachments,travelInfo:travelInfo||null,refundInfo:refundInfo||null,purchaseInfo:purchaseInfo||null,hrInfo:hrInfo||null,accountingManualDefaults:accountingResolution.manualDefaults||null}};
   if(S.nrType==='petty_cash_request'){
     normalizePettyAccounting(newReq);
     newReq.formPayload=Object.assign({},newReq.formPayload||{},{
@@ -21312,7 +21458,7 @@ window.submitNR=async function(){
   }
   newReq.formPayload=Object.assign({},newReq.formPayload||{},{
     accountingLines:principalAccountingLines(buildAccountingLines(newReq)),
-    accountingLinePolicy:'detail_line_accounts_v1'
+    accountingLinePolicy:'human_override_authoritative_v1'
   });
   var firstStep=nextStep||{};
   var durablePending=saveExpenseSubmissionPending(newReq,null);
@@ -25446,7 +25592,7 @@ window.submitProcurementPaymentInfo=async function(rid,prefix){
   r.feeBearer=info.feeBearer;
   r.bankAcc=info.summary;
   r.bankFeeAmount=requestBankFeeAmount(r);
-  invalidateAccountingLines(r,'總務填寫採購預估付款資料，金額與匯款資訊已變更。');
+  invalidateAccountingLines(r,'總務填寫採購預估付款資料，金額與匯款資訊已變更。',true);
   r.formPayload=Object.assign({},r.formPayload||{},{
     purchaseEstimate:Object.assign({},(r.formPayload||{}).purchaseEstimate||{},{
       procurementAmount:info.amount,
@@ -25517,7 +25663,7 @@ window.submitProcurementActual=async function(rid,prefix){
   r.actualAmt=actual;
   r.actualFiles=normalizeFiles(r.actualFiles||[]).concat(p.files);
   r.files=normalizeFiles(r.files||[]).concat(p.files);
-  invalidateAccountingLines(r,'總務提交採購最終憑據與實際支出，會計第二關需依實際內容重新覆核。');
+  invalidateAccountingLines(r,'總務提交採購最終憑據與實際支出，會計第二關需依實際內容重新覆核。',true);
   r.formPayload=Object.assign({},r.formPayload||{},{
     purchaseActual:{
       actualAmount:actual,

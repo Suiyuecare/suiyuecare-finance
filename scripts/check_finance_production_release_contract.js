@@ -15,7 +15,7 @@ assert.deepEqual(guard.PRODUCTION_CATALOG, {
   productionDomain: 'finance.suiyuecare.com'
 });
 assert.deepEqual(guard.SUPPORTED_GATE_PHASES, [
-  [], ['20260826070814'], ['20260826155840'], ['20260827052447']
+  [], ['20260826070814'], ['20260826155840'], ['20260827052447'], ['20260902054834']
 ]);
 assert.deepEqual(guard.MIGRATION_CHAIN, ['20260826070814', '20260826155840', '20260827052447']);
 assert.equal(guard.MIGRATION_PORTAL_LINK_REPAIR, '20260828015718');
@@ -24,13 +24,17 @@ assert.equal(guard.MIGRATION_EXPENSE_DERIVED_STATUS, '20260831043517');
 assert.equal(guard.MIGRATION_FINAL_ACCOUNTANT_SELF_POST, '20260901024020');
 assert.equal(guard.MIGRATION_FORMAL_CASHIER_REPAIR, '20260901073241');
 assert.equal(guard.MIGRATION_FORMAL_CASHIER_SELF_DISBURSEMENT, '20260901081807');
+assert.equal(guard.MIGRATION_HUMAN_ACCOUNTING_AUTHORITY, '20260902054834');
 assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20260831042040', '20260831043517', '20260901024020', '20260901073241', '20260901081807']);
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
-  '20260826070814', '20260826155840', '20260827052447', '20260828015718', '20260831042040', '20260831043517', '20260901024020', '20260901073241', '20260901081807'
+  '20260826070814', '20260826155840', '20260827052447', '20260828015718',
+  '20260831042040', '20260831043517', '20260901024020', '20260901073241',
+  '20260901081807', '20260902054834'
 ]);
 assert.deepEqual(guard.RELEASE_PHASES, {
   frontend_compat: 'none',
-  database_v3: '20260827052447'
+  database_v3: '20260827052447',
+  database_human_accounting: '20260902054834'
 });
 assert.deepEqual(guard.migrationVersions('none'), []);
 assert.throws(() => guard.migrationVersions('20260826070814,20260826070814'), /unique/);
@@ -42,6 +46,9 @@ assert.deepEqual(guard.releasePlan('frontend_compat', 'none'), {
 });
 assert.deepEqual(guard.releasePlan('database_v3', '20260827052447'), {
   releasePhase: 'database_v3', migrationVersions: '20260827052447'
+});
+assert.deepEqual(guard.releasePlan('database_human_accounting', '20260902054834'), {
+  releasePhase: 'database_human_accounting', migrationVersions: '20260902054834'
 });
 assert.throws(() => guard.releasePlan('frontend_compat', '20260827052447'), /must use migration_versions=none/);
 assert.throws(() => guard.releasePlan('database_v3', 'none'), /must use migration_versions=20260827052447/);
@@ -58,6 +65,7 @@ const exactEnvironment = {
 };
 guard.validateTarget(exactEnvironment, 'a'.repeat(40), 'frontend_compat', 'none', catalog.supabaseProjectRef);
 guard.validateTarget(exactEnvironment, 'a'.repeat(40), 'database_v3', '20260827052447', catalog.supabaseProjectRef);
+guard.validateTarget(exactEnvironment, 'a'.repeat(40), 'database_human_accounting', '20260902054834', catalog.supabaseProjectRef);
 assert.throws(() => guard.validateTarget(exactEnvironment, 'a'.repeat(40), 'frontend_compat', '20260827052447', catalog.supabaseProjectRef), /must use/);
 assert.throws(() => guard.validateTarget(exactEnvironment, 'a'.repeat(40), 'database_v3', 'none', catalog.supabaseProjectRef), /must use/);
 assert.throws(() => guard.validateTarget({ ...exactEnvironment, VERCEL_ORG_ID: 'team_other' }, 'a'.repeat(40), 'frontend_compat', 'none', catalog.supabaseProjectRef), /organization/);
@@ -93,6 +101,7 @@ const required = [
   'external?.google!==true',
   '/rest/v1/finance_users?select=id&limit=1',
   'finance_production_authenticated_canary.sql',
+  'finance_production_human_accounting_canary.sql',
   'authenticated-canary-before.json',
   'authenticated-canary-after.json',
   'promotion-authenticated-canary.json',
@@ -117,8 +126,8 @@ const required = [
   'EXPECTED_MANIFEST_SHA256: ${{ needs.candidate.outputs.manifest_sha256 }}',
   'PHASE_STATE="$(node "$GUARD" classify-ledger',
   'if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then',
-  'elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_v3"; then',
-  'elif test "$PHASE_STATE" = "applied" && test "$RELEASE_PHASE" = "database_v3"; then',
+  'elif test "$PHASE_STATE" = "pending" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then',
+  'elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then',
   '--allow-production-alias true',
   'for ATTEMPT in 1 2 3',
   'promote "$DEPLOYMENT_URL" --yes',
@@ -131,6 +140,7 @@ assert.ok(releaseGuide.includes('缺少該欄位的舊分頁一律以 `55000` �
 assert.ok(releaseGuide.includes('已完成的歷史簽核人與已移除的舊金額關卡保持不可變'));
 assert.ok(releaseGuide.includes('`frontend_compat` | `none`'));
 assert.ok(releaseGuide.includes('`database_v3` | `20260827052447`'));
+assert.ok(releaseGuide.includes('`database_human_accounting` | `20260902054834`'));
 assert.ok(releaseGuide.includes('目前正式庫已完成 v3'));
 assert.ok(releaseGuide.includes('20260828015718_repair_admin_ntpc_portal_employee_link_20260828'));
 assert.ok(releaseGuide.includes('20260901073241_assign_ceo_cashier_and_reassign_pending_cashier'));
@@ -185,11 +195,11 @@ assert.match(promoteJob, /needs: \[candidate, database\]/);
 assert.match(promoteJob, /download-artifact[\s\S]+validate-target[\s\S]+supabase link[\s\S]+verify-receipt[\s\S]+finance_production_db_postflight\.sql[\s\S]+promote "\$DEPLOYMENT_URL" --yes[\s\S]+verify-promotion[\s\S]+verify-frontend-contract/);
 assert.doesNotMatch(promoteJob, /vercel@59\.3\.0 (?:build|deploy)|prepare-apply/, 'retryable promote job must not rebuild, redeploy or reapply DB migrations');
 const compatAt = databaseJob.indexOf('if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then');
-const pendingAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_v3"; then');
-const appliedAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "applied" && test "$RELEASE_PHASE" = "database_v3"; then');
+const pendingAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "pending" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then');
+const appliedAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then');
 const applies = [...databaseJob.matchAll(/prepare-apply/g)];
 assert.equal(applies.length, 1, 'database job must generate exactly one atomic apply payload');
-assert.ok(compatAt >= 0 && pendingAt > compatAt && applies[0].index > pendingAt && applies[0].index < appliedAt, 'DB mutation must exist only in database_v3 pending; frontend_compat/applied are read-only paths');
+assert.ok(compatAt >= 0 && pendingAt > compatAt && applies[0].index > pendingAt && applies[0].index < appliedAt, 'DB mutation must exist only in a reviewed pending database phase; frontend_compat/applied are read-only paths');
 assert.ok((databaseJob.match(/supabase db query --linked/g) || []).length >= 4, 'database job must use pinned linked queries for ledger, gates, rehearsal and apply');
 assert.match(databaseJob, /verify-supabase-public-key[\s\S]+auth\/v1\/settings[\s\S]+rest\/v1\/finance_users[\s\S]+finance_submit_expense_request[\s\S]+finance_resubmit_expense_request[\s\S]+classify-ledger/);
 assert.match(databaseJob, /prepare-rehearsal[\s\S]+--fingerprint[\s\S]+production-immediately-before-db-contract-manifest\.json[\s\S]+production-immediately-before-db-contract-index\.html[\s\S]+verify-production-baseline[\s\S]+prepare-apply[\s\S]+--ledger "\$LEDGER"/);
@@ -261,6 +271,7 @@ try {
   const finalAccountantSelfPost = path.join(migrations, '20260901024020_final_accountant_self_post.sql');
   const formalCashierRepair = path.join(migrations, '20260901073241_assign_ceo_cashier_and_reassign_pending_cashier.sql');
   const formalCashierSelfDisbursement = path.join(migrations, '20260901081807_allow_formal_cashier_self_disbursement.sql');
+  const humanAccounting = path.join(migrations, '20260902054834_preserve_human_accounting_authority_v1.sql');
   fs.writeFileSync(notification, '-- comment\nselect 1;\n');
   fs.writeFileSync(target, '-- comment\nselect 2;\n');
   fs.writeFileSync(v3Target, '-- comment\nselect 3;\n');
@@ -270,6 +281,7 @@ try {
   fs.writeFileSync(finalAccountantSelfPost, '-- comment\nselect 7;\n');
   fs.writeFileSync(formalCashierRepair, '-- comment\nselect 8;\n');
   fs.writeFileSync(formalCashierSelfDisbursement, '-- comment\nselect 9;\n');
+  fs.writeFileSync(humanAccounting, '-- comment\nselect 10;\n');
   const ledger = path.join(temp, 'ledger');
   fs.writeFileSync(ledger, '20260825000000\n');
   const syntheticVersions = ['20260825000000'];
@@ -297,10 +309,16 @@ try {
   fs.appendFileSync(ledger, '20260901081807\n');
   assert.equal(guard.classifyLedger(ledger, migrations, 'database_v3', '20260827052447', syntheticBaseline), 'applied');
   guard.verifyLedger('post', ledger, migrations, 'database_v3', '20260827052447', syntheticBaseline);
+  assert.equal(guard.classifyLedger(ledger, migrations, 'database_human_accounting', '20260902054834', syntheticBaseline), 'pending');
+  guard.verifyLedger('pre', ledger, migrations, 'database_human_accounting', '20260902054834', syntheticBaseline);
+  assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /requires applied migration/);
+  fs.appendFileSync(ledger, '20260902054834\n');
+  assert.equal(guard.classifyLedger(ledger, migrations, 'database_human_accounting', '20260902054834', syntheticBaseline), 'applied');
+  guard.verifyLedger('post', ledger, migrations, 'database_human_accounting', '20260902054834', syntheticBaseline);
   assert.equal(guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), 'compat');
   guard.verifyLedger('pre', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
   guard.verifyLedger('post', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
-  fs.appendFileSync(ledger, '20260902000000\n');
+  fs.appendFileSync(ledger, '20260903000000\n');
   assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /unreviewed post-baseline migration/);
   const duplicateDir = path.join(temp, 'duplicate'); fs.mkdirSync(duplicateDir);
   fs.writeFileSync(path.join(duplicateDir, '20260826070814_a.sql'), 'begin;\ncommit;\n');
@@ -346,6 +364,9 @@ try {
   fs.writeFileSync(phasePreflightSource, "\\set ON_ERROR_STOP on\nselect set_config('finance.release_migration_versions', :'migration_versions', false);\nselect 1;\n");
   guard.preparePhaseQuery(phasePreflightSource, v3GateOutput, 'database_v3', '20260827052447');
   assert.match(fs.readFileSync(v3GateOutput, 'utf8'), /'20260827052447'/);
+  const humanGateOutput = path.join(temp, 'human-gate-rendered.sql');
+  guard.preparePhaseQuery(phasePreflightSource, humanGateOutput, 'database_human_accounting', '20260902054834');
+  assert.match(fs.readFileSync(humanGateOutput, 'utf8'), /'20260827052447'/);
   assert.throws(() => guard.preparePhaseQuery(phasePreflightSource, path.join(temp, 'bad-compat-gate.sql'), 'frontend_compat', 'none'), /may only render/);
   assert.throws(() => guard.preparePhaseQuery(phasePostflightSource, path.join(temp, 'bad-pair-gate.sql'), 'database_v3', 'none'), /must use/);
   const readOnlySource = path.join(temp, 'read-only.sql');
@@ -372,6 +393,23 @@ try {
     /exact pending state/,
     'a ledger change captured before apply must fail closed'
   );
+  const humanApply = path.join(temp, 'human-apply.sql');
+  const humanApplyLedger = path.join(temp, 'human-apply-ledger');
+  fs.writeFileSync(humanApplyLedger, [
+    '20260825000000',
+    '20260826070814',
+    '20260826155840',
+    '20260827052447',
+    '20260828015718',
+    '20260831042040',
+    '20260831043517',
+    '20260901024020',
+    '20260901073241',
+    '20260901081807'
+  ].join('\n') + '\n');
+  guard.prepareApply(humanAccounting, humanApply, '20260902054834', humanApplyLedger, syntheticBaseline);
+  assert.match(fs.readFileSync(humanApply, 'utf8'), /20260902054834/);
+  assert.match(fs.readFileSync(humanApply, 'utf8'), /select 10;/);
   const queryResult = path.join(temp, 'query-result.json');
   const normalizedRows = path.join(temp, 'query-rows.json');
   fs.writeFileSync(queryResult, JSON.stringify({ boundary: 'random-per-call', rows: [{ fingerprint: 'stable' }], warning: 'ignored transport warning' }));
