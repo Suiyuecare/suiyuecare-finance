@@ -40,6 +40,7 @@ create table public.employee_department_roles(id text primary key,tenant_id uuid
  direct_supervisor_finance_user_id text,is_department_manager boolean default false,is_department_director boolean default false,can_approve boolean default false);
 create table public.finance_identity_links(id text);
 create table public.system_settings(tenant_id uuid,key text,value jsonb,version bigint default 1);
+create table public.system_setting_versions(id text,tenant_id uuid,approved_by text);
 create table public.departments(code text,deleted_at timestamptz);
 create table private.finance_membership_org_versions_v1(id uuid primary key default gen_random_uuid(),tenant_id uuid,version_no bigint,status text,
  title text,reason text,snapshot jsonb,revision bigint default 1,etag text,validation_summary jsonb,impact_summary jsonb,

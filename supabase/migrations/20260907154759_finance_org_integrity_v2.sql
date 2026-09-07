@@ -1469,6 +1469,8 @@ begin
   if jsonb_typeof(p_rows) is distinct from 'array' or jsonb_array_length(p_rows)=0 then raise exception '主管設定不可空白' using errcode='22023';end if;
   v_result:=private.finance_save_org_chart_org_base_v1(p_rows,p_summary);
   if not coalesce((v_result->>'ok')::boolean,false) then raise exception '主管異動未完整寫入' using errcode='55000';end if;
+  -- A direct authorized edit is not a second person's approval.
+  update public.system_setting_versions set approved_by=null where id=v_result->>'version_id' and tenant_id=v_tenant;
   return v_result||private.finance_org_publish_runtime_v2(v_tenant,public.current_finance_user_id(),p_summary)||jsonb_build_object('org_revision',private.finance_org_runtime_revision_v2(v_tenant));
 end;$fn$;
 

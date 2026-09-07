@@ -36257,7 +36257,7 @@ window.saveOrgChart=async function(){
       summary:savedPayload.summary||'更新人員主管圖與簽核主管關係',
       snapshot:savedPayload.snapshot||{organization_chart:cloneSettingValue(ORG_CHART)},
       createdBy:S.user?S.user.n:'',
-      approvedBy:S.user?S.user.n:'',
+      approvedBy:'',
       createdAt:savedPayload.saved_at||new Date().toISOString(),
       dataEnv:activeDataEnvironment()
     });
