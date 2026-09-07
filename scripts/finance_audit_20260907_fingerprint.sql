@@ -1,7 +1,5 @@
 \set ON_ERROR_STOP on
 
--- Full affected data hashes remain server-side; only one fingerprint is returned.
--- REPEATABLE READ prevents ordinary concurrent transactions from changing the snapshot.
 with schema_parts as (
   select 'function:'||p.oid::regprocedure::text as key,
     concat_ws('|',p.proowner::text,p.prosecdef::text,p.proconfig::text,p.proacl::text,md5(pg_get_functiondef(p.oid))) as value
@@ -65,3 +63,6 @@ with schema_parts as (
   select 'supabase_migrations.schema_migrations'::text as key, md5(coalesce(string_agg(to_jsonb(r)::text,E'\n' order by to_jsonb(r)::text),'')) as value from supabase_migrations.schema_migrations r
 ), parts as (select * from schema_parts union all select * from data_parts)
 select md5(string_agg(key||'='||coalesce(value,''),E'\n' order by key)) as fingerprint from parts;
+
+-- Full affected data hashes remain server-side; only one fingerprint is returned.
+-- REPEATABLE READ prevents concurrent transactions from changing the snapshot.

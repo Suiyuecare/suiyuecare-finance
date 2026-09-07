@@ -32,7 +32,7 @@
     "test:final-accountant-self-post": "node scripts/check_final_accountant_self_post_contract.js",
     "test:formal-cashier-self-disbursement": "node scripts/check_formal_cashier_self_disbursement_contract.js",
     "test:approval-timeline-assignee": "node scripts/check_approval_timeline_assignee_contract.js",
-    "test:audit-remediation": "node scripts/check_finance_auth_recovery_regressions.js && node scripts/test_current_identity_runtime_sql.mjs && node scripts/check_finance_org_regressions.js && node scripts/check_procurement_human_event_contract.js && node scripts/check_expense_accounting_corrections.js && node scripts/check_receipt_atomic_workflow.js && node scripts/check_receipt_notification_ui.js && node scripts/test_hris_attendance_identity_boundary.mjs && node scripts/test_html_render_security.cjs && node scripts/test_diagnostic_outbox.cjs && node scripts/test_audit_release_batch.mjs"
+    "test:audit-remediation": "node scripts/check_finance_auth_recovery_regressions.js && node scripts/test_current_identity_runtime_sql.mjs && node scripts/check_finance_org_regressions.js && node scripts/check_procurement_human_event_contract.js && node scripts/check_expense_accounting_corrections.js && node scripts/check_receipt_atomic_workflow.js && node scripts/check_receipt_notification_ui.js && node scripts/test_hris_attendance_identity_boundary.mjs && node scripts/test_html_render_security.cjs && node scripts/test_diagnostic_outbox.cjs && node scripts/test_audit_release_batch.mjs && node scripts/check_approval_postflight.js"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8"

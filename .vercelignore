@@ -72,3 +72,5 @@ supabase/.temp
 !scripts/fixtures/hris_attendance_live_baseline_20260907.sql
 !scripts/fixtures/finance_procurement_guard_20260907.sql
 !scripts/fixtures/finance_correction_dependencies_20260907.sql
+
+!scripts/check_approval_postflight.js

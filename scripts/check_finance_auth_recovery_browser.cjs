@@ -31,6 +31,7 @@ async function scoped(code){
   await browser('snapshot','-i');
   assert.equal((await browser('errors')).trim(),'','initial app has no JavaScript error');
   await browser('set','viewport','390','844');
+  await scoped("showFinanceLoginAccountGuidance({state:'expected'});");
   const mobile=JSON.parse(await browser('eval',"JSON.stringify({height:document.getElementById('login-switch-account').getBoundingClientRect().height,overflow:document.documentElement.scrollWidth>innerWidth})"));
   const mobileResult=typeof mobile==='string'?JSON.parse(mobile):mobile;
   assert.ok(mobileResult.height>=44,'account switch touch area');assert.equal(mobileResult.overflow,false,'mobile horizontal overflow');

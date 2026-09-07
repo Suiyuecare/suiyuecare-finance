@@ -102,6 +102,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/finance_production_authenticated_canary.sql',
   'scripts/finance_production_human_accounting_canary.sql',
   'scripts/finance_production_release_guard.js',
+  'scripts/check_approval_postflight.js',
   'scripts/check_finance_auth_recovery_regressions.js',
   'scripts/test_current_identity_runtime_sql.mjs',
   'scripts/check_finance_org_regressions.js',
@@ -125,7 +126,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
 ]);
 
 const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
-  'test:audit-remediation': "node scripts/check_finance_auth_recovery_regressions.js && node scripts/test_current_identity_runtime_sql.mjs && node scripts/check_finance_org_regressions.js && node scripts/check_procurement_human_event_contract.js && node scripts/check_expense_accounting_corrections.js && node scripts/check_receipt_atomic_workflow.js && node scripts/check_receipt_notification_ui.js && node scripts/test_hris_attendance_identity_boundary.mjs && node scripts/test_html_render_security.cjs && node scripts/test_diagnostic_outbox.cjs && node scripts/test_audit_release_batch.mjs",
+  'test:audit-remediation': "node scripts/check_finance_auth_recovery_regressions.js && node scripts/test_current_identity_runtime_sql.mjs && node scripts/check_finance_org_regressions.js && node scripts/check_procurement_human_event_contract.js && node scripts/check_expense_accounting_corrections.js && node scripts/check_receipt_atomic_workflow.js && node scripts/check_receipt_notification_ui.js && node scripts/test_hris_attendance_identity_boundary.mjs && node scripts/test_html_render_security.cjs && node scripts/test_diagnostic_outbox.cjs && node scripts/test_audit_release_batch.mjs && node scripts/check_approval_postflight.js",
   'release:source-integrity': 'node scripts/check_release_source_integrity.js',
   'release:environment-isolation': 'node scripts/check_environment_isolation_contract.js',
   'release:migration-lineage': 'node scripts/check_migration_lineage_contract.js',
@@ -164,6 +165,7 @@ const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
   'scripts/finance_production_authenticated_canary.sql',
   'scripts/finance_production_human_accounting_canary.sql',
   'scripts/finance_production_release_guard.js',
+  'scripts/check_approval_postflight.js',
   'scripts/check_finance_auth_recovery_regressions.js',
   'scripts/test_current_identity_runtime_sql.mjs',
   'scripts/check_finance_org_regressions.js',
