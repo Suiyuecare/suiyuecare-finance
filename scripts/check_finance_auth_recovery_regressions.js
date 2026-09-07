@@ -80,6 +80,25 @@ const plain = value => JSON.parse(JSON.stringify(value));
   assert.doesNotThrow(()=>tabs.startRealtime(),'late bootstrap cannot restart realtime while identity is blocked');
   console.log('PASS A04: immediate multi-tab lock, realtime stop, no stale-token writes, no token-only unlock');
 
+  const workspaceFrames=[],workspaceTargets=[];
+  const workspace=install({
+    S:{page:'dashboard'},financeWorkspaceNavigationRevision:0,APPROVAL_WAIT_TIMER_ID:null,PT:{newreq:'新增申請'},
+    el:()=>({style:{},classList:{add(){}}}),document:{querySelectorAll:()=>[]},
+    requestAnimationFrame:callback=>workspaceFrames.push(callback),restoreFinanceRefreshTarget:target=>workspaceTargets.push(target),
+    applyRolePermissions(){},setRuntimeDefaults(){},initFilters(){},consumeFinanceRefreshReturnPage:()=>null,
+    pendingApprovalDeepLink:()=>null,isExpenseApplicantRevisionMode:()=>false,shouldPromptUnsavedNewReq:()=>false,
+    shouldPromptUnsavedIncomeDoc:()=>false,canAccessPage:()=>true,buildNR(){},syncMobileNavSelect(){},
+    enhanceLongSelects(){},startSearchableSelectObserver(){},enhanceMobileTables(){},startMobileEnhancer(){}
+  },['openFinanceWorkspace','guardedNav']);
+  workspace.openFinanceWorkspace();
+  await workspace.guardedNav('newreq',null);
+  workspaceFrames.shift()();
+  assert.deepEqual(workspaceTargets,[],'initial dashboard frame cannot navigate away from recovered form');
+  assert.equal(workspace.S.page,'newreq');
+  workspace.openFinanceWorkspace();workspaceFrames.shift()();
+  assert.deepEqual(workspaceTargets,['dashboard'],'initial target still opens when no later navigation supersedes it');
+  console.log('PASS A02: queued initial navigation cannot reopen a leave dialog over restored content');
+
   for (const nrType of ['expense_reimbursement', 'payment_request', 'welfare_request', 'petty_cash_request', 'hr_expense_request', 'purchase_request', 'travel_request', 'refund_request', 'advance_request']) {
     let draft, removed = 0; const notices = [];
     const fields = [{ id: 'nr-desc', type: 'textarea', tagName: 'TEXTAREA', value: '人工用途' }, { id: 'nr-amt', type: 'number', value: '4611' }];

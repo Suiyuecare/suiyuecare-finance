@@ -69,6 +69,8 @@ async function scoped(code){
     return results;
   })()`);
   for(const result of results){console.log(JSON.stringify(result));assert.equal(result.saved,true,result.type+' saves');assert.equal(result.ok,true,result.type+' restores full DOM');assert.equal(result.backupRemains,false,result.type+' deletes only verified backup');}
+  const afterFrames=await scoped(`(async()=>{await new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve);});});return {page:S.page,leaveGuardOpen:!!(el('m-leave-guard')&&getComputedStyle(el('m-leave-guard')).display!=='none'),incomeGuardOpen:!!(el('m-income-leave-guard')&&getComputedStyle(el('m-income-leave-guard')).display!=='none')};})()`);
+  assert.deepEqual(afterFrames,{page:'newreq',leaveGuardOpen:false,incomeGuardOpen:false},'late initial navigation must not reopen a leave dialog over restored content');
   const income=await scoped(`(async()=>{
     var results=[];
     for(var page of ['invoices','bills']){
@@ -88,9 +90,10 @@ async function scoped(code){
   })()`);
   for(const result of income){console.log(JSON.stringify(result));assert.equal(result.saved,true);assert.equal(result.ok,true);assert.equal(result.backupRemains,false);}
   await browser('reload');await browser('wait','--load','networkidle');
-  const reload=await scoped(`(async()=>{quickLogin('employee');S.user.authUserId='10000000-0000-0000-0000-000000000001';S.user.tenantId=currentTenantId();var ok=await restoreFinanceAuthRecoveryDraft();return {ok:ok,type:S.nrType,item:S.purchaseRows[0]&&S.purchaseRows[0].itemName,qty:S.purchaseRows[0]&&S.purchaseRows[0].qty};})()`);
-  assert.deepEqual(reload,{ok:true,type:'purchase_request',item:'重新載入後仍須保留',qty:7});
+  const reload=await scoped(`(async()=>{quickLogin('employee');S.user.authUserId='10000000-0000-0000-0000-000000000001';S.user.tenantId=currentTenantId();var unrelated=el('m-voucher');unrelated.style.display='flex';var ok=await restoreFinanceAuthRecoveryDraft();var unrelatedPreserved=unrelated.style.display==='flex';unrelated.style.display='none';await new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve);});});return {ok:ok,type:S.nrType,item:S.purchaseRows[0]&&S.purchaseRows[0].itemName,qty:S.purchaseRows[0]&&S.purchaseRows[0].qty,unrelatedPreserved:unrelatedPreserved,leaveGuardOpen:!!(el('m-leave-guard')&&getComputedStyle(el('m-leave-guard')).display!=='none')};})()`);
+  assert.deepEqual(reload,{ok:true,type:'purchase_request',item:'重新載入後仍須保留',qty:7,unrelatedPreserved:true,leaveGuardOpen:false});
   console.log('PASS A02 browser: invoice/bill rows and a full page reload preserve owned draft.');
+  await browser('wait','1400');
   await browser('screenshot',process.env.FINANCE_AUTH_SCREENSHOT||'/tmp/finance-auth-recovery-browser.png');
   const locked=await scoped(`(async()=>{S.demoLogin=false;var before=document.createElement('div');before.className='modal-bg';before.style.display='flex';before.setAttribute('aria-hidden','false');document.body.appendChild(before);var cb;bindSupabaseAuthState({auth:{onAuthStateChange:function(fn){cb=fn;return {data:{subscription:{}}};}}});cb('SIGNED_IN',{access_token:'fixture',user:{id:'different-auth-uuid',email:'other@suiyuecare.com',email_confirmed_at:'2026-09-01',app_metadata:{provider:'google'},identities:[{provider:'google',identity_data:{email:'other@suiyuecare.com',email_verified:true}}]}});await new Promise(function(resolve){setTimeout(resolve,10);});hideFinanceAuthRecovery();var after=document.createElement('div');after.className='modal-bg';after.style.display='flex';document.body.appendChild(after);return {existingDialogHidden:getComputedStyle(before).visibility==='hidden',pendingDialogHidden:getComputedStyle(after).visibility==='hidden',locked:financeWorkspaceIdentityBlocked,inert:el('main-wrap').inert,visibility:el('main-wrap').style.visibility,dialog:el('finance-auth-recovery').style.display,hasClose:el('finance-auth-recovery').innerHTML.indexOf('onclick="hideFinanceAuthRecovery()"')>-1};})()`);
   assert.deepEqual(locked,{existingDialogHidden:true,pendingDialogHidden:true,locked:true,inert:true,visibility:'hidden',dialog:'flex',hasClose:false});

@@ -13987,7 +13987,14 @@ function openFinanceWorkspace(){
   var refreshPage=consumeFinanceRefreshReturnPage();
   var targetPage=pendingApprovalDeepLink()?'approvals':(refreshPage||'dashboard');
   if(targetPage==='approvals')approvalRenderLoadingStateIfAvailable('workspace_open');
-  var openTarget=function(){restoreFinanceRefreshTarget(targetPage);};
+  var initialNavigationRevision=financeWorkspaceNavigationRevision;
+  var openTarget=function(){
+    // Recovery and user navigation can finish before this animation frame.
+    // A stale initial target must not navigate away from their restored form
+    // and open an unrelated unsaved-changes confirmation over it.
+    if(financeWorkspaceNavigationRevision!==initialNavigationRevision)return;
+    restoreFinanceRefreshTarget(targetPage);
+  };
   if(typeof requestAnimationFrame==='function')requestAnimationFrame(openTarget);else setTimeout(openTarget,0);
 }
 function rememberFinanceRefreshPage(){
@@ -14469,11 +14476,13 @@ function normalizeRequestEntityDept(eid,dc){
   var deptEnt=entityOfDept(dc);
   return {ok:true,eid:eid,dc:dc,deptEntity:deptEnt||''};
 }
+var financeWorkspaceNavigationRevision=0;
 var PT={dashboard:'經營決策儀表板',newreq:'新增申請',expenses:'放款申請',detail:'申請單詳情',approvals:'簽核管理',vouchers:'傳票查詢',shareholder:'股東 / 公司間往來',invoices:'開立發票',bills:'申請繳費單',recv:'收款情形',reports:'三表總覽',ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',orgchart:'人員主管圖',health:'系統健檢',settings:'系統設定'};
 window.nav=function(id,btn){
   return guardedNav(id,btn);
 };
 async function guardedNav(id,btn){
+  financeWorkspaceNavigationRevision++;
   var leavingApplicantRevision=S.page==='newreq'&&isExpenseApplicantRevisionMode()&&id!=='newreq';
   if(shouldPromptUnsavedNewReq(id)){
     var choice=await confirmLeaveNewReq();
