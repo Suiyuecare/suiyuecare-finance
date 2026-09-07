@@ -140,3 +140,18 @@ build 前固定檢查：
 - Supabase database reset: https://supabase.com/docs/reference/cli/supabase-db-reset
 - Vercel Git deployment configuration: https://vercel.com/docs/project-configuration/git-configuration
 - Vercel staged deployment guidance: https://vercel.com/docs/deployments/overview
+
+
+### Audit repair batch, 2026-09-08
+
+The protected release additionally recognizes `database_audit_20260907`, whose
+exact six migrations are pinned in `AUDIT_MIGRATIONS`. Run `pnpm test:audit-remediation`
+for the focused input rendering, auth recovery, organization, accounting, receipt,
+attendance and atomic release tests. CI installs the locked PGlite dependency.
+The browser auth recovery check is also run locally with `agent-browser`; its
+result must be distinguished from a real Google OAuth login.
+
+The audit phase uses `finance_audit_20260907_fingerprint.sql` and
+`finance_audit_20260907_postflight.sql` in its complete rollback rehearsal and
+formal transactional apply. No individual migration, unchecked pending suffix,
+or newly discovered remote migration may bypass the exact ledger contract.

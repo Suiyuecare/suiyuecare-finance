@@ -19,6 +19,9 @@
     "permission-engine.js",
     "report-engine.js",
     "organization-engine.js",
-    "accounting-engine.js"
+    "accounting-engine.js",
+    "accounting-corrections.js",
+    "receipt-transactions.js",
+    "notification-routing.js"
   ]
 }

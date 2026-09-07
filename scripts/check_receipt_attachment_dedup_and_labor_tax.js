@@ -70,7 +70,9 @@ check('non-labor invoice tax remains unchanged',regularParts.gross===4600&&regul
 
 check('receipt summary count uses the unique grouped attachment list',/receiptFiles=receiptFilesForInvoiceRows\(groupRows\),proof=receiptFiles\.length/.test(indexSource));
 check('receivable detail uses the unique grouped attachment list',/var receiptFiles=receiptFilesForInvoiceRows\(rows\);/.test(indexSource));
-check('receipt write avoids appending the same physical file twice',/nextFiles:uniqueAttachments\(\(row\.receiptFiles\|\|\[\]\)\.concat\(files\)\)/.test(indexSource));
+const receiptTransactionSource=fs.readFileSync(path.join(root,'assets/engines/receipt-transactions.js'),'utf8');
+const receiptMigration=fs.readFileSync(path.join(root,'supabase/migrations/20260907154743_receipt_ceo_atomic_v1.sql'),'utf8');
+check('atomic receipt write deduplicates the reviewed proof set without appending old files',receiptTransactionSource.includes('runtime().uniqueAttachments')&&receiptTransactionSource.includes('files=unique(files)')&&receiptMigration.includes('receipt_files=v_files')&&!receiptMigration.includes('receipt_files=receipt_files||'));
 
 check('labor-fee OCR rows are forced to exempt mode',/if\(laborFee\)\{[\s\S]{0,180}tax=0;[\s\S]{0,100}taxMode='exempt';/.test(indexSource));
 check('6221 is an explicit labor-fee detection signal',/if\(code==='6221'\)return true;/.test(indexSource));

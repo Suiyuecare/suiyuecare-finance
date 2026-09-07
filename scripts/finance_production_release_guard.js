@@ -32,10 +32,13 @@ const REVIEWED_POST_BASELINE_MIGRATIONS = Object.freeze([
   MIGRATION_FORMAL_CASHIER_REPAIR,
   MIGRATION_FORMAL_CASHIER_SELF_DISBURSEMENT
 ]);
+const AUDIT_MIGRATIONS = Object.freeze(['20260907154404','20260907154739','20260907154742','20260907154743','20260907154758','20260907154759']);
+const RELEASE_PHASE_DATABASE_AUDIT = 'database_audit_20260907';
 const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...MIGRATION_CHAIN,
   ...REVIEWED_POST_BASELINE_MIGRATIONS,
-  MIGRATION_HUMAN_ACCOUNTING_AUTHORITY
+  MIGRATION_HUMAN_ACCOUNTING_AUTHORITY,
+  ...AUDIT_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -43,6 +46,7 @@ const RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING = 'database_human_accounting';
 const RELEASE_PHASES = Object.freeze({
   [RELEASE_PHASE_FRONTEND_COMPAT]: 'none',
   [RELEASE_PHASE_DATABASE_V3]: MIGRATION_V3,
+  [RELEASE_PHASE_DATABASE_AUDIT]: AUDIT_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING]: MIGRATION_HUMAN_ACCOUNTING_AUTHORITY
 });
 const FRONTEND_RELEASE_CONTRACT = 'expense-submit-resilience-v3-20260827';
@@ -59,7 +63,8 @@ const SUPPORTED_GATE_PHASES = Object.freeze([
   Object.freeze([MIGRATION_V1]),
   Object.freeze([MIGRATION_V2]),
   Object.freeze([MIGRATION_V3]),
-  Object.freeze([MIGRATION_HUMAN_ACCOUNTING_AUTHORITY])
+  Object.freeze([MIGRATION_HUMAN_ACCOUNTING_AUTHORITY]),
+  AUDIT_MIGRATIONS
 ]);
 const SUPPORTED_GATE_SUFFIXES = SUPPORTED_GATE_PHASES;
 
@@ -133,6 +138,7 @@ function deploymentHost(record) { return String(record.url || '').replace(/^http
 function validateTarget(env, candidate, releasePhase, versionsText, expectedRef) {
   canonicalSha(candidate);
   releasePlan(releasePhase, versionsText);
+  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AUDIT].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use the complete audit batch');
   expectedRef = projectRef(expectedRef);
   if (expectedRef !== PRODUCTION_CATALOG.supabaseProjectRef) fail('Supabase project ref is not the immutable Finance production catalog target');
   for (const name of ['SUPABASE_ACCESS_TOKEN', 'FINANCE_SUPABASE_URL', 'FINANCE_SUPABASE_ANON_KEY', 'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']) {
@@ -218,6 +224,14 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
   const remote = readLedgerVersions(ledgerPath);
   assertProductionLedgerBaseline(remote, baseline);
   const missing = MIGRATION_CHAIN.filter((version) => !remote.includes(version));
+  if (plan.releasePhase === RELEASE_PHASE_DATABASE_AUDIT) {
+    const legacy=[...MIGRATION_CHAIN,...REVIEWED_POST_BASELINE_MIGRATIONS,MIGRATION_HUMAN_ACCOUNTING_AUTHORITY];
+    if(legacy.some(v=>!remote.includes(v))) fail('audit phase requires the complete reviewed legacy authority chain');
+    if(AUDIT_MIGRATIONS.some(v=>!local.some(name=>name.startsWith(v+'_')))) fail('audit migration file is missing');
+    const installed=AUDIT_MIGRATIONS.filter(v=>remote.includes(v));
+    if(installed.length!==0&&installed.length!==AUDIT_MIGRATIONS.length) fail('audit phase is partially installed; no mutation is permitted');
+    return installed.length?'applied':'pending';
+  }
   if (plan.releasePhase === RELEASE_PHASE_FRONTEND_COMPAT) {
     if (missing.length) {
       fail(`frontend_compat requires the complete v1/v2/v3 authority chain, found pending: ${missing.join(',')}`);
@@ -226,6 +240,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if (!remote.includes(MIGRATION_HUMAN_ACCOUNTING_AUTHORITY)) {
       fail(`frontend_compat requires applied migration ${MIGRATION_HUMAN_ACCOUNTING_AUTHORITY}`);
     }
+    if(AUDIT_MIGRATIONS.some(version=>!remote.includes(version))) fail('frontend_compat requires the complete audit migration batch');
     return 'compat';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
@@ -334,6 +349,86 @@ function prepareRehearsal(sourcePath, outputPath, target, fingerprintPath, canar
 }
 
 function sqlLiteral(value) { return `'${String(value).replace(/'/g, "''")}'`; }
+function readAuditBatch(directory, versionsText) {
+  releasePlan(RELEASE_PHASE_DATABASE_AUDIT,versionsText);
+  const files=migrationFiles(directory);
+  return AUDIT_MIGRATIONS.map(version=>{
+    const filename=files.find(name=>name.startsWith(version+'_'));
+    if(!filename)fail(`audit migration is missing: ${version}`);
+    const source=fs.readFileSync(path.join(directory,filename),'utf8');
+    assertCliAtomicMigration(source,filename);
+    if(!source.trim())fail(`audit migration is empty: ${version}`);
+    return {version,filename,source};
+  });
+}
+function prepareAuditBatchRehearsal(directory,outputPath,versionsText,fingerprintPath,canaryPath,postflightPath) {
+  const batch=readAuditBatch(directory,versionsText);
+  const canary=authenticatedCanarySections(canaryPath);
+  const fingerprint=stripPsqlDirectives(fs.readFileSync(fingerprintPath,'utf8'),path.basename(fingerprintPath)).trim();
+  if(!/^with\b/i.test(fingerprint)||/\b(?:insert\s+into|update\s+\S+\s+set|delete\s+from|alter\s+table|create\s+(?:table|index|schema|function|policy)|drop\s+(?:table|index|schema|function|policy)|truncate\s+|vacuum\b|call\s+|copy\s+)\b/i.test(fingerprint))fail('audit fingerprint must be a pure read-only CTE query');
+  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
+  assertCliAtomicMigration(postflight,'audit postflight');
+  const sources=batch.map(item=>item.source.trimEnd()).join('\n');
+  const tag='$finance_audit_rollback_assert$';
+  if([sources,fingerprint,postflight,canary.core,canary.rollbackCheck].some(value=>value.includes(tag)))fail('audit rehearsal assertion tag collision');
+  writeExclusive(outputPath,`begin isolation level repeatable read;
+set local lock_timeout = '5s';
+set local statement_timeout = '180s';
+create temporary table finance_release_fingerprint_before on commit drop as
+${fingerprint}
+savepoint finance_release_migration;
+${sources}
+${postflight}
+${canary.core}
+rollback to savepoint finance_release_migration;
+${canary.rollbackCheck}
+create temporary table finance_release_fingerprint_after on commit drop as
+${fingerprint}
+do ${tag}
+begin
+  if (select fingerprint from finance_release_fingerprint_before) is distinct from
+     (select fingerprint from finance_release_fingerprint_after) then
+    raise exception 'audit rollback rehearsal changed the reviewed database fingerprint';
+  end if;
+end;
+${tag};
+rollback;
+`);
+  return true;
+}
+function prepareAuditBatchApply(directory,outputPath,versionsText,ledgerPath,postflightPath,baseline=PRODUCTION_BASELINE_LEDGER) {
+  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
+  assertCliAtomicMigration(postflight,'audit postflight');
+  const batch=readAuditBatch(directory,versionsText);
+  verifyLedger('pre',ledgerPath,directory,RELEASE_PHASE_DATABASE_AUDIT,versionsText,baseline);
+  const remote=readLedgerVersions(ledgerPath);
+  const tag='$finance_audit_ledger_guard$';
+  const parts=batch.map(item=>{
+    const quote=`$finance_audit_migration_${item.version}$`;
+    if(item.source.includes(quote)||item.source.includes(tag))fail('audit source collides with protected ledger tag');
+    const name=item.filename.replace(/^\d{14}_/,'').replace(/\.sql$/,'');
+    return `${item.source.trimEnd()}\ninsert into supabase_migrations.schema_migrations(version,statements,name,created_by) values (${sqlLiteral(item.version)},array[${quote}${item.source.trimEnd()}${quote}]::text[],${sqlLiteral(name)},'github-actions');`;
+  });
+  writeExclusive(outputPath,`begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '180s';
+select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('finance-production-release-v1',0));
+lock table supabase_migrations.schema_migrations in share row exclusive mode;
+do ${tag}
+declare actual_versions text[];
+begin
+  select pg_catalog.array_agg(version order by version) into actual_versions from supabase_migrations.schema_migrations;
+  if actual_versions is distinct from array[${remote.map(sqlLiteral).join(',')}]::text[] then
+    raise exception 'formal migration ledger changed after the reviewed release gate';
+  end if;
+end;
+${tag};
+${parts.join('\n')}
+${postflight}
+commit;
+`);
+  return true;
+}
 function stripPsqlDirectives(source, label) {
   if (!/^\\set ON_ERROR_STOP on\r?\n/.test(source)) fail(`${label} must begin with the reviewed psql fail-closed directive`);
   return source.replace(/^\\set ON_ERROR_STOP on\r?\n/, '');
@@ -352,6 +447,14 @@ function prepareGateQuery(sourcePath, outputPath, versionsText) {
 function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
   const plan = releasePlan(releasePhase, versionsText);
   const sourceName = path.basename(sourcePath);
+  if ([RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)) {
+    if(sourceName!=='finance_production_db_postflight.sql') fail('audit phase requires the reviewed existing-v3 postflight');
+    const base=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),sourceName).replace(/:'migration_versions'/g,sqlLiteral(MIGRATION_V3));
+    const auditPath=path.join(path.dirname(sourcePath),'finance_audit_20260907_postflight.sql');
+    const audit=stripPsqlDirectives(fs.readFileSync(auditPath,'utf8'),path.basename(auditPath));
+    writeExclusive(outputPath,`begin read only;\nset local statement_timeout = '60s';\n${base.trimEnd()}\n${audit.trimEnd()}\nrollback;\n`);
+    return true;
+  }
   if (plan.releasePhase === RELEASE_PHASE_FRONTEND_COMPAT) {
     if (sourceName !== 'finance_production_db_postflight.sql') {
       fail('frontend_compat may only render the reviewed v3 read-only compatibility postflight');
@@ -613,6 +716,7 @@ function verifyReceipt(receiptPath, deploymentPath, manifestPath, indexPath, can
 function manifestSha(file) { return sha256File(file); }
 
 const api = {
+  AUDIT_MIGRATIONS, RELEASE_PHASE_DATABASE_AUDIT, prepareAuditBatchRehearsal, prepareAuditBatchApply, readAuditBatch,
   PRODUCTION_CATALOG, PRODUCTION_BASELINE_LEDGER, MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_CHAIN,
   MIGRATION_PORTAL_LINK_REPAIR, MIGRATION_TOP_LEVEL_CEO_ROUTE, MIGRATION_EXPENSE_DERIVED_STATUS,
   MIGRATION_FINAL_ACCOUNTANT_SELF_POST, MIGRATION_FORMAL_CASHIER_REPAIR,
@@ -636,6 +740,8 @@ if (require.main === module) {
     if (command === 'validate-target') validateTarget(process.env, arg('candidate-sha'), arg('release-phase'), arg('migration-versions'), arg('project-ref'));
     else if (command === 'classify-ledger') process.stdout.write(`${classifyLedger(arg('ledger'), arg('migration-dir'), arg('release-phase'), arg('migration-versions'))}\n`);
     else if (command === 'verify-ledger') verifyLedger(arg('mode'), arg('ledger'), arg('migration-dir'), arg('release-phase'), arg('migration-versions'));
+    else if (command === 'prepare-audit-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'), arg('output'), arg('migration-versions'), arg('fingerprint'), arg('authenticated-canary'), arg('audit-postflight'));
+    else if (command === 'prepare-audit-apply') prepareAuditBatchApply(arg('migration-dir'), arg('output'), arg('migration-versions'), arg('ledger'), arg('audit-postflight'));
     else if (command === 'prepare-rehearsal') prepareRehearsal(arg('migration'), arg('output'), arg('migration-version'), arg('fingerprint'), arg('authenticated-canary'));
     else if (command === 'prepare-gate-query') prepareGateQuery(arg('input'), arg('output'), arg('migration-versions'));
     else if (command === 'prepare-phase-query') preparePhaseQuery(arg('input'), arg('output'), arg('release-phase'), arg('migration-versions'));
