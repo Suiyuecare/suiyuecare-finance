@@ -36,6 +36,17 @@ async function rejects(name,fn,code){let e;try{await fn();}catch(error){e=error;
  let before=JSON.stringify(fixture.rows),result=await fixture.ctx.financeReceiptAction(fixture.rows,'approve','note',[],{one:2});
  check('One RPC receives reviewed version and scope',fixture.calls.length===1&&fixture.calls[0].p_expected_versions.one===2&&fixture.calls[0].p_data_environment==='test');
  check('Success never fabricates local ledger/status',result.committed&&JSON.stringify(fixture.rows)===before);
+ const attachments={window:{},console};attachments.window.window=attachments.window;
+ vm.runInNewContext(read('assets/engines/finance-v4-engine-registry.js'),attachments);
+ vm.runInNewContext(read('assets/engines/attachment-engine.js'),attachments);
+ const proof={n:'proof.png',bucket:'finance-attachments',path:'anonymous/proof.png'};
+ fixture=receipt({uniqueAttachments:attachments.window.FinanceAttachmentEngine.uniqueFiles});
+ await fixture.ctx.financeReceiptAction(fixture.rows,'submit','note',[proof,proof],{one:2});
+ check('Receipt dispatch deduplicates the reviewed proof with the actual attachment engine',fixture.calls[0].p_files.length===1&&fixture.calls[0].p_files[0].path===proof.path);
+ fixture=receipt({uniqueAttachments:attachments.window.FinanceAttachmentEngine.uniqueFiles});
+ await fixture.ctx.financeReceiptAction(fixture.rows,'submit','note',{one:[proof,proof]},{one:2});
+ check('Per-invoice receipt proof map is also deduplicated before dispatch',fixture.calls[0].p_files.one.length===1);
+
  fixture=receipt({reloadInvoicesByIds:async()=>false});result=await fixture.ctx.financeReceiptAction(fixture.rows,'approve','note',[],{one:2});
  check('Committed write + failed readback remains committed',result.committed&&result.refreshRequired&&fixture.flags.includes(true));
  fixture=receipt({refreshApprovalAfterCommittedAction:async()=>{throw Error('render failed');}});result=await fixture.ctx.financeReceiptAction(fixture.rows,'approve','note',[],{one:2});
