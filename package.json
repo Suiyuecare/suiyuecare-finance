@@ -33,6 +33,7 @@
     "test:formal-cashier-self-disbursement": "node scripts/check_formal_cashier_self_disbursement_contract.js",
     "test:approval-timeline-assignee": "node scripts/check_approval_timeline_assignee_contract.js"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
+  }
 }

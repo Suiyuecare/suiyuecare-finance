@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {PGlite} from '@electric-sql/pglite';
+import guard from './finance_production_release_guard.js';
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'finance-audit-gate-'));
+const versions=guard.AUDIT_MIGRATIONS.join(','),phase=guard.RELEASE_PHASE_DATABASE_AUDIT;
+const legacy=['20260820000000',...guard.MIGRATION_CHAIN,...guard.REVIEWED_POST_BASELINE_MIGRATIONS,guard.MIGRATION_HUMAN_ACCOUNTING_AUTHORITY];
+const baseline={count:1,lastVersion:legacy[0],sha256:guard.ledgerSha256([legacy[0]])};
+const ledger=path.join(dir,'ledger.txt');fs.writeFileSync(ledger,legacy.join('\n')+'\n');
+const migrationDir=path.join(dir,'migrations');fs.mkdirSync(migrationDir);
+for(const v of guard.REVIEWED_MIGRATION_CATALOG)fs.writeFileSync(path.join(migrationDir,v+'_test.sql'),guard.AUDIT_MIGRATIONS.includes(v)?`create table public.audit_probe_${v}(id integer);`:'select 1;');
+const sql=(name,body)=>{const p=path.join(dir,name);fs.writeFileSync(p,body);return p;};
+const postflight=sql('postflight.sql',"\\set ON_ERROR_STOP on\ndo $test$ begin if (select count(*) from pg_tables where tablename like 'audit_probe_%')<>6 then raise exception 'incomplete batch'; end if; end; $test$;");
+const fingerprint=sql('fingerprint.sql',"\\set ON_ERROR_STOP on\nwith x as (select count(*)::text as fingerprint from pg_tables where tablename like 'audit_probe_%') select fingerprint from x;");
+const canary=sql('canary.sql',`-- Test-only rollback contract
+begin isolation level repeatable read;
+-- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN
+do $core$ begin if (select count(*) from pg_tables where tablename like 'audit_probe_%')<>6 then raise exception 'partial rehearsal'; end if; end; $core$;
+-- FINANCE_AUTHENTICATED_CANARY_CORE_END
+-- FINANCE_AUTHENTICATED_CANARY_ROLLBACK_CHECK_BEGIN
+do $rollback$ begin if exists(select 1 from pg_tables where tablename like 'audit_probe_%') then raise exception 'rehearsal residue'; end if; end; $rollback$;
+-- FINANCE_AUTHENTICATED_CANARY_ROLLBACK_CHECK_END
+rollback;
+`);
+assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'pending');
+assert.throws(()=>guard.migrationPhase(guard.AUDIT_MIGRATIONS.slice(0,5).join(',')),/no exact catalog/);
+assert.throws(()=>guard.migrationPhase([...guard.AUDIT_MIGRATIONS].reverse().join(',')),/strictly ordered/);
+assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/complete audit migration batch/);
+const db=new PGlite();
+await db.exec('create schema supabase_migrations; create table supabase_migrations.schema_migrations(version text primary key,statements text[],name text,created_by text);');
+for(const v of legacy)await db.query('insert into supabase_migrations.schema_migrations(version) values ($1)',[v]);
+const rehearsal=path.join(dir,'rehearsal.sql');guard.prepareAuditBatchRehearsal(migrationDir,rehearsal,versions,fingerprint,canary,postflight);
+await db.exec(fs.readFileSync(rehearsal,'utf8'));
+assert.equal((await db.query("select count(*)::int n from pg_tables where tablename like 'audit_probe_%'")).rows[0].n,0);
+const apply=path.join(dir,'apply.sql');guard.prepareAuditBatchApply(migrationDir,apply,versions,ledger,postflight,baseline);
+const finalFile=path.join(migrationDir,guard.AUDIT_MIGRATIONS.at(-1)+'_test.sql');
+const good=fs.readFileSync(finalFile,'utf8');fs.writeFileSync(finalFile,good+"\nselect 1/0;");
+const bad=path.join(dir,'bad.sql');guard.prepareAuditBatchApply(migrationDir,bad,versions,ledger,postflight,baseline);
+await assert.rejects(()=>db.exec(fs.readFileSync(bad,'utf8')),/division by zero/);await db.exec('rollback;');
+assert.equal((await db.query("select count(*)::int n from pg_tables where tablename like 'audit_probe_%'")).rows[0].n,0);
+assert.equal((await db.query('select count(*)::int n from supabase_migrations.schema_migrations')).rows[0].n,legacy.length);
+fs.writeFileSync(finalFile,good);
+await db.exec(fs.readFileSync(apply,'utf8'));
+assert.equal((await db.query('select count(*)::int n from supabase_migrations.schema_migrations')).rows[0].n,legacy.length+6);
+await assert.rejects(()=>db.exec(fs.readFileSync(apply,'utf8')),/ledger changed/);await db.exec('rollback;');
+fs.writeFileSync(ledger,[...legacy,...guard.AUDIT_MIGRATIONS.slice(0,2)].join('\n')+'\n');
+assert.throws(()=>guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),/partially installed/);
+fs.writeFileSync(ledger,[...legacy,...guard.AUDIT_MIGRATIONS].join('\n')+'\n');
+assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'applied');
+assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
+fs.unlinkSync(finalFile);assert.throws(()=>guard.readAuditBatch(migrationDir,versions),/missing/);
+await db.close();fs.rmSync(dir,{recursive:true});
+console.log('PASS fixed audit batch: exact catalog, rollback rehearsal, atomic SQL+ledger, last migration failure rollback, stale ledger rejection, partial install rejection, idempotent applied state');

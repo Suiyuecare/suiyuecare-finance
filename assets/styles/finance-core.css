@@ -4475,3 +4475,7 @@ input:focus,select:focus,textarea:focus{
   #pg-settings :is(.permission-board-grid,.workflow-editor-shell,.form-field-admin-layout,.account-template-layout){grid-template-columns:1fr!important;min-width:0!important}
   #pg-settings :is(.permission-matrix-scroll,.workflow-pane,.form-field-admin-table-wrap){max-width:100%!important;overflow-x:auto!important;overscroll-behavior-x:contain!important}
 }
+
+/* Shared-device account recovery must remain easy to tap on narrow screens. */
+#login-switch-account{min-height:44px;min-width:44px;padding:10px 14px;}
+@media(max-width:760px){.file-chip>button{min-height:44px!important;min-width:44px!important;padding:8px!important;}}

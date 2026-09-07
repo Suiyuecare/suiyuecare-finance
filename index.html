@@ -34,6 +34,7 @@
 </script>
 <link rel="icon" type="image/png" href="assets/suiyue-logo-transparent.png">
 <script src="assets/engines/finance-v4-engine-registry.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/diagnostic-outbox-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/data-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/form-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/approval-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -3895,6 +3896,7 @@ function num(v){
   return Number(v||0);
 }
 function escAttr(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function financeInlineJsString(value){return escAttr(JSON.stringify(String(value==null?'':value)));}
 function financeAttachmentEngine(){
   if(window.FinanceV4Engines&&typeof window.FinanceV4Engines.get==='function')return window.FinanceV4Engines.get('attachments');
   return window.FinanceAttachmentEngine||null;
@@ -4821,9 +4823,9 @@ function fileChipDownloadHtml(f,reqId,idx){
   var can=!!f.url;
   var title=f.archivePath||f.path||'';
   return'<div class="file-chip" title="'+escAttr(title)+'" style="display:inline-flex;margin:2px">'
-    +'<span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+ext+'</span>'
-    +'<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+f.n+'</span>'
-    +(can||f.path||f.storagePath?'<button onclick="event.stopPropagation();downloadAttachment(\''+reqId+'\','+idx+')" style="border:1px solid #d8c2a8;background:#fff8ed;color:var(--brtxt);border-radius:5px;font-size:10px;padding:1px 6px;cursor:pointer">下載</button>':'<span style="font-size:10px;color:#c09060">僅檔名</span>')
+    +'<span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+escAttr(ext)+'</span>'
+    +'<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(f.n)+'</span>'
+    +(can||f.path||f.storagePath?'<button onclick="event.stopPropagation();downloadAttachment('+financeInlineJsString(reqId)+','+idx+')" style="border:1px solid #d8c2a8;background:#fff8ed;color:var(--brtxt);border-radius:5px;font-size:10px;padding:1px 6px;cursor:pointer">下載</button>':'<span style="font-size:10px;color:#c09060">僅檔名</span>')
     +'</div>';
 }
 var STEP_DOWNLOADS=[];
@@ -4945,7 +4947,7 @@ function stepAttachmentHtml(files){
     var ext=(f.t||fileExt(f.n)).toUpperCase();
     var health=ATTACHMENT_DOWNLOAD_HEALTH[attachmentDownloadHealthKey(f)]||{};
     var missing=health.kind==='missing';
-    return'<button type="button" '+(missing?'disabled ':'')+'onclick="event.stopPropagation();downloadStepAttachment('+key+',this)" title="'+escAttr(missing?attachmentDownloadFailureMessage('missing'):'下載附件')+'" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:'+(missing?'#fff1f2':'#fff')+';border:1px solid '+(missing?'#fecaca':'#e0d0b8')+';border-radius:5px;padding:2px 6px;font-size:10px;color:'+(missing?'#9f1239':'#334155')+';cursor:'+(missing?'not-allowed':'pointer')+'"><span style="color:var(--brtxt);font-weight:650">'+ext+'</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(f.n||'附件')+'</span><span data-download-label style="color:'+(missing?'#9f1239':'#7c3f00')+';font-weight:650">'+(missing?'附件缺失':'下載')+'</span></button>';
+    return'<button type="button" '+(missing?'disabled ':'')+'onclick="event.stopPropagation();downloadStepAttachment('+key+',this)" title="'+escAttr(missing?attachmentDownloadFailureMessage('missing'):'下載附件')+'" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:'+(missing?'#fff1f2':'#fff')+';border:1px solid '+(missing?'#fecaca':'#e0d0b8')+';border-radius:5px;padding:2px 6px;font-size:10px;color:'+(missing?'#9f1239':'#334155')+';cursor:'+(missing?'not-allowed':'pointer')+'"><span style="color:var(--brtxt);font-weight:650">'+escAttr(ext)+'</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(f.n||'附件')+'</span><span data-download-label style="color:'+(missing?'#9f1239':'#7c3f00')+';font-weight:650">'+(missing?'附件缺失':'下載')+'</span></button>';
   }).join('')+'</div>';
 }
 function stepFeedbackHtml(comment){
@@ -5230,7 +5232,7 @@ async function auditLog(action,target,detail,meta){
   saveComplianceStore('audit_logs',AUDIT_LOGS);
   var payload={id:row.id,action:row.action,target:row.target,detail:row.detail,actor_name:row.user,actor_role:row.role,created_at:row.time,entity_id:row.eid||null,period:row.period||null,data_environment:row.dataEnv};
   var ins=await dbInsert('compliance_audit_logs',payload);
-  if(ins&&ins.ok===false&&ins.error&&isSchemaCacheMiss(ins.error.message)){
+  if(allowLocalPersistence()&&ins&&ins.ok===false&&ins.error&&isSchemaCacheMiss(ins.error.message)){
     delete payload.entity_id;delete payload.period;delete payload.data_environment;
     await dbInsert('compliance_audit_logs',payload);
   }
@@ -9640,11 +9642,30 @@ function healthSectionHtml(title,rows,note){
   var sectionStatus=rows.some(function(r){return r.status==='fail';})?'fail':(rows.some(function(r){return r.status==='warn';})?'warn':'ok');
   return'<section class="health-flat-section"><div class="health-flat-head"><div><div class="health-flat-title">'+escAttr(title)+'</div>'+(note?'<div class="health-flat-subtitle">'+escAttr(note)+'</div>':'')+'</div><span class="badge '+healthBadgeClass(sectionStatus)+'">'+rows.length+' 項</span></div><div class="health-list-scroll"><table class="health-list-table"><thead><tr><th>群組</th><th>檢查項目</th><th>狀態</th><th>結果</th></tr></thead><tbody>'+rows.map(function(r){return'<tr class="health-row-'+attr(r.status||'skip')+'"><td>'+escAttr(r.group||'—')+'</td><td><div class="health-item-name">'+escAttr(r.label||r.name||r.table||'')+'</div><div class="health-item-code">'+escAttr(r.table||r.name||'')+'</div></td><td><span class="badge '+healthBadgeClass(r.status)+'">'+healthStatusLabel(r.status)+'</span></td><td class="health-result-cell">'+escAttr(r.detail||'')+'</td></tr>';}).join('')+'</tbody></table></div></section>';
 }
-function saveOpsEvents(){
-  if(!allowLocalPersistence())return false;
-  OPS_EVENTS=(OPS_EVENTS||[]).slice(0,200);
-  return safeJsonSet(OPS_EVENT_KEY,OPS_EVENTS);
+var FINANCE_DIAGNOSTIC_OUTBOX=null;
+function financeDiagnosticScope(){return {owner:S.user&&S.user.authUserId||'',tenantId:currentTenantId(),dataEnv:activeDataEnvironment()};}
+function financeDiagnosticOutbox(){
+  if(FINANCE_DIAGNOSTIC_OUTBOX)return FINANCE_DIAGNOSTIC_OUTBOX;
+  try{if(window.FinanceDiagnosticOutbox)FINANCE_DIAGNOSTIC_OUTBOX=window.FinanceDiagnosticOutbox.create(window.localStorage);}catch(ignore){}
+  return FINANCE_DIAGNOSTIC_OUTBOX;
 }
+function saveOpsEvents(){
+  OPS_EVENTS=(OPS_EVENTS||[]).slice(0,200);
+  if(allowLocalPersistence())return safeJsonSet(OPS_EVENT_KEY,OPS_EVENTS);
+  var box=financeDiagnosticOutbox(),scope=financeDiagnosticScope();
+  return !!box&&box.save(OPS_EVENTS.filter(function(row){return row.diagnosticOwner===scope.owner&&row.tenantId===scope.tenantId&&row.dataEnv===scope.dataEnv;}),scope);
+}
+window.restoreFinanceDiagnosticOutbox=function(){
+  if(allowLocalPersistence()||!hasSupabase()||!S.user)return false;
+  var scope=financeDiagnosticScope(),box=financeDiagnosticOutbox();if(!box||!scope.owner)return false;
+  box.pending(scope).forEach(function(item){
+    var row=OPS_EVENTS.find(function(e){return e.id===item.id;});
+    if(!row){row=Object.assign({},item,{diagnosticOwner:scope.owner,title:'離線診斷：'+item.type,detail:'重新連線後補送；本機僅保留事件類型與錯誤碼。',user:'系統診斷',role:'system',meta:{code:item.code},remoteAuditStatus:'queued'});OPS_EVENTS.unshift(row);}
+    if(row.remoteAuditStatus!=='synced'&&row.remoteAuditStatus!=='syncing'){row.remoteAuditQueued=false;queueOpsEventRemoteSync(row);}
+  });
+  return true;
+};
+window.addEventListener('online',function(){restoreFinanceDiagnosticOutbox();});
 function opsEventRemoteAuditAction(row){
   return '維運事件：'+(row&&row.type?row.type:'system');
 }
@@ -9677,6 +9698,7 @@ function opsEventCompliancePayload(row){
 }
 async function syncOpsEventToComplianceAudit(row){
   if(!row||row.remoteAuditStatus==='synced'||row.remoteAuditStatus==='syncing')return {ok:true,skipped:true};
+  if(!allowLocalPersistence()&&(!S.user||row.diagnosticOwner!==financeDiagnosticScope().owner||row.tenantId!==currentTenantId()||row.dataEnv!==activeDataEnvironment()))return {ok:false,skipped:true};
   row.remoteAuditStatus='syncing';
   saveOpsEvents();
   var payload=opsEventCompliancePayload(row);
@@ -9691,7 +9713,7 @@ async function syncOpsEventToComplianceAudit(row){
     delete legacy.tenant_id;
     ins=await dbInsert('compliance_audit_logs',legacy);
   }
-  if(ins&&ins.ok===false){
+  if(ins&&ins.ok===false&&String(ins.error&&ins.error.code)!=='23505'){
     row.remoteAuditStatus='failed';
     row.remoteAuditError=(ins.error&&ins.error.message)||'遠端 audit log 寫入失敗';
     saveOpsEvents();
@@ -9755,6 +9777,7 @@ window.runOpsEventRemoteAuditSelfCheck=function(){
 function recordOpsEvent(type,severity,title,detail,meta){
   meta=meta||{};
   var row={id:'ops_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),time:new Date().toISOString(),type:type||'system',severity:severity||'info',title:title||'系統事件',detail:detail||'',user:S.user?(S.user.email||S.user.n||''):'',role:S.user?currentRoleKey():'',page:S.page||'',dataEnv:activeDataEnvironment(),tenantId:currentTenantId(),meta:meta};
+  row.diagnosticOwner=S.user&&S.user.authUserId||'';
   OPS_EVENTS.unshift(row);
   saveOpsEvents();
   return queueOpsEventRemoteSync(row);
@@ -9867,6 +9890,7 @@ window.exportOpsDiagnostics=function(){
 };
 window.clearOpsEvents=function(){
   if(!confirm('確定清空本機維運事件紀錄？這不會刪除正式資料庫或 audit log。'))return;
+  var box=financeDiagnosticOutbox();if(box)box.clear(financeDiagnosticScope());
   OPS_EVENTS=[];saveOpsEvents();buildSystemHealth();
 };
 function buildSystemHealth(){
@@ -15388,7 +15412,7 @@ window.openReportTraceModal=function(kind,key){
     var src=r.source||sourceByLedgerRef(r.ref),dept=(r.dc||'')+' '+(gD(r.dc).n||''),v=r.voucher;
     return'<tr><td style="font-size:11px;color:#64748b;white-space:nowrap">'+(r.date||'—')+'</td>'
       +'<td><div style="font-size:11px;color:var(--brtxt);font-weight:650">'+(src.no||r.ref||'—')+'</div><div style="font-size:10px;color:#94a3b8">'+src.label+(r.virtual?' · 現金流事件':'')+(v?' · 傳票 '+v.no:'')+'</div></td>'
-      +'<td><div style="font-size:12px;color:#334155">'+(r.desc||src.title||'—')+'</div><div style="font-size:10px;color:#94a3b8">'+dept+' · '+(src.name||'')+' · 附件 '+(src.files||0)+' · 核准 '+(src.approvals||0)+'</div></td>'
+      +'<td><div style="font-size:12px;color:#334155">'+escAttr(r.desc||src.title||'—')+'</div><div style="font-size:10px;color:#94a3b8">'+dept+' · '+(src.name||'')+' · 附件 '+(src.files||0)+' · 核准 '+(src.approvals||0)+'</div></td>'
       +'<td style="font-size:10px;color:#64748b">'+(r.postingKey||'—')+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);color:#1a5010">'+(r.dr?fmt(r.dr):'—')+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);color:#8a1010">'+(r.cr?fmt(r.cr):'—')+'</td>'
@@ -17514,7 +17538,7 @@ function renderNRFList(){
   if(isExpenseApplicantRevisionMode())notice+='<div style="font-size:10px;color:#0f766e;background:#ecfdf5;border:1px solid #b7ead1;border-radius:7px;padding:6px;margin-bottom:5px">原附件為簽核紀錄的一部分，不能刪除；這次選擇的附件會追加到原單。</div>';
   else if(S.nrFiles.some(function(f){return f.path||f.storagePath;}))notice+='<div style="font-size:10px;color:#0f766e;background:#ecfdf5;border:1px solid #b7ead1;border-radius:7px;padding:6px;margin-bottom:5px">此草稿的附件已從 Supabase 保存路徑恢復，可直接送出；若要替換請重新上傳。</div>';
   if(!S.nrFiles.length){fl.innerHTML=notice+'<div style="font-size:11px;color:#94a3b8;padding:2px 0">尚未上傳任何憑據</div>';return;}
-  fl.innerHTML=notice+S.nrFiles.map(function(f,i){var nm=f.name||f.n||'附件',ext=fileExt(nm).toUpperCase(),original=!!(isExpenseApplicantRevisionMode()&&f.__revisionOriginal);return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+ext+'</span><span style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(nm)+'</span>'+(original?'<span style="font-size:9px;color:#0f766e">原附件保留</span>':'<button onclick="nrRemoveFile('+i+')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0;line-height:1">×</button>')+'</div>';}).join('');
+  fl.innerHTML=notice+S.nrFiles.map(function(f,i){var nm=f.name||f.n||'附件',ext=fileExt(nm).toUpperCase(),original=!!(isExpenseApplicantRevisionMode()&&f.__revisionOriginal);return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+escAttr(ext)+'</span><span style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(nm)+'</span>'+(original?'<span style="font-size:9px;color:#0f766e">原附件保留</span>':'<button onclick="nrRemoveFile('+i+')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0;line-height:1">×</button>')+'</div>';}).join('');
   var dz=el('nr-dz');
   if(dz)dz.classList.toggle('filled',S.nrFiles.length>0);
 }
@@ -22451,7 +22475,7 @@ window.openDetail=function(rid){
   if(S.page!=='detail')S.prev=S.page;
   nav('detail',null);
   var d=gD(r.dc);var e=gE(r.eid);
-  el('detail-hd').innerHTML='<div style="font-size:15px;font-weight:500;color:#1e293b">'+r.no+' <span class="badge '+SCSS[r.status]+'">'+SL[r.status]+'</span></div><div style="font-size:12px;color:#94a3b8;margin-top:2px">'+r.app+' · '+r.dc+' '+d.n+'</div>';
+  el('detail-hd').innerHTML='<div style="font-size:15px;font-weight:500;color:#1e293b">'+escAttr(r.no)+' <span class="badge '+SCSS[r.status]+'">'+SL[r.status]+'</span></div><div style="font-size:12px;color:#94a3b8;margin-top:2px">'+escAttr(r.app)+' · '+escAttr(r.dc)+' '+escAttr(d.n)+'</div>';
   var curStep=activeStep(r);var acts=[];
   var returnedMiddle=isRestrictedReturnedMiddleStep(r);
   var detailUpload='<div style="min-width:260px;max-width:420px;flex:1">'+approvalActionFields('detail-appr-c','detail-appr-files','detail-appr-add-user',{allowAddSign:!returnedMiddle,excludeUserIds:approvalApplicantIds([r])})+'</div>';
@@ -22478,11 +22502,11 @@ window.openDetail=function(rid){
   // FIX 3：顯示匯款欄位
   var feeAmt=r.type==='advance_request'?0:requestBankFeeAmount(r);
   var feeNote=feeAmt?('（自動切分錄 '+fmt(feeAmt)+'）'):(isMegaBankRecipient(r)?'（兆豐收款銀行，不列手續費分錄）':'');
-  var bankDetail=(r.payee||r.bankName||r.bankNo)?('收款人：'+(r.payee||'—')+'<br>銀行：'+(r.bankName||'—')+(r.bankBranch?' '+r.bankBranch:'')+'<br>帳號：<span style="font-family:var(--font-sans)">'+(r.bankNo||'—')+'</span><br>預計匯款日：'+(r.expectedPayDate||'—')+'<br>手續費：'+(requestFeeBearer(r)||'—')+feeNote):(r.bankAcc||'—');
+  var bankDetail=(r.payee||r.bankName||r.bankNo)?('收款人：'+escAttr((r.payee||'—'))+'<br>銀行：'+escAttr((r.bankName||'—'))+(r.bankBranch?' '+escAttr(r.bankBranch):'')+'<br>帳號：<span style="font-family:var(--font-sans)">'+escAttr((r.bankNo||'—'))+'</span><br>預計匯款日：'+escAttr((r.expectedPayDate||'—'))+'<br>手續費：'+(requestFeeBearer(r)||'—')+feeNote):escAttr((r.bankAcc||'—'));
   var actualText=(r.type==='purchase_request')?(purchaseActualAmount(r)?'<strong style="font-size:15px;color:#0f766e">'+fmt(purchaseActualAmount(r))+'</strong>':'<span style="color:#94a3b8">待總務填寫</span>'):(r.type==='advance_request'?(r.actualAmt?'<strong style="font-size:15px;color:#0f766e">'+fmt(r.actualAmt)+'</strong>':'<span style="color:#94a3b8">待會計依最後憑據填寫</span>'):'—');
   var amountLabel=r.type==='purchase_request'?'預估付款金額':(r.type==='advance_request'?'原申請金額':'金額');
   var amountValue=r.type==='purchase_request'?purchaseEstimatedAmount(r):(r.estimatedAmt||r.amt);
-  var cells=[['法人','<span class="ep">'+e.s+'</span>'],['部門','<span class="dt">'+r.dc+'</span>'],['類型','<span class="badge '+TCSS[r.type]+'">'+r.tL+'</span>'],[amountLabel,'<strong style="font-size:15px">'+fmt(amountValue)+'</strong>'],['最後實際支出',actualText],['申請人',r.app],['日期',r.date],['匯款資訊','<span style="font-size:11px;color:var(--brtxt);line-height:1.5">'+bankDetail+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:8px;padding:7px;border:1px solid #f0e0c8"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+x[0]+'</div><div style="font-size:12px">'+x[1]+'</div></div>';}).join('');
+  var cells=[['法人','<span class="ep">'+escAttr(e.s)+'</span>'],['部門','<span class="dt">'+escAttr(r.dc)+'</span>'],['類型','<span class="badge '+TCSS[r.type]+'">'+escAttr(r.tL)+'</span>'],[amountLabel,'<strong style="font-size:15px">'+fmt(amountValue)+'</strong>'],['最後實際支出',actualText],['申請人',escAttr(r.app)],['日期',escAttr(r.date)],['匯款資訊','<span style="font-size:11px;color:var(--brtxt);line-height:1.5">'+bankDetail+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:8px;padding:7px;border:1px solid #f0e0c8"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+x[0]+'</div><div style="font-size:12px">'+x[1]+'</div></div>';}).join('');
   var filesHtml='';
   if(r.files&&r.files.length)filesHtml='<div style="margin-top:8px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">已上傳憑據（'+r.files.length+'個）</div><div>'+r.files.map(function(f,i){return fileChipDownloadHtml(f,r.id,i);}).join('')+'</div></div>';
   var tlRuntime=approvalTimelineWithRuntimeLogs('expense',r,{includeSubmitFallback:true});
@@ -22492,10 +22516,10 @@ window.openDetail=function(rid){
   var lineAccountingTitle=accountingLinesTitleForRequest(r);
   var lineAccountingCard=shouldShowRequestAccountingLines(r)?accountingLinesHtml(r,canEditAccountingLines,lineAccountingTitle,'detail-acct-line'):'';
   var accountingCard=isFinance()
-    ?'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById(\''+r.voucherId+'\')">'+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+r.dr+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+r.drN+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+r.cr+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+r.crN+'</div></div></div>'+(feeAmt?'<div style="font-size:11px;color:#6a5840;margin-top:6px;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:6px">己方支出手續費會自動增加：Dr 6290 手續費 '+fmt(feeAmt)+'，Cr '+r.cr+' 銀行存款合計 '+fmt(r.amt+feeAmt)+'。</div>':'')+'<div style="font-size:11px;color:#94a3b8;margin-top:6px">提醒：數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
+    ?'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById(\''+r.voucherId+'\')">'+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+escAttr(r.dr)+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+escAttr(r.drN)+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+escAttr(r.cr)+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+escAttr(r.crN)+'</div></div></div>'+(feeAmt?'<div style="font-size:11px;color:#6a5840;margin-top:6px;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:6px">己方支出手續費會自動增加：Dr 6290 手續費 '+fmt(feeAmt)+'，Cr '+escAttr(r.cr)+' 銀行存款合計 '+fmt(r.amt+feeAmt)+'。</div>':'')+'<div style="font-size:11px;color:#94a3b8;margin-top:6px">提醒：數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
     :'<div class="card" style="padding:12px;background:#fff8ed;border-color:#efd7b8"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:5px">會計處理</div><div style="font-size:11px;color:#8b7358;line-height:1.7">這張單完成簽核後，會計會確認憑據與金流並由系統處理入帳。您不用填寫會計科目、分錄或傳票，只需要追蹤簽核狀態與補齊附件。</div></div>';
   var managerCard=(S.user&&['section_chief','dept_manager','admin_director','ceo','general_affairs'].indexOf(currentRoleKey())>-1)?'<div class="detail-full-row">'+supervisorReviewCardHtml(r,false)+'</div>':'';
-  var infoCard='<div class="card detail-info-card"><div class="chd"><span class="cht">申請資訊</span></div>'+entityDeptEditorHtml('expense',r.id,r.eid,r.dc)+'<div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+cells+'</div><div style="padding:0 12px 12px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;border:1px solid #f0e0c8">'+r.desc+'</div>'+purchaseAmountCompareHtml(r)+advanceTwoEventHtml(r)+pettyAccountingHtml(r)+filesHtml+'</div></div>';
+  var infoCard='<div class="card detail-info-card"><div class="chd"><span class="cht">申請資訊</span></div>'+entityDeptEditorHtml('expense',r.id,r.eid,r.dc)+'<div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+cells+'</div><div style="padding:0 12px 12px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;border:1px solid #f0e0c8">'+escAttr(r.desc)+'</div>'+purchaseAmountCompareHtml(r)+advanceTwoEventHtml(r)+pettyAccountingHtml(r)+filesHtml+'</div></div>';
   var progressRows=approvalTimelineRows(r,{includeSubmitFallback:true});
   var progressCard='<div class="card detail-progress-card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">'+approvalTimelineProgressText(r)+(progressRows.length>5?' · 可上下滑動':'')+'</span></div><div class="detail-progress-scroll">'+tl+'</div></div>';
   el('detail-body').innerHTML=managerCard+infoCard+progressCard+(invoiceReviewCard?'<div class="detail-full-row">'+invoiceReviewCard+'</div>':'')+'<div class="detail-full-row">'+accountingCard+'</div>'+(lineAccountingCard?'<div class="detail-full-row">'+lineAccountingCard+'</div>':'');
@@ -22939,14 +22963,14 @@ function requestPrimaryFilesHtml(r){
       var ext=(f.t||fileExt(f.n)).toUpperCase();
       var health=ATTACHMENT_DOWNLOAD_HEALTH[attachmentDownloadHealthKey(f)]||{};
       var missing=health.kind==='missing';
-      return'<button type="button" '+(missing?'disabled ':'')+'onclick="event.stopPropagation();downloadStepAttachment('+key+',this)" title="'+escAttr(missing?attachmentDownloadFailureMessage('missing'):'下載附件')+'" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:'+(missing?'#fff1f2':'#fff')+';border:1px solid '+(missing?'#fecaca':'#e0d0b8')+';border-radius:5px;padding:2px 6px;font-size:10px;color:'+(missing?'#9f1239':'#334155')+';cursor:'+(missing?'not-allowed':'pointer')+';margin:0 4px 4px 0"><span style="color:var(--brtxt);font-weight:650">'+ext+'</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(f.n||'附件')+'</span><span data-download-label style="color:'+(missing?'#9f1239':'#7c3f00')+';font-weight:650">'+(missing?'附件缺失':'下載')+'</span></button>';
+      return'<button type="button" '+(missing?'disabled ':'')+'onclick="event.stopPropagation();downloadStepAttachment('+key+',this)" title="'+escAttr(missing?attachmentDownloadFailureMessage('missing'):'下載附件')+'" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:'+(missing?'#fff1f2':'#fff')+';border:1px solid '+(missing?'#fecaca':'#e0d0b8')+';border-radius:5px;padding:2px 6px;font-size:10px;color:'+(missing?'#9f1239':'#334155')+';cursor:'+(missing?'not-allowed':'pointer')+';margin:0 4px 4px 0"><span style="color:var(--brtxt);font-weight:650">'+escAttr(ext)+'</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(f.n||'附件')+'</span><span data-download-label style="color:'+(missing?'#9f1239':'#7c3f00')+';font-weight:650">'+(missing?'附件缺失':'下載')+'</span></button>';
     }).join('');
   }
   function row(title,items,empty){
     return'<div style="margin-bottom:8px"><div style="font-size:10px;color:#a08060;margin-bottom:4px">'+title+'</div><div>'+(items.length?fileButtons(items):'<span style="font-size:11px;color:#94a3b8">'+empty+'</span>')+'</div></div>';
   }
   function passbookRow(){
-    return'<div style="margin-bottom:8px"><div style="font-size:10px;color:#a08060;margin-bottom:4px">3. 存摺封面</div><div>'+(passbook.length?passbook.map(function(f,i){return'<button type="button" onclick="downloadPassbookAttachment(\''+r.id+'\','+i+')" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#fff;border:1px solid #e0d0b8;border-radius:5px;padding:2px 6px;font-size:10px;color:#334155;cursor:pointer;margin:0 4px 4px 0"><span style="color:var(--brtxt);font-weight:650">'+fileExt(f.n||f.t).toUpperCase()+'</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(f.n||'存摺封面')+'</span><span style="color:#7c3f00;font-weight:650">下載</span></button>';}).join(''):'<span style="font-size:11px;color:#94a3b8">尚無存摺封面</span>')+'</div></div>';
+    return'<div style="margin-bottom:8px"><div style="font-size:10px;color:#a08060;margin-bottom:4px">3. 存摺封面</div><div>'+(passbook.length?passbook.map(function(f,i){return'<button type="button" onclick="downloadPassbookAttachment('+financeInlineJsString(r.id)+','+i+')" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:#fff;border:1px solid #e0d0b8;border-radius:5px;padding:2px 6px;font-size:10px;color:#334155;cursor:pointer;margin:0 4px 4px 0"><span style="color:var(--brtxt);font-weight:650">'+escAttr(fileExt(f.n||f.t).toUpperCase())+'</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(f.n||'存摺封面')+'</span><span style="color:#7c3f00;font-weight:650">下載</span></button>';}).join(''):'<span style="font-size:11px;color:#94a3b8">尚無存摺封面</span>')+'</div></div>';
   }
   return row('1. 即時 Excel 生成檔',excel,'尚無 Excel 明細檔')+row('2. 憑據照片彙整 PDF',pdf,'尚無照片彙整 PDF')+passbookRow()+(others.length?row('其他原始附件',others,''):'');
 }
@@ -25867,7 +25891,7 @@ window.openReportVoucherModal=function(kind,account){
     var v=r.voucher,dept=(r.dc||'')+' '+(gD(r.dc).n||''),ref=r.ref||'—';
     return'<tr><td style="font-size:11px;color:#64748b;white-space:nowrap">'+(r.date||'—')+'</td>'
       +'<td><div style="font-size:11px;color:var(--brtxt);font-weight:650">'+ref+'</div><div style="font-size:10px;color:#94a3b8">'+(v?('傳票 '+v.no):'分類帳分錄')+'</div></td>'
-      +'<td><div style="font-size:12px;color:#334155">'+(r.desc||'—')+'</div><div style="font-size:10px;color:#94a3b8">'+dept+'</div></td>'
+      +'<td><div style="font-size:12px;color:#334155">'+escAttr(r.desc||'—')+'</div><div style="font-size:10px;color:#94a3b8">'+dept+'</div></td>'
       +'<td style="text-align:right;font-family:var(--font-sans);color:#1a5010">'+(r.dr?fmt(r.dr):'—')+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);color:#8a1010">'+(r.cr?fmt(r.cr):'—')+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);font-weight:650;color:'+(kind==='revenue'?'#2a9040':'#8a1010')+'">'+fmt(r.amount)+'</td>'
@@ -29548,7 +29572,7 @@ function buildTrialBalance(period,eid){
     }else{
       issueBox.innerHTML='<div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:6px">異常來源追溯</div><div style="overflow-x:auto"><table><thead><tr><th>異常</th><th>日期</th><th>科目</th><th>摘要</th><th style="text-align:right">借方</th><th style="text-align:right">貸方</th><th>來源</th></tr></thead><tbody>'+t.issues.map(function(x){
         var r=x.row||{};
-        return'<tr><td><span class="badge b-rej">'+x.kind+'</span><div style="font-size:10px;color:#94a3b8">'+x.msg+'</div></td><td>'+normDate(r.date)+'</td><td>'+(r.ac||'')+' '+(r.an||'')+'</td><td>'+String(r.desc||'').slice(0,42)+'</td><td style="text-align:right;font-family:var(--font-sans)">'+fmt(r.dr||0)+'</td><td style="text-align:right;font-family:var(--font-sans)">'+fmt(r.cr||0)+'</td><td>'+(r.ref||r.voucherNo||r.postingKey||'—')+'</td></tr>';
+        return'<tr><td><span class="badge b-rej">'+x.kind+'</span><div style="font-size:10px;color:#94a3b8">'+x.msg+'</div></td><td>'+normDate(r.date)+'</td><td>'+(r.ac||'')+' '+(r.an||'')+'</td><td>'+escAttr(String(r.desc||'').slice(0,42))+'</td><td style="text-align:right;font-family:var(--font-sans)">'+fmt(r.dr||0)+'</td><td style="text-align:right;font-family:var(--font-sans)">'+fmt(r.cr||0)+'</td><td>'+(r.ref||r.voucherNo||r.postingKey||'—')+'</td></tr>';
       }).join('')+'</tbody></table></div>';
     }
   }
@@ -33692,7 +33716,7 @@ window.setLegacyPermissionBoardAll=async function(enabled){
 // ══ 通知 ══
 function buildNotifs(){renderNotifs();}
 window.notifTab=function(t,btn){S.nT=t;document.querySelectorAll('#pg-notif .tb').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');renderNotifs();};
-window.renderNotifs=function renderNotifs(){var data=S.nT==='unread'?NOTIFS.filter(function(n){return!n.read;}):S.nT==='approval'?NOTIFS.filter(function(n){return n.type==='approval';}):S.nT==='system'?NOTIFS.filter(function(n){return n.type==='system';}):NOTIFS;var unread=NOTIFS.filter(function(n){return!n.read;}).length,verified=!!(lastSyncAt||S.demoLogin);el('notif-sub').textContent=verified?(unread+' 則未讀'):'通知讀取中';el('notif-cnt').textContent=verified?unread:'—';el('n-badge').style.display=verified&&unread?'block':'none';el('notif-list').innerHTML=verified?(data.map(function(n){return'<div class="notif-row'+(n.read?'':' unread')+'" onclick="markNotifRead(\''+n.id+'\')'+(n.reqId?';openDetail(\''+n.reqId+'\')':'')+'"><div style="width:6px;height:6px;border-radius:50%;background:'+(n.read?'#d0c0a8':'var(--br)')+';margin-top:4px;flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;font-weight:'+(n.read?'400':'500')+';color:#334155">'+n.title+'</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+n.body+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px">'+n.time+'</div></div><span class="badge '+(n.type==='approval'?'b-wait':'b-blue')+'">'+(n.type==='approval'?'簽核':'系統')+'</span></div>';}).join('')||'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">沒有通知</div>'):'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">正在讀取通知…</div>';}
+window.renderNotifs=function renderNotifs(){var data=S.nT==='unread'?NOTIFS.filter(function(n){return!n.read;}):S.nT==='approval'?NOTIFS.filter(function(n){return n.type==='approval';}):S.nT==='system'?NOTIFS.filter(function(n){return n.type==='system';}):NOTIFS;var unread=NOTIFS.filter(function(n){return!n.read;}).length,verified=!!(lastSyncAt||S.demoLogin);el('notif-sub').textContent=verified?(unread+' 則未讀'):'通知讀取中';el('notif-cnt').textContent=verified?unread:'—';el('n-badge').style.display=verified&&unread?'block':'none';el('notif-list').innerHTML=verified?(data.map(function(n){return'<div class="notif-row'+(n.read?'':' unread')+'" onclick="markNotifRead(\''+n.id+'\')'+(n.reqId?';openDetail(\''+n.reqId+'\')':'')+'"><div style="width:6px;height:6px;border-radius:50%;background:'+(n.read?'#d0c0a8':'var(--br)')+';margin-top:4px;flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;font-weight:'+(n.read?'400':'500')+';color:#334155">'+escAttr(n.title)+'</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+escAttr(n.body)+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px">'+escAttr(n.time)+'</div></div><span class="badge '+(n.type==='approval'?'b-wait':'b-blue')+'">'+(n.type==='approval'?'簽核':'系統')+'</span></div>';}).join('')||'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">沒有通知</div>'):'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">正在讀取通知…</div>';}
 window.markNotifRead=async function(id){var n=NOTIFS.find(function(x){return x.id===id;});if(n)n.read=true;await dbUpdate('notifications',id,{read:true});renderNotifs();buildDash();};
 window.markAllRead=async function(){NOTIFS.forEach(function(n){n.read=true;});var client=getSb();if(client)await client.from('notifications').update({read:true}).eq('tenant_id',currentTenantId()).eq('data_environment',activeDataEnvironment()).eq('read',false);renderNotifs();buildDash();};
 

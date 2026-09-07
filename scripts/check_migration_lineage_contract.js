@@ -23,6 +23,7 @@ const EXPENSE_STATUS_HOTFIX = '20260831043517_expense_submit_derived_status.sql'
 const FINAL_ACCOUNTANT_SELF_POST_HOTFIX = '20260901024020_final_accountant_self_post.sql';
 const FORMAL_CASHIER_REPAIR = '20260901073241_assign_ceo_cashier_and_reassign_pending_cashier.sql';
 const FORMAL_CASHIER_SELF_DISBURSEMENT = '20260901081807_allow_formal_cashier_self_disbursement.sql';
+const AUDIT_MIGRATIONS=require('./finance_production_release_guard').AUDIT_MIGRATIONS;
 const HUMAN_ACCOUNTING_AUTHORITY = '20260902054834_preserve_human_accounting_authority_v1.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
@@ -98,15 +99,20 @@ const humanAccountingSql = humanAccountingIndex >= 0 ? read(`supabase/migrations
 const staleAttemptBranch = releaseSql.match(/if v_attempt_id is null then([\s\S]*?)end if;/)?.[1] || '';
 const futureRouteGuard = releaseSql.match(/create function private\.finance_expense_assert_applicant_revision_future_route_v3\([\s\S]*?\$function\$;/)?.[0] || '';
 check('route authority and all reviewed production hotfixes are the exact lineage suffix',
-  releaseIndex === migrations.length - 8
-    && adoptedRepairIndex === migrations.length - 7
-    && routeHotfixIndex === migrations.length - 6
-    && statusHotfixIndex === migrations.length - 5
-    && finalAccountantHotfixIndex === migrations.length - 4
-    && cashierRepairIndex === migrations.length - 3
-    && cashierSelfDisbursementIndex === migrations.length - 2
-    && humanAccountingIndex === migrations.length - 1,
+  releaseIndex === migrations.length - AUDIT_MIGRATIONS.length - 8
+    && adoptedRepairIndex === migrations.length - AUDIT_MIGRATIONS.length - 7
+    && routeHotfixIndex === migrations.length - AUDIT_MIGRATIONS.length - 6
+    && statusHotfixIndex === migrations.length - AUDIT_MIGRATIONS.length - 5
+    && finalAccountantHotfixIndex === migrations.length - AUDIT_MIGRATIONS.length - 4
+    && cashierRepairIndex === migrations.length - AUDIT_MIGRATIONS.length - 3
+    && cashierSelfDisbursementIndex === migrations.length - AUDIT_MIGRATIONS.length - 2
+    && humanAccountingIndex === migrations.length - AUDIT_MIGRATIONS.length - 1,
   migrations[migrations.length - 1] || '(none)');
+check('audited batch is the exact new ordered suffix',migrations.slice(-AUDIT_MIGRATIONS.length).map(name=>name.slice(0,14)).join(',')===AUDIT_MIGRATIONS.join(','));
+for(const version of AUDIT_MIGRATIONS){
+  const file=migrations.find(name=>name.startsWith(version+'_'));
+  if(file)require('./finance_production_release_guard').assertCliAtomicMigration(read('supabase/migrations/'+file),file);
+}
 check('current release migration leaves transaction and ledger atomicity to the pinned CLI',
   !/^\s*(?:begin|commit|rollback)(?:\s+(?:work|transaction))?\s*;\s*$/im.test(releaseSql)
     && !/^\s*(?:(?:create(?:\s+unique)?\s+index|drop\s+index)\s+concurrently\b|reindex\b[^;]*\bconcurrently\b|vacuum\b|alter\s+system\b|cluster\b)/im.test(releaseSql)
