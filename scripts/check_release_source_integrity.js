@@ -109,6 +109,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/check_procurement_human_event_contract.js',
   'scripts/check_expense_accounting_corrections.js',
   'scripts/check_receipt_atomic_workflow.js',
+  'scripts/check_receipt_revenue_compatibility.js',
   'scripts/check_receipt_notification_ui.js',
   'scripts/test_hris_attendance_identity_boundary.mjs',
   'scripts/test_html_render_security.cjs',
@@ -120,13 +121,14 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/finance_approval_audit_postflight.sql',
   'scripts/fixtures/hris_attendance_live_baseline_20260907.sql',
   'scripts/fixtures/finance_procurement_guard_20260907.sql',
+  'scripts/fixtures/finance_invoice_revenue_posting_20260908.sql',
   'scripts/fixtures/finance_correction_dependencies_20260907.sql',
   'supabase/config.toml',
   'vercel.json'
 ]);
 
 const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
-  'test:audit-remediation': "node scripts/check_finance_auth_recovery_regressions.js && node scripts/test_current_identity_runtime_sql.mjs && node scripts/check_finance_org_regressions.js && node scripts/check_procurement_human_event_contract.js && node scripts/check_expense_accounting_corrections.js && node scripts/check_receipt_atomic_workflow.js && node scripts/check_receipt_notification_ui.js && node scripts/test_hris_attendance_identity_boundary.mjs && node scripts/test_html_render_security.cjs && node scripts/test_diagnostic_outbox.cjs && node scripts/test_audit_release_batch.mjs && node scripts/check_approval_postflight.js",
+  'test:audit-remediation': "node scripts/check_finance_auth_recovery_regressions.js && node scripts/test_current_identity_runtime_sql.mjs && node scripts/check_finance_org_regressions.js && node scripts/check_procurement_human_event_contract.js && node scripts/check_expense_accounting_corrections.js && node scripts/check_receipt_atomic_workflow.js && node scripts/check_receipt_revenue_compatibility.js && node scripts/check_receipt_notification_ui.js && node scripts/test_hris_attendance_identity_boundary.mjs && node scripts/test_html_render_security.cjs && node scripts/test_diagnostic_outbox.cjs && node scripts/test_audit_release_batch.mjs && node scripts/check_approval_postflight.js",
   'release:source-integrity': 'node scripts/check_release_source_integrity.js',
   'release:environment-isolation': 'node scripts/check_environment_isolation_contract.js',
   'release:migration-lineage': 'node scripts/check_migration_lineage_contract.js',
@@ -172,6 +174,7 @@ const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
   'scripts/check_procurement_human_event_contract.js',
   'scripts/check_expense_accounting_corrections.js',
   'scripts/check_receipt_atomic_workflow.js',
+  'scripts/check_receipt_revenue_compatibility.js',
   'scripts/check_receipt_notification_ui.js',
   'scripts/test_hris_attendance_identity_boundary.mjs',
   'scripts/test_html_render_security.cjs',
@@ -183,6 +186,7 @@ const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
   'scripts/finance_approval_audit_postflight.sql',
   'scripts/fixtures/hris_attendance_live_baseline_20260907.sql',
   'scripts/fixtures/finance_procurement_guard_20260907.sql',
+  'scripts/fixtures/finance_invoice_revenue_posting_20260908.sql',
   'scripts/fixtures/finance_correction_dependencies_20260907.sql'
 ]);
 

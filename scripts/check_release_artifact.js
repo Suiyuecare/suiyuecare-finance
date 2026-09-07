@@ -153,6 +153,7 @@ function releaseSourceFiles() {
     'scripts/check_procurement_human_event_contract.js',
     'scripts/check_expense_accounting_corrections.js',
     'scripts/check_receipt_atomic_workflow.js',
+    'scripts/check_receipt_revenue_compatibility.js',
     'scripts/check_receipt_notification_ui.js',
     'scripts/test_hris_attendance_identity_boundary.mjs',
     'scripts/test_html_render_security.cjs',
@@ -164,6 +165,7 @@ function releaseSourceFiles() {
     'scripts/finance_approval_audit_postflight.sql',
     'scripts/fixtures/hris_attendance_live_baseline_20260907.sql',
     'scripts/fixtures/finance_procurement_guard_20260907.sql',
+    'scripts/fixtures/finance_invoice_revenue_posting_20260908.sql',
     'scripts/fixtures/finance_correction_dependencies_20260907.sql',
     'supabase/config.toml',
     'vercel.json'
