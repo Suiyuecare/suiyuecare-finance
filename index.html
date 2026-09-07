@@ -47,6 +47,16 @@
 <link rel="stylesheet" href="assets/styles/mobile-operations.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/workflow-simplification.css?v=__FINANCE_ASSET_VERSION__">
 <style>
+/* Include dialogs opened by already pending renders after an identity change. */
+body[data-finance-identity-blocked="true"] #main-wrap,
+body[data-finance-identity-blocked="true"] #sidebar,
+body[data-finance-identity-blocked="true"] .modal-bg,
+body[data-finance-identity-blocked="true"] #action-feedback,
+body[data-finance-identity-blocked="true"] [data-mobile-bottom-nav],
+body[data-finance-identity-blocked="true"] #mobile-nav-select{
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
 /* Submission actions stay visibly unavailable until the current Google
    identity has a freshly loaded finance_users directory. */
 body.finance-identity-syncing button[onclick*="submitNR"],
@@ -2914,6 +2924,9 @@ function isFinanceAttachmentRecordType(type){
 var sb=null;
 var supabaseAuthSubscription=null;
 var supabaseAuthCheckPromise=null;
+var financeAuthIdentityEpoch=0;
+var financeWorkspaceIdentityBlocked=false;
+var financeAuthRecoveryRestorePendingKey='';
 var financeLogoutInProgress=false;
 var financeGoogleAccountSwitchInProgress=false;
 var AUTH_REQUEST_TIMEOUT_MS=8000;
@@ -3001,6 +3014,19 @@ function financeSupabaseFetch(input,init){
   init=init||{};
   var url=typeof input==='string'?input:String((input&&input.url)||'');
   var nativeFetch=window.fetch.bind(window);
+  // A different tab can replace the shared Supabase token while this tab still
+  // displays the previous employee. Never send that employee's UI actions with
+  // the replacement token; the server remains the authorization authority.
+  if(url.indexOf('/auth/v1/')<0&&S.user&&!S.demoLogin){
+    var headers=new Headers(init.headers||(input&&input.headers)||{});
+    var bearer=String(headers.get('authorization')||'').replace(/^Bearer\s+/i,'');
+    var tokenSubject='';
+    try{var encoded=String(bearer.split('.')[1]||'').replace(/-/g,'+').replace(/_/g,'/');tokenSubject=String(JSON.parse(atob(encoded)).sub||'');}catch(e){}
+    if(financeWorkspaceIdentityBlocked||(tokenSubject&&tokenSubject!==currentFinanceAuthUserId())){
+      lockFinanceWorkspaceIdentity('auth_identity_mismatch');
+      return Promise.reject(new Error('FINANCE_AUTH_IDENTITY_CHANGED: 請使用原填單帳號重新驗證，尚未送出這個動作。'));
+    }
+  }
   if(url.indexOf('/auth/v1/')<0||typeof AbortController==='undefined')return nativeFetch(input,init);
   var controller=new AbortController();
   var sourceSignal=init.signal||(input&&input.signal);
@@ -3084,25 +3110,87 @@ function supabaseAuthResult(reason,opts){
     }
   };
 }
+function financeSessionMatchesWorkspace(session){
+  var user=session&&session.user;
+  if(!S.user||S.user.active===false||!user||!currentFinanceAuthUserId())return false;
+  var email=supabaseAuthUserPreferredEmail(user);
+  return String(user.id||'')===currentFinanceAuthUserId()&&isCompanyGoogleLoginEmail(email)
+    &&email===String(S.user.email||'').trim().toLowerCase()
+    &&(!S.user.tenantId||S.user.tenantId===currentTenantId());
+}
+function setFinanceWorkspaceIdentityBlocked(blocked){
+  financeWorkspaceIdentityBlocked=!!blocked;
+  var nodes=['main-wrap','sidebar'].map(function(id){return el(id);});
+  if(typeof document!=='undefined'){
+    if(document.body){
+      if(blocked)document.body.setAttribute('data-finance-identity-blocked','true');
+      else document.body.removeAttribute('data-finance-identity-blocked');
+    }
+    if(document.querySelectorAll)nodes=nodes.concat(Array.from(document.querySelectorAll('.modal-bg,#action-feedback,[data-mobile-bottom-nav],#mobile-nav-select')));
+  }
+  nodes.forEach(function(node){
+    if(!node)return;
+    if(blocked&&node.__financeStateBeforeLock===undefined)node.__financeStateBeforeLock={
+      inert:!!node.inert,ariaHidden:node.getAttribute?node.getAttribute('aria-hidden'):null,
+      visibility:node.style?node.style.visibility||'':''
+    };
+    var previous=node.__financeStateBeforeLock;
+    if(blocked)node.inert=true;
+    if(blocked)node.setAttribute('aria-hidden','true');
+    else if(previous){
+      node.inert=previous.inert;
+      if(previous.ariaHidden===null)node.removeAttribute('aria-hidden');else node.setAttribute('aria-hidden',previous.ariaHidden);
+    }
+    // Inert prevents actions; hiding also prevents the replacement account
+    // from viewing the previous employee's cached documents behind the dialog.
+    if(node.style&&(blocked||previous))node.style.visibility=blocked?'hidden':previous.visibility;
+    if(!blocked)delete node.__financeStateBeforeLock;
+  });
+}
+function captureFinanceWorkspaceRecoveryBeforeLock(){
+  if(financeWorkspaceIdentityBlocked)return;
+  try{if(typeof captureVisibleAccountingReviewDrafts==='function')captureVisibleAccountingReviewDrafts();}
+  catch(err){console.warn('Accounting recovery snapshot unavailable:',err);}
+  try{saveFinanceAuthRecoveryDraft();}
+  catch(err){console.warn('Workspace recovery snapshot unavailable:',err);}
+}
+function lockFinanceWorkspaceIdentity(reason){
+  if(!S.user||S.demoLogin)return;
+  captureFinanceWorkspaceRecoveryBeforeLock();
+  setFinanceWorkspaceIdentityBlocked(true);
+  resetFinanceUsersDirectoryReadiness();
+  clearApprovalFastBootstrapState();
+  Promise.resolve(stopRealtime()).catch(function(err){console.warn('Identity-change realtime shutdown:',err);});
+  setTopSyncStatus('登入身分已變更；本分頁已暫停，未送內容仍保留');
+  showFinanceAuthRecovery({ok:false,reason:reason||'auth_identity_mismatch',message:'登入已失效或其他分頁切換了 Google 帳號。為避免用錯身分，本分頁已暫停讀寫；請使用原填單帳號 '+String(S.user.email||'')+' 重新驗證。尚未送出的內容仍保留。'},'繼續使用系統');
+}
 function bindSupabaseAuthState(client){
   if(supabaseAuthSubscription||!client||!client.auth||typeof client.auth.onAuthStateChange!=='function')return;
   var listener=client.auth.onAuthStateChange(function(event,session){
+    var eventEpoch=++financeAuthIdentityEpoch;
+    supabaseAuthCheckPromise=null;
     AUTH_RUNTIME_STATE={
       event:String(event||''),
       sessionPresent:!!(session&&session.access_token),
       updatedAt:new Date().toISOString(),
       expiresAt:supabaseAuthSessionExpiresAt(session)||null
     };
+    // Lock synchronously before any queued UI action can pick up another user's
+    // token. Defer SDK calls out of onAuthStateChange to avoid its auth lock.
+    if(S.user&&!S.demoLogin&&!financeLogoutInProgress&&
+      (event==='SIGNED_OUT'||session&&session.user&&!financeSessionMatchesWorkspace(session))){
+      captureFinanceWorkspaceRecoveryBeforeLock();
+      setFinanceWorkspaceIdentityBlocked(true);
+    }
     setTimeout(function(){
+      if(eventEpoch!==financeAuthIdentityEpoch)return;
       if(event==='SIGNED_OUT'&&S.user&&!financeLogoutInProgress){
-        saveFinanceAuthRecoveryDraft();
-        setTopSyncStatus('登入已失效；尚未送出的內容仍保留');
-        showFinanceAuthRecovery({
-          ok:false,
-          reason:'auth_session_expired',
-          message:'您的登入工作階段已失效，這不是表單內容錯誤。尚未送出的內容仍保留在目前分頁，請重新使用公司 Google 帳號驗證。'
-        },'繼續使用系統');
-      }else if((event==='SIGNED_IN'||event==='TOKEN_REFRESHED')&&S.user){
+        lockFinanceWorkspaceIdentity('auth_session_expired');
+      }else if(['SIGNED_IN','TOKEN_REFRESHED','USER_UPDATED'].indexOf(event)>-1&&S.user){
+        if(!financeSessionMatchesWorkspace(session)||financeWorkspaceIdentityBlocked){
+          lockFinanceWorkspaceIdentity('auth_identity_mismatch');
+          return;
+        }
         hideFinanceAuthRecovery();
         setTopSyncStatus(syncStatusText());
       }
@@ -3196,9 +3284,10 @@ async function inspectCurrentSupabaseSessionInternal(){
 }
 async function inspectCurrentSupabaseSession(){
   if(supabaseAuthCheckPromise)return supabaseAuthCheckPromise;
-  supabaseAuthCheckPromise=inspectCurrentSupabaseSessionInternal();
-  try{return await supabaseAuthCheckPromise;}
-  finally{supabaseAuthCheckPromise=null;}
+  var pending=inspectCurrentSupabaseSessionInternal();
+  supabaseAuthCheckPromise=pending;
+  try{return await pending;}
+  finally{if(supabaseAuthCheckPromise===pending)supabaseAuthCheckPromise=null;}
 }
 async function currentSupabaseSession(){
   var inspected=await inspectCurrentSupabaseSession();
@@ -3206,6 +3295,7 @@ async function currentSupabaseSession(){
 }
 async function ensureSupabaseWriteReady(actionLabel){
   if(!hasSupabase()||S.demoLogin)return {ok:false,reason:'demo_or_unconfigured'};
+  var expectedAuthUserId=currentFinanceAuthUserId();
   var inspected=await inspectCurrentSupabaseSession();
   if(!inspected||!inspected.ok){
     var reason=inspected&&inspected.reason||'auth_verification_unavailable';
@@ -3216,8 +3306,11 @@ async function ensureSupabaseWriteReady(actionLabel){
     return Object.assign({},inspected||{},{ok:false,reason:reason,retryable:retryable,message:(actionLabel||'這個動作')+'尚未送出。登入驗證服務暫時無法回應，您的登入資料仍保留。請確認網路後再試一次，不需要重新填寫表單。'});
   }
   var sess=inspected.session;
-  var email=((sess.user||{}).email||'').toLowerCase();
-  if(S.user&&S.user.email&&email&&email!==String(S.user.email).toLowerCase()){
+  var email=supabaseAuthUserPreferredEmail(sess&&sess.user);
+  if(financeWorkspaceIdentityBlocked||!expectedAuthUserId||expectedAuthUserId!==currentFinanceAuthUserId()||String(sess&&sess.user&&sess.user.id||'')!==expectedAuthUserId||!S.user||S.user.active===false||S.user.tenantId&&S.user.tenantId!==currentTenantId()){
+    return Object.assign({},inspected,{ok:false,reason:'auth_identity_mismatch',message:'登入身分或工作區已變更。這個動作尚未送出，請使用原填單帳號重新驗證。'});
+  }
+  if(!isCompanyGoogleLoginEmail(email)||email!==String(S.user.email||'').trim().toLowerCase()){
     return Object.assign({},inspected,{ok:false,reason:'auth_email_mismatch',message:'目前瀏覽器登入的 Google 帳號是 '+email+'，但 Finance 使用者是 '+S.user.email+'。這張單尚未送出，請改用同一個公司 Google 帳號重新驗證。'});
   }
   return Object.assign({},inspected,{ok:true,session:sess,message:inspected.degraded?'登入驗證服務暫時無法回應；系統將由正式送單交易再次確認您的權限。':''});
@@ -3354,14 +3447,51 @@ async function guardSubmissionIdentityDirectory(actionLabel){
   if(ready.ok)return true;
   var message=ready.message||(actionLabel||'這張單')+'尚未送出。最新人員與簽核權限尚未完成同步，請稍後再試。';
   if(typeof failActionFeedback==='function')failActionFeedback('尚未送出',message);
-  if(ready.reason==='missing_auth_session'||ready.reason==='auth_session_expired'||ready.reason==='auth_verification_unavailable')showFinanceAuthRecovery(ready,actionLabel||'送件');
+  if(['missing_auth_session','auth_session_expired','auth_verification_unavailable','auth_identity_mismatch','auth_email_mismatch'].indexOf(ready.reason)>-1)showFinanceAuthRecovery(ready,actionLabel||'送件');
   alert(message);
   return false;
+}
+function financeRecoverySerializable(value){
+  if(typeof File!=='undefined'&&value instanceof File||typeof Blob!=='undefined'&&value instanceof Blob)return undefined;
+  if(Array.isArray(value))return value.map(financeRecoverySerializable).filter(function(item){return item!==undefined;});
+  if(value&&typeof value==='object'){
+    var out={};Object.keys(value).forEach(function(key){var saved=financeRecoverySerializable(value[key]);if(saved!==undefined)out[key]=saved;});return out;
+  }
+  return value;
+}
+function financeAuthRecoveryStorageKey(draft){
+  var authId=draft?draft.expectedAuthUserId:currentFinanceAuthUserId();
+  var tenant=draft?draft.tenantId:currentTenantId();
+  var environment=draft?draft.dataEnvironment:activeDataEnvironment();
+  if(!authId||!tenant||!environment)return FINANCE_AUTH_RECOVERY_DRAFT_KEY;
+  return FINANCE_AUTH_RECOVERY_DRAFT_KEY+':'+[tenant,environment,authId].map(encodeURIComponent).join(':');
+}
+function financeAuthRecoveryNewRequestSnapshot(){
+  var state={};
+  financeAuthRecoveryNewRequestKeys().forEach(function(key){state[key]=S[key];});
+  state.form=collectNRFormState();
+  // HR always renders the protected transfer format, even while an older
+  // in-memory draft still carries an unset privacy flag.
+  state.form.hrPrivacyMode=state.hrPrivacyMode=S.nrType==='hr_expense_request'||!!state.form.hrPrivacyMode;
+  return financeRecoverySerializable(state);
+}
+function financeAuthRecoveryNewRequestKeys(){
+  return ['nrType','nrStep','nrRec','nrPay','nrFixedExpense','lazyMode','nrDraftId',
+    'nrRevisionRid','nrRevisionExpected','nrRevisionOriginalFiles','nrRevisionOriginalPassbookFiles',
+    'nrRevisionPendingUploads','nrRevisionConfirmationPending','nrSubmissionConfirmationPending',
+    'nrFiles','nrPassbookFile','lazyImportReview','hrImportReview','purchaseImportReview',
+    'hrItem','hrPeriod','hrLaborPeriod','hrPrivacyMode','pettyMode'];
 }
 function financeAuthRecoveryDraftSnapshot(){
   var page=S.page||'dashboard';
   var root=el('pg-'+page);
   var fields={};
+  // onchange-backed item/quantity cells may still have focus when auth expires.
+  // Commit the visible edit to the same state used by normal form submission.
+  var focused=typeof document!=='undefined'?document.activeElement:null;
+  if(root&&focused&&root.contains(focused)&&typeof focused.onchange==='function'){
+    focused.dispatchEvent(new Event('change',{bubbles:true}));
+  }
   if(page==='invoices'&&typeof syncBatchRowsFromDom==='function'){
     try{syncBatchRowsFromDom();}catch(e){}
   }
@@ -3376,15 +3506,19 @@ function financeAuthRecoveryDraftSnapshot(){
     });
   }
   var hadFiles=!!(
-    S.bUploadFile||S.invOcrFile||S.nrPassbookFile||(S.nrFiles&&S.nrFiles.length)||
+    S.bUploadFile||S.invOcrFile||S.nrPassbookFile||(S.nrFiles&&S.nrFiles.length)||Object.keys(S.travelFiles||{}).some(function(key){return (S.travelFiles[key]||[]).length;})||
     (root&&root.querySelector('input[type="file"]')&&Array.from(root.querySelectorAll('input[type="file"]')).some(function(node){return !!(node.files&&node.files.length);}))
   );
   return {
-    version:1,
+    version:2,
     savedAt:Date.now(),
     page:page,
     expectedEmail:String(S.user&&S.user.email||'').toLowerCase(),
+    expectedAuthUserId:currentFinanceAuthUserId(),
+    tenantId:currentTenantId(),
+    dataEnvironment:activeDataEnvironment(),
     fields:fields,
+    newRequest:page==='newreq'?financeAuthRecoveryNewRequestSnapshot():null,
     invoiceRows:page==='invoices'?JSON.parse(JSON.stringify(S.bRows||[])):null,
     invoiceMode:page==='invoices'?'batch':null,
     billRows:page==='bills'&&typeof BILL_ROWS!=='undefined'?JSON.parse(JSON.stringify(BILL_ROWS||[])):null,
@@ -3393,24 +3527,34 @@ function financeAuthRecoveryDraftSnapshot(){
 }
 function saveFinanceAuthRecoveryDraft(){
   try{
-    return sessionSetItem(FINANCE_AUTH_RECOVERY_DRAFT_KEY,JSON.stringify(financeAuthRecoveryDraftSnapshot()));
+    var key=financeAuthRecoveryStorageKey();
+    // A failed restore must not replace the intact backup with the partially
+    // rendered form when the user retries Google verification.
+    if(financeAuthRecoveryRestorePendingKey===key&&sessionGetItem(key))return true;
+    var draft=financeAuthRecoveryDraftSnapshot();
+    if(!draft.expectedAuthUserId||!draft.tenantId||!draft.dataEnvironment)return false;
+    var encoded=JSON.stringify(draft);
+    return sessionSetItem(key,encoded)&&sessionGetItem(key)===encoded;
   }catch(err){
     console.warn('Finance auth recovery draft save failed:',err);
     return false;
   }
 }
 function financeAuthRecoveryDraft(){
-  var raw=sessionGetItem(FINANCE_AUTH_RECOVERY_DRAFT_KEY);
+  var key=financeAuthRecoveryStorageKey();
+  var raw=sessionGetItem(key);
+  if(!raw&&key!==FINANCE_AUTH_RECOVERY_DRAFT_KEY){key=FINANCE_AUTH_RECOVERY_DRAFT_KEY;raw=sessionGetItem(key);}
   if(!raw)return null;
   try{
     var draft=JSON.parse(raw)||null;
-    if(!draft||Number(draft.version)!==1||Date.now()-Number(draft.savedAt||0)>30*60*1000){
-      sessionRemoveItem(FINANCE_AUTH_RECOVERY_DRAFT_KEY);
+    if(!draft||[1,2].indexOf(Number(draft.version))<0||Date.now()-Number(draft.savedAt||0)>30*60*1000){
+      sessionRemoveItem(key);
       return null;
     }
+    draft.__storageKey=key;
     return draft;
   }catch(e){
-    sessionRemoveItem(FINANCE_AUTH_RECOVERY_DRAFT_KEY);
+    // Keep unreadable content available for recovery rather than destroying it.
     return null;
   }
 }
@@ -3441,23 +3585,48 @@ function applyFinanceAuthRecoveryFields(draft){
     if(typeof renderBillEntryTable==='function')renderBillEntryTable();
     S.billDirtyBaseline='__auth_recovered_unsaved__';
   }
+  return Object.keys(draft.fields||{}).every(function(id){
+    var node=el(id),saved=draft.fields[id]||{};
+    if(!node||!root.contains(node))return false;
+    var type=String(node.type||'').toLowerCase();
+    return type==='checkbox'||type==='radio'?node.checked===!!saved.checked:String(node.value)===(saved.value==null?'':String(saved.value));
+  });
+}
+function financeAuthRecoveryContentMatches(draft){
+  function same(a,b){return JSON.stringify(stableSnapshotValue(financeRecoverySerializable(a)))===JSON.stringify(stableSnapshotValue(financeRecoverySerializable(b)));}
+  if(draft.page==='newreq'){
+    var expected=draft.newRequest,actual=financeAuthRecoveryNewRequestSnapshot();
+    return financeAuthRecoveryNewRequestKeys().every(function(key){return !Object.prototype.hasOwnProperty.call(expected,key)||same(expected[key],actual[key]);})&&same(expected.form,actual.form);
+  }
+  if(draft.page==='invoices')return same(draft.invoiceRows,S.bRows);
+  if(draft.page==='bills')return same(draft.billRows,BILL_ROWS);
   return true;
 }
+function financeAuthRecoveryFailed(draft,message){
+  financeAuthRecoveryRestorePendingKey=draft.__storageKey||financeAuthRecoveryStorageKey(draft);
+  showFinanceAuthRecovery({reason:'draft_restore_incomplete',message:message||'部分欄位或明細尚未完整恢復，原備份仍保留。請保留此分頁並重新整理後再試；系統不會把這次結果視為恢復成功。'},'恢復未送資料');
+  return false;
+}
 async function restoreFinanceAuthRecoveryDraft(){
+  if(financeWorkspaceIdentityBlocked)return false;
   var draft=financeAuthRecoveryDraft();
   if(!draft||!S.user)return false;
-  var currentEmail=String(S.user.email||'').toLowerCase();
-  if(draft.expectedEmail&&currentEmail&&draft.expectedEmail!==currentEmail){
+  var identityMatches=S.user.active!==false&&Number(draft.version)>=2&&!!draft.expectedAuthUserId&&draft.expectedAuthUserId===currentFinanceAuthUserId()&&draft.tenantId===currentTenantId()&&draft.dataEnvironment===activeDataEnvironment();
+  if(!identityMatches){
     showFinanceAuthRecovery({
-      reason:'auth_email_mismatch',
+      reason:'auth_identity_mismatch',
       message:'重新登入的 Google 帳號與原本填單帳號不同，為避免把資料帶給錯誤帳號，系統沒有恢復先前內容。請改用 '+draft.expectedEmail+' 登入。'
     },'恢復未送資料');
     return false;
   }
   if(!el('pg-'+draft.page)||!canAccessPage(draft.page)){
-    sessionRemoveItem(FINANCE_AUTH_RECOVERY_DRAFT_KEY);
+    return financeAuthRecoveryFailed(draft,'目前頁面或權限尚未就緒，原草稿備份仍保留，沒有清除任何備份。請稍後重新載入，或聯絡管理者確認目前頁面權限。');
+  }
+  if(draft.page==='newreq'&&(!draft.newRequest||!draft.newRequest.form)){
+    showFinanceAuthRecovery({reason:'legacy_draft_incomplete',message:'這份舊版登入恢復資料未保存完整申請明細，系統不會宣稱已完整恢復。若原分頁仍開啟，請保留原分頁並重新驗證；否則請檢查已暫存的表單。'},'恢復未送資料');
     return false;
   }
+  try{
   if(draft.page==='invoices'&&Array.isArray(draft.invoiceRows)){
     S.bRows=draft.invoiceRows;
     S.invMobileChoice='batch';
@@ -3465,22 +3634,47 @@ async function restoreFinanceAuthRecoveryDraft(){
   }
   if(draft.page==='bills'&&Array.isArray(draft.billRows))BILL_ROWS=draft.billRows;
   await guardedNav(draft.page,null);
+  if(S.page!==draft.page)return financeAuthRecoveryFailed(draft);
+  if(draft.page==='newreq'){
+    var saved=financeRecoverySerializable(draft.newRequest);
+    financeAuthRecoveryNewRequestKeys().forEach(function(key){if(Object.prototype.hasOwnProperty.call(saved,key))S[key]=saved[key];});
+    S.nrFiles=saved.nrFiles||[];S.nrPassbookFile=saved.nrPassbookFile||null;
+    // Build the correct form type before applying fields. Rendering may install
+    // defaults, so restore the exact saved rows again after that render.
+    renderNR();
+    applyNRFormState(financeRecoverySerializable(saved.form),{preserveManualValues:true});
+    ['lazyRows','refundRows','purchaseRows','hrRows','travelRows','travelPeople'].forEach(function(key){S[key]=financeRecoverySerializable(saved.form[key]||[]);});
+    if(typeof renderLazySheet==='function')renderLazySheet();
+    if(S.nrType==='refund_request')renderRefundSheet();
+    if(S.nrType==='purchase_request')renderPurchaseSheet();
+    if(S.nrType==='hr_expense_request')renderHrExpenseSheet();
+    if(S.nrType==='travel_request'){renderTravelPeople();renderTravelSheet();}
+    if(draft.hadFiles){S.nrDraftFileNotice='登入恢復已保留欄位與明細；未上傳的附件無法從瀏覽器儲存空間復原，請重新選取並核對附件。';renderNRFList();}
+    S.nrDirtyBaseline='__auth_recovered_unsaved__';
+  }
   if(draft.page==='invoices')buildInvoices();
   if(draft.page==='bills')buildBills();
   var restored=applyFinanceAuthRecoveryFields(draft);
-  if(!restored)return false;
-  sessionRemoveItem(FINANCE_AUTH_RECOVERY_DRAFT_KEY);
+  if(!restored||!financeAuthRecoveryContentMatches(draft))return financeAuthRecoveryFailed(draft);
+  sessionRemoveItem(draft.__storageKey||financeAuthRecoveryStorageKey(draft));
+  financeAuthRecoveryRestorePendingKey='';
   setTimeout(function(){
     if(draft.page==='invoices')S.invoiceDirtyBaseline='__auth_recovered_unsaved__';
     if(draft.page==='bills')S.billDirtyBaseline='__auth_recovered_unsaved__';
+    if(draft.page==='newreq')S.nrDirtyBaseline='__auth_recovered_unsaved__';
   },0);
   completeActionFeedback(
     '已恢復尚未送出的內容',
     draft.hadFiles?'欄位與明細已恢復；基於瀏覽器安全限制，附件請重新選取後再送出。':'欄位與明細已恢復，請確認後再送出。'
   );
   return true;
+  }catch(err){
+    console.warn('Finance draft restore retained its backup:',err);
+    return financeAuthRecoveryFailed(draft);
+  }
 }
 function hideFinanceAuthRecovery(){
+  if(financeWorkspaceIdentityBlocked)return;
   var modal=el('finance-auth-recovery');
   if(modal)modal.style.display='none';
 }
@@ -3493,8 +3687,8 @@ function showFinanceAuthRecovery(result,actionLabel){
     modal.style.cssText='position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(37,27,20,.48);backdrop-filter:blur(3px)';
     document.body.appendChild(modal);
   }
-  var needsLogin=['missing_auth_session','auth_session_expired','auth_email_mismatch'].indexOf(result.reason)>-1;
-  var title=result.reason==='auth_email_mismatch'?'Google 帳號不一致':(needsLogin?'登入工作階段已失效':'登入驗證暫時無法回應');
+  var needsLogin=['missing_auth_session','auth_session_expired','auth_email_mismatch','auth_identity_mismatch'].indexOf(result.reason)>-1;
+  var title=['auth_email_mismatch','auth_identity_mismatch'].indexOf(result.reason)>-1?'Google 帳號或工作區不一致':(needsLogin?'登入工作階段已失效':'登入驗證暫時無法回應');
   var message=result.message||(needsLogin?'尚未送出的內容仍保留，重新驗證後即可繼續。':'請確認網路後再試一次，系統不會清除目前填寫內容。');
   modal.innerHTML='<div role="alertdialog" aria-modal="true" aria-labelledby="finance-auth-recovery-title" style="width:min(520px,100%);background:#fff;border:1px solid #efd7b8;border-radius:18px;box-shadow:0 24px 70px rgba(55,33,10,.28);padding:24px">'
     +'<div style="width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:#fff2df;color:#b45309;font-size:25px;font-weight:900;margin-bottom:14px">!</div>'
@@ -3502,7 +3696,7 @@ function showFinanceAuthRecovery(result,actionLabel){
     +'<div style="font-size:14px;line-height:1.75;color:#6b594b">'+escAttr(message)+'</div>'
     +'<div style="font-size:12px;line-height:1.6;color:#927a66;background:#fff8ed;border-radius:10px;padding:10px 12px;margin-top:14px">'+escAttr((actionLabel||'這個動作')+'尚未送出；請勿重複建立資料。')+'</div>'
     +'<div style="display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-top:20px">'
-    +'<button type="button" class="btn-g" onclick="hideFinanceAuthRecovery()">關閉</button>'
+    +(financeWorkspaceIdentityBlocked?'':'<button type="button" class="btn-g" onclick="hideFinanceAuthRecovery()">關閉</button>')
     +(needsLogin?'<button type="button" class="btn-p" onclick="startFinanceReauthentication()">重新驗證 Google 登入</button>':'')
     +'</div></div>';
   modal.style.display='flex';
@@ -3524,6 +3718,10 @@ window.startFinanceReauthentication=async function(){
     return;
   }
   var email=String(S.user&&S.user.email||'').trim().toLowerCase();
+  safeSetItem(FINANCE_PORTAL_EMAIL_KEY,email);
+  safeSetItem(FINANCE_PORTAL_EMAIL_AT_KEY,String(Date.now()));
+  safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1');
+  safeSetItem(FINANCE_PORTAL_OAUTH_MODE_KEY,'select_account');
   hideFinanceAuthRecovery();
   setTopSyncStatus('正在重新驗證 Google 登入');
   var response=await client.auth.signInWithOAuth({
@@ -5162,6 +5360,7 @@ function mapUser(u){
   if(role==='general_affairs'&&name==='朱雪欣')name='朱夏欣';
   return {
     id:u.id,
+    tenantId:u.tenant_id||u.tenantId||'',
     n:name,
     email:u.email,
     contactEmail:u.org_contact_email||u.contact_email||u.contactEmail||u.orgContactEmail||u.email||'',
@@ -6556,6 +6755,18 @@ function financeUserRuntimeReadinessRows(){
     return {user:u,ok:h.ok,warnings:h.warnings,blocking:h.blocking,runtimeRole:h.runtimeRole};
   });
 }
+async function repairCurrentFinanceIdentityRuntime(){
+  var ready=await ensureSupabaseWriteReady('同步本人登入資料');
+  if(!ready.ok)return ready;
+  var client=getSb();
+  var r=await client.rpc('finance_repair_current_identity_runtime_v1',{});
+  if(r.error){
+    var managementRequired=String(r.error.code||'')==='42501'||isRpcMissing(r.error);
+    return {ok:false,error:r.error,requiresManagementReview:managementRequired,message:managementRequired?'目前人員設定需要管理者確認，請聯絡人資或行政主任檢查啟用狀態與任職資料。':(r.error.message||'本人登入資料同步失敗')};
+  }
+  var data=normalizeSettingValue(r.data||{});
+  return {ok:data.ok===true,data:data,requiresManagementReview:data.requires_management_review===true};
+}
 async function runCurrentUserRuntimeAssurance(opts){
   opts=opts||{};
   if(!S.user)return {ok:false,skipped:true,reason:'no_user'};
@@ -6568,8 +6779,8 @@ async function runCurrentUserRuntimeAssurance(opts){
     if(ORG_ADMIN_RUNTIME.available!==true)await refreshApprovalOrgAdminRuntime(client,'login_runtime_assurance_before');
     var before=financeUserRuntimeReadiness(S.user);
     if(!before.ok||opts.force){
-      var sync=await syncFrontOfficePermissionRuntime(S.user.id,'login_runtime_assurance',{alert:false});
-      if(!sync||sync.ok===false)warnings.push('帳號與簽核權限尚未完成同步。請確認網路連線後再試一次；若仍失敗，請聯絡系統管理者。');
+      var sync=await repairCurrentFinanceIdentityRuntime();
+      if(!sync||sync.ok===false)warnings.push(sync&&sync.requiresManagementReview?'本人登入資料已檢查；任職或權限仍需人資、行政主任確認。請聯絡管理者檢查目前任職、直屬主管及啟用狀態。':(sync&&sync.message||'本人登入資料暫時無法同步，請稍後重新檢查。'));
     }
     await refreshApprovalOrgAdminRuntime(client,'login_runtime_assurance_after');
     var after=financeUserRuntimeReadiness(S.user);
@@ -6593,11 +6804,11 @@ async function runCurrentUserRuntimeAssurance(opts){
 window.runCurrentUserRuntimeAssurance=runCurrentUserRuntimeAssurance;
 window.repairCurrentApprovalAccount=async function(){
   try{
-    setTopSyncStatus('修復帳號簽核權限中');
-    await runCurrentUserRuntimeAssurance({force:true,alert:true});
+    setTopSyncStatus('檢查並同步本人登入資料中');
+    var result=await runCurrentUserRuntimeAssurance({force:true,alert:true});
     await loadRemoteData();
     initFilters();buildAll();
-    setTopSyncStatus(syncStatusText());
+    setTopSyncStatus(result&&result.ok?syncStatusText():'登入資料檢查完成；尚有任職或主管設定需要管理者確認');
   }catch(err){
     setTopSyncStatus('帳號簽核權限修復失敗');
     alert('帳號簽核權限修復失敗：'+remoteReadIssueText(err));
@@ -8713,11 +8924,13 @@ function markApprovalRealtimeRowPending(table,payload){
   if(S.page==='approvals'&&!approvalFastShouldHoldSkeleton())buildApprovals();
 }
 function startRealtime(){
+  if(financeWorkspaceIdentityBlocked)return;
   var client=getSb();
   if(!client||realtimeChannel)return;
   realtimeChannel=client.channel('module-finance-live');
   ['expense_requests','invoices','ledger_entries','bills','vouchers','notifications','finance_users','draft_requests','period_closes','compliance_archives','annual_reviews','backup_restore_events','system_setting_versions','payee_bank_accounts','finance_portal_roles'].forEach(function(table){
     realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:table},function(payload){
+      if(financeWorkspaceIdentityBlocked)return;
       if(table==='finance_users'){
         invalidateFinanceUsersDirectoryReadiness('正式人員或簽核權限已更新');
         setSubmissionIdentitySyncing(true,'人員或簽核權限已更新，正在重新確認；完成前不會送出資料');
@@ -8727,12 +8940,15 @@ function startRealtime(){
     });
   });
 	  realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'system_settings',filter:'tenant_id=eq.'+currentTenantId()},function(payload){
+	    if(financeWorkspaceIdentityBlocked)return;
 	    queueSystemSettingsRealtime(payload);
 	  });
   realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'membership_org_runtime_state'},function(){
+    if(financeWorkspaceIdentityBlocked)return;
     refreshMembershipOrgGraph('realtime',{silent:true,preserveDraft:true});
   });
   realtimeChannel.subscribe(function(status){
+    if(financeWorkspaceIdentityBlocked)return;
     if(status==='SUBSCRIBED')setTopSyncStatus(syncStatusText());
   });
 }
@@ -13485,7 +13701,7 @@ window.quickLogin=function(role){
 window.switchFinanceGoogleAccount=async function(){
   if(financeGoogleAccountSwitchInProgress)return false;
   financeGoogleAccountSwitchInProgress=true;
-  var expectedEmail=financeExpectedLoginEmail();
+  var expectedEmail='';
   var actualEmail='';
   var err=el('login-err');
   try{
@@ -13495,6 +13711,10 @@ window.switchFinanceGoogleAccount=async function(){
     if(err){err.style.display='block';err.textContent='正在清除這個瀏覽器沿用的 Google 登入，接著請重新選擇公司帳號。';}
     var client=getSb();
     if(client&&client.auth)await client.auth.signOut({scope:'local'});
+    safeRemoveItem(FINANCE_PORTAL_EMAIL_KEY);
+    safeRemoveItem(FINANCE_PORTAL_EMAIL_AT_KEY);
+    safeRemoveItem(FINANCE_PORTAL_ROLE_KEY);
+    safeRemoveItem(FINANCE_PORTAL_SCOPE_KEY);
     safeRemoveItem(FINANCE_PORTAL_OAUTH_PENDING_KEY);
     safeRemoveItem(FINANCE_PORTAL_OAUTH_MODE_KEY);
     financeGoogleAccountSwitchInProgress=false;
@@ -13563,6 +13783,7 @@ async function completeOAuthFromUrl(rawUrl,cleanBrowserUrl){
   var refreshToken=hashParams.get('refresh_token')||queryParams.get('refresh_token');
   // Read the callback values once, then remove every OAuth secret immediately on every branch.
   scrubOAuthUrl(url.href,!!cleanBrowserUrl);
+  if(!isFinanceProductionBuild())return false;
   var client=getSb();
   if(!client){
     await showFinanceOAuthFailure('oauth_client_init','oauth_start_failed','Finance 登入元件尚未完成初始化。',{expectedEmail:financeExpectedLoginEmail()});
@@ -13612,7 +13833,25 @@ async function completeOAuthFromUrl(rawUrl,cleanBrowserUrl){
 async function handleOAuthReturn(){
   return await completeOAuthFromUrl(location.href,true);
 }
+function showFinanceOfflinePreviewNotice(){
+  var loading=el('auth-loading'),login=el('login-screen'),error=el('login-err');
+  if(loading)loading.style.display='none';
+  if(login)login.style.display='flex';
+  if(error){error.style.display='none';error.textContent='';}
+  var box=el('login-account-guide'),title=el('login-account-guide-title'),detail=el('login-account-guide-detail'),button=el('login-switch-account');
+  if(box){box.style.display='block';box.dataset.state='offline';}
+  if(title)title.textContent='離線預覽版本';
+  if(detail)detail.textContent='這個版本只供本機介面驗收，不會連線 Google、正式人員或正式帳務資料。請使用本機預覽入口；正式登入請前往 finance.suiyuecare.com。';
+  if(button){button.disabled=true;button.style.display='none';}
+  var google=document.querySelector('.google-btn');
+  if(google){google.disabled=true;google.title='離線預覽不提供 Google 登入；正式登入請使用正式網址。';}
+}
 async function bootAuthGate(){
+  if(!isFinanceProductionBuild()){
+    scrubOAuthUrl(location.href,true);
+    showFinanceOfflinePreviewNotice();
+    return false;
+  }
   var loading=el('auth-loading');
   var login=el('login-screen');
   captureApprovalDeepLinkFromUrl();
@@ -13647,8 +13886,15 @@ async function bootAuthGate(){
 function doEnter(u){
   hideFinanceLoginAccountGuidance();
   var previousDirectoryIdentity=currentFinanceAuthUserId();
+  if(S.user&&previousDirectoryIdentity&&previousDirectoryIdentity!==String(u.authUserId||u.auth_user_id||'')){
+    lockFinanceWorkspaceIdentity('auth_identity_mismatch');return;
+  }
+  setFinanceWorkspaceIdentityBlocked(false);
   S.user=u;
   if(previousDirectoryIdentity!==currentFinanceAuthUserId()||!financeUsersDirectoryReadyForCurrentAuth())resetFinanceUsersDirectoryReadiness();
+  if(!S.demoLogin&&hasSupabase()&&typeof window.restoreFinanceDiagnosticOutbox==='function'){
+    Promise.resolve(window.restoreFinanceDiagnosticOutbox()).catch(function(err){console.warn('Deferred login diagnostic recovery failed:',err);});
+  }
   S.page='dashboard';
   S.prev='dashboard';
   S.aT='p';
@@ -17293,8 +17539,9 @@ function collectNRFormState(){
   draftInputIds().forEach(function(id){var e=el(id);if(e)fields[id]=e.value;});
   return {fields:fields,lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'salary_50',hrPeriod:normalizeHrMonthStrict(fields['hr-period'])||S.hrPeriod||'',hrLaborPeriod:fields['hr-labor-period']||S.hrLaborPeriod||'',hrPrivacyMode:!!S.hrPrivacyMode,pettyMode:S.pettyMode||((el('petty-mode')||{}).value)||'general',travelFiles:S.travelFiles||{},travelPeople:S.travelPeople||[],travelRows:S.travelRows||[]};
 }
-function applyNRFormState(state){
+function applyNRFormState(state,opts){
   state=state||{};
+  opts=opts||{};
   Object.keys(state.fields||{}).forEach(function(id){var e=el(id);if(e)e.value=state.fields[id];});
   if(el('nr-ent')&&el('nr-dept'))syncDeptOptionsForEntity('nr-ent','nr-dept',state.fields&&state.fields['nr-dept']);
   applicantSelectChanged(true);
@@ -17311,7 +17558,7 @@ function applyNRFormState(state){
   if(state.travelFiles)S.travelFiles=state.travelFiles;
   if(state.travelPeople)S.travelPeople=state.travelPeople;
   if(state.travelRows)S.travelRows=state.travelRows;
-  if(S.nrType==='travel_request'){renderTravelPeople();calcTravelDays();syncTravelRows();}
+  if(S.nrType==='travel_request'){renderTravelPeople();if(opts.preserveManualValues)renderTravelSheet();else{calcTravelDays();syncTravelRows();}}
   updateBankTypeUI();
   renderNRFList();updNRAcct();
   if(isExpenseApplicantRevisionMode()&&S.nrRevisionOriginalPassbookFiles.length){setPassbookStatus('原存摺附件已保留；如需補充，可再選擇一份新檔案追加。','#0f766e');}
@@ -23001,7 +23248,7 @@ function approvalDataLoadWarningHtml(){
     +'<div><div style="font-size:13px;font-weight:900;color:#991b1b">簽核資料尚未完全確認</div>'
     +'<div style="font-size:11px;color:#7f1d1d;line-height:1.7;margin-top:5px">'+issues.map(function(x){return'<div>・ '+escAttr(x)+'</div>';}).join('')+'</div>'
     +'<div style="font-size:10px;color:#9f7b7b;margin-top:5px">請先按「修復我的簽核資料」；若仍沒有資料，再截圖交給系統管理員查 runtime 與 Auth 綁定。</div></div>'
-    +'<div style="display:flex;gap:7px;flex-wrap:wrap"><button class="btn-g" onclick="repairCurrentApprovalAccount()">修復我的簽核資料</button><button class="btn-g" onclick="refreshRemoteData(&quot;approval_warning_manual_refresh&quot;)">重新同步</button></div>'
+    +'<div style="display:flex;gap:7px;flex-wrap:wrap"><button class="btn-g" onclick="repairCurrentApprovalAccount()">檢查並同步我的登入資料</button><button class="btn-g" onclick="refreshRemoteData(&quot;approval_warning_manual_refresh&quot;)">重新同步</button></div>'
     +'</div></div>';
 }
 function buildApprovals(){
