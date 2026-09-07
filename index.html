@@ -54,6 +54,7 @@
 body[data-finance-identity-blocked="true"] #main-wrap,
 body[data-finance-identity-blocked="true"] #sidebar,
 body[data-finance-identity-blocked="true"] .modal-bg,
+body[data-finance-identity-blocked="true"] dialog[data-finance-approval-dialog],
 body[data-finance-identity-blocked="true"] #action-feedback,
 body[data-finance-identity-blocked="true"] [data-mobile-bottom-nav],
 body[data-finance-identity-blocked="true"] #mobile-nav-select{
@@ -3129,16 +3130,19 @@ function setFinanceWorkspaceIdentityBlocked(blocked){
       if(blocked)document.body.setAttribute('data-finance-identity-blocked','true');
       else document.body.removeAttribute('data-finance-identity-blocked');
     }
-    if(document.querySelectorAll)nodes=nodes.concat(Array.from(document.querySelectorAll('.modal-bg,#action-feedback,[data-mobile-bottom-nav],#mobile-nav-select')));
+    if(document.querySelectorAll)nodes=nodes.concat(Array.from(document.querySelectorAll('.modal-bg,dialog[data-finance-approval-dialog],#action-feedback,[data-mobile-bottom-nav],#mobile-nav-select')));
   }
   nodes.forEach(function(node){
     if(!node)return;
     if(blocked&&node.__financeStateBeforeLock===undefined)node.__financeStateBeforeLock={
-      inert:!!node.inert,ariaHidden:node.getAttribute?node.getAttribute('aria-hidden'):null,
+      open:node.tagName==='DIALOG'&&node.open,inert:!!node.inert,ariaHidden:node.getAttribute?node.getAttribute('aria-hidden'):null,
       visibility:node.style?node.style.visibility||'':''
     };
     var previous=node.__financeStateBeforeLock;
-    if(blocked)node.inert=true;
+    if(blocked){
+      if(node.tagName==='DIALOG'&&node.open&&node.close)node.close();
+      node.inert=true;
+    }
     if(blocked)node.setAttribute('aria-hidden','true');
     else if(previous){
       node.inert=previous.inert;
@@ -3147,7 +3151,10 @@ function setFinanceWorkspaceIdentityBlocked(blocked){
     // Inert prevents actions; hiding also prevents the replacement account
     // from viewing the previous employee's cached documents behind the dialog.
     if(node.style&&(blocked||previous))node.style.visibility=blocked?'hidden':previous.visibility;
-    if(!blocked)delete node.__financeStateBeforeLock;
+    if(!blocked){
+      if(previous&&previous.open&&node.showModal&&!node.open)node.showModal();
+      delete node.__financeStateBeforeLock;
+    }
   });
 }
 function captureFinanceWorkspaceRecoveryBeforeLock(){
@@ -37329,6 +37336,44 @@ function installActionFeedbackWrappers(){
     setTimeout(function(){btn.classList.remove('action-busy');},1200);
   },true);
 }
+function createFinanceApprovalRuntime(){
+  // Explicit bridge for the three external approval engines. Accessors keep
+  // list replacement in this closure and the engine's exact reads consistent.
+  return Object.freeze({
+    get S(){return S;},
+    get REQS(){return REQS;},set REQS(rows){REQS=rows;},
+    get INVS(){return INVS;},set INVS(rows){INVS=rows;},
+    get BILLS(){return BILLS;},set BILLS(rows){BILLS=rows;},
+    get NOTIFS(){return NOTIFS;},set NOTIFS(rows){NOTIFS=rows;},
+    isIdentityBlocked:function(){return financeWorkspaceIdentityBlocked;},
+    currentTenantId:function(){return currentTenantId.apply(null,arguments);},
+    activeDataEnvironment:function(){return activeDataEnvironment.apply(null,arguments);},
+    hasSupabase:function(){return hasSupabase.apply(null,arguments);},
+    getSb:function(){return getSb.apply(null,arguments);},
+    userById:function(){return userById.apply(null,arguments);},
+    expenseApprovalTransactionPatch:function(){return expenseApprovalTransactionPatch.apply(null,arguments);},
+    requestCashPostedAt:function(){return requestCashPostedAt.apply(null,arguments);},
+    reloadRequestsByIds:function(){return reloadRequestsByIds.apply(null,arguments);},
+    uniqueAttachments:function(){return uniqueAttachments.apply(null,arguments);},
+    ensureSupabaseWriteReady:function(){return ensureSupabaseWriteReady.apply(null,arguments);},
+    expenseApplicantRevisionRpcErrorIsAmbiguous:function(){return expenseApplicantRevisionRpcErrorIsAmbiguous.apply(null,arguments);},
+    reloadInvoicesByIds:function(){return reloadInvoicesByIds.apply(null,arguments);},
+    approvalSetReconcilePending:function(){return approvalSetReconcilePending.apply(null,arguments);},
+    setTopSyncStatus:function(){return setTopSyncStatus.apply(null,arguments);},
+    refreshApprovalAfterCommittedAction:function(){return refreshApprovalAfterCommittedAction.apply(null,arguments);},
+    approvalFastBootstrapIdentity:function(){return approvalFastBootstrapIdentity.apply(null,arguments);},
+    mapInv:function(){return mapInv.apply(null,arguments);},
+    mapBill:function(){return mapBill.apply(null,arguments);},
+    mapReq:function(){return mapReq.apply(null,arguments);},
+    approvalRowsMarkVerified:function(){return approvalRowsMarkVerified.apply(null,arguments);},
+    showReceiptTaskD:function(){return showReceiptTaskD.apply(null,arguments);},
+    showInvApprD:function(){return showInvApprD.apply(null,arguments);},
+    showBillApprD:function(){return showBillApprD.apply(null,arguments);},
+    markNotifRead:function(id){return window.markNotifRead(id);},
+    openDetail:function(id){return window.openDetail(id);}
+  });
+}
+window.FinanceApprovalRuntime=createFinanceApprovalRuntime();
 installApprovalActionLocks();
 installActionFeedbackWrappers();
 setDemoLoginVisibility();

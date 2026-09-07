@@ -1,5 +1,9 @@
 (function (global) {
   'use strict';
+  function runtime() {
+    if (!global.FinanceApprovalRuntime) throw new Error('簽核功能尚未完成載入，請重新整理後再試。');
+    return global.FinanceApprovalRuntime;
+  }
   // This module never updates REQS optimistically and never treats a checkbox
   // as proof of cash. Every action uses the server's versioned correction RPC.
   var operations = Object.create(null);
@@ -12,17 +16,17 @@
     });
   }
   function identity() {
-    return [global.currentTenantId(), global.activeDataEnvironment(), (global.S.user || {}).id,
-      (global.S.user || {}).authUserId || (global.S.user || {}).auth_user_id || ''].join('|');
+    return [runtime().currentTenantId(), runtime().activeDataEnvironment(), (runtime().S.user || {}).id,
+      (runtime().S.user || {}).authUserId || (runtime().S.user || {}).auth_user_id || ''].join('|');
   }
   function guardIdentity(expected) {
-    if (!global.S || global.S.demoLogin || !global.hasSupabase() || !global.S.user || identity() !== expected) {
+    if (!runtime().S || runtime().isIdentityBlocked() || runtime().S.demoLogin || !runtime().hasSupabase() || !runtime().S.user || identity() !== expected) {
       throw new Error('登入身分或環境已變更，請重新開啟更正流程；先前輸入不會送到其他帳號。');
     }
   }
   function amount(value) { return 'NT$' + Number(value || 0).toLocaleString('zh-TW'); }
   function userName(id) {
-    var user = typeof global.userById === 'function' ? global.userById(id) : null;
+    var user = typeof runtime().userById === 'function' ? runtime().userById(id) : null;
     return user ? (user.n || user.name || id) : (id || '尚未指定');
   }
   function errorMessage(error) {
@@ -35,10 +39,11 @@
   function show(title, body) {
     close(); trigger = document.activeElement;
     dialog = document.createElement('dialog');
+    dialog.setAttribute('data-finance-approval-dialog','correction');
     dialog.style.cssText = 'width:min(1040px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:0;border:1px solid #dfc7a8;border-radius:16px;color:#3b2410;background:#fffcf8';
     dialog.innerHTML = '<div style="padding:20px;box-sizing:border-box"><div style="display:flex;justify-content:space-between;gap:16px;align-items:center">'
       + '<h2 id="finance-correction-title" style="margin:0;font-size:22px">' + escapeHtml(title) + '</h2>'
-      + '<button type="button" data-close aria-label="關閉金額更正">關閉 ×</button></div>'
+      + '<button type="button" class="btn-g" data-close aria-label="關閉金額更正" style="min-height:44px!important;min-width:72px">關閉 ×</button></div>'
       + '<p data-feedback role="status" aria-live="polite" style="line-height:1.6"></p><div data-body>' + body + '</div></div>';
     dialog.setAttribute('aria-labelledby', 'finance-correction-title');
     document.body.appendChild(dialog);
@@ -64,8 +69,8 @@
   }
   async function read(requestId, expectedIdentity) {
     guardIdentity(expectedIdentity);
-    var result = await global.getSb().rpc('finance_expense_correction_read_v1', {
-      p_request_id: requestId || null, p_data_environment: global.activeDataEnvironment()
+    var result = await runtime().getSb().rpc('finance_expense_correction_read_v1', {
+      p_request_id: requestId || null, p_data_environment: runtime().activeDataEnvironment()
     });
     guardIdentity(expectedIdentity);
     if (result.error) throw result.error;
@@ -79,29 +84,30 @@
       operations[fingerprint] = (global.crypto && global.crypto.randomUUID)
         ? global.crypto.randomUUID() : ('correction_' + Date.now() + '_' + (++serial));
     }
-    var result = await global.getSb().rpc('finance_expense_correction_action_v1', Object.assign({}, args, {
-      p_operation_key: operations[fingerprint], p_data_environment: global.activeDataEnvironment()
+    var result = await runtime().getSb().rpc('finance_expense_correction_action_v1', Object.assign({}, args, {
+      p_operation_key: operations[fingerprint], p_data_environment: runtime().activeDataEnvironment()
     }));
     guardIdentity(expectedIdentity);
     if (result.error) throw result.error;
     if (!result.data || result.data.ok !== true) throw new Error('尚未確認正式保存結果；再次按相同操作會使用原識別碼確認，不會重複建立。');
     // Retain the operation key through an uncertain readback. Identical retry
     // always returns the original committed outcome from the database.
-    if (typeof global.reloadRequestsByIds === 'function') await global.reloadRequestsByIds([args.p_request_id]);
+    if (typeof runtime().reloadRequestsByIds === 'function') await runtime().reloadRequestsByIds([args.p_request_id]);
     return result.data;
   }
   global.startExpenseAccountingCorrection = async function (original, work) {
     var expectedIdentity = identity();
-    var patch = global.expenseApprovalTransactionPatch(work);
+    guardIdentity(expectedIdentity);
+    var patch = runtime().expenseApprovalTransactionPatch(work);
     var node = show('提出金額更正', '<p>人工修訂將先保存為更正提案，不會直接更改核定本金，也不會切傳票。</p>'
       + '<p><strong>原核定：' + amount(original.amt) + '　→　提案：' + amount(patch.amount) + '</strong></p>'
-      + '<p>' + (global.requestCashPostedAt(original)
+      + '<p>' + (runtime().requestCashPostedAt(original)
         ? '此單已有付款紀錄。主管覆核後，差額仍須由正式出納確認實際銀行補匯／退款；完成前不能入帳。'
         : '此單尚無正式付款紀錄。主管覆核完成後，才套用更正值；系統不會新增付款紀錄。') + '</p>'
       + linesHtml(patch.accounting_lines)
       + '<label>更正原因（至少 3 字）<textarea data-reason rows="3" style="width:100%;box-sizing:border-box"></textarea></label>'
       + '<label>獨立覆核主管<select data-reviewer style="width:100%;margin:8px 0"><option value="">載入合格人員中…</option></select></label>'
-      + '<button type="button" data-submit disabled>保存更正提案</button>');
+      + '<button type="button" class="btn-p" data-submit style="min-height:44px!important" disabled>保存更正提案</button>');
     try {
       var data = await read(original.id, expectedIdentity);
       var selector = node.querySelector('[data-reviewer]');
@@ -127,6 +133,7 @@
   }
   global.openExpenseAccountingCorrections = async function (requestId) {
     var expectedIdentity = identity();
+    guardIdentity(expectedIdentity);
     var node = show(requestId ? '金額更正與差額紀錄' : '金額更正待辦', '<p>讀取正式更正紀錄中…</p>');
     try {
       var data = await read(requestId, expectedIdentity);
@@ -142,7 +149,7 @@
           + '<details><summary>檢視五欄人工明細與稽核紀錄</summary>' + linesHtml((row.patch || {}).accounting_lines)
           + '<ol>' + (row.history || []).map(function (event) { return '<li>' + escapeHtml(event.at + ' · ' + userName(event.actorId) + ' · ' + event.action + ' · ' + event.reason) + '</li>'; }).join('') + '</ol></details>';
         if (!requestId) {
-          var details = document.createElement('button'); details.type = 'button'; details.textContent = '開啟此單更正／指定覆核人';
+          var details = document.createElement('button'); details.type = 'button'; details.className = 'btn-g'; details.style.setProperty('min-height', '44px', 'important'); details.textContent = '開啟此單更正／指定覆核人';
           details.onclick = function () { global.openExpenseAccountingCorrections(row.requestId); }; card.appendChild(details);
         }
         var canAct = row.canReview || row.canSettle || row.canCancel;
@@ -160,7 +167,7 @@
           if (row.canSettle) choices.push(['settle', '確認實際差額交易並套用更正']);
           if (row.canCancel) { if (requestId) choices.push(['assign', '指定覆核人']); choices.push(['cancel', '取消提案']); }
           choices.forEach(function (choice) {
-            var button = document.createElement('button'); button.type = 'button'; button.textContent = choice[1]; button.style.margin = '8px 8px 0 0';
+            var button = document.createElement('button'); button.type = 'button'; button.className = ['approve','settle'].indexOf(choice[0])>-1?'btn-p':'btn-s'; button.style.setProperty('min-height', '44px', 'important'); button.textContent = choice[1]; button.style.margin = '8px 8px 0 0';
             button.onclick = async function () {
               var reason = card.querySelector('[data-reason]').value.trim();
               var bank = card.querySelector('[data-bank]'), reviewer = card.querySelector('[data-reviewer]');
@@ -191,7 +198,7 @@
     var proposal = (request.formPayload || {}).accountingCorrection;
     return '<div style="padding:12px;margin:10px 0;border:1px solid #dfc7a8;border-radius:10px">'
       + (proposal ? escapeHtml(statusLabel(proposal.status)) + '　' : '')
-      + '<button type="button" data-correction-request="' + escapeHtml(request.id) + '" onclick="openExpenseAccountingCorrections(this.dataset.correctionRequest)">金額更正／差額紀錄</button></div>';
+      + '<button type="button" class="btn-g" style="min-height:44px!important" data-correction-request="' + escapeHtml(request.id) + '" onclick="openExpenseAccountingCorrections(this.dataset.correctionRequest)">金額更正／差額紀錄</button></div>';
   };
   global.expenseCorrectionCashEvents = function (request, kind) {
     return (((request || {}).formPayload || {}).correctionCashEvents || []).filter(function (event) {
