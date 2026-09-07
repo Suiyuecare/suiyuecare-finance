@@ -24,12 +24,16 @@ create role anon;create role authenticated;create role service_role;
 create function auth.uid() returns uuid language sql as $$select nullif(current_setting('fixture.uid',true),'')::uuid$$;
 create function auth.jwt() returns jsonb language sql as $$select jsonb_build_object('role',current_setting('fixture.role',true))$$;
 create function public.current_tenant_id() returns uuid language sql as $$select nullif(current_setting('fixture.tenant',true),'')::uuid$$;
-create table public.companies(id uuid primary key,code text,tax_id text,deleted_at timestamptz);
-insert into public.companies values('${id(40)}','E1','12345678',null),('${id(41)}','E2','87654321',null);
+create table public.companies(id uuid primary key,code text,tax_id text,deleted_at timestamptz,status text default 'active');
+insert into public.companies(id,code,tax_id,deleted_at) values('${id(40)}','E1','12345678',null),('${id(41)}','E2','87654321',null);
 create table public.system_settings(tenant_id uuid,key text,value jsonb);
 insert into public.system_settings values('${id(50)}','entities','[{"id":"E1","taxId":"12345678"},{"id":"E2","taxId":"87654321"}]'),
  ('${id(51)}','entities','[{"id":"E1","taxId":"12345678"}]');
-create table public.users(id uuid primary key,auth_user_id uuid,email text,status text,deleted_at timestamptz,company_id uuid,employee_id uuid);
+create table public.users(id uuid primary key,auth_user_id uuid,email text,status text,deleted_at timestamptz,company_id uuid,employee_id uuid,role_id uuid);
+create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
+create table public.roles(id uuid primary key,company_id uuid,key text,deleted_at timestamptz);
+create table public.employees(id uuid primary key,company_id uuid,email text,employment_status text,deleted_at timestamptz);
+insert into public.roles values('${id(80)}',null,'employee',null),('${id(81)}',null,'section_chief',null);
 create table public.finance_users(id text primary key,auth_user_id uuid,email text,active boolean,tenant_id uuid,role text,entity_id text,google_link_status text default 'bound');
 create table public.fixture_auth(id uuid primary key,email text,verified boolean default true);
 create function public.finance_verified_google_email(p_id uuid) returns text language sql stable security definer set search_path='' as $$select email from public.fixture_auth where id=p_id and verified$$;
@@ -44,7 +48,12 @@ create table public.punch_correction_requests(id uuid primary key default gen_ra
 create table public.module_audit_logs(table_name text,row_id text,action text,actor_email text,before_data jsonb,after_data jsonb);
 alter table public.attendance_punches enable row level security;
 alter table public.punch_correction_requests enable row level security;
-create policy original_own_all on public.attendance_punches to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
+alter table public.users enable row level security;
+grant select on public.users to authenticated;
+create policy own_hr_profile on public.users for select to authenticated using(auth_user_id=auth.uid());
+create policy original_own_all on public.attendance_punches to authenticated
+ using(user_id in(select u.id from public.users u where u.auth_user_id=auth.uid()))
+ with check(user_id in(select u.id from public.users u where u.auth_user_id=auth.uid()));
 -- Model the live permissive global HR predicate. The new restrictive policy
 -- must independently scope it, not merely protect its own RPC.
 create policy legacy_global_hr_read on public.attendance_punches for select to authenticated using((public.current_finance_user()).role in ('hr','admin_director','ceo'));
@@ -52,9 +61,17 @@ grant usage on schema public,auth to anon,authenticated,service_role;
 grant all on public.attendance_punches,public.punch_correction_requests to anon,authenticated,service_role;
 `);
 for(let n=1;n<=4;n++){
- await db.query('insert into public.users values($1,$1,$2,$3,null,$4,$1)',[id(n),`user${n}@fixture.invalid`,'active',id(n===4?41:40)]);
+ await db.query('insert into public.users values($1,$1,$2,$3,null,$4,$1,null)',[id(n),`user${n}@fixture.invalid`,'active',id(n===4?41:40)]);
  await db.query('insert into public.finance_users values($1,$2,$3,true,$4,$5,$6,\'bound\')',['finance-'+n,id(n),`user${n}@fixture.invalid`,id(50),n===2||n===3?'ceo':'employee',n===4?'E2':'E1']);
  await db.query('insert into public.fixture_auth(id,email) values($1,$2)',[id(n),`user${n}@fixture.invalid`]);
+}
+// HR-only accounts use email/password identities and HR UUIDs different from auth UUIDs.
+// E3 has no Finance mapping; E2 is unique; E1 deliberately appears in two tenants.
+await db.exec(`insert into public.companies(id,code,tax_id) values('${id(42)}','E3','11223344')`);
+for (const [n,company,role] of [[5,42,80],[6,41,81],[7,40,80]]) {
+ await db.query('insert into public.users values($1,$2,$3,$4,null,$5,$1,$6)',[id(n),id(n+100),`user${n}@fixture.invalid`,'active',id(company),id(role)]);
+ await db.query('insert into auth.users values($1,$2,now())',[id(n+100),`user${n}@fixture.invalid`]);
+ await db.query('insert into public.employees values($1,$2,$3,$4,null)',[id(n),id(company),`user${n}@fixture.invalid`,'active']);
 }
 await db.exec(fs.readFileSync(root+'scripts/fixtures/hris_attendance_live_baseline_20260907.sql','utf8'));
 const migration=fs.readFileSync(root+'supabase/migrations/20260907154404_finance_audit_attendance_security_v1.sql','utf8');
@@ -105,5 +122,62 @@ await check('trusted server caller remains signature compatible',()=>db.query(cr
 await check('trusted server cannot self-approve new punch',()=>denied(create(1,'approved')));
 await db.exec('set session authorization postgres; reset role');
 await check('legacy private RPC cannot be invoked by browser role',async()=>{const r=await db.query("select has_function_privilege('authenticated','private.hris_create_attendance_punch(uuid,text,text,numeric,numeric,text,text,text,text,boolean,text,text,text,integer,text)','execute') allowed");assert.equal(r.rows[0].allowed,false);});
+await as(105);
+await check('HR-only confirmed email account punches without a Finance company mapping',()=>db.query(create(5)));
+await check('HR-only profile UUID is resolved through auth UUID for list and raw SELECT',async()=>{
+ const rows=(await db.query(list(5,'ceo'))).rows;assert.equal(rows.length,1);assert.equal(rows[0].user_id,id(5));
+ assert.deepEqual((await db.query('select user_id from attendance_punches')).rows,[{user_id:id(5)}]);
+});
+await check('HR-only account cannot impersonate a colleague',()=>denied(create(6)));
+await check('HR-only account cannot gain review rights from client CEO role',()=>denied(review(5,punch)));
+await as(106);await db.query(create(6));
+const hrPunch=(await db.query(list(6))).rows[0].id;
+await check('HR-only section chief has self access and no automatic management authority',async()=>{
+ assert.equal((await db.query(list(6,'ceo'))).rows.length,1);await denied(review(6,other));
+ assert.deepEqual((await db.query('select user_id from attendance_punches')).rows,[{user_id:id(6)}]);
+});
+await as(107);await db.query(create(7));
+await check('ambiguous Finance company mapping still permits HR-only own attendance',async()=>{assert.equal((await db.query(list(7))).rows.length,1);});
+await as(2);
+await check('ambiguous HR-only company mapping does not leak to either Finance tenant',async()=>{
+ assert.equal((await db.query(list(2))).rows.some(r=>r.user_id===id(7)),false);
+ assert.equal((await db.query('select user_id from attendance_punches')).rows.some(r=>r.user_id===id(7)),false);
+});
+await db.exec('set session authorization postgres; reset role');
+await db.exec("update finance_users set role='hr' where id='finance-4'");await as(4);
+await check('same-company Finance reviewer can see and review uniquely mapped HR-only staff',async()=>{
+ assert.equal((await db.query(list(4))).rows.some(r=>r.id===hrPunch),true);
+ assert.equal((await db.query('select id from attendance_punches')).rows.some(r=>r.id===hrPunch),true);
+ await db.query(review(4,hrPunch));
+});
+for (const [label,mutation,restore] of [
+ ['unconfirmed auth email',`update auth.users set email_confirmed_at=null where id='${id(105)}'`,`update auth.users set email_confirmed_at=now() where id='${id(105)}'`],
+ ['mismatched auth email',`update auth.users set email='wrong@fixture.invalid' where id='${id(105)}'`,`update auth.users set email='user5@fixture.invalid' where id='${id(105)}'`],
+ ['inactive employment',`update employees set employment_status='terminated' where id='${id(5)}'`,`update employees set employment_status='active' where id='${id(5)}'`],
+ ['employee company mismatch',`update employees set company_id='${id(40)}' where id='${id(5)}'`,`update employees set company_id='${id(42)}' where id='${id(5)}'`],
+ ['inactive company',`update companies set status='inactive' where id='${id(42)}'`,`update companies set status='active' where id='${id(42)}'`],
+ ['role from another company',`update roles set company_id='${id(40)}' where id='${id(80)}'`,`update roles set company_id=null where id='${id(80)}'`],
+ ['deleted role',`update roles set deleted_at=now() where id='${id(80)}'`,`update roles set deleted_at=null where id='${id(80)}'`]
+]) {
+ await db.exec('set session authorization postgres; reset role');await db.exec(mutation);await as(105);
+ await check(`HR-only ${label} denies create, list and raw reads`,async()=>{
+  await denied(create(5));await denied(list(5));assert.equal((await db.query('select id from attendance_punches')).rows.length,0);
+ });
+ await db.exec('set session authorization postgres; reset role');await db.exec(restore);
+}
+await db.exec(`insert into finance_users values('blocked-hr','${id(105)}','user5@fixture.invalid',false,'${id(50)}','ceo','E3','bound')`);
+await as(105);
+await check('HR-only fallback is unavailable once any Finance binding exists, including disabled',async()=>{
+ await denied(create(5));await denied(list(5));assert.equal((await db.query('select id from attendance_punches')).rows.length,0);
+});
+await db.exec('set session authorization postgres; reset role');await db.exec("delete from finance_users where id='blocked-hr'");
+await as(null,'service_role');
+await check('trusted server may submit an existing verified HR-only employee own punch',()=>db.query(create(5)));
+await check('trusted server may not grant HR-only review authority through input_role',()=>denied(review(5,punch)));
+await db.exec('set session authorization postgres; reset role');
+await check('HR-only identity audit retains backend HR role and self-service source',async()=>{
+ const row=(await db.query("select after_data->'actor' actor from module_audit_logs where actor_email='user6@fixture.invalid' and action='ATTENDANCE_SELF_PUNCH'")).rows[0];
+ assert.equal(row.actor.hr_role,'section_chief');assert.equal(row.actor.identity_source,'hr');assert.equal(row.actor.role,'employee');
+});
 console.log(`Attendance identity boundary: ${checks} passed; HR caller production acceptance not run.`);
 }catch(error){console.error('FAILED',error.code||'',error.message);process.exitCode=1;}finally{await db.close();}

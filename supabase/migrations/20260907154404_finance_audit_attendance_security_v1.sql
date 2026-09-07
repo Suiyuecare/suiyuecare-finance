@@ -37,21 +37,70 @@ $company$;
 alter function private.hris_attendance_company_in_tenant_v1(uuid,uuid,text) owner to postgres;
 revoke all on function private.hris_attendance_company_in_tenant_v1(uuid,uuid,text) from public,anon,authenticated,service_role;
 
--- Read/review history stays attached to its immutable Finance identity even
--- when the target has left. Caller authorization is checked separately.
+-- HR-only staff may use their verified HR account for their own attendance.
+-- This is separate from Finance authority: an existing Finance binding never
+-- falls back here after being disabled, moved, or losing its verified email.
+create function private.hris_attendance_hr_identity_v1(p_user_id uuid)
+returns boolean language sql stable security definer set search_path=''
+as $hr_identity$
+  select exists (
+    select 1 from public.users u
+    join auth.users a on a.id=u.auth_user_id and a.email_confirmed_at is not null
+      and lower(btrim(a.email))=lower(btrim(u.email))
+    join public.employees e on e.id=u.employee_id and e.company_id=u.company_id
+      and e.deleted_at is null and e.employment_status='active'
+      and lower(btrim(e.email))=lower(btrim(u.email))
+    join public.companies c on c.id=u.company_id and c.deleted_at is null and c.status='active'
+    join public.roles r on r.id=u.role_id and r.deleted_at is null
+      and (r.company_id is null or r.company_id=u.company_id)
+    where u.id=p_user_id and u.deleted_at is null and u.status='active'
+      and not exists(select 1 from public.finance_users f where f.auth_user_id=u.auth_user_id)
+  )
+$hr_identity$;
+alter function private.hris_attendance_hr_identity_v1(uuid) owner to postgres;
+revoke all on function private.hris_attendance_hr_identity_v1(uuid) from public,anon,authenticated,service_role;
+
+-- HR-only records are visible to Finance reviewers only when their company has
+-- one unambiguous tenant mapping. Unmapped HR companies still support self use.
+create function private.hris_attendance_hr_company_tenant_v1(p_company_id uuid)
+returns uuid language sql stable security definer set search_path=''
+as $hr_tenant$
+  with mapped as (
+    select distinct ss.tenant_id from public.companies c join public.system_settings ss on ss.key='entities'
+    cross join lateral jsonb_array_elements(case when jsonb_typeof(ss.value)='array' then ss.value else '[]'::jsonb end) item
+    where c.id=p_company_id and c.deleted_at is null and c.status='active'
+      and coalesce(nullif(item->>'id',''),nullif(item->>'eid',''),nullif(item->>'code',''),nullif(item->>'c',''))=c.code
+      and nullif(btrim(c.tax_id),'')=nullif(btrim(item->>'taxId'),'')
+      and private.hris_attendance_company_in_tenant_v1(c.id,ss.tenant_id,c.code)
+  ) select case when count(*)=1 then (array_agg(tenant_id))[1] end from mapped
+$hr_tenant$;
+alter function private.hris_attendance_hr_company_tenant_v1(uuid) owner to postgres;
+revoke all on function private.hris_attendance_hr_company_tenant_v1(uuid) from public,anon,authenticated,service_role;
+
+-- Departed Finance staff history retains its Finance identity. HR-only history
+-- stays with its HR employee/company mapping; actor authorization is separate.
 create function private.hris_attendance_user_in_tenant_v1(p_user_id uuid,p_company_id uuid,p_tenant_id uuid)
 returns boolean language sql stable security definer set search_path=''
 as $scope$
-  select count(*)=1 from public.users u join public.finance_users fu on fu.auth_user_id=u.auth_user_id
-    and lower(btrim(fu.email))=lower(btrim(u.email))
-  where u.id=p_user_id and u.company_id=p_company_id and fu.tenant_id=p_tenant_id
-    and private.hris_attendance_company_in_tenant_v1(p_company_id,fu.tenant_id,fu.entity_id)
+  select exists (
+    select 1 from public.users u where u.id=p_user_id and u.company_id=p_company_id
+      and (
+        (select count(*)=1 from public.finance_users fu where fu.auth_user_id=u.auth_user_id
+          and lower(btrim(fu.email))=lower(btrim(u.email)) and fu.tenant_id=p_tenant_id
+          and private.hris_attendance_company_in_tenant_v1(p_company_id,fu.tenant_id,fu.entity_id))
+        or (
+          not exists(select 1 from public.finance_users f where f.auth_user_id=u.auth_user_id)
+          and exists(select 1 from public.employees e where e.id=u.employee_id and e.company_id=u.company_id)
+          and private.hris_attendance_hr_company_tenant_v1(p_company_id)=p_tenant_id
+        )
+      )
+  )
 $scope$;
 alter function private.hris_attendance_user_in_tenant_v1(uuid,uuid,uuid) owner to postgres;
 revoke all on function private.hris_attendance_user_in_tenant_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;
 
 create function private.hris_verified_attendance_actor_v1(p_user_id uuid,p_email text)
-returns jsonb language plpgsql security definer set search_path=''
+returns jsonb language plpgsql stable security definer set search_path=''
 as $actor$
 declare
   v_user public.users%rowtype;
@@ -70,6 +119,17 @@ begin
   if not v_service and v_user.auth_user_id is distinct from auth.uid() then
     raise exception 'Attendance actor must be the authenticated employee' using errcode='42501';
   end if;
+  if not exists(select 1 from public.finance_users f where f.auth_user_id=v_user.auth_user_id) then
+    if not private.hris_attendance_hr_identity_v1(v_user.id) then
+      raise exception 'Verified active HR employee identity required' using errcode='42501';
+    end if;
+    -- Backend HR roles are retained as audit context. They do not manufacture
+    -- Finance attendance-review authority, including when input_role is forged.
+    return jsonb_build_object('id',v_user.id,'email',v_user.email,'role','employee',
+      'hr_role',(select r.key from public.roles r where r.id=v_user.role_id),
+      'identity_source','hr','tenant_id',private.hris_attendance_hr_company_tenant_v1(v_user.company_id),
+      'auth_user_id',v_user.auth_user_id,'company_id',v_user.company_id,'employee_id',v_user.employee_id);
+  end if;
   select count(*) into v_count from public.finance_users fu
     where fu.auth_user_id=v_user.auth_user_id and fu.active=true
       and fu.google_link_status in ('bound','pending_rebind')
@@ -86,7 +146,7 @@ begin
       and private.hris_attendance_company_in_tenant_v1(v_user.company_id,fu.tenant_id,fu.entity_id)
       and (v_service or fu.tenant_id=public.current_tenant_id());
   return jsonb_build_object('id',v_user.id,'email',v_user.email,'role',v_finance.role,
-    'tenant_id',v_finance.tenant_id,'auth_user_id',v_user.auth_user_id,'company_id',v_user.company_id,'employee_id',v_user.employee_id);
+    'identity_source','finance','tenant_id',v_finance.tenant_id,'auth_user_id',v_user.auth_user_id,'company_id',v_user.company_id,'employee_id',v_user.employee_id);
 end;
 $actor$;
 alter function private.hris_verified_attendance_actor_v1(uuid,text) owner to postgres;
@@ -140,8 +200,9 @@ begin
     p.distance_meters,p.review_status,p.reviewed_by,p.reviewed_at,p.review_note,p.deleted_at
   from public.attendance_punches p
   where p.deleted_at is null and p.company_id=(v_actor->>'company_id')::uuid
-    and private.hris_attendance_user_in_tenant_v1(p.user_id,p.company_id,(v_actor->>'tenant_id')::uuid)
-    and (v_actor->>'role' in ('hr','admin_director','ceo') or p.user_id=(v_actor->>'id')::uuid)
+    and (p.user_id=(v_actor->>'id')::uuid
+      or (v_actor->>'identity_source'='finance' and v_actor->>'role' in ('hr','admin_director','ceo')
+        and private.hris_attendance_user_in_tenant_v1(p.user_id,p.company_id,(v_actor->>'tenant_id')::uuid)))
   order by p.punched_at desc,p.id desc
   limit least(greatest(coalesce(input_limit,200),1),500);
 end;
@@ -164,7 +225,7 @@ begin
   if input_review_status is null or input_review_status not in ('approved','rejected') then
     raise exception 'Invalid punch review status' using errcode='22023';
   end if;
-  if coalesce(v_actor->>'role','') not in ('hr','admin_director','ceo') then
+  if v_actor->>'identity_source' is distinct from 'finance' or coalesce(v_actor->>'role','') not in ('hr','admin_director','ceo') then
     raise exception 'Approved reviewer role required' using errcode='42501';
   end if;
   select * into v_old from public.attendance_punches p where p.id=input_punch_id
@@ -206,6 +267,9 @@ returns boolean language plpgsql stable security definer set search_path=''
 as $read$
 declare v_actor public.finance_users%rowtype := public.current_finance_user();
 begin
+  if auth.uid() is null then return false; end if;
+  if exists(select 1 from public.users u where u.id=p_user_id and u.company_id=p_company_id
+      and u.auth_user_id=auth.uid() and private.hris_attendance_hr_identity_v1(u.id)) then return true; end if;
   if auth.uid() is null or v_actor.id is null or v_actor.active is distinct from true
     or v_actor.auth_user_id is distinct from auth.uid() or v_actor.tenant_id is distinct from public.current_tenant_id() then return false; end if;
   if not private.hris_attendance_company_in_tenant_v1(p_company_id,v_actor.tenant_id,v_actor.entity_id)
@@ -228,6 +292,16 @@ begin
     where n.nspname='public' and p.proname in ('hris_create_attendance_punch','hris_list_attendance_punches','hris_review_attendance_punches','hris_review_attendance_punch') loop
     if has_function_privilege('anon',x.oid,'EXECUTE') then raise exception 'Anonymous HRIS RPC remains executable'; end if;
   end loop;
+  for x in select p.oid,p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='private' and p.proname in ('hris_attendance_hr_identity_v1','hris_attendance_hr_company_tenant_v1',
+      'hris_attendance_user_in_tenant_v1','hris_verified_attendance_actor_v1') loop
+    if has_function_privilege('anon',x.oid,'EXECUTE') or has_function_privilege('authenticated',x.oid,'EXECUTE')
+      or has_function_privilege('service_role',x.oid,'EXECUTE') then raise exception 'Attendance internal helper exposed: %',x.proname; end if;
+  end loop;
+  if not exists(select 1 from pg_policy where polrelid='public.attendance_punches'::regclass
+      and polname='attendance_tenant_read_boundary_v1' and not polpermissive)
+    or not exists(select 1 from pg_class where oid='public.attendance_punches'::regclass and relrowsecurity)
+    then raise exception 'Attendance read boundary is missing'; end if;
   if has_table_privilege('authenticated','public.attendance_punches','UPDATE')
     or has_table_privilege('authenticated','public.attendance_punches','TRUNCATE')
     or has_table_privilege('anon','public.attendance_punches','SELECT') then raise exception 'Unsafe attendance table grants remain'; end if;
