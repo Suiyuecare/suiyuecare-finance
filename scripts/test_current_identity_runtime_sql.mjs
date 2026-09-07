@@ -47,13 +47,31 @@ await db.exec(`
 `);
 // The release runner owns the surrounding transaction for the whole batch.
 await db.exec('begin;\n' + migration + '\ncommit;');
+// The auth migration precedes the organization migration. Resolve the private
+// publish helper only when the endpoint is invoked, after the complete batch.
+await db.exec(`
+  create schema private;
+  create table public.fixture_org_publications(tenant_id uuid,actor text,reason text,role_count integer);
+  create function private.finance_org_publish_runtime_v2(p_tenant uuid,p_actor text,p_reason text)
+  returns jsonb language plpgsql security definer set search_path='' as $$
+  begin
+    insert into public.fixture_org_publications
+      select p_tenant,p_actor,p_reason,count(*) from public.employee_department_roles where tenant_id=p_tenant;
+    if current_setting('fixture.org_publish_failure',true) = 'true' then
+      raise exception 'fixture organization validation failed' using errcode='23514';
+    end if;
+    if current_setting('fixture.org_publish_empty',true) = 'true' then return '{}'::jsonb; end if;
+    return jsonb_build_object('org_version_id','50000000-0000-0000-0000-000000000001','org_version_no',1,'org_etag','fixture-published');
+  end; $$;
+  revoke all on function private.finance_org_publish_runtime_v2(uuid,text,text) from public,anon,authenticated,service_role;
+`);
 async function login(actor = actorA, tenant = tenantA, role = 'authenticated') {
   await db.exec('reset role');
   await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('app.current_tenant_id',$2,false)", [actor, tenant]);
   await db.exec(`set role ${role}`);
 }
 async function seed() {
-  await db.exec('reset role; truncate public.fixture_auth_users,public.finance_users,public.tenant_members,public.employee_department_roles,public.module_audit_logs,public.system_settings;');
+  await db.exec("reset role; set fixture.org_publish_failure='false'; set fixture.org_publish_empty='false'; truncate public.fixture_auth_users,public.finance_users,public.tenant_members,public.employee_department_roles,public.module_audit_logs,public.system_settings,public.fixture_org_publications;");
   await db.query(`insert into public.system_settings values($1,'entities','[{"id":"E1","taxId":"12345678"}]')`, [tenantA]);
   await db.query('insert into public.fixture_auth_users(id,email,verified) values($1,$2,true),($3,$4,true)', [actorA, 'a@suiyuecare.com', actorB, 'b@suiyuecare.com']);
   await db.query(`insert into public.finance_users values
@@ -71,6 +89,10 @@ try {
   await seed();
   const repaired = await invoke();
   assert.equal(repaired.ok, true); assert.equal(repaired.tenant_members_created, 1); assert.equal(repaired.employee_roles_created, 1);
+  assert.equal(repaired.org_version_id,'50000000-0000-0000-0000-000000000001');
+  const [publication] = await sql('select * from public.fixture_org_publications');
+  assert.equal(publication.tenant_id,tenantA);assert.equal(publication.actor,'employee-a');
+  assert.equal(publication.role_count,1,'publish observes the newly repaired role in the same transaction');
   const [role] = await sql('select * from public.employee_department_roles');
   assert.equal(role.finance_user_id, 'employee-a'); assert.equal(role.tenant_id, tenantA);
   assert.equal(role.can_approve, false); assert.equal(role.is_department_manager, false); assert.equal(role.is_department_director, false);
@@ -78,10 +100,27 @@ try {
   assert.deepEqual(role.permissions_override, {});
   const [audit] = await sql('select * from public.module_audit_logs');
   assert.equal(audit.action, 'SELF_IDENTITY_RUNTIME_REPAIR'); assert.equal(audit.before_data.actor_auth_user_id, actorA);
+  assert.equal(audit.after_data.org_version_id,repaired.org_version_id);
   await login(); const again = await invoke();
   assert.equal(again.tenant_members_created, 0); assert.equal(again.employee_roles_created, 0);
   assert.equal((await sql('select count(*)::integer n from public.module_audit_logs'))[0].n, 1, 'idempotent repair audit');
+  assert.equal((await sql('select count(*)::integer n from public.fixture_org_publications'))[0].n,1,'idempotent check does not publish another version');
   console.log('PASS SQL A03: missing own projections repaired idempotently, audited, no manager/approval/delegate grants');
+
+  // Membership-only recovery does not change org runtime_revision.
+  await sql('delete from public.tenant_members');await login();
+  const memberOnly=await invoke();
+  assert.equal(memberOnly.tenant_members_created,1);assert.equal(memberOnly.employee_roles_created,0);
+  assert.equal(memberOnly.org_version_id,undefined);
+  assert.equal((await sql('select count(*)::integer n from public.fixture_org_publications'))[0].n,1,'membership-only repair does not publish unnecessarily');
+  for(const [failureSetting,expectedCode] of [['fixture.org_publish_failure','23514'],['fixture.org_publish_empty','55000']]){
+    await seed();await sql(`select set_config($1,'true',false)`,[failureSetting]);await login();
+    await assert.rejects(invoke,error=>error.code===expectedCode,'organization publish failure reaches the caller');
+    for(const table of ['tenant_members','employee_department_roles','module_audit_logs','fixture_org_publications']){
+      assert.equal((await sql(`select count(*)::integer n from public.${table}`))[0].n,0,`${table} rolled back with organization publication failure`);
+    }
+  }
+  console.log('PASS SQL A03/O03: publish only on organization changes; preserve self actor/tenant, idempotence and full rollback on invalid publication');
 
   await seed(); await login(''); await denied('missing auth');
   await seed(); await login('10000000-0000-0000-0000-000000000099'); await denied('unknown auth');

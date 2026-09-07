@@ -35,11 +35,15 @@ declare
   v_members integer := 0;
   v_roles integer := 0;
   v_needs_management boolean := false;
+  v_org_publication jsonb := '{}'::jsonb;
 begin
   if v_actor is null or v_tenant is null or v_current.id is null then
     raise exception 'A verified active Finance identity is required' using errcode = '42501';
   end if;
   v_email := public.finance_verified_google_email(v_actor);
+  -- Use the same lock order as governed personnel updates: governance first,
+  -- then the Finance person row, then the published organization version.
+  perform pg_advisory_xact_lock(hashtextextended('finance-org-governance:' || v_tenant::text, 0));
   select fu.* into v_user from public.finance_users fu
   where fu.id = v_current.id and fu.tenant_id = v_tenant
     and fu.auth_user_id = v_actor and fu.active = true
@@ -149,16 +153,28 @@ begin
       end if;
     end if;
   end if;
+  if v_roles > 0 then
+    -- tenant_members is not part of the organization runtime revision. A new
+    -- employee_department_roles row is, so publish its validated snapshot in
+    -- this transaction. The following batch migration defines this private
+    -- helper before the endpoint becomes available. Never mask its failure:
+    -- an invalid organization must roll back the entire self repair.
+    v_org_publication := private.finance_org_publish_runtime_v2(
+      v_tenant, v_user.id, '本人登入資料修復同步正式組織');
+    if nullif(v_org_publication ->> 'org_version_id', '') is null then
+      raise exception 'Self identity repair did not publish a validated organization version' using errcode = '55000';
+    end if;
+  end if;
   if v_members + v_roles > 0 then
     insert into public.module_audit_logs (table_name, row_id, action, actor_email, before_data, after_data)
     values ('finance_users', v_user.id, 'SELF_IDENTITY_RUNTIME_REPAIR', v_email,
       jsonb_build_object('tenant_id', v_tenant, 'actor_auth_user_id', v_actor),
       jsonb_build_object('tenant_members_created', v_members, 'employee_roles_created', v_roles,
-        'can_approve_granted', false, 'management_permissions_granted', false));
+        'can_approve_granted', false, 'management_permissions_granted', false) || v_org_publication);
   end if;
   return jsonb_build_object('ok', not v_needs_management, 'finance_user_id', v_user.id,
     'tenant_id', v_tenant, 'tenant_members_created', v_members,
-    'employee_roles_created', v_roles, 'requires_management_review', v_needs_management);
+    'employee_roles_created', v_roles, 'requires_management_review', v_needs_management) || v_org_publication;
 end;
 $function$;
 
