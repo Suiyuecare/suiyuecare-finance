@@ -1,8 +1,8 @@
 -- Finance organization integrity v2. Apply inside one release transaction.
 -- Preserves existing role authorization and all submitted approval snapshots.
 -- The rollback backup contains definitions and old org versions, never passwords.
-set lock_timeout = '5s';
-set statement_timeout = '120s';
+set local lock_timeout = '5s';
+set local statement_timeout = '120s';
 create table private.finance_org_integrity_backup_v2(kind text not null,key text not null,payload jsonb not null,primary key(kind,key));
 alter table private.finance_org_integrity_backup_v2 enable row level security;
 revoke all on private.finance_org_integrity_backup_v2 from public,anon,authenticated,service_role;
