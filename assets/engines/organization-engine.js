@@ -302,6 +302,21 @@
       + '</div></div>';
   }
 
+  function isEffectiveAt(row, at) {
+    row = row || {};
+    if (!booleanValue(row.active, true)) return false;
+    var when = at === undefined ? Date.now() : Number(at);
+    function boundary(value, isEnd) {
+      if (!value) return isEnd ? Infinity : -Infinity;
+      var dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(String(value));
+      var time = Date.parse(dateOnly ? value + 'T00:00:00+08:00' : value);
+      return dateOnly && isEnd ? time + 86400000 : time;
+    }
+    var from = boundary(row.effective_from || row.effectiveFrom, false);
+    var to = boundary(row.effective_to || row.effectiveTo, true);
+    return !Number.isNaN(from) && !Number.isNaN(to) && from <= when && when < to;
+  }
+
   function normalizeVersionedGraph(data) {
     data = normalizeSettingValue(data) || {};
     var units = Array.isArray(data.units) ? data.units : [];
@@ -317,6 +332,8 @@
       etag: pick(data, ['etag']),
       activatedAt: pick(data, ['activated_at', 'activatedAt']),
       nextEffectiveChangeAt: pick(data, ['next_effective_change_at', 'nextEffectiveChangeAt']),
+      runtimeConsistent: data.runtime_consistent !== undefined ? data.runtime_consistent : data.runtimeConsistent,
+      reportingOverrides: Array.isArray(data.reporting_overrides) ? data.reporting_overrides.slice() : Array.isArray(data.reportingOverrides) ? data.reportingOverrides.slice() : [],
       permissions: data.permissions && typeof data.permissions === 'object' ? data.permissions : {},
       units: units.map(function (raw) {
         raw = raw || {};
@@ -503,7 +520,7 @@
           metadata: assignment.metadata || {},
         };
       }),
-      reporting_overrides: [],
+      reporting_overrides: normalized.reportingOverrides.slice(),
     };
   }
 
@@ -609,6 +626,7 @@
     orgAdminRuntimeStatus: orgAdminRuntimeStatus,
     orgAdminRuntimeStatusHtml: orgAdminRuntimeStatusHtml,
     normalizeVersionedGraph: normalizeVersionedGraph,
+    isEffectiveAt: isEffectiveAt,
     graphMaps: graphMaps,
     graphTree: graphTree,
     graphSubtreeIds: graphSubtreeIds,

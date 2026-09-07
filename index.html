@@ -1242,7 +1242,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
         </div>
         <div class="fr2">
           <div class="fg"><label class="fl">上一階單位 *</label><select id="org-unit-edit-parent"></select></div>
-          <div class="fg"><label class="fl">歸屬公司 *</label><select id="org-unit-edit-entity" onchange="refreshMembershipOrgUnitEditorCode()"></select><div class="user-field-help">新設立的部、課、組發布後會立即出現在該公司的費用申請部門選單。</div></div>
+          <div class="fg"><label class="fl" for="org-unit-edit-scope">服務公司範圍 *</label><select id="org-unit-edit-scope"><option value="inherit">繼承上層單位</option><option value="all">全集團</option><option value="explicit">指定公司</option></select><label class="fl" for="org-unit-edit-entity">指定公司（可複選）</label><select id="org-unit-edit-entity" multiple size="5" onchange="refreshMembershipOrgUnitEditorCode()"></select><div class="user-field-help">選擇「指定公司」時可複選。儲存名稱或主管時會保留完整公司範圍。</div></div>
         </div>
         <div class="fr2">
           <div class="fg"><label class="fl">會計／部門代碼</label><input id="org-unit-edit-code" readonly style="background:var(--warm)" placeholder="儲存時由正式系統產生"><div class="user-field-help">代碼由系統產生且不可重複；建立後不允許直接改碼，避免舊單據斷鏈。</div></div>
@@ -1883,6 +1883,9 @@ var DEFAULT_APPROVAL_ROUTING_POLICY={
 var APPROVAL_ROUTING_POLICY=JSON.parse(JSON.stringify(DEFAULT_APPROVAL_ROUTING_POLICY));
 var ORG_CHART=[];
 var ORG_CHART_PERSISTED=[];
+var ORG_CHART_REVISION='';
+var ORG_CHART_DIRTY=false;
+var ORG_CHART_CONFLICT=false;
 // Once the canonical employee_department_roles projection has loaded, a
 // delayed legacy system_settings snapshot must never replace it on screen.
 var ORG_CHART_CANONICAL_RUNTIME_LOADED=false;
@@ -6005,17 +6008,21 @@ function normalizeOrgChartRuntimeRows(data){
 async function refreshOrgChartRowsFromRuntime(client,reason){
   client=client||getSb();
   if(!client||S.demoLogin)return {ok:false,skipped:true,reason:'no_supabase'};
-  var r=await client.rpc('finance_org_chart_rows',{});
+  var r=await client.rpc('finance_org_chart_editor_state_v2',{});
   if(r.error){
     if(isRpcMissing(r.error)){
-      console.warn('Org chart canonical RPC not installed; using legacy system_settings.organization_chart fallback.');
+      ORG_CHART_REVISION='';
+      console.warn('Org chart revision API is unavailable; editing stays disabled until reload after the database update.');
       return {ok:false,missing:true,error:r.error};
     }
     console.warn('Org chart canonical RPC failed:',r.error.message||r.error);
     return {ok:false,error:r.error,message:r.error.message||'組織圖 runtime 讀取失敗'};
   }
-  var rows=normalizeOrgChartRuntimeRows(r.data);
+  var rows=normalizeOrgChartRuntimeRows(r.data&&r.data.rows);
+  if(!r.data||!r.data.revision){ORG_CHART_REVISION='';return {ok:false,message:'主管圖缺少來源版本，請重新載入。'};}
   if(!rows)return {ok:false,error:new Error('Invalid org chart runtime payload'),message:'組織圖 runtime 回傳格式不正確'};
+  if(ORG_CHART_DIRTY&&String(reason||'').indexOf('failed')<0&&ORG_CHART_REVISION&&r.data.revision!==ORG_CHART_REVISION){ORG_CHART_CONFLICT=true;return {ok:false,conflict:true,message:'主管圖已在其他視窗更新；保留目前編輯，儲存前請重新載入核對。'};}
+  ORG_CHART_REVISION=r.data.revision;ORG_CHART_DIRTY=false;ORG_CHART_CONFLICT=false;
   ORG_CHART=rows;
   ORG_CHART_PERSISTED=cloneSettingValue(rows);
   ORG_CHART_CANONICAL_RUNTIME_LOADED=true;
@@ -13988,9 +13995,7 @@ function membershipOrgCurrentUserPostingAssignments(eid){
   var at=Date.now();
   return graph.assignments.filter(function(assignment){
     if(!assignment.active||String(assignment.financeUserId||'')!==String(userId))return false;
-    var from=assignment.effectiveFrom?new Date(assignment.effectiveFrom).getTime():-Infinity;
-    var to=assignment.effectiveTo?new Date(assignment.effectiveTo).getTime():Infinity;
-    return from<=at&&to>at;
+    return engine.isEffectiveAt(assignment,at);
   }).map(function(assignment){
     var unit=graph.units.find(function(row){return row.id===assignment.orgUnitId;});
     if(!unit||!unit.active||!unit.isPostingUnit)return null;
@@ -34635,8 +34640,9 @@ window.refreshMembershipOrgGraph=async function(reason,options){
 function membershipOrgStatusHtml(){
   var state=MEMBERSHIP_ORG_RUNTIME,graph=membershipOrgRuntimeGraph();
   if(state.loading)return'<div class="membership-org-status">正在讀取正式組織版本…</div>';
-  if(state.available===false)return'<div class="membership-org-status ok"><strong>簡易組織圖已啟用</strong> · 正式資料由現行部門主檔提供</div>';
-  if(!graph||!graph.orgVersionId)return'<div class="membership-org-status ok"><strong>簡易組織圖已啟用</strong> · 正式資料由現行部門主檔提供</div>';
+  if(state.error||state.available===false)return'<div class="membership-org-status" role="alert"><strong>正式組織版本讀取失敗</strong> · '+escAttr(state.error||'目前無法確認正式版本，請重新載入。')+(state.lastLoaded?' · 上次成功讀取 '+escAttr(new Date(state.lastLoaded).toLocaleString('zh-TW')):'')+'</div>';
+  if(!graph||!graph.orgVersionId)return'<div class="membership-org-status"><strong>尚未取得正式組織版本</strong> · 目前顯示的部門資料尚未完成版本核對。</div>';
+  if(graph.runtimeConsistent===false)return'<div class="membership-org-status" role="alert"><strong>正式組織與現行人員資料尚未一致</strong> · 請重新建立組織草稿核對目前主管與任職；目前版本 '+escAttr(graph.orgVersionId)+'</div>';
   var remoteWarn=MEMBERSHIP_ORG_DRAFT.remoteChanged?' · 正式版本已在其他視窗更新；目前草稿不會被覆蓋，送審前請檢查差異。':'';
   return'<div class="membership-org-status ok"><strong>正式版本已啟用</strong> · '+escAttr(graph.orgVersionId)+' · '+escAttr(graph.units.length+' 個單位')+' · '+escAttr(graph.assignments.length+' 筆任職')+(graph.nextEffectiveChangeAt?' · 下一次人事生效 '+escAttr(new Date(graph.nextEffectiveChangeAt).toLocaleString('zh-TW')):'')+escAttr(remoteWarn)+'</div>';
 }
@@ -34940,8 +34946,9 @@ window.openMembershipOrgUnitEditor=async function(parentId,editId){
   if(el('org-unit-edit-name'))el('org-unit-edit-name').value=unit?unit.name:'';
   if(typeBox)typeBox.innerHTML=membershipOrgUnitTypes().filter(function(value){return unit?true:allowed.indexOf(value)>-1;}).map(function(value){return'<option value="'+value+'" '+(value===type?'selected':'')+'>'+membershipOrgUnitTypeLabel(value)+'</option>';}).join('');
   if(entityBox){
-    var currentEntities=unit?(unit.entity_codes||[]):[],inherited=parent?membershipOrgEngine().effectiveEntityScope(graph,parent.id).entityCodes:[],currentEntity=currentEntities[0]||inherited[0]||'';
-    entityBox.innerHTML='<option value="">請選擇公司</option>'+graph.legalEntities.filter(function(row){return row.active;}).map(function(row){return'<option value="'+attr(row.code)+'" '+(row.code===currentEntity?'selected':'')+'>'+escAttr(row.code+' '+row.shortName)+'</option>';}).join('');
+    var currentEntities=unit?(unit.entity_codes||[]):(parent?membershipOrgEngine().effectiveEntityScope(graph,parent.id).entityCodes:[]);
+    if(el('org-unit-edit-scope'))el('org-unit-edit-scope').value=unit?(unit.entity_scope_mode||'inherit'):'explicit';
+    entityBox.innerHTML=graph.legalEntities.filter(function(row){return row.active||currentEntities.indexOf(row.code)>-1;}).map(function(row){return'<option value="'+attr(row.code)+'" '+(currentEntities.indexOf(row.code)>-1?'selected':'')+'>'+escAttr(row.code+' '+row.shortName)+(row.active?'':'（已停用）')+'</option>';}).join('');
   }
   if(el('org-unit-edit-parent'))el('org-unit-edit-parent').innerHTML=membershipOrgEditorParentOptions(graph,unit?unit.parent_org_unit_id:parentId,type,unit&&unit.id);
   if(el('org-unit-edit-code'))el('org-unit-edit-code').value=unit?unit.code:'';
@@ -34979,24 +34986,26 @@ function membershipOrgApplyUnitPeople(unit,headId,memberIds){
 }
 window.saveMembershipOrgUnitEditor=async function(){
   var errorBox=el('org-unit-edit-error'),editId=(el('org-unit-edit-id')||{}).value||'',name=((el('org-unit-edit-name')||{}).value||'').trim(),type=(el('org-unit-edit-type')||{}).value||'',parentId=(el('org-unit-edit-parent')||{}).value||'',entity=(el('org-unit-edit-entity')||{}).value||'',code=((el('org-unit-edit-code')||{}).value||'').trim().toUpperCase(),headId=(el('org-unit-edit-head')||{}).value||'',memberIds=Array.from((el('org-unit-edit-members')||{}).selectedOptions||[]).map(function(option){return option.value;});
+  var scopeMode=(el('org-unit-edit-scope')||{}).value||'explicit',entityCodes=Array.from((el('org-unit-edit-entity')||{}).selectedOptions||[]).map(function(option){return option.value;}).filter(Boolean);
+  var previousSnapshot=cloneSettingValue(MEMBERSHIP_ORG_DRAFT.snapshot);
   try{
-    if(!name||!type||(!parentId&&type!=='shareholders')||!entity)throw new Error('請完整填寫單位名稱、層級、上一階單位與歸屬公司。');
+    if(!name||!type||(!parentId&&type!=='shareholders')||['inherit','all','explicit'].indexOf(scopeMode)<0||scopeMode==='explicit'&&!entityCodes.length)throw new Error('請完整填寫單位名稱、層級、上一階單位與公司範圍。');
     if(!headId&&type!=='shareholders')throw new Error('請選擇單位主管；如職務暫時空缺，請先指定代理主管再發布。');
     if(!code||code==='正在產生…')await refreshMembershipOrgUnitEditorCode();
     code=((el('org-unit-edit-code')||{}).value||'').trim().toUpperCase();
     if(!code)throw new Error('正式系統未能產生單位代碼，請稍後再試。');
     var unit=editId?membershipOrgDraftUnit(editId):null;
     if(!unit){
-      unit={id:membershipOrgDraftUuid(),code:code,name:name,unit_type:type,parent_org_unit_id:parentId,parent_code:null,sort_order:(MEMBERSHIP_ORG_DRAFT.snapshot.units||[]).filter(function(row){return String(row.parent_org_unit_id)===String(parentId);}).length*10+10,is_posting_unit:!!((el('org-unit-edit-posting')||{}).checked),entity_scope_mode:'explicit',entity_codes:[entity],active:true,legacy_department_code:code,metadata:{source:'backoffice_unit_editor'}};
+      unit={id:membershipOrgDraftUuid(),code:code,name:name,unit_type:type,parent_org_unit_id:parentId,parent_code:null,sort_order:(MEMBERSHIP_ORG_DRAFT.snapshot.units||[]).filter(function(row){return String(row.parent_org_unit_id)===String(parentId);}).length*10+10,is_posting_unit:!!((el('org-unit-edit-posting')||{}).checked),entity_scope_mode:scopeMode,entity_codes:entityCodes,active:true,legacy_department_code:code,metadata:{source:'backoffice_unit_editor'}};
       MEMBERSHIP_ORG_DRAFT.snapshot.units.push(unit);
     }else{
       unit.name=name;unit.unit_type=type;unit.parent_org_unit_id=parentId;unit.parent_code=null;
-      if(unit.entity_scope_mode!=='all'){unit.entity_scope_mode='explicit';unit.entity_codes=[entity];}
+      unit.entity_scope_mode=scopeMode;unit.entity_codes=entityCodes;
       unit.is_posting_unit=!!((el('org-unit-edit-posting')||{}).checked)&&['department','section','team'].indexOf(type)>-1;
     }
     membershipOrgApplyUnitPeople(unit,headId,memberIds);
     MEMBERSHIP_ORG_DRAFT.dirty=true;MEMBERSHIP_ORG_DRAFT.validation=null;closeModal('m-org-unit-editor');renderMembershipOrgManager();
-  }catch(err){if(errorBox){errorBox.style.display='block';errorBox.textContent=err.message||String(err);}}
+  }catch(err){MEMBERSHIP_ORG_DRAFT.snapshot=previousSnapshot;if(errorBox){errorBox.style.display='block';errorBox.textContent=err.message||String(err);}}
 };
 window.membershipOrgAddChild=function(parentId){return openMembershipOrgUnitEditor(parentId,'');};
 window.membershipOrgToggleUnit=function(id){var unit=membershipOrgDraftUnit(id);if(!unit)return;unit.active=!unit.active;MEMBERSHIP_ORG_DRAFT.dirty=true;MEMBERSHIP_ORG_DRAFT.validation=null;renderMembershipOrgManager();};
@@ -35040,20 +35049,20 @@ window.membershipOrgDragOver=function(event,targetId){if(!MEMBERSHIP_ORG_DRAFT.d
 window.membershipOrgDragLeave=function(event){event.currentTarget.classList.remove('drag-over');};
 window.membershipOrgDrop=function(event,targetId){event.preventDefault();event.currentTarget.classList.remove('drag-over');var source=MEMBERSHIP_ORG_DRAFT.dragUnitId;MEMBERSHIP_ORG_DRAFT.dragUnitId='';if(source&&source!==targetId)membershipOrgMoveUnit(source,targetId);};
 window.saveMembershipOrgDraft=async function(){
-  var draft=MEMBERSHIP_ORG_DRAFT.version;if(!draft)return;
+  var draft=MEMBERSHIP_ORG_DRAFT.version;if(!draft)return false;
   var response=await getSb().rpc('membership_org_save_draft',{p_version_id:draft.id,p_etag:draft.etag,p_snapshot:MEMBERSHIP_ORG_DRAFT.snapshot,p_title:draft.title,p_reason:draft.reason,p_effective_at:draft.effective_at});
-  if(response.error)return alert('儲存失敗：'+friendlyErrorMessage(response.error,{action:'儲存組織草稿'}));
-  MEMBERSHIP_ORG_DRAFT.version=response.data.version;MEMBERSHIP_ORG_DRAFT.snapshot=response.data.snapshot;MEMBERSHIP_ORG_DRAFT.impact=response.data.impact;MEMBERSHIP_ORG_DRAFT.dirty=false;MEMBERSHIP_ORG_DRAFT.validation=null;renderMembershipOrgManager();setTopSyncStatus('組織草稿已儲存');
+  if(response.error){alert('儲存失敗：'+friendlyErrorMessage(response.error,{action:'儲存組織草稿'}));return false;}
+  MEMBERSHIP_ORG_DRAFT.version=response.data.version;MEMBERSHIP_ORG_DRAFT.snapshot=response.data.snapshot;MEMBERSHIP_ORG_DRAFT.impact=response.data.impact;MEMBERSHIP_ORG_DRAFT.dirty=false;MEMBERSHIP_ORG_DRAFT.validation=null;renderMembershipOrgManager();setTopSyncStatus('組織草稿已儲存');return true;
 };
 window.validateMembershipOrgDraft=async function(){
-  if(MEMBERSHIP_ORG_DRAFT.dirty)await saveMembershipOrgDraft();
+  if(MEMBERSHIP_ORG_DRAFT.dirty&&!await saveMembershipOrgDraft())return;
   var response=await getSb().rpc('membership_org_validate_draft',{p_version_id:MEMBERSHIP_ORG_DRAFT.version.id});
   if(response.error)return alert('驗證失敗：'+friendlyErrorMessage(response.error,{action:'驗證組織草稿'}));
   MEMBERSHIP_ORG_DRAFT.version=response.data.version;MEMBERSHIP_ORG_DRAFT.validation=response.data.validation;MEMBERSHIP_ORG_DRAFT.impact=response.data.impact;renderMembershipOrgManager();
   alert((response.data.ok?'驗證通過':'驗證未通過')+'\n\n錯誤：'+((response.data.validation.errors||[]).join('\n')||'無')+'\n\n提醒：'+((response.data.validation.warnings||[]).join('\n')||'無')+'\n\n影響：'+JSON.stringify(response.data.impact||{}));
 };
 window.submitMembershipOrgDraft=async function(){
-  if(MEMBERSHIP_ORG_DRAFT.dirty)await saveMembershipOrgDraft();
+  if(MEMBERSHIP_ORG_DRAFT.dirty&&!await saveMembershipOrgDraft())return;
   if(!confirm('確定送交執行長核准？送審後草稿將暫時鎖定。'))return;
   var response=await getSb().rpc('membership_org_submit_draft',{p_version_id:MEMBERSHIP_ORG_DRAFT.version.id});
   if(response.error)return alert('送審失敗：'+friendlyErrorMessage(response.error,{action:'送審組織草稿'}));
@@ -35477,7 +35486,7 @@ function setOrgSupervisorForUser(userId,supervisorId){
     alert(blocked);
     return false;
   }
-  ORG_CHART=orgRowsAfterSupervisorDrop(userId,supervisorId,rows);
+  ORG_CHART=orgRowsAfterSupervisorDrop(userId,supervisorId,rows);ORG_CHART_DIRTY=true;
   buildOrgChart();
   return true;
 }
@@ -35854,7 +35863,7 @@ function syncOrgRowMeta(userId,patch){
     return Object.assign({},row,patch||{});
   });
   if(!found)rows.push(Object.assign(orgChartRowPayload(user,orgSupervisorUser(orgRowForUser(userId)||{}),orgRowForUser(userId)||{}),patch||{}));
-  ORG_CHART=normalizeOrgChartRows(rows);
+  ORG_CHART=normalizeOrgChartRows(rows);ORG_CHART_DIRTY=true;
   buildOrgChart();
   return true;
 }
@@ -36152,6 +36161,7 @@ function buildOrgChart(){
       +'</div>';
   }
   scheduleOrgChartConnectors();
+  if(ORG_CHART_CONFLICT)orgSetDragStatus('error','主管圖已在其他視窗更新；目前編輯仍保留，請重新載入後核對再儲存。');
   var summary=el('org-summary');
   var relationCount=Math.max(0,activeUsers.length-roots.length);
   if(summary)summary.textContent=activeUsers.length+' 位啟用人員 · '+relationCount+' 條主管關係';
@@ -36208,8 +36218,10 @@ window.saveOrgChart=async function(){
   }
   var client=getSb();
   if(!client){alert('組織圖沒有儲存成功：目前沒有連上正式資料庫。');return;}
-  var saved=await client.rpc('finance_save_org_chart_atomic',{
+  if(!ORG_CHART_REVISION){alert('尚未取得主管圖來源版本，請重新載入後再修改；本次尚未儲存。');return;}
+  var saved=await client.rpc('finance_save_org_chart_versioned_v2',{
     p_rows:data,
+    p_expected_revision:ORG_CHART_REVISION,
     p_summary:'更新人員主管圖與簽核主管關係'
   });
   if(saved.error){
@@ -36226,13 +36238,14 @@ window.saveOrgChart=async function(){
     throw new Error(msg);
   }
   var savedPayload=saved.data||{};
+  ORG_CHART_REVISION=savedPayload.org_revision||'';
   var savedRows=normalizeOrgChartRuntimeRows(savedPayload.rows?savedPayload.rows:savedPayload);
   if(!savedRows){
     await refreshOrgChartRowsFromRuntime(client,'organization_chart_atomic_invalid_payload');
     buildOrgChart();
     throw new Error('人員主管圖已送出，但伺服器沒有回傳可驗證的正式主管資料。');
   }
-  ORG_CHART=savedRows;
+  ORG_CHART=savedRows;ORG_CHART_DIRTY=false;ORG_CHART_CONFLICT=false;
   ORG_CHART_PERSISTED=cloneSettingValue(savedRows);
   SYSTEM_SETTINGS.organization_chart=cloneSettingValue(ORG_CHART);
   var versionNo=savedPayload.version_no||savedPayload.versionNo||'';
@@ -36249,7 +36262,7 @@ window.saveOrgChart=async function(){
       dataEnv:activeDataEnvironment()
     });
   }
-  var orgSync=await syncApprovalOrgSettingsFromSettings('organization_chart_save');
+  var orgSync=await refreshMembershipOrgGraph('organization_chart_save');
   await refreshOrgChartRowsFromRuntime(client,'organization_chart_save');
   await auditLog('更新組織圖','組織圖','調整簽核主管辨識關係',{period:todayMonth()});
   buildOrgChart();
