@@ -30,6 +30,12 @@ async function scoped(code){
   await browser('wait','--load','networkidle');
   await browser('snapshot','-i');
   assert.equal((await browser('errors')).trim(),'','initial app has no JavaScript error');
+  await browser('set','viewport','390','844');
+  const mobile=JSON.parse(await browser('eval',"JSON.stringify({height:document.getElementById('login-switch-account').getBoundingClientRect().height,overflow:document.documentElement.scrollWidth>innerWidth})"));
+  const mobileResult=typeof mobile==='string'?JSON.parse(mobile):mobile;
+  assert.ok(mobileResult.height>=44,'account switch touch area');assert.equal(mobileResult.overflow,false,'mobile horizontal overflow');
+  console.log('PASS mobile login: 390px layout and 44px account-switch touch target');
+  await browser('set','viewport','1440','1000');
   const results=await scoped(`(async()=>{
     quickLogin('employee');
     S.user.authUserId='10000000-0000-0000-0000-000000000001';S.user.tenantId=currentTenantId();

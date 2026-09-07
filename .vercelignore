@@ -50,3 +50,25 @@ docs/*
 assets/.DS_Store
 supabase/.branches
 supabase/.temp
+
+# Focused audit regressions and their anonymized SQL fixtures.
+!scripts/fixtures
+!scripts/fixtures/**
+!scripts/check_finance_auth_recovery_regressions.js
+!scripts/test_current_identity_runtime_sql.mjs
+!scripts/check_finance_org_regressions.js
+!scripts/check_procurement_human_event_contract.js
+!scripts/check_expense_accounting_corrections.js
+!scripts/check_receipt_atomic_workflow.js
+!scripts/check_receipt_notification_ui.js
+!scripts/test_hris_attendance_identity_boundary.mjs
+!scripts/test_html_render_security.cjs
+!scripts/test_diagnostic_outbox.cjs
+!scripts/test_audit_release_batch.mjs
+!scripts/finance_audit_20260907_fingerprint.sql
+!scripts/finance_audit_20260907_postflight.sql
+!scripts/finance_org_integrity_postflight.sql
+!scripts/finance_approval_audit_postflight.sql
+!scripts/fixtures/hris_attendance_live_baseline_20260907.sql
+!scripts/fixtures/finance_procurement_guard_20260907.sql
+!scripts/fixtures/finance_correction_dependencies_20260907.sql

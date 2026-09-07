@@ -83,3 +83,30 @@ v3 會重新解析正式直屬主管與唯一部門主管，只有可稽核的�
 若整個 workflow 被人為選擇「Re-run all jobs」，會建立新的候選；這不等同原 candidate 的復原路徑。DB ledger 已套用時仍會阻止重複 mutation，但操作上應一律優先使用 **Re-run failed jobs** 續跑原 `promote` job。
 
 此文件與 workflow 只建立程式內的 gate；若 GitHub Environment required reviewers、branch restriction 或最小權限 secrets 尚未由平台管理者設定，不得宣稱平台層硬閘門已啟用。
+
+
+## 2026-09-08 audit repair release
+
+The `database_audit_20260907` phase accepts only the complete ordered batch
+`20260907154404,20260907154739,20260907154742,20260907154743,20260907154758,20260907154759`.
+It requires the entire previously reviewed production ledger. A partial batch is
+rejected. The sealed candidate is built before mutation. The database job runs
+all six migrations, read-only audit postflight, and authenticated canary inside a
+rollback rehearsal, comparing schema, privileges, triggers and affected data
+fingerprints before and after. Formal apply commits all six migrations and their
+ledger rows in one transaction; its final audit postflight must pass before COMMIT.
+Promotion consumes the same candidate, repeats read-only gates and verifies the
+production domain's manifest. An already applied batch is verified without reapply.
+
+Subsequent `frontend_compat` releases require the entire audit batch and run the
+additional audit postflight. The historical v3/human phases remain recorded for
+lineage compatibility; they cannot install any audit migration individually.
+
+Local PGlite fixtures are isolated behavior tests. They do not replace the live
+rollback rehearsal or authenticated staff browser acceptance. Google OAuth
+acceptance needs an authorized user's interactive session; never simulate a
+real login by injecting a production token or rewriting an identity.
+
+For this candidate, `validate-target` also rejects archived `database_v3` and
+`database_human_accounting` dispatches. Their code remains only for historical
+lineage tests; the current UI offers audit-batch or fully compatible frontend releases.

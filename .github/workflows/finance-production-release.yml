@@ -13,8 +13,6 @@ on:
         type: choice
         options:
           - frontend_compat
-          - database_v3
-          - database_human_accounting
           - database_audit_20260907
       migration_versions:
         description: frontend_compat=none; database_v3=20260827052447; database_human_accounting=20260902054834; audit=20260907154404,20260907154739,20260907154742,20260907154743,20260907154758,20260907154759
