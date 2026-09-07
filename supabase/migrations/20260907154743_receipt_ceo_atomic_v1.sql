@@ -100,6 +100,63 @@ returns boolean language sql immutable set search_path='' as $f$
  and not exists(select 1 from jsonb_array_elements(p_steps) s where coalesce(s->>'a','')<>'approved' and not(coalesce(s->>'rk','')='applicant_invoice_delivery' and coalesce(s->>'a','')=''));
 $f$;
 
+-- Receipt of an already recognized receivable belongs to today's cash period.
+-- Validate the existing ledger without reopening or reposting its invoice period.
+-- Three historical key families are supported, each as one complete set; keys
+-- never substitute for tenant/environment/source/entity/amount verification.
+create function private.finance_receipt_revenue_ready_v1(p_invoice_id text)
+returns jsonb language plpgsql security definer set search_path='' as $f$
+declare i public.invoices%rowtype;v_total numeric;v_tax numeric;v_net numeric;v_version integer;
+ v_prefix text;v_keys text[];v_family_ok boolean;v_matches integer:=0;
+begin
+ select * into i from public.invoices where id=p_invoice_id and tenant_id=public.current_tenant_id() for update;
+ if not found or not public.can_read_invoice(i) then raise exception '找不到本租戶可核對的發票收入紀錄' using errcode='42501';end if;
+ if not (coalesce(i.revenue_posted,false) or i.revenue_posted_at is not null or coalesce(i.revenue_posting_state,'')='posted') then
+  -- This remains the full production writer, including approval, original
+  -- invoice-period, active recognition rule, account and partial-ledger guards.
+  return private.post_invoice_revenue_v2_internal(i.id,true);
+ end if;
+ if i.voided_at is not null or coalesce(i.revenue_posted,false) is not true or i.revenue_posted_at is null
+  or coalesce(i.revenue_posting_state,'')<>'posted' then
+  raise exception '收入認列旗標不一致，請先核對原收入傳票；收款尚未入帳' using errcode='23514';
+ end if;
+ v_total:=coalesce(i.total,i.amount,0);v_tax:=coalesce(i.tax,0);v_net:=v_total-v_tax;
+ if v_total<=0 or v_tax<0 or v_net<=0 or nullif(i.revenue_account_code,'') is null then
+  raise exception '原發票收入／稅額／科目不完整，收款尚未入帳' using errcode='23514';
+ end if;
+ v_version:=greatest(2,coalesce(i.revenue_posting_version,2));
+ foreach v_prefix in array array[
+  'tenant:'||i.tenant_id::text||':invoice:'||i.no||':revenue:v'||v_version,
+  'invoice:'||i.no||':revenue:v'||v_version,
+  'invoice:'||i.no||':revenue'
+ ] loop
+  v_keys:=array[v_prefix||':ar',v_prefix||':income',v_prefix||':output_tax'];
+  select count(*)=case when v_tax>0 then 3 else 2 end
+   and count(*) filter(where l.source_type='invoice' and l.source_id=i.id and l.reference_no=i.no
+    and l.entity_id=i.entity_id and l.department_code is not distinct from i.department_code)=count(*)
+   and count(*) filter(where l.posting_key=v_keys[1] and l.account_code='1123' and abs(coalesce(l.debit,0)-v_total)<=0.01 and coalesce(l.credit,0)=0)=1
+   and count(*) filter(where l.posting_key=v_keys[2] and l.account_code=i.revenue_account_code and abs(coalesce(l.credit,0)-v_net)<=0.01 and coalesce(l.debit,0)=0)=1
+   and ((v_tax=0 and count(*) filter(where l.posting_key=v_keys[3])=0)
+     or (v_tax>0 and count(*) filter(where l.posting_key=v_keys[3] and l.account_code='2134' and abs(coalesce(l.credit,0)-v_tax)<=0.01 and coalesce(l.debit,0)=0)=1))
+   and abs(coalesce(sum(l.debit),0)-coalesce(sum(l.credit),0))<=0.01 into v_family_ok
+  from public.ledger_entries l where l.tenant_id=i.tenant_id and l.data_environment=i.data_environment
+   and l.voided_at is null and l.posting_key=any(v_keys);
+  if v_family_ok then
+   if exists(select 1 from public.ledger_entries l where l.tenant_id=i.tenant_id and l.data_environment=i.data_environment
+    and l.source_type='invoice' and l.source_id=i.id and l.voided_at is null
+    and position(':revenue:' in coalesce(l.posting_key,''))>0 and not(l.posting_key=any(v_keys))) then
+    raise exception '原收入存在重複或混用版本分錄，收款尚未入帳' using errcode='23514';
+   end if;
+   v_matches:=v_matches+1;
+  end if;
+ end loop;
+ if v_matches<>1 then
+  raise exception '收入認列旗標與應收／收入／銷項稅完整分錄不一致，收款尚未入帳' using errcode='23514';
+ end if;
+ return jsonb_build_object('ok',true,'idempotent',true,'deferred',false,'invoice_id',i.id,'existing_revenue_verified',true);
+end;
+$f$;
+
 create function public.finance_invoice_receipt_action_v1(
  p_invoice_ids text[],p_action text,p_idempotency_key text,p_expected_versions jsonb,
  p_note text default '',p_files jsonb default '[]',p_data_environment text default 'production')
@@ -182,7 +239,7 @@ begin
    -- Explicit validation below makes that failure abort this entire receipt.
    update public.invoices set status='paid',paid_at=v_now,receipt_reviewed_at=v_now,receipt_reviewed_by=a.name,receipt_review_note=coalesce(p_note,''),
     cash_receipt_posted_at=v_now,steps=v_steps,approval_status='completed',approval_step=jsonb_array_length(v_steps),updated_at=v_now where id=i.id;
-   v_result:=private.post_invoice_revenue_v2_internal(i.id,true);
+   v_result:=private.finance_receipt_revenue_ready_v1(i.id);
    if v_result->>'ok' is distinct from 'true' or coalesce((v_result->>'deferred')::boolean,false) then
     raise exception '收入認列尚未完成，收款整批未入帳' using errcode='23514';
    end if;
@@ -207,7 +264,7 @@ create or replace function public.post_invoice_cash_receipt(p_invoice_id text,p_
 returns jsonb language plpgsql set search_path='' as $f$
 begin raise exception '收款覆核已更新，請重新載入頁面並使用執行長確認收款功能；本次未入帳' using errcode='55000',detail='RECEIPT_ATOMIC_ACTION_REQUIRED';end;
 $f$;
-revoke all on function private.finance_receipt_write_allowed_v1(uuid,text,text),private.finance_receipt_guard_v1(),private.finance_receipt_ledger_guard_v1(),private.finance_receipt_files_valid_v1(public.invoices,jsonb,text),private.finance_receipt_route_ready_v1(jsonb) from public,anon,authenticated,service_role;
+revoke all on function private.finance_receipt_write_allowed_v1(uuid,text,text),private.finance_receipt_guard_v1(),private.finance_receipt_ledger_guard_v1(),private.finance_receipt_files_valid_v1(public.invoices,jsonb,text),private.finance_receipt_route_ready_v1(jsonb),private.finance_receipt_revenue_ready_v1(text) from public,anon,authenticated,service_role;
 revoke all on function public.finance_invoice_receipt_action_v1(text[],text,text,jsonb,text,jsonb,text),public.post_invoice_cash_receipt(text,timestamptz,text,text) from public,anon,service_role;
 grant execute on function public.finance_invoice_receipt_action_v1(text[],text,text,jsonb,text,jsonb,text),public.post_invoice_cash_receipt(text,timestamptz,text,text) to authenticated;
 

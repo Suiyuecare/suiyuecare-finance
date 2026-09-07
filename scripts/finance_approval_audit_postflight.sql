@@ -20,7 +20,7 @@ begin
  foreach v_signature in array array[
   'private.finance_receipt_write_allowed_v1(uuid,text,text)','private.finance_receipt_guard_v1()',
   'private.finance_receipt_ledger_guard_v1()','private.finance_receipt_files_valid_v1(public.invoices,jsonb,text)',
-  'private.finance_receipt_route_ready_v1(jsonb)','private.finance_accounting_human_event_is_fresh_v2(jsonb,jsonb)',
+  'private.finance_receipt_route_ready_v1(jsonb)','private.finance_receipt_revenue_ready_v1(text)','private.finance_accounting_human_event_is_fresh_v2(jsonb,jsonb)',
   'private.finance_correction_role_v1(uuid,text,text,text[])','private.finance_correction_actor_v1()',
   'private.finance_expense_correction_guard_v1()'
  ] loop
@@ -43,7 +43,9 @@ begin
  select prosrc into v_source from pg_proc where oid='private.finance_receipt_write_allowed_v1(uuid,text,text)'::regprocedure;
  if position('writing_transaction=pg_current_xact_id()::text' in v_source)=0 or position('p_id=any(o.invoice_ids)' in v_source)=0 then raise exception 'Receipt capability must bind current transaction and exact source IDs';end if;
  select prosrc into v_source from pg_proc where oid='public.finance_invoice_receipt_action_v1(text[],text,text,jsonb,text,jsonb,text)'::regprocedure;
- if position('p_expected_versions->>v_id' in v_source)=0 or position('for update' in v_source)=0 or position('post_invoice_revenue_v2_internal(i.id,true)' in v_source)=0 then raise exception 'Receipt CAS/locking/revenue contract absent';end if;
+ if position('p_expected_versions->>v_id' in v_source)=0 or position('for update' in v_source)=0 or position('finance_receipt_revenue_ready_v1(i.id)' in v_source)=0 then raise exception 'Receipt CAS/locking/revenue contract absent';end if;
+ select prosrc into v_source from pg_proc where oid='private.finance_receipt_revenue_ready_v1(text)'::regprocedure;
+ if position('post_invoice_revenue_v2_internal(i.id,true)' in v_source)=0 or position('v_matches<>1' in v_source)=0 or position('l.source_id=i.id' in v_source)=0 or position('l.voided_at is null' in v_source)=0 or position('finance_assert_period_open' in v_source)>0 then raise exception 'Existing receipt revenue must verify a complete source-bound family without old-period posting';end if;
  select prosrc into v_source from pg_proc where oid='private.finance_expense_guard_direct_update()'::regprocedure;
  if (length(v_source)-length(replace(v_source,E'        ''accountingLines'',\n        ''accountingLinesPreservedForReview'',','')))/length(E'        ''accountingLines'',\n        ''accountingLinesPreservedForReview'',')<>2 then raise exception 'Both exact procurement payload whitelists must include preservation marker';end if;
  if not private.finance_receipt_route_ready_v1('[{"rk":"accountant_invoice","a":"approved"},{"rk":"applicant_invoice_delivery","a":""}]')
