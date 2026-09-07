@@ -143,9 +143,9 @@ for (const marker of required) assert.ok(workflow.includes(marker), `workflow mi
 assert.ok(releaseGuide.includes('缺少該欄位的舊分頁一律以 `55000` 要求重新整理'));
 assert.ok(releaseGuide.includes('已完成的歷史簽核人與已移除的舊金額關卡保持不可變'));
 assert.ok(releaseGuide.includes('`frontend_compat` | `none`'));
-assert.ok(releaseGuide.includes('`database_v3` | `20260827052447`'));
-assert.ok(releaseGuide.includes('`database_human_accounting` | `20260902054834`'));
-assert.ok(releaseGuide.includes('目前正式庫已完成 v3'));
+assert.ok(releaseGuide.includes('`database_audit_20260907` | `'+guard.AUDIT_MIGRATIONS.join(',')+'`'));
+assert.ok(releaseGuide.includes('歷史紀錄：`database_v3`（此版本不接受 dispatch）'));
+assert.ok(releaseGuide.includes('歷史紀錄：`database_human_accounting`（此版本不接受 dispatch）'));
 assert.ok(releaseGuide.includes('20260828015718_repair_admin_ntpc_portal_employee_link_20260828'));
 assert.ok(releaseGuide.includes('20260901073241_assign_ceo_cashier_and_reassign_pending_cashier'));
 assert.ok(releaseGuide.includes('目前只接受 `applied` recovery 路徑'));
