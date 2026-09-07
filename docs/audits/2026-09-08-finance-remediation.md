@@ -40,7 +40,8 @@
 ## 驗收方式與界線
 
 `pnpm test:audit-remediation` 執行 Node 與 PGlite 隔離案例；
-`node scripts/check_finance_auth_recovery_browser.cjs` 執行實際瀏覽器 DOM、重載與換帳號鎖定案例。
+`node scripts/check_finance_auth_recovery_browser.cjs` 執行實際瀏覽器 DOM、重載與換帳號鎖定案例；
+`node scripts/check_finance_approval_runtime_browser.cjs` 驗證實際主程式與通知、更正、收款引擎的連接、手機畫面和更正視窗身分鎖定。
 PGlite 使用匿名 fixtures，不能代表正式完整 schema 或真人 Google OAuth 驗收。
 新選取的 File bytes 若未上傳，跨整頁重載需重新選取，畫面會明示；不誤稱檔案內容已恢復。
 

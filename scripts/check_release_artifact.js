@@ -148,6 +148,8 @@ function releaseSourceFiles() {
     'scripts/finance_production_release_guard.js',
     'scripts/check_approval_postflight.js',
     'scripts/check_finance_auth_recovery_regressions.js',
+    'scripts/check_finance_auth_recovery_browser.cjs',
+    'scripts/check_finance_approval_runtime_browser.cjs',
     'scripts/test_current_identity_runtime_sql.mjs',
     'scripts/check_finance_org_regressions.js',
     'scripts/check_procurement_human_event_contract.js',
