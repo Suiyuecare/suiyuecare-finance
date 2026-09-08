@@ -8,14 +8,14 @@ on:
         required: true
         type: string
       release_phase:
-        description: frontend_compat publishes UI after all audit migrations; database_audit_20260907 applies the fixed complete audit batch
+        description: frontend_compat publishes UI after all reviewed migrations; database_cases_20260908 applies the exact accounting fix
         required: true
         type: choice
         options:
           - frontend_compat
-          - database_audit_20260907
+          - database_cases_20260908
       migration_versions:
-        description: frontend_compat=none; audit=20260907154404,20260907154739,20260907154742,20260907154743,20260907154758,20260907154759
+        description: frontend_compat=none; database_cases_20260908=20260908065050
         required: true
         type: string
       confirmation:
@@ -170,6 +170,9 @@ jobs:
           cp scripts/finance_production_db_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_audit_20260907_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_audit_20260907_fingerprint.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_cases_20260908_fingerprint.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_finalize_accounting_lines_postflight.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_finalize_accounting_lines_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_production_authenticated_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_production_human_accounting_canary.sql "$BUNDLE/release-tools/scripts/"
           cp supabase/config.toml "$BUNDLE/release-tools/supabase/config.toml"
@@ -397,6 +400,23 @@ jobs:
           if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then
             run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
               "$RUNNER_TEMP/finance-compatibility-gate.sql" "$RUNNER_TEMP/finance-compatibility-gate.json"
+          elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_cases_20260908"; then
+            node "$GUARD" prepare-phase-query --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
+              --output "$RUNNER_TEMP/finance-cases-prerequisites.sql" \
+              --release-phase database_audit_20260907 \
+              --migration-versions 20260907154404,20260907154739,20260907154742,20260907154743,20260907154758,20260907154759
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-cases-prerequisites.sql" --output json) > "$RUNNER_TEMP/cases-prerequisites.json"
+            node "$GUARD" prepare-cases-rehearsal --migration-dir "$TOOLS/supabase/migrations" \
+              --output "$RUNNER_TEMP/finance-cases-rehearsal.sql" --migration-versions "$MIGRATION_VERSIONS" \
+              --fingerprint "$TOOLS/scripts/finance_cases_20260908_fingerprint.sql" \
+              --authenticated-canary "$TOOLS/scripts/finance_production_authenticated_canary.sql" \
+              --case-canary "$TOOLS/scripts/finance_finalize_accounting_lines_canary.sql" \
+              --case-postflight "$TOOLS/scripts/finance_finalize_accounting_lines_postflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-cases-rehearsal.sql" --output json) > "$RUNNER_TEMP/cases-rehearsal.json"
+            node "$GUARD" prepare-cases-apply --migration-dir "$TOOLS/supabase/migrations" \
+              --output "$RUNNER_TEMP/finance-cases-apply.sql" --migration-versions "$MIGRATION_VERSIONS" --ledger "$LEDGER" \
+              --case-postflight "$TOOLS/scripts/finance_finalize_accounting_lines_postflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-cases-apply.sql" --output json) > "$RUNNER_TEMP/cases-apply.json"
           elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_audit_20260907"; then
             node "$GUARD" prepare-gate-query --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
               --output "$RUNNER_TEMP/finance-audit-existing-v3.sql" --migration-versions 20260827052447
@@ -451,7 +471,7 @@ jobs:
             node "$GUARD" prepare-apply --migration "$MIGRATION" --output "$APPLY" \
               --migration-version "$MIGRATION_VERSIONS" --ledger "$LEDGER"
             (cd "$TOOLS" && supabase db query --linked --file "$APPLY" --output json) > "$RUNNER_TEMP/apply-result.json"
-          elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907"; }; then
+          elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908"; }; then
             echo "Exact DB phase is already applied; recovering with postflight only and no mutation."
           else
             echo "Unexpected phase state: $PHASE_STATE" >&2
@@ -470,7 +490,14 @@ jobs:
             --output json) > "$RUNNER_TEMP/authenticated-canary-after.json"
           node "$GUARD" verify-authenticated-canary \
             --input "$RUNNER_TEMP/authenticated-canary-after.json"
-          if test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "frontend_compat" || test "$RELEASE_PHASE" = "database_audit_20260907"; then
+          if test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "frontend_compat"; then
+            (cd "$TOOLS" && supabase db query --linked \
+              --file scripts/finance_finalize_accounting_lines_canary.sql \
+              --output json) > "$RUNNER_TEMP/finalize-accounting-canary.json"
+            node "$GUARD" verify-finalize-canary \
+              --input "$RUNNER_TEMP/finalize-accounting-canary.json"
+          fi
+          if test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "frontend_compat" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908"; then
             node "$GUARD" prepare-read-only-query \
               --input "$TOOLS/scripts/finance_production_human_accounting_canary.sql" \
               --output "$RUNNER_TEMP/human-accounting-canary.sql"
@@ -603,7 +630,14 @@ jobs:
             --output json) > "$RUNNER_TEMP/promotion-authenticated-canary.json"
           node "$GUARD" verify-authenticated-canary \
             --input "$RUNNER_TEMP/promotion-authenticated-canary.json"
-          if test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "frontend_compat" || test "$RELEASE_PHASE" = "database_audit_20260907"; then
+          if test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "frontend_compat"; then
+            (cd "$TOOLS" && supabase db query --linked \
+              --file scripts/finance_finalize_accounting_lines_canary.sql \
+              --output json) > "$RUNNER_TEMP/promotion-finalize-accounting-canary.json"
+            node "$GUARD" verify-finalize-canary \
+              --input "$RUNNER_TEMP/promotion-finalize-accounting-canary.json"
+          fi
+          if test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "frontend_compat" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908"; then
             node "$GUARD" prepare-read-only-query \
               --input "$TOOLS/scripts/finance_production_human_accounting_canary.sql" \
               --output "$RUNNER_TEMP/promotion-human-accounting-canary.sql"

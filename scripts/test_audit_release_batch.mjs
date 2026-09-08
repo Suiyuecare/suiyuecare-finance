@@ -54,6 +54,8 @@ fs.writeFileSync(ledger,[...legacy,...guard.AUDIT_MIGRATIONS.slice(0,2)].join('\
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),/partially installed/);
 fs.writeFileSync(ledger,[...legacy,...guard.AUDIT_MIGRATIONS].join('\n')+'\n');
 assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'applied');
+assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/database cases migration batch/);
+fs.writeFileSync(ledger,[...legacy,...guard.AUDIT_MIGRATIONS,...guard.CASE_MIGRATIONS].join('\n')+'\n');
 assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
 fs.unlinkSync(finalFile);assert.throws(()=>guard.readAuditBatch(migrationDir,versions),/missing/);
 await db.close();fs.rmSync(dir,{recursive:true});
