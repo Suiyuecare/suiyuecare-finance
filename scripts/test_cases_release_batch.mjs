@@ -76,10 +76,62 @@ try{
  assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'applied');
  assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
  assert.throws(()=>guard.prepareAuditBatchApply(migrationDir,path.join(dir,'again.sql'),versions,ledger,postflight,baseline,phase),/must be pending/);
- const output=sql('canary.json',JSON.stringify({rows:[{finalize_accounting_canary_result:{canary:'authenticated_finalize_accounting_lines',ok:true,rolled_back:true,accounting_lines_consistent:true}}]}));
- assert.equal(guard.verifyFinalizeCanary(output),true);
- for(const value of [{}, {rows:[{finalize_accounting_canary_result:{ok:true}}]}, {rows:[{finalize_accounting_canary_result:{canary:'authenticated_finalize_accounting_lines',ok:true,rolled_back:false,accounting_lines_consistent:true}}]}]){
-  fs.writeFileSync(output,JSON.stringify(value));assert.throws(()=>guard.verifyFinalizeCanary(output));
+ const expectedCanary={canary:'authenticated_finalize_accounting_lines',ok:true,rolled_back:true,accounting_lines_consistent:true};
+ const marker='finalize_accounting_canary_result';
+ const row=value=>({[marker]:value});
+ // Supabase CLI 2.111.0 db query --output json emits rows as a top-level
+ // array; this was rejected before marker validation in release 34199215678.
+ // Also retain the nested transport and jsonb-as-string shapes handled by the
+ // established authenticated canary parser.
+ const output=sql('canary.json','[]');
+ const accepted=[
+   [row(expectedCanary)],
+   {rows:[row(expectedCanary)]},
+   [{rows:[row(expectedCanary)]}],
+   {results:[{rows:[row(expectedCanary)]}]},
+   [row(JSON.stringify(expectedCanary))],
+   {rows:[row(JSON.stringify(expectedCanary))]}
+ ];
+ for(const value of accepted){
+   fs.writeFileSync(output,JSON.stringify(value));
+   assert.equal(guard.verifyFinalizeCanary(output),true,'valid CLI transport '+JSON.stringify(value));
  }
+ const rejected=[
+   {}, [], null, false, true, 1, 'transport is not a row set',
+   expectedCanary, [{authenticated_canary_result:expectedCanary}],
+   [row(expectedCanary),row(expectedCanary)],
+   {rows:[row(expectedCanary)],nested:{rows:[row(expectedCanary)]}},
+   [row({...expectedCanary,nested:row(expectedCanary)})],
+   [row(null)], [row(false)], [row([])], [row({})], [row('{malformed')],
+   [row({...expectedCanary,canary:'authenticated_submit_return_resubmit'})],
+   [row({...expectedCanary,ok:false})],
+   [row({...expectedCanary,rolled_back:false})],
+   [row({...expectedCanary,accounting_lines_consistent:false})],
+   [row({...expectedCanary,ok:'true'})],
+   [row({...expectedCanary,rolled_back:1})],
+   [row({...expectedCanary,accounting_lines_consistent:'true'})],
+   [row({...expectedCanary,unexpected:true})],
+   ...Object.keys(expectedCanary).map(key=>[row(Object.fromEntries(Object.entries(expectedCanary).filter(([name])=>name!==key)))])
+ ];
+ for(const value of rejected){
+   fs.writeFileSync(output,JSON.stringify(value));
+   assert.throws(()=>guard.verifyFinalizeCanary(output),'invalid marker/result must fail: '+JSON.stringify(value));
+ }
+ for(const text of ['', '   ', '[', '{', 'not-json']){
+   fs.writeFileSync(output,text);
+   assert.throws(()=>guard.verifyFinalizeCanary(output),/not valid JSON/);
+ }
+ // The production CLI entrypoint must accept the same actual row shape and
+ // return a nonzero exit for duplicated markers; unit-only coverage missed the
+ // transport boundary during the original release.
+ const guardPath=fileURLToPath(new URL('./finance_production_release_guard.js',import.meta.url));
+ const {spawnSync}=await import('node:child_process');
+ fs.writeFileSync(output,JSON.stringify([row(expectedCanary)]));
+ let cli=spawnSync(process.execPath,[guardPath,'verify-finalize-canary','--input',output],{encoding:'utf8'});
+ assert.equal(cli.status,0,cli.stderr);
+ fs.writeFileSync(output,JSON.stringify([row(expectedCanary),row(expectedCanary)]));
+ cli=spawnSync(process.execPath,[guardPath,'verify-finalize-canary','--input',output],{encoding:'utf8'});
+ assert.notEqual(cli.status,0);assert.match(cli.stderr,/exactly one result/);
+ console.log('PASS finalize canary parser: 6 valid CLI transports, '+rejected.length+' invalid marker/result shapes, 5 malformed inputs and CLI exit statuses');
  console.log('PASS cases release: exact one-migration phase, complete audit prerequisites, full accounting fingerprint rollback, both canary contracts, atomic SQL+ledger+postflight, stale ledger and reapply rejection');
 }finally{await db.close();fs.rmSync(dir,{recursive:true});}
