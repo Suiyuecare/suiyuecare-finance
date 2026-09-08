@@ -70,7 +70,25 @@ async function scoped(code){
  assert.equal(lockedReopen,true,'locked identity cannot reopen a native top-layer dialog');
  const resumed=await scoped(`(function(){setFinanceWorkspaceIdentityBlocked(false);var d=document.querySelector('dialog[data-finance-approval-dialog]');return {open:d.open,text:d.querySelector('[data-reason]').value};})()`);
  assert.deepEqual(resumed,{open:true,text:'保留本機更正理由'});
+ // Closed request display must read saved human lines and the exact voucher,
+ // without replacing its historical form payload or posting any business data.
+ await scoped(`(async()=>{
+   document.querySelector('dialog [data-close]').click();
+   var t=currentTenantId(),e=activeDataEnvironment(),dc=S.user.dc,eid=S.user.eid;
+   var old={id:'line_1',description:'匿名已入帳修繕',departmentCode:dc,netAmount:657,taxAmount:33,grossAmount:690,debitAccount:'6299',debitAccountName:'舊申請科目',creditAccount:'1111',creditAccountName:'零用金'};
+   var corrected=Object.assign({},old,{netAmount:690,taxAmount:0,debitAccount:'6207',debitAccountName:'修繕費',creditAccount:'1112',manualOverride:true,manualFields:['debitAccount','netAmount','taxAmount','creditAccount']});
+   var r=mapReq({id:'posted-ui-fixture',no:'POSTED-001',type:'petty_cash_request',entity_id:eid,department_code:dc,applicant:'匿名申請人',amount:690,status:'completed',step:3,ver:7,debit_account:'6299',debit_account_name:'舊申請科目',credit_account:'1111',form_payload:{accountingLines:[old]},voucher_id:'V-UI-POSTED',ledger_posted_at:'2026-09-06T08:53:17Z',posting_locked_at:'2026-09-06T08:53:17Z',steps:[{rk:'applicant_submit',a:'approved'},{rk:'cashier',a:'approved'},{rk:'accountant_final',a:'approved'}],tenant_id:t,data_environment:e});
+   REQS.push(r);window.__postedSourceBefore=JSON.stringify(r.formPayload);
+   var v={id:r.voucherId,no:r.voucherId,request_id:r.id,entity_id:eid,tenant_id:t,data_environment:e,posted:true,voided_at:null,total:1380,entries:[{t:'dr',ac:'6207',an:'修繕費',dept:dc,amt:690},{t:'cr',ac:'1111',an:'零用金',dept:dc,amt:690},{t:'dr',ac:'1111',an:'零用金',dept:dc,amt:690},{t:'cr',ac:'1112',an:'銀行存款',dept:dc,amt:690}]};
+   var line={id:'posted-line',request_id:r.id,request_no:r.no,line_index:1,entity_id:eid,department_code:dc,tenant_id:t,data_environment:e,description:corrected.description,net_amount:690,tax_amount:0,gross_amount:690,debit_account:'6207',debit_account_name:'修繕費',credit_account:'1112',credit_account_name:'銀行存款',payload:corrected};
+   getSb=function(){return {from:function(table){var q={then:function(resolve){return Promise.resolve({data:table==='vouchers'?v:[line]}).then(resolve);}};['select','eq','order','range','maybeSingle'].forEach(function(k){q[k]=function(){return q;};});return q;}};};
+   openDetail(r.id);await ensurePostedAccountingView(r);
+ })()`);
+ const posted=await scoped(`(function(){var card=document.querySelector('[data-accounting-request="posted-ui-fixture"]');return {ready:postedAccountingView(REQS.find(function(r){return r.id==='posted-ui-fixture';})).status,corrected:!!card&&card.textContent.includes('6207')&&card.textContent.includes('修繕費'),oldVisible:el('detail-body').textContent.includes('舊申請科目'),sourceUntouched:JSON.stringify(REQS.find(function(r){return r.id==='posted-ui-fixture';}).formPayload)===window.__postedSourceBefore,overflow:document.documentElement.scrollWidth>innerWidth,twoStage:!!card&&card.textContent.includes('補足另貸 1112')};})()`);
+ assert.deepEqual(posted,{ready:'ready',corrected:true,oldVisible:false,sourceUntouched:true,overflow:false,twoStage:true});
+ await browser('screenshot','/tmp/finance-posted-accounting-390.png');
+ await browser('set','viewport','1440','1000');await browser('screenshot','/tmp/finance-posted-accounting-desktop.png');
  assert.equal((await browser('errors')).trim(),'','all actual UI actions complete without JavaScript errors');
  assert.deepEqual(await scoped('window.__fixtureNetwork'),[],'offline UI tests never dispatch a network request');
- console.log('PASS actual offline browser: narrow facade, closure list replacement, correction detail/read, typed receipt notification click, receipt RPC fixture, 390px layout and native-dialog identity lock');
+ console.log('PASS actual offline browser: narrow facade, closure list replacement, correction detail/read, typed receipt notification click, receipt RPC fixture, posted accounting truth, 390px layout and native-dialog identity lock');
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{await browser('close').catch(()=>{});await new Promise(resolve=>server.close(resolve));});

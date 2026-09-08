@@ -16149,8 +16149,116 @@ function sourceRowsForAccounting(r){
   if(r&&r.type==='purchase_request')return [{source:'purchase_estimate',item:'採購預估付款',grossAmount:purchaseEstimatedAmount(r)||num(r.amt),total:purchaseEstimatedAmount(r)||num(r.amt),taxAmount:0,note:'預估金額只供第一關會計覆核，最終入帳以總務實際憑據為準'}];
   return [{source:'request_total',item:(r&&r.desc)||requestTypeLabel(r&&r.type),grossAmount:requestGrossAmount(r),total:requestGrossAmount(r),taxAmount:requestTaxAmount(r)}];
 }
+var POSTED_ACCOUNTING_VIEWS=new WeakMap();
+function postedAccountingViewKey(r){
+  if(!r||S.demoLogin||!requestPostingLocked(r))return '';
+  return [currentFinanceAuthUserId(),currentTenantId(),activeDataEnvironment(),r.id,r.ver,r.voucherId||r.voucher_id||'',requestLedgerPostedAt(r),currentRoleKey(),financeWorkspaceIdentityBlocked?'blocked':'ready'].join('|');
+}
+function postedAccountingView(r){
+  var key=postedAccountingViewKey(r);if(!key)return null;
+  var view=POSTED_ACCOUNTING_VIEWS.get(r);
+  return view&&view.key===key?view:{key:key,status:'idle'};
+}
+function postedAccountingEntrySummary(entries){
+  if(!Array.isArray(entries)||!entries.length)return null;
+  var totals=Object.create(null),debit=0,credit=0;
+  for(var entry of entries){
+    var amount=Number(entry.amt),side=entry.t,code=String(entry.ac||''),dept=String(entry.dept||'');
+    if(!code||['dr','cr'].indexOf(side)<0||!Number.isFinite(amount)||amount<=0)return null;
+    var cents=Math.round(amount*100);if(Math.abs(amount*100-cents)>0.001)return null;
+    var key=JSON.stringify([side,code,dept]);totals[key]=(totals[key]||0)+cents;
+    if(side==='dr')debit+=cents;else credit+=cents;
+  }
+  if(debit!==credit)return null;
+  return {total:debit/100,entries:Object.keys(totals).sort().map(function(key){return [key,totals[key]];})};
+}
+function postedAccountingLinesMatchVoucher(r,lines,voucher){
+  if(!Array.isArray(lines)||!lines.length||r.type==='advance_request'||(r.type==='petty_cash_request'&&pettyIsInitial(r)))return false;
+  var ids=new Set(),gross=0;
+  if(lines.some(function(line){
+    var values=[line.netAmount,line.taxAmount,line.grossAmount].map(Number);
+    if(!line.id||ids.has(line.id)||values.some(function(n){return !Number.isFinite(n)||n<0;})||Math.abs(values[0]+values[1]-values[2])>0.01)return true;
+    ids.add(line.id);gross+=values[2];return false;
+  })||Math.abs(gross-Number(r.actualAmt||r.amt||r.amount))>0.01)return false;
+  var work=cloneSettingValue(r);
+  work.formPayload=Object.assign({},work.formPayload||{},{accountingLines:cloneSettingValue(lines)});
+  var entries=r.type==='petty_cash_request'
+    ?pettyCashVoucherEntries(work,gross,requestBankFeeAmount(work))
+    :entriesFromAccountingLines(work,gross,requestBankFeeAmount(work));
+  var actual=postedAccountingEntrySummary(voucher.entries),expected=postedAccountingEntrySummary(entries);
+  return !!(actual&&expected&&JSON.stringify(actual)===JSON.stringify(expected));
+}
+function postedAccountingRowsFromRemote(r,rows){
+  if(!Array.isArray(rows)||!rows.length||rows.length>200)return [];
+  return rows.map(function(row,index){
+    if(row.request_id!==r.id||row.request_no!==r.no||row.tenant_id!==currentTenantId()||row.data_environment!==activeDataEnvironment()
+      ||row.entity_id!==r.eid||Number(row.line_index)!==index+1)throw new Error('會計明細來源或順序不一致');
+    return Object.assign({},row.payload||{}, {id:(row.payload||{}).id||row.id,source:row.source||'detail',description:row.description||'',
+      departmentCode:row.department_code,netAmount:Number(row.net_amount),taxAmount:Number(row.tax_amount),grossAmount:Number(row.gross_amount),
+      debitAccount:row.debit_account,debitAccountName:row.debit_account_name,creditAccount:row.credit_account,creditAccountName:row.credit_account_name,
+      reviewedBy:row.reviewed_by||'',reviewedAt:row.reviewed_at||''});
+  });
+}
+async function ensurePostedAccountingView(r){
+  var view=postedAccountingView(r);if(!view)return null;
+  if(view.status==='ready'||view.status==='error')return view;
+  if(view.promise)return view.promise;
+  var key=view.key,identity=approvalFastBootstrapIdentity(),tenant=currentTenantId(),environment=activeDataEnvironment();
+  view={key:key,status:'loading'};POSTED_ACCOUNTING_VIEWS.set(r,view);
+  view.promise=(async function(){
+    try{
+      if(!hasSupabase()||!S.user||!currentFinanceAuthUserId()||financeWorkspaceIdentityBlocked)throw new Error('請重新驗證登入身分後再讀取正式會計明細。');
+      var voucherId=r.voucherId||r.voucher_id;
+      if(!voucherId)throw new Error('此單尚無可核對的正式傳票編號，請由會計確認入帳狀態。');
+      var results=await Promise.all([
+        getSb().from('vouchers').select('id,no,request_id,entity_id,entries,total,posted,posted_at,voided_at,data_environment,tenant_id').eq('id',voucherId).eq('request_id',r.id).eq('entity_id',r.eid).eq('tenant_id',tenant).eq('data_environment',environment).maybeSingle(),
+        getSb().from('application_accounting_lines').select('id,request_id,request_no,line_index,source,description,entity_id,department_code,gross_amount,net_amount,tax_amount,debit_account,debit_account_name,credit_account,credit_account_name,reviewed_by,reviewed_at,payload,data_environment,tenant_id').eq('request_id',r.id).eq('tenant_id',tenant).eq('data_environment',environment).order('line_index',{ascending:true}).range(0,200)
+      ]);
+      if(key!==postedAccountingViewKey(r)||identity!==approvalFastBootstrapIdentity()||financeWorkspaceIdentityBlocked)return null;
+      var voucher=results[0].data;
+      if(results[0].error||!voucher)throw new Error('無法讀取這張單的正式傳票，請重新讀取；目前不以舊申請科目代替。');
+      var summary=postedAccountingEntrySummary(voucher.entries);
+      if(voucher.id!==voucherId||voucher.request_id!==r.id||voucher.entity_id!==r.eid||voucher.tenant_id!==tenant||voucher.data_environment!==environment
+        ||!voucher.posted||voucher.voided_at||!summary||Math.abs(summary.total-Number(voucher.total))>0.01)throw new Error('正式傳票的來源或借貸金額不一致，請由會計核對。');
+      var candidates=[];
+      if(!results[1].error){try{candidates.push(postedAccountingRowsFromRemote(r,results[1].data));}catch(ignore){}}
+      candidates.push((r.formPayload||{}).accountingLines||[]);
+      var lines=candidates.find(function(items){return postedAccountingLinesMatchVoucher(r,items,voucher);})||null;
+      Object.assign(view,{status:'ready',voucher:voucher,lines:lines});
+    }catch(error){
+      if(key!==postedAccountingViewKey(r)||identity!==approvalFastBootstrapIdentity()||financeWorkspaceIdentityBlocked)return null;
+      view.status='error';view.message=error.message||'正式會計明細讀取失敗，請重新讀取。';
+    }
+    if(typeof document!=='undefined')document.querySelectorAll('[data-accounting-request]').forEach(function(card){
+      if(card.dataset.accountingRequest===r.id&&card.isConnected){
+        card.outerHTML=accountingLinesHtml(r,false,'正式入帳會計明細',card.dataset.accountingPrefix||'acct-line');
+      }
+    });
+    return view;
+  })();
+  return view.promise;
+}
+window.retryPostedAccountingView=function(id){
+  var r=REQS.find(function(row){return row.id===id;});if(!r)return;
+  POSTED_ACCOUNTING_VIEWS.delete(r);return ensurePostedAccountingView(r);
+};
+function postedAccountingStatusHtml(r,prefix,view){
+  var text=view.status==='error'?view.message:'正在讀取已入帳傳票與會計覆核明細…';
+  return '<div class="card" data-accounting-request="'+escAttr(r.id)+'" data-accounting-prefix="'+escAttr(prefix)+'" style="padding:16px;margin-top:10px">'
+    +'<strong>正式入帳會計明細</strong><p role="status">'+escAttr(text)+'</p>'
+    +(view.status==='error'?'<button type="button" class="btn-g" style="min-height:44px" data-request-id="'+escAttr(r.id)+'" onclick="retryPostedAccountingView(this.dataset.requestId)">重新讀取</button>':'')+'</div>';
+}
+function postedVoucherEntriesHtml(r,prefix,view){
+  var voucher=view.voucher;
+  return '<div class="card" data-accounting-request="'+escAttr(r.id)+'" data-accounting-prefix="'+escAttr(prefix)+'" style="padding:16px;margin-top:10px">'
+    +'<strong>正式入帳分錄 · '+escAttr(voucher.no)+'</strong><p>'+(view.lines?'以下為本單完整的正式傳票分錄。':'以下為已保存的正式傳票。逐項覆核明細尚無法與此傳票完整對照，請以本表確認入帳科目。')+'</p>'
+    +'<div class="accounting-lines-scroll"><table class="accounting-lines-table"><thead><tr><th>科目</th><th>名稱</th><th>部門</th><th>借方</th><th>貸方</th></tr></thead><tbody>'
+    +voucher.entries.map(function(entry){return '<tr><td>'+escAttr(entry.ac)+'</td><td>'+escAttr(entry.an)+'</td><td>'+escAttr(entry.dept)+'</td><td>'+fmt(entry.t==='dr'?entry.amt:0)+'</td><td>'+fmt(entry.t==='cr'?entry.amt:0)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+}
 function buildAccountingLines(r){
   if(!r)return [];
+  var posted=postedAccountingView(r);
+  if(posted&&posted.status==='ready'&&posted.lines)return posted.lines.map(function(line){return cloneSettingValue(line);});
   var fp=r.formPayload||{};
   if(Array.isArray(fp.accountingLines)&&fp.accountingLines.length){
     return fp.accountingLines.map(function(line,i){return normalizeAccountingLine(line,r,i);});
@@ -16267,11 +16375,19 @@ window.syncAccountingLineSubjectTax=function(prefix,i){
 };
 function accountingLinesHtml(r,editable,title){
   var prefix=arguments.length>3&&arguments[3]?arguments[3]:'acct-line';
+  var posted=postedAccountingView(r);
+  if(posted&&posted.status!=='ready'){
+    if(posted.status==='idle')Promise.resolve().then(function(){return ensurePostedAccountingView(r);});
+    return postedAccountingStatusHtml(r,prefix,posted);
+  }
+  if(posted&&!posted.lines)return postedVoucherEntriesHtml(r,prefix,posted);
+  if(posted){editable=false;title='正式入帳會計明細';}
   var lines=buildAccountingLines(r);
   var editAllowed=editable&&(canEditAccountingLineAmounts(r)||canEditAccountingLineSubjects(r));
   var head=editAllowed
     ?'<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">每一列明細都可以有自己的借方會計科目；只有執行長、行政部門主任或會計可以修訂品項、數量、金額與會計科目。</div>'
     :'<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">申請人與申請人主管僅能檢視；若需修訂品項、數量、金額或會計科目，請由執行長、行政部門主任或會計處理。</div>';
+  if(posted)head='<div style="font-size:12px;line-height:1.7;margin-bottom:10px">正式傳票 '+escAttr(posted.voucher.no)+' · 以下為與已入帳分錄核對一致的會計明細。既有簽核與付款紀錄保留；後續更正請由會計辦理調整。'+(r.type==='petty_cash_request'&&!pettyIsInitial(r)?' 零用金依兩段分錄核銷並補足額度，完整借貸列於下方正式傳票。':'')+'</div>';
   var rows=lines.map(function(line,i){
     var amountEditable=editable&&canEditAccountingLineAmounts(r)&&!line.locked;
     var subjectEditable=editable&&canEditAccountingLineSubjects(r)&&!line.locked;
@@ -16282,10 +16398,10 @@ function accountingLinesHtml(r,editable,title){
       +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'taxAmount',line.taxAmount):fmt(line.taxAmount))+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);font-weight:650">'+(amountEditable?accountingLineAmountInput(prefix,i,'grossAmount',line.grossAmount):fmt(line.grossAmount))+'</td>'
       +'<td>'+(subjectEditable?'<select id="'+prefix+'-dr-'+i+'" style="font-size:11px" onchange="syncAccountingLineSubjectTax(\''+prefix+'\','+i+')">'+accountOptionsHtml(line.debitAccount,'debit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-dr">'+escAttr(line.debitAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.debitAccountName)+'</div>')+'</td>'
-      +'<td>'+(subjectEditable?'<select id="'+prefix+'-cr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.creditAccount,'credit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-cr">'+escAttr(line.creditAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.creditAccountName)+'（系統鎖定）</div>')+'</td>'
+      +'<td>'+(posted&&r.type==='petty_cash_request'&&!pettyIsInitial(r)?'<span class="acct-cr">1111</span><div style="font-size:10px;color:#64748b">零用金核銷；補足另貸 1112</div>':(subjectEditable?'<select id="'+prefix+'-cr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.creditAccount,'credit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-cr">'+escAttr(line.creditAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.creditAccountName)+'（系統鎖定）</div>'))+'</td>'
       +'</tr>';
   }).join('');
-  return'<div class="card" data-accounting-request="'+escAttr(r.id)+'" data-accounting-prefix="'+escAttr(prefix)+'" oninput="scheduleAccountingReviewDraft(this)" onchange="captureAccountingReviewDraftForElement(this)" style="margin-top:10px"><div class="chd"><span class="cht">'+escAttr(title||'明細列會計科目')+'</span><span style="font-size:10px;color:#94a3b8">'+(editAllowed?'可覆核編輯':'僅供檢視')+'</span></div><div style="padding:11px">'+head+(typeof accountingReviewDraftHtml==='function'?accountingReviewDraftHtml(r,prefix):'')+'<div class="accounting-lines-scroll"><table class="accounting-lines-table"><thead><tr><th>#</th><th>明細</th><th style="text-align:right">未稅/費用</th><th style="text-align:right">進項稅額</th><th style="text-align:right">含稅</th><th>借方科目</th><th>貸方科目</th></tr></thead><tbody>'+rows+'</tbody></table></div></div></div>';
+  return'<div class="card" data-accounting-request="'+escAttr(r.id)+'" data-accounting-prefix="'+escAttr(prefix)+'" oninput="scheduleAccountingReviewDraft(this)" onchange="captureAccountingReviewDraftForElement(this)" style="margin-top:10px"><div class="chd"><span class="cht">'+escAttr(title||'明細列會計科目')+'</span><span style="font-size:10px;color:#94a3b8">'+(editAllowed?'可覆核編輯':'僅供檢視')+'</span></div><div style="padding:11px">'+head+(typeof accountingReviewDraftHtml==='function'?accountingReviewDraftHtml(r,prefix):'')+'<div class="accounting-lines-scroll"><table class="accounting-lines-table"><thead><tr><th>#</th><th>明細</th><th style="text-align:right">未稅/費用</th><th style="text-align:right">進項稅額</th><th style="text-align:right">含稅</th><th>借方科目</th><th>貸方科目</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+(posted?'<details style="margin-top:12px"><summary>完整正式傳票分錄</summary>'+postedVoucherEntriesHtml(r,prefix+'-voucher',posted).replace('data-accounting-request=','data-posted-voucher-request=')+'</details>':'')+'</div></div>';
 }
 function expenseInvoiceReviewGroups(r){
   var fp=(r&&r.formPayload)||{};
@@ -22818,6 +22934,7 @@ window.openDetail=function(rid){
     ?'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById(\''+r.voucherId+'\')">'+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+escAttr(r.dr)+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+escAttr(r.drN)+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+escAttr(r.cr)+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+escAttr(r.crN)+'</div></div></div>'+(feeAmt?'<div style="font-size:11px;color:#6a5840;margin-top:6px;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:6px">己方支出手續費會自動增加：Dr 6290 手續費 '+fmt(feeAmt)+'，Cr '+escAttr(r.cr)+' 銀行存款合計 '+fmt(r.amt+feeAmt)+'。</div>':'')+'<div style="font-size:11px;color:#94a3b8;margin-top:6px">提醒：數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
     :'<div class="card" style="padding:12px;background:#fff8ed;border-color:#efd7b8"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:5px">會計處理</div><div style="font-size:11px;color:#8b7358;line-height:1.7">這張單完成簽核後，會計會確認憑據與金流並由系統處理入帳。您不用填寫會計科目、分錄或傳票，只需要追蹤簽核狀態與補齊附件。</div></div>';
   var managerCard=(S.user&&['section_chief','dept_manager','admin_director','ceo','general_affairs'].indexOf(currentRoleKey())>-1)?'<div class="detail-full-row">'+supervisorReviewCardHtml(r,false)+'</div>':'';
+  if(isFinance()&&requestPostingLocked(r))accountingCard='';
   var infoCard='<div class="card detail-info-card"><div class="chd"><span class="cht">申請資訊</span></div>'+entityDeptEditorHtml('expense',r.id,r.eid,r.dc)+'<div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+cells+'</div><div style="padding:0 12px 12px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;border:1px solid #f0e0c8">'+escAttr(r.desc)+'</div>'+purchaseAmountCompareHtml(r)+advanceTwoEventHtml(r)+pettyAccountingHtml(r)+filesHtml+'</div></div>';
   var progressRows=approvalTimelineRows(r,{includeSubmitFallback:true});
   var progressCard='<div class="card detail-progress-card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">'+approvalTimelineProgressText(r)+(progressRows.length>5?' · 可上下滑動':'')+'</span></div><div class="detail-progress-scroll">'+tl+'</div></div>';
