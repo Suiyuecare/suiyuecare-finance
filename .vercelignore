@@ -78,3 +78,18 @@ supabase/.temp
 !scripts/fixtures/finance_correction_dependencies_20260907.sql
 
 !scripts/check_approval_postflight.js
+
+# Current database cases, payment and download regression sources.
+!scripts/check_procurement_payment_handler.js
+!scripts/fixtures/finance_procurement_payment_helpers_20260908.sql
+!scripts/test_cases_release_batch.mjs
+!scripts/finance_cases_20260908_fingerprint.sql
+!scripts/finance_finalize_accounting_lines_postflight.sql
+!scripts/finance_finalize_accounting_lines_canary.sql
+!scripts/check_finalize_accounting_lines_atomic.js
+!scripts/test_posted_accounting_view.cjs
+!scripts/check_attachment_download_names.cjs
+!scripts/check_attachment_download_browser.cjs
+
+!scripts/fixtures/finance_finalize_expense_baseline_20260908.sql
+!scripts/fixtures/finance_finalize_dependencies_20260908.sql

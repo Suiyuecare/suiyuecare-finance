@@ -155,3 +155,22 @@ The audit phase uses `finance_audit_20260907_fingerprint.sql` and
 `finance_audit_20260907_postflight.sql` in its complete rollback rehearsal and
 formal transactional apply. No individual migration, unchecked pending suffix,
 or newly discovered remote migration may bypass the exact ledger contract.
+
+## 2026-09-08 database case regression gate
+
+`pnpm test:database-cases` runs the exact posted-accounting view, attachment filename,
+procurement payment handler/SQL, final-accounting SQL and release transaction
+regressions. Browser download verification is retained as source and run separately
+with `agent-browser` and `openssl`; it is not represented as a pure Node CI test.
+
+`database_cases_20260908` accepts only migration `20260908065050`, after the entire
+reviewed authority chain and all six deployed audit migrations. Those existing
+migration files stay unchanged. Current `frontend_compat` also requires this new
+migration; dispatching a historical database phase cannot bypass the new contract.
+The production rehearsal keeps both the original authenticated workflow canary
+and the new authenticated finalization canary. Its read-only fingerprint includes
+`application_accounting_lines` alongside requests, vouchers, ledger, schema and
+permissions. New SQL, migration ledger entry and domain postflight commit together,
+and promotion consumes the previously sealed deployment only after both canaries
+and all postflights pass again. Isolated PGlite tests are local regression evidence;
+they do not constitute a production migration or successful production rehearsal.
