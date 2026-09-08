@@ -577,13 +577,19 @@ function verifyAuthenticatedCanary(inputPath) {
 }
 
 function verifyFinalizeCanary(inputPath) {
+  // db query --output json returns a top-level row array. Unlike deployment
+  // manifests, canary transports may also wrap those rows in result objects.
+  // Match the existing authenticated canary reader without weakening readJson.
+  let payload;
+  try { payload = JSON.parse(fs.readFileSync(inputPath, 'utf8')); }
+  catch (error) { fail(`${path.basename(inputPath)} is not valid JSON: ${error.message}`); }
   const matches=[];
   const visit=value=>{
     if(!value||typeof value!=='object')return;
     if(Object.hasOwn(value,'finalize_accounting_canary_result'))matches.push(value.finalize_accounting_canary_result);
     Object.values(value).forEach(visit);
   };
-  visit(readJson(inputPath));
+  visit(payload);
   if(matches.length!==1)fail('finalize canary output must contain exactly one result');
   const result=typeof matches[0]==='string'?JSON.parse(matches[0]):matches[0];
   assert.deepStrictEqual(result,{canary:'authenticated_finalize_accounting_lines',ok:true,rolled_back:true,accounting_lines_consistent:true},'authenticated finalize rollback canary did not complete safely');
