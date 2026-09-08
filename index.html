@@ -4753,7 +4753,11 @@ function recordAttachmentAccess(f,action,context){
     console.warn('attachment access audit failed',err);
   }
 }
-async function signAttachmentUrl(f,expiresIn){
+function attachmentSignedDownloadUrl(url,name){
+  var engine=financeAttachmentEngine();
+  return engine&&typeof engine.signedDownloadUrl==='function'?engine.signedDownloadUrl(url,name,SUPABASE_URL):url;
+}
+async function signAttachmentUrl(f,expiresIn,downloadName){
   f=normalizeFileMeta(f);
   if(!f)return'';
   expiresIn=Math.max(60,num(expiresIn||60));
@@ -4762,10 +4766,10 @@ async function signAttachmentUrl(f,expiresIn){
     var bucket=f.bucket||SUPABASE_ATTACHMENT_BUCKET;
     if(hasSupabase()){
       var client=getSb();
-      var signed=await client.storage.from(bucket).createSignedUrl(path,expiresIn);
+      var signed=await client.storage.from(bucket).createSignedUrl(path,expiresIn,downloadName?{download:true}:undefined);
       if(signed.error)throw signed.error;
       recordAttachmentAccess(f,'signed_url',{source:'signAttachmentUrl'});
-      return signed.data.signedUrl;
+      return attachmentSignedDownloadUrl(signed.data.signedUrl,downloadName);
     }
     if(SUPABASE_URL&&SUPABASE_ANON_KEY&&window.fetch){
       var encodedPath=String(path).split('/').map(encodeURIComponent).join('/');
@@ -4775,15 +4779,15 @@ async function signAttachmentUrl(f,expiresIn){
         var data=await res.json();
         var signedUrl=data.signedURL||data.signedUrl||data.url||'';
         if(signedUrl){
-          if(/^https?:\/\//i.test(signedUrl))return signedUrl;
-          return SUPABASE_URL.replace(/\/$/,'')+'/storage/v1'+signedUrl;
+          if(/^https?:\/\//i.test(signedUrl))return attachmentSignedDownloadUrl(signedUrl,downloadName);
+          return attachmentSignedDownloadUrl(SUPABASE_URL.replace(/\/$/,'')+'/storage/v1'+signedUrl,downloadName);
         }
       }
       console.warn('Supabase storage REST signed URL failed',res.status,await res.text().catch(function(){return'';}));
     }
     return '';
   }
-  return f.url||'';
+  return attachmentSignedDownloadUrl(f.url||'',downloadName);
 }
 function storagePublicUrl(f){
   f=normalizeFileMeta(f);
@@ -5080,8 +5084,23 @@ function markAttachmentDownloadFailure(f,kind,button){
     if(retryLabel)retryLabel.textContent=kind==='auth'?'重新登入':kind==='permission'?'檢查權限':'重新嘗試';
   }
 }
+function attachmentDownloadFileName(file,ctx,sourceFile){
+  var engine=financeAttachmentEngine(),record=(ctx&&ctx.record)||{};
+  var fp=record.formPayload||record.form_payload||{};
+  var purpose=String(fp.requestPurpose||fp.purpose||fp.reason||record.purpose||record.desc||record.description||record.item||'').trim();
+  var files=uniqueAttachments([].concat(record.files||[],record.actualFiles||[],record.receiptFiles||[],record.passbookFiles||fp.passbookFiles||[],
+    [].concat.apply([],((record.steps||[]).map(function(step){return step.files||[];})))));
+  var source=sourceFile||file,sourcePath=attachmentStoragePath(source);
+  var index=files.findIndex(function(item){return sourcePath?attachmentStoragePath(item)===sourcePath:fileIdentity(item)===fileIdentity(source);});
+  if(index<0){index=files.length;files.push(source);}
+  return engine.downloadName(file,{
+    recordNo:record.no||record.record_no||(ctx&&ctx.recordNo)||attachmentRecordNoFromPath(source),
+    purpose:purpose,fileIndex:index+1,fileCount:files.length
+  });
+}
 async function downloadFileMeta(f,ctx){
   f=normalizeFileMeta(f);
+  var downloadContext=Object.assign({},findAttachmentOwner(f),ctx||{});
   if(!f||(!f.url&&!f.path&&!f.storagePath)){alert('這個附件只有檔名，沒有保存到原始檔案。請申請人重新上傳一次，後續簽核人就能下載。');return;}
   if(!canDownloadAttachment(f,ctx)){alert('請先使用公司 Google 帳號登入，再重新下載附件。若已登入仍無法下載，請重新整理頁面後再試一次。');return;}
   var auditFile=f;
@@ -5112,7 +5131,8 @@ async function downloadFileMeta(f,ctx){
       return;
     }
   }
-  try{if(!href)href=await signAttachmentUrl(f);}catch(err){
+  var downloadName=attachmentDownloadFileName(downloadMeta,downloadContext,auditFile);
+  try{if(!href)href=await signAttachmentUrl(f,60,downloadName);}catch(err){
     console.error(err);
     recordAttachmentAccess(auditFile,'download_failed',{source:'downloadFileMeta',ownerType:(ctx&&ctx.type)||'',reason:rawErrorText(err)});
     // path 型附件只能使用當次正式簽章；簽章失敗時不可退回舊 URL，
@@ -5140,7 +5160,7 @@ async function downloadFileMeta(f,ctx){
   }
   var a=document.createElement('a');
   a.href=href;
-  a.download=downloadMeta.n||('attachment.'+(downloadMeta.t||'file'));
+  a.download=downloadName;
   a.target='_blank';
   a.rel='noopener';
   a.style.display='none';

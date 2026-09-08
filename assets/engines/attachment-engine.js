@@ -46,6 +46,75 @@
     return dot > -1 ? value.slice(dot + 1).toLowerCase() : '';
   }
 
+  function safeDownloadNamePart(value) {
+    var text = String(value == null ? '' : value).normalize('NFC')
+      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
+      .replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').replace(/_+/g, '_').trim()
+      .replace(/^[. ]+|[. ]+$/g, '');
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(text)) text = '_' + text;
+    return text;
+  }
+  function downloadBasename(value) {
+    var text = String(value || '');
+    // URL query parameters (including a signed token) are never filename data.
+    if (/^[a-z][a-z0-9+.-]*:/i.test(text)) {
+      if (!/^https?:/i.test(text)) return '';
+      try { text = new URL(text).pathname; } catch (ignore) { return ''; }
+      try { text = decodeURIComponent(text); } catch (ignore) {}
+    }
+    // A normalized URL may already have lost its scheme, while a real filename
+    // can contain a question mark before its extension on macOS.
+    if (/\.[a-z0-9]{1,12}[?#]|[?#].*[=&]/i.test(text)) text = text.replace(/[?#].*$/, '');
+    return text.split(/[\\/]/).pop() || '';
+  }
+  function downloadExtension(file) {
+    file = typeof file === 'string' ? { n: file } : (file || {});
+    var candidates = [file.n, file.name, file.file_name, file.path, file.storagePath, file.storage_path, file.url];
+    for (var i = 0; i < candidates.length; i++) {
+      var match = downloadBasename(candidates[i]).match(/\.([a-z0-9]{1,12})$/i);
+      if (match) return match[1].toLowerCase();
+    }
+    var ext = String(file.t || file.type_ext || '').toLowerCase();
+    if (/^[a-z0-9]{1,12}$/.test(ext) && ext !== 'file') return ext;
+    return { 'application/pdf':'pdf', 'application/vnd.ms-excel':'xls',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'xlsx',
+      'application/msword':'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx',
+      'text/csv':'csv', 'text/plain':'txt', 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp'
+    }[String(file.mime || file.file_type || '').toLowerCase()] || '';
+  }
+  function truncateDownloadName(value, maxBytes) {
+    var bytes = 0, result = '';
+    Array.from(value).some(function (char) {
+      var cp = char.codePointAt(0);
+      if (cp >= 0xd800 && cp <= 0xdfff) return false;
+      var size = cp <= 0x7f ? 1 : cp <= 0x7ff ? 2 : cp <= 0xffff ? 3 : 4;
+      if (bytes + size > maxBytes) return true;
+      bytes += size; result += char; return false;
+    });
+    return result.replace(/[. ]+$/g, '');
+  }
+  function downloadName(file, options) {
+    options = options || {};
+    var no = truncateDownloadName(safeDownloadNamePart(options.recordNo), 72);
+    var purpose = safeDownloadNamePart(options.purpose);
+    var original = downloadBasename(typeof file === 'string' ? file : file && (file.n || file.name || file.file_name || file.path || file.storagePath || file.url));
+    var ext = downloadExtension(file);
+    var stem = no ? no + '_' + (purpose || '申請附件') : (purpose || safeDownloadNamePart(original.replace(/\.[a-z0-9]{1,12}$/i, '')) || '附件');
+    var suffix = Number(options.fileCount) > 1 ? '_附件' + String(Math.max(1, Number(options.fileIndex) || 1)).padStart(2, '0') : '';
+    // Leave room for the stable attachment suffix and original extension on
+    // filesystems whose component limit is measured in UTF-8 bytes.
+    return truncateDownloadName(stem, 210) + suffix + (ext ? '.' + ext : '');
+  }
+  function signedDownloadUrl(value, name, supabaseUrl) {
+    if (!name) return value;
+    try {
+      var url = new URL(value), base = new URL(supabaseUrl);
+      if (url.origin !== base.origin || url.protocol !== 'https:' || !/^\/storage\/v1\/object\/sign\//.test(url.pathname) || !url.searchParams.has('token')) return value;
+      url.searchParams.set('download', name);
+      return url.href;
+    } catch (ignore) { return value; }
+  }
+
   function normalizeList(files) {
     if (!files) return [];
     if (Array.isArray(files)) return files.filter(Boolean);
@@ -240,6 +309,8 @@
 
   var api = {
     fileExtension: fileExtension,
+    downloadName: downloadName,
+    signedDownloadUrl: signedDownloadUrl,
     normalizeList: normalizeList,
     normalizeFileMeta: normalizeFileMeta,
     normalizeFiles: normalizeFiles,
