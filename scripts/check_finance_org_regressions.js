@@ -229,6 +229,57 @@ await check('actual runtime seed preserves all company scopes and financial seco
  const again=await value('select private.finance_membership_org_seed_snapshot_v1($1) v',[tenant]);
  assert.equal(seed.units.find(u=>u.code==='GOV_EXECUTIVE').id,again.units.find(u=>u.code==='GOV_EXECUTIVE').id);
 });
+// The legacy authoritative submit/canary guards compare effective_at with
+// transaction-stable now(). Exercise the real publishers in the same transaction
+// after its clock has advanced, not a later query after COMMIT.
+await db.exec(`
+create function private.finance_membership_org_version_payload_v1(uuid) returns jsonb language sql stable as $$
+ select to_jsonb(v) from private.finance_membership_org_versions_v1 v where v.id=$1$$;
+create function private.finance_membership_org_role_label_v1(text) returns text language sql immutable as $$select $1$$;
+`);
+async function assertPublishedPostingUnitInSameTransaction(versionId){
+ const visible=await db.query(`select version_row.id,version_row.effective_at=transaction_timestamp() effective_in_transaction,
+   version_row.published_at>transaction_timestamp() audit_retains_wall_clock,
+   unit_row.value->'entity_codes' entity_codes
+  from private.finance_membership_org_versions_v1 version_row
+  cross join lateral jsonb_array_elements(version_row.snapshot->'units') unit_row(value)
+  where version_row.tenant_id=$1 and version_row.status='published'
+   and (version_row.effective_at is null or version_row.effective_at<=pg_catalog.now())
+   and unit_row.value->>'code'='D1'
+   and coalesce((unit_row.value->>'active')::boolean,false)
+   and coalesce((unit_row.value->>'is_posting_unit')::boolean,false)
+   and coalesce(unit_row.value->'entity_codes','[]')?'E1'`,[tenant]);
+ assert.equal(visible.rows.length,1,'same-transaction authoritative posting-unit lookup must see the new version');
+ assert.equal(visible.rows[0].id,versionId);assert.equal(visible.rows[0].effective_in_transaction,true);
+ assert.equal(visible.rows[0].audit_retains_wall_clock,true);
+ assert.deepEqual(visible.rows[0].entity_codes,['E1','E2']);
+}
+await check('runtime reconciliation is immediately visible to now-based posting guards in its transaction',async()=>{
+ await actor('boss','admin_director');await db.exec('begin');
+ try{
+  await new Promise(resolve=>setTimeout(resolve,25));
+  const published=await value('select private.finance_org_publish_runtime_v2($1,$2,$3) v',[tenant,'boss','Same transaction fixture']);
+  await assertPublishedPostingUnitInSameTransaction(published.org_version_id);
+ }finally{await db.exec('rollback');}
+});
+for(const requestedEffective of [null,'2020-01-01T00:00:00Z']){
+await check('CEO '+(requestedEffective?'explicit historical':'default')+' immediate publication is visible in the same transaction and future scheduling stays denied',async()=>{
+ await actor('ceo','ceo');await db.exec('begin');
+ try{
+  const draft=await value("select public.membership_org_create_draft('Same transaction','Publication timing regression',null,null) v");
+  const id=draft.version.id;
+  await db.query("update private.finance_membership_org_versions_v1 set status='pending_review' where id=$1",[id]);
+  await db.exec('savepoint future_date');
+  await assert.rejects(value("select public.membership_org_publish_draft($1,clock_timestamp()+interval '1 hour') v",[id]),error=>error.code==='22023');
+  await db.exec('rollback to savepoint future_date');
+  assert.equal(await value('select status v from private.finance_membership_org_versions_v1 where id=$1',[id]),'pending_review');
+  await new Promise(resolve=>setTimeout(resolve,25));
+  const published=await value('select public.membership_org_publish_draft($1,$2) v',[id,requestedEffective]);
+  assert.equal(published.ok,true);assert.equal(published.scheduled,false);
+  await assertPublishedPostingUnitInSameTransaction(id);
+ }finally{await db.exec('rollback');}
+});
+}
 await check('engine uses the same Taipei end-date boundary and retains reporting exceptions',async()=>{
  const c=ctx({FinanceV4Engines:{register(){}}});vm.runInContext(fs.readFileSync(path.join(root,'assets/engines/organization-engine.js'),'utf8'),c);
  const engine=c.FinanceOrganizationEngine;
