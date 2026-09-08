@@ -86,8 +86,12 @@ async function scoped(code){
  })()`);
  const posted=await scoped(`(function(){var card=document.querySelector('[data-accounting-request="posted-ui-fixture"]');return {ready:postedAccountingView(REQS.find(function(r){return r.id==='posted-ui-fixture';})).status,corrected:!!card&&card.textContent.includes('6207')&&card.textContent.includes('修繕費'),oldVisible:el('detail-body').textContent.includes('舊申請科目'),sourceUntouched:JSON.stringify(REQS.find(function(r){return r.id==='posted-ui-fixture';}).formPayload)===window.__postedSourceBefore,overflow:document.documentElement.scrollWidth>innerWidth,twoStage:!!card&&card.textContent.includes('補足另貸 1112')};})()`);
  assert.deepEqual(posted,{ready:'ready',corrected:true,oldVisible:false,sourceUntouched:true,overflow:false,twoStage:true});
+ await browser('eval',"document.querySelector('[data-accounting-request=\"posted-ui-fixture\"]').scrollIntoView({block:'center'})");
+ assert.deepEqual(await scoped("(function(){var c=document.querySelector('[data-accounting-request=\"posted-ui-fixture\"]');return {mobile:getComputedStyle(c.querySelector('.posted-accounting-mobile-lines')).display!=='none',desktop:getComputedStyle(c.querySelector('.posted-accounting-desktop-table')).display!=='none'};})()"),{mobile:true,desktop:false});
  await browser('screenshot','/tmp/finance-posted-accounting-390.png');
- await browser('set','viewport','1440','1000');await browser('screenshot','/tmp/finance-posted-accounting-desktop.png');
+ await browser('set','viewport','1440','1000');
+ await browser('eval',"document.querySelector('[data-accounting-request=\"posted-ui-fixture\"]').scrollIntoView({block:'center'})");
+ await browser('screenshot','/tmp/finance-posted-accounting-desktop.png');
  assert.equal((await browser('errors')).trim(),'','all actual UI actions complete without JavaScript errors');
  assert.deepEqual(await scoped('window.__fixtureNetwork'),[],'offline UI tests never dispatch a network request');
  console.log('PASS actual offline browser: narrow facade, closure list replacement, correction detail/read, typed receipt notification click, receipt RPC fixture, posted accounting truth, 390px layout and native-dialog identity lock');
