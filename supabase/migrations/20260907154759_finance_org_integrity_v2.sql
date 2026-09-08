@@ -1439,8 +1439,10 @@ begin
   if not coalesce((v_validation->>'ok')::boolean,false) then raise exception '正式組織一致性檢查未通過：%',v_validation->'errors' using errcode='23514';end if;
   select coalesce(max(version_no),0)+1 into v_next from private.finance_membership_org_versions_v1 where tenant_id=p_tenant_id;
   update private.finance_membership_org_versions_v1 set status='archived',updated_at=clock_timestamp() where tenant_id=p_tenant_id and status='published';
+  -- Immediate publication must be visible to authoritative now()-based guards
+  -- in this same transaction. Wall-clock publication time remains in the audit.
   insert into private.finance_membership_org_versions_v1(tenant_id,version_no,status,title,reason,snapshot,revision,etag,validation_summary,source_version_id,source_runtime_revision,created_by_finance_user_id,approved_by_finance_user_id,effective_at,published_at)
-  values(p_tenant_id,v_next,'published','正式人員與主管關係同步',p_reason,v_snapshot,1,private.finance_membership_org_etag_v1(v_snapshot,1),v_validation,v_previous.id,private.finance_org_runtime_revision_v2(p_tenant_id),p_actor,null,clock_timestamp(),clock_timestamp()) returning * into v_new;
+  values(p_tenant_id,v_next,'published','正式人員與主管關係同步',p_reason,v_snapshot,1,private.finance_membership_org_etag_v1(v_snapshot,1),v_validation,v_previous.id,private.finance_org_runtime_revision_v2(p_tenant_id),p_actor,null,transaction_timestamp(),clock_timestamp()) returning * into v_new;
   return jsonb_build_object('org_version_id',v_new.id,'org_version_no',v_new.version_no,'org_etag',v_new.etag);
 end;$fn$;
 
@@ -1618,7 +1620,8 @@ begin
   set status = 'published',
       source_runtime_revision = private.finance_org_runtime_revision_v2(v_version.tenant_id),
       approved_by_finance_user_id = v_actor ->> 'finance_user_id',
-      effective_at = clock_timestamp(),
+      -- Future scheduling remains rejected above; this is an immediate release.
+      effective_at = transaction_timestamp(),
       published_at = clock_timestamp(),
       validation_summary = v_validation,
       updated_at = clock_timestamp()
