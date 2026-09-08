@@ -767,4 +767,3 @@ begin
   return coalesce(v_allowed, false);
 end;
 $function$;
-
