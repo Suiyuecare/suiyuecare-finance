@@ -1096,6 +1096,8 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
         <div id="membership-org-tree"></div>
         <div id="membership-org-versions" class="card" style="display:none;margin-top:10px"></div>
       </div>
+      <details id="settings-dept-legacy-disclosure" class="org-legacy-details" data-org-detail-key="legacy" ontoggle="membershipOrgWorkspaceRememberDetail(this)">
+        <summary>歷史部門代碼</summary>
       <div id="settings-dept-legacy">
         <div id="settings-dept-tree" class="settings-dept-tree" aria-label="目前組織階層預覽"></div>
         <div class="org-runtime-status settings-flat-runtime"></div>
@@ -1106,6 +1108,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
           </table>
         </div>
       </div>
+      </details>
     </section>
     <section id="settings-panel-accounts" class="set-panel settings-flat-panel" style="margin-bottom:12px;display:none"><div class="settings-flat-head"><span class="settings-flat-title">會計科目</span><div class="settings-write" style="display:flex;gap:6px"><button class="btn-g" onclick="saveAcctSettings()">送出科目異動</button><button class="btn-p" onclick="addAcctSetting()">+ 新增科目</button></div></div><div class="settings-flat-notice"><div><strong>目前選擇規則：</strong>所有公司、所有部門都可選全部啟用的借／貸科目。既有範圍會繼續保存，作為未來啟用公司／部門限制時的預留設定，目前不會縮小選單。</div><div>會計科目屬正式帳務設定，新增、編輯、停用或刪除都會產生異動單；非執行長送出後須待執行長核准才會生效。</div><div class="settings-write settings-change-reason"><label class="fl">異動原因 *</label><textarea id="acct-change-reason" rows="2" placeholder="例：配合會計師建議新增科目、停用不再使用科目、修正科目名稱…" style="font-size:12px"></textarea></div></div><div class="settings-list-scroll"><table class="settings-list-table settings-account-list"><thead><tr><th>代號</th><th>名稱</th><th>借/貸</th><th>預留部門限制（目前不生效）</th><th>啟用</th><th class="settings-action-head">操作</th></tr></thead><tbody id="settings-accts"></tbody></table></div></section>
     <div id="settings-panel-fees" class="set-panel card" style="margin-bottom:12px;display:none"><div class="chd"><span class="cht">手續費金額</span><span style="font-size:10px;color:#94a3b8">每間公司可各自設定；非兆豐且己方支出時套用</span></div><div style="overflow-x:auto"><table><thead><tr><th>公司別</th><th>單筆銀行手續費</th><th>說明</th></tr></thead><tbody id="settings-fees"></tbody></table></div><div class="settings-write" style="padding:10px 12px;border-top:1px solid #f0e6d6;justify-content:flex-end"><button class="btn-p" onclick="saveFeeSetting()">儲存手續費</button></div></div>
@@ -31245,6 +31248,8 @@ window.exportSettingVersions=function(){
 };
 window.settingsTab=function(tab,btn){SETTINGS_TAB=tab;applySettingsTab();if(tab==='permissions'&&!MEMBERSHIP_ROLE_RUNTIME.loaded&&!MEMBERSHIP_ROLE_RUNTIME.loading)refreshMembershipRoleCatalog();};
 function applySettingsTab(){
+  var mobileSection=el('mobile-settings-section');
+  if(mobileSection){mobileSection.value=SETTINGS_TAB;syncComboValue(mobileSection);}
   ['entities','departments','accounts','fees','permissions','workflows','formfields','templates','profiles','modules','versions'].forEach(function(t){
     var p=el('settings-panel-'+t);if(p)p.style.display=t===SETTINGS_TAB?'block':'none';
   });
@@ -31472,13 +31477,21 @@ function renderSettingDepts(){
   var formalAvailable=!!(formalGraph&&MEMBERSHIP_ORG_RUNTIME.available!==false);
   if(formalPanel)formalPanel.style.display=formalAvailable?'':'none';
   if(legacyPanel)legacyPanel.style.display='';
-  if(legacyActions)legacyActions.style.display=SETTINGS_EDIT?'flex':'none';
+  var legacyDisclosure=el('settings-dept-legacy-disclosure');
+  if(legacyDisclosure){
+    legacyDisclosure.dataset.orgFormalAvailable=formalAvailable?'true':'false';
+    if(!legacyDisclosure._orgDetailToggleBound){legacyDisclosure.addEventListener('toggle',function(){if(this.dataset.orgFormalAvailable==='true')membershipOrgWorkspaceRememberDetail(this);});legacyDisclosure._orgDetailToggleBound=true;}
+    legacyDisclosure.open=formalAvailable?!!MEMBERSHIP_ORG_WORKSPACE_UI.details.legacy:true;
+    var legacySummary=legacyDisclosure.querySelector('summary');if(legacySummary)legacySummary.style.display=formalAvailable?'':'none';
+  }
+  if(legacyActions)legacyActions.style.display=SETTINGS_EDIT&&!formalAvailable?'flex':'none';
   if(formalAvailable)renderMembershipOrgManager();
   renderSettingDeptTree();
   body.innerHTML=DEPTS.map(function(d,i){
     var code=String(d.c||'').trim();
     var isNew=/^NEW/i.test(code);
-    var codeState=SETTINGS_EDIT?(isNew?'':' readonly'):' disabled';
+    var codeState=formalAvailable?' disabled':SETTINGS_EDIT?(isNew?'':' readonly'):' disabled';
+    var legacyDisabled=formalAvailable?' disabled':settingsDisabled();
     var scopeCodes=Array.isArray(d.newFormEntityCodes)
       ?d.newFormEntityCodes
       :(Array.isArray(d.entityCodes)&&d.entityCodes.length?d.entityCodes:[d.eid]);
@@ -31486,15 +31499,15 @@ function renderSettingDepts(){
     var scopeLabel=d.shared&&scopeCodes.length>=ENTS.length?'服務全體法人':scopeCodes.map(function(id){return (gE(id)||{}).s||id;}).join('、');
     return'<tr data-idx="'+i+'" class="'+(d.active===false?'settings-dept-inactive':'')+'">'
       +'<td><input class="set-dept-c" value="'+attr(code)+'" style="width:96px;font-size:11px"'+codeState+'></td>'
-      +'<td><input class="set-dept-n" value="'+attr(d.n)+'" style="min-width:180px"'+settingsDisabled()+'></td>'
-      +'<td><select class="set-dept-entities" multiple size="3" data-no-search="1" style="min-width:190px"'+settingsDisabled()+'>'+entOpts+'</select><div class="settings-dept-scope">'+escAttr(scopeLabel)+'</div>'+(SETTINGS_EDIT?'<div class="settings-dept-scope">可按住 Command／Ctrl 複選</div>':'')+'</td>'
-      +'<td><select class="set-dept-parent" style="min-width:180px;font-size:11px"'+settingsDisabled()+'>'+settingDeptOptionHtml(deptExplicitParentValue(d),code,d.lv)+'</select></td>'
-      +'<td><select class="set-dept-manager" style="min-width:210px;font-size:11px"'+settingsDisabled()+'>'+settingDeptUserOptionHtml(deptConfiguredManagerId(d),'未指定主管')+'</select></td>'
-      +'<td><select class="set-dept-director" style="min-width:210px;font-size:11px"'+settingsDisabled()+'>'+settingDeptUserOptionHtml(deptConfiguredDirectorId(d),'未指定主任')+'</select></td>'
-      +'<td><input class="set-dept-lv" type="number" min="3" max="5" value="'+attr(d.lv==null?3:d.lv)+'" style="width:62px"'+settingsDisabled()+'></td>'
-      +'<td style="text-align:center"><input class="set-dept-posting" type="checkbox" '+(d.isPostingUnit===false?'':'checked')+settingsDisabled()+'></td>'
-      +'<td style="text-align:center"><input class="set-dept-active" type="checkbox" '+(d.active===false?'':'checked')+settingsDisabled()+'></td>'
-      +(SETTINGS_EDIT?'<td><button class="btn-g" style="color:#8a1010" onclick="deleteDeptSetting('+i+')">'+(isNew?'移除':'停用')+'</button></td>':'')
+      +'<td><input class="set-dept-n" value="'+attr(d.n)+'" style="min-width:180px"'+legacyDisabled+'></td>'
+      +'<td><select class="set-dept-entities" multiple size="3" data-no-search="1" style="min-width:190px"'+legacyDisabled+'>'+entOpts+'</select><div class="settings-dept-scope">'+escAttr(scopeLabel)+'</div>'+(!formalAvailable&&SETTINGS_EDIT?'<div class="settings-dept-scope">可按住 Command／Ctrl 複選</div>':'')+'</td>'
+      +'<td><select class="set-dept-parent" style="min-width:180px;font-size:11px"'+legacyDisabled+'>'+settingDeptOptionHtml(deptExplicitParentValue(d),code,d.lv)+'</select></td>'
+      +'<td><select class="set-dept-manager" style="min-width:210px;font-size:11px"'+legacyDisabled+'>'+settingDeptUserOptionHtml(deptConfiguredManagerId(d),'未指定主管')+'</select></td>'
+      +'<td><select class="set-dept-director" style="min-width:210px;font-size:11px"'+legacyDisabled+'>'+settingDeptUserOptionHtml(deptConfiguredDirectorId(d),'未指定主任')+'</select></td>'
+      +'<td><input class="set-dept-lv" type="number" min="3" max="5" value="'+attr(d.lv==null?3:d.lv)+'" style="width:62px"'+legacyDisabled+'></td>'
+      +'<td style="text-align:center"><input class="set-dept-posting" type="checkbox" '+(d.isPostingUnit===false?'':'checked')+legacyDisabled+'></td>'
+      +'<td style="text-align:center"><input class="set-dept-active" type="checkbox" '+(d.active===false?'':'checked')+legacyDisabled+'></td>'
+      +(!formalAvailable&&SETTINGS_EDIT?'<td><button class="btn-g" style="color:#8a1010" onclick="deleteDeptSetting('+i+')">'+(isNew?'移除':'停用')+'</button></td>':'')
       +'</tr>';
   }).join('');
 }
@@ -35197,9 +35210,9 @@ function membershipOrgStatusHtml(){
   if(state.loading)return'<div class="membership-org-status">正在讀取正式組織版本…</div>';
   if(state.error||state.available===false)return'<div class="membership-org-status" role="alert"><strong>正式組織版本讀取失敗</strong> · '+escAttr(state.error||'目前無法確認正式版本，請重新載入。')+(state.lastLoaded?' · 上次成功讀取 '+escAttr(new Date(state.lastLoaded).toLocaleString('zh-TW')):'')+'</div>';
   if(!graph||!graph.orgVersionId)return'<div class="membership-org-status"><strong>尚未取得正式組織版本</strong> · 目前顯示的部門資料尚未完成版本核對。</div>';
-  if(graph.runtimeConsistent===false)return'<div class="membership-org-status" role="alert"><strong>正式組織與現行人員資料尚未一致</strong> · 請重新建立組織草稿核對目前主管與任職；目前版本 '+escAttr(graph.orgVersionId)+'</div>';
+  if(graph.runtimeConsistent===false)return'<div class="membership-org-status" role="alert" title="正式版本 '+attr(graph.orgVersionId)+'"><strong>正式組織與現行人員資料尚未一致</strong> · 請重新建立組織草稿核對目前主管與任職。</div>';
   var remoteWarn=MEMBERSHIP_ORG_DRAFT.remoteChanged?' · 正式版本已在其他視窗更新；目前草稿不會被覆蓋，送審前請檢查差異。':'';
-  return'<div class="membership-org-status ok"><strong>正式版本已啟用</strong> · '+escAttr(graph.orgVersionId)+' · '+escAttr(graph.units.length+' 個單位')+' · '+escAttr(graph.assignments.length+' 筆任職')+(graph.nextEffectiveChangeAt?' · 下一次人事生效 '+escAttr(new Date(graph.nextEffectiveChangeAt).toLocaleString('zh-TW')):'')+escAttr(remoteWarn)+'</div>';
+  return'<div class="membership-org-status ok" title="正式版本 '+attr(graph.orgVersionId)+'"><strong>正式版本已啟用</strong> · '+escAttr(graph.units.length+' 個單位')+' · '+escAttr(graph.assignments.length+' 筆任職')+(graph.nextEffectiveChangeAt?' · 下一次人事生效 '+escAttr(new Date(graph.nextEffectiveChangeAt).toLocaleString('zh-TW')):'')+escAttr(remoteWarn)+'</div>';
 }
 function membershipOrgPeopleOptions(selected,blankLabel){
   var rows=(MEMBERSHIP_ORG_DRAFT.people||[]).filter(function(p){return p.active!==false;});
@@ -35224,24 +35237,29 @@ function membershipOrgDateTimeValue(value){
   return local.toISOString().slice(0,16);
 }
 function membershipOrgAssignmentRowsHtml(unit,graph,editable){
-  if(!editable)return'';
+  if(!graph.permissions||graph.permissions.can_view_people!==true)return'<p class="org-members-empty">成員姓名依目前權限隱藏。</p>';
   var rows=graph.assignments.filter(function(row){return row.active&&String(row.orgUnitId)===String(unit.id);});
-  if(!rows.length)return'<div class="membership-org-assignment-list"><div class="membership-org-assignment-empty">目前沒有有效任職</div></div>';
-  return'<div class="membership-org-assignment-list">'+rows.map(function(row){
-    var name=membershipOrgPersonName(row.financeUserId,row.name);
+  if(!rows.length)return'<p class="org-members-empty">目前沒有有效任職。</p>';
+  return'<div class="org-member-list">'+rows.map(function(row){
+    var name=membershipOrgWorkspacePersonName(row,graph);
     var head=row.headKind==='acting'?'代理主管':row.headKind==='permanent'?'正主管':'一般任職';
-    return'<div class="membership-org-assignment-row">'
-      +'<div><strong>'+escAttr(name)+'</strong><span>'+escAttr((row.positionName||membershipOrgPositionLabel(row.positionCode))+' · '+head)+'</span></div>'
-      +'<select aria-label="職位" onchange="membershipOrgPatchAssignment(\''+attr(row.id)+'\',\'position_code\',this.value)">'+membershipOrgPositionOptions(row.positionCode)+'</select>'
-      +'<select aria-label="主兼任" onchange="membershipOrgPatchAssignment(\''+attr(row.id)+'\',\'assignment_kind\',this.value)"><option value="primary" '+(row.assignmentKind==='primary'?'selected':'')+'>主要任職</option><option value="secondary" '+(row.assignmentKind==='secondary'?'selected':'')+'>兼任</option></select>'
+    var editor=editable?'<div class="membership-org-assignment-row org-member-editor-fields">'
+      +'<label>職位<select data-no-search="1" aria-label="職位" onchange="membershipOrgPatchAssignment(\''+attr(row.id)+'\',\'position_code\',this.value)">'+membershipOrgPositionOptions(row.positionCode)+'</select></label>'
+      +'<label>主兼任<select data-no-search="1" aria-label="主兼任" onchange="membershipOrgPatchAssignment(\''+attr(row.id)+'\',\'assignment_kind\',this.value)"><option value="primary" '+(row.assignmentKind==='primary'?'selected':'')+'>主要任職</option><option value="secondary" '+(row.assignmentKind==='secondary'?'selected':'')+'>兼任</option></select></label>'
       +'<label class="membership-org-assignment-check"><input type="checkbox" '+(row.canApprove?'checked':'')+' onchange="membershipOrgPatchAssignment(\''+attr(row.id)+'\',\'can_approve\',this.checked)">可簽核</label>'
       +'<label>生效<input type="datetime-local" value="'+attr(membershipOrgDateTimeValue(row.effectiveFrom))+'" onchange="membershipOrgPatchAssignmentDate(\''+attr(row.id)+'\',\'effective_from\',this.value)"></label>'
       +'<label>到期<input type="datetime-local" value="'+attr(membershipOrgDateTimeValue(row.effectiveTo))+'" onchange="membershipOrgPatchAssignmentDate(\''+attr(row.id)+'\',\'effective_to\',this.value)"></label>'
       +'<button class="btn-g" style="color:#8a1010" onclick="membershipOrgDeactivateAssignment(\''+attr(row.id)+'\')">結束任職</button>'
+      +'</div>':'';
+    return'<div class="org-member-row" data-org-assignment-id="'+attr(row.id)+'" data-assignment-id="'+attr(row.id)+'">'
+      +'<div class="org-member-identity"><strong>'+escAttr(name)+'</strong><span>'+escAttr(row.positionCode?membershipOrgPositionLabel(row.positionCode):row.positionName||'組員')+' · '+escAttr(head)+'</span></div>'
+      +'<div class="org-member-badges"><span class="membership-org-badge">'+(row.assignmentKind==='primary'?'主要任職':'兼任')+'</span><span class="membership-org-badge '+(row.canApprove?'ok':'off')+'">'+(row.canApprove?'可簽核':'不簽核')+'</span></div>'
+      +(editable?membershipOrgWorkspaceDetails('member:'+row.id,'編輯任職','org-member-editor',editor):'')
       +'</div>';
   }).join('')+'</div>';
 }
-function membershipOrgNodeHtml(branch,graph,editable){
+function membershipOrgNodeHtml(branch,graph,editable,options){
+  options=options||{};
   var unit=branch.unit,permanent=membershipOrgHeadAssignment(graph,unit.id,'permanent'),acting=membershipOrgHeadAssignment(graph,unit.id,'acting');
   var scope=membershipOrgEngine().effectiveEntityScope(graph,unit.id);
   var entityText=scope.mode==='all'?'全集團':((scope.entityCodes||[]).join('、')||'尚未指定');
@@ -35259,7 +35277,151 @@ function membershipOrgNodeHtml(branch,graph,editable){
   var headLabel=unit.head&&unit.head.name?((unit.head.head_kind==='acting'?'代理 ':'')+unit.head.name):(headHidden?'主管姓名依權限隱藏':'主管空缺');
   var headHtml=editable?'<div class="membership-org-head"><select onchange="membershipOrgSetHead(\''+attr(unit.id)+'\',\'permanent\',this.value)">'+membershipOrgPeopleOptions(permanent&&permanent.financeUserId,'正主管空缺')+'</select><select onchange="membershipOrgSetHead(\''+attr(unit.id)+'\',\'acting\',this.value)">'+membershipOrgPeopleOptions(acting&&acting.financeUserId,'無代理主管')+'</select></div>':'<div class="membership-org-head"><span class="membership-org-badge '+(headHidden?'off':unit.head&&unit.head.vacant?'warn':'ok')+'">'+escAttr(headLabel)+'</span></div>';
   var actions=editable?'<div class="membership-org-row-actions"><button class="btn-g" onclick="openMembershipOrgUnitEditor(\''+attr(unit.parentId||'')+'\',\''+attr(unit.id)+'\')">編輯單位</button>'+(membershipOrgAllowedChildTypes(unit.unitType).length?'<button class="btn-g" onclick="membershipOrgAddChild(\''+attr(unit.id)+'\')">+ 下一階單位</button>':'')+'<button class="btn-g" onclick="membershipOrgAddAssignment(\''+attr(unit.id)+'\')">+ 任職</button><button class="btn-g" onclick="membershipOrgToggleUnit(\''+attr(unit.id)+'\')">'+(unit.active?'停用':'啟用')+'</button></div>':'<div class="membership-org-row-actions"><span class="membership-org-badge">'+graph.assignments.filter(function(a){return a.active&&a.orgUnitId===unit.id;}).length+' 人任職</span></div>';
-  return'<div class="membership-org-node" data-org-unit-id="'+attr(unit.id)+'"><div class="'+nodeClass+'" draggable="'+(editable?'true':'false')+'" ondragstart="membershipOrgDragStart(event,\''+attr(unit.id)+'\')" ondragend="membershipOrgDragEnd(event)" ondragover="membershipOrgDragOver(event,\''+attr(unit.id)+'\')" ondragleave="membershipOrgDragLeave(event)" ondrop="membershipOrgDrop(event,\''+attr(unit.id)+'\')">'+main+type+'<div class="membership-org-parent">'+parent+'</div>'+order+posting+scopeHtml+headHtml+actions+'</div>'+membershipOrgAssignmentRowsHtml(unit,graph,editable)+(branch.children.length?'<div class="membership-org-node-children">'+branch.children.map(function(child){return membershipOrgNodeHtml(child,graph,editable);}).join('')+'</div>':'')+'</div>';
+  return'<div class="membership-org-node" data-org-unit-id="'+attr(unit.id)+'"><div class="'+nodeClass+'" draggable="'+(editable?'true':'false')+'" ondragstart="membershipOrgDragStart(event,\''+attr(unit.id)+'\')" ondragend="membershipOrgDragEnd(event)" ondragover="membershipOrgDragOver(event,\''+attr(unit.id)+'\')" ondragleave="membershipOrgDragLeave(event)" ondrop="membershipOrgDrop(event,\''+attr(unit.id)+'\')">'+main+type+'<div class="membership-org-parent">'+parent+'</div>'+order+posting+scopeHtml+headHtml+actions+'</div>'+(options.hideAssignments?'':membershipOrgAssignmentRowsHtml(unit,graph,editable))+(branch.children.length?'<div class="membership-org-node-children">'+branch.children.map(function(child){return membershipOrgNodeHtml(child,graph,editable);}).join('')+'</div>':'')+'</div>';
+}
+// Presentation state stays separate from the versioned draft and its RPC payload.
+var MEMBERSHIP_ORG_WORKSPACE_UI={selectedUnitId:'',query:'',collapsed:{},details:{},navOpen:false,batchParent:''};
+function membershipOrgWorkspaceDetails(key,title,className,body){
+  return'<details class="'+className+'" data-org-detail-key="'+attr(key)+'" '+(MEMBERSHIP_ORG_WORKSPACE_UI.details[key]?'open':'')+' ontoggle="membershipOrgWorkspaceRememberDetail(this)"><summary>'+escAttr(title)+'</summary>'+body+'</details>';
+}
+window.membershipOrgWorkspaceRememberDetail=function(node){
+  if(node&&node.isConnected){
+    var key=node.getAttribute('data-org-detail-key');
+    if(key==='legacy'&&node.dataset.orgFormalAvailable!=='true')return;
+    MEMBERSHIP_ORG_WORKSPACE_UI.details[key]=node.open;
+  }
+};
+function membershipOrgWorkspacePersonName(row,graph){
+  if(!graph.permissions||graph.permissions.can_view_people!==true)return'姓名依權限隱藏';
+  if(row.name)return row.name;
+  var published=membershipOrgRuntimeGraph();
+  var visible=published&&published.permissions&&published.permissions.can_view_people===true
+    ?published.assignments.find(function(person){return String(person.financeUserId)===String(row.financeUserId)&&person.name;}):null;
+  return visible&&visible.name||'姓名尚未載入';
+}
+function membershipOrgWorkspaceHeadLabel(unit,graph,kind){
+  var engine=membershipOrgEngine();
+  var head=graph.assignments.find(function(row){return row.active&&row.orgUnitId===unit.id&&row.headKind===kind&&engine.isEffectiveAt(row,Date.now());});
+  if(head)return graph.permissions&&graph.permissions.can_view_people===true?membershipOrgWorkspacePersonName(head,graph):'姓名依權限隱藏';
+  if(unit.head&&!unit.head.vacant&&unit.head.head_kind===kind){
+    return graph.permissions&&graph.permissions.can_view_people===true?(unit.head.name||'姓名尚未載入'):'姓名依權限隱藏';
+  }
+  return kind==='acting'?'未設定代理':'主管空缺';
+}
+function membershipOrgWorkspacePath(graph,id){
+  var byId=membershipOrgEngine().graphMaps(graph).byId,path=[],seen={};
+  while(id&&byId[id]&&!seen[id]){seen[id]=true;path.unshift(byId[id]);id=byId[id].parentId;}
+  return path;
+}
+function membershipOrgWorkspaceFocusKey(node){
+  if(!node||!node.getAttribute)return'';
+  if(node.getAttribute('data-org-focus'))return node.getAttribute('data-org-focus');
+  var combo=node.classList&&node.classList.contains('combo-input')&&node.closest('.combo-select');
+  if(combo){var select=el(combo.getAttribute('data-for-select'));if(select)return'combo:'+membershipOrgWorkspaceFocusKey(select);}
+  if(node.id&&!/^searchable-select-\d+$/.test(node.id))return'id:'+node.id;
+  var member=node.closest('[data-org-assignment-id]'),detail=node.closest('[data-org-detail-key]');
+  var scope=member?'member:'+member.getAttribute('data-org-assignment-id'):detail?'details:'+detail.getAttribute('data-org-detail-key'):'workspace';
+  return scope+':'+node.tagName+':'+(node.getAttribute('onchange')||node.getAttribute('oninput')||node.getAttribute('onclick')||node.getAttribute('aria-label')||node.textContent||'');
+}
+function membershipOrgWorkspaceCapture(){
+  var tree=el('membership-org-tree'),toolbar=el('membership-org-draft-toolbar'),active=document.activeElement;
+  // Read the live disclosure state before replacing DOM. Native toggle events
+  // may still be queued when a field's change handler rerenders immediately.
+  if(tree)Array.from(tree.querySelectorAll('details[data-org-detail-key]')).forEach(function(node){MEMBERSHIP_ORG_WORKSPACE_UI.details[node.getAttribute('data-org-detail-key')]=node.open;});
+  var inside=active&&((tree&&tree.contains(active))||(toolbar&&toolbar.contains(active)));
+  var selection=null;
+  if(inside){try{if(typeof active.selectionStart==='number')selection=[active.selectionStart,active.selectionEnd];}catch(ignore){}}
+  var nav=el('org-workspace-navigation');
+  return{key:inside?membershipOrgWorkspaceFocusKey(active):'',selection:selection,navScroll:nav?nav.scrollTop:0};
+}
+function membershipOrgWorkspaceRestore(saved){
+  var tree=el('membership-org-tree'),toolbar=el('membership-org-draft-toolbar'),nav=el('org-workspace-navigation');
+  if(nav)nav.scrollTop=saved.navScroll;
+  if(!saved.key)return;
+  var nodes=[];
+  [tree,toolbar].forEach(function(root){if(root)nodes=nodes.concat(Array.from(root.querySelectorAll('button,input,select,textarea,summary,[tabindex]')));});
+  var target=nodes.find(function(node){return membershipOrgWorkspaceFocusKey(node)===saved.key;});
+  if(!target)target=el('org-workspace-detail-title');
+  if(target){target.focus({preventScroll:true});if(saved.selection&&typeof target.setSelectionRange==='function'){try{target.setSelectionRange(saved.selection[0],saved.selection[1]);}catch(ignore){}}}
+}
+window.membershipOrgWorkspaceSearch=function(value,event){
+  if(event&&event.isComposing)return;
+  MEMBERSHIP_ORG_WORKSPACE_UI.query=String(value||'');
+  renderMembershipOrgManager();
+};
+window.membershipOrgWorkspaceToggleBranch=function(id){
+  MEMBERSHIP_ORG_WORKSPACE_UI.collapsed[id]=!MEMBERSHIP_ORG_WORKSPACE_UI.collapsed[id];
+  renderMembershipOrgManager();
+};
+window.membershipOrgWorkspaceSelect=function(id){
+  var graph=membershipOrgEditableGraph();if(!graph||!graph.units.some(function(unit){return unit.id===id;}))return;
+  MEMBERSHIP_ORG_WORKSPACE_UI.selectedUnitId=id;
+  membershipOrgWorkspacePath(graph,id).slice(0,-1).forEach(function(unit){MEMBERSHIP_ORG_WORKSPACE_UI.collapsed[unit.id]=false;});
+  var mobile=window.matchMedia&&window.matchMedia('(max-width:900px)').matches;
+  MEMBERSHIP_ORG_WORKSPACE_UI.navOpen=false;
+  renderMembershipOrgManager();
+  if(mobile){var title=el('org-workspace-detail-title');if(title)title.focus({preventScroll:true});}
+};
+window.membershipOrgWorkspaceToggleNav=function(){
+  MEMBERSHIP_ORG_WORKSPACE_UI.navOpen=!MEMBERSHIP_ORG_WORKSPACE_UI.navOpen;
+  renderMembershipOrgManager();
+  if(MEMBERSHIP_ORG_WORKSPACE_UI.navOpen){var search=el('org-workspace-search');if(search)search.focus({preventScroll:true});}
+};
+window.membershipOrgWorkspaceSetBatchParent=function(value){
+  MEMBERSHIP_ORG_WORKSPACE_UI.batchParent=String(value||'');
+};
+window.membershipOrgWorkspaceKeydown=function(event){
+  if(event.key==='Escape'&&MEMBERSHIP_ORG_WORKSPACE_UI.navOpen){
+    event.preventDefault();MEMBERSHIP_ORG_WORKSPACE_UI.navOpen=false;renderMembershipOrgManager();
+    var toggle=el('org-workspace-mobile-toggle');if(toggle)toggle.focus({preventScroll:true});
+  }
+};
+function membershipOrgWorkspaceTreeHtml(graph,editable){
+  var state=MEMBERSHIP_ORG_WORKSPACE_UI,query=state.query.trim().toLocaleLowerCase(),path=membershipOrgWorkspacePath(graph,state.selectedUnitId).map(function(unit){return unit.id;});
+  function branchHtml(branch,depth){
+    var unit=branch.unit,children=branch.children.map(function(child){return branchHtml(child,depth+1);}).filter(Boolean);
+    var matches=(unit.name+' '+unit.code+' '+membershipOrgUnitTypeLabel(unit.unitType)).toLocaleLowerCase().indexOf(query)>-1;
+    if(query&&!matches&&!children.length)return'';
+    if(!Object.prototype.hasOwnProperty.call(state.collapsed,unit.id))state.collapsed[unit.id]=depth>0&&path.indexOf(unit.id)<0;
+    var expanded=!!query||!state.collapsed[unit.id],selected=unit.id===state.selectedUnitId;
+    var count=graph.assignments.filter(function(row){return row.active&&row.orgUnitId===unit.id;}).length;
+    var subtitle=membershipOrgUnitTypeLabel(unit.unitType)+' · '+membershipOrgWorkspaceHeadLabel(unit,graph,'permanent')+' · '+count+' 筆任職'+(unit.active?'':' · 已停用');
+    var drag=editable?' ondragover="membershipOrgDragOver(event,\''+attr(unit.id)+'\')" ondragleave="membershipOrgDragLeave(event)" ondrop="membershipOrgDrop(event,\''+attr(unit.id)+'\')"':'';
+    return'<li class="org-tree-item'+(selected?' is-selected':'')+(unit.active?'':' is-disabled')+'" data-org-nav-unit="'+attr(unit.id)+'" style="--org-depth:'+depth+'">'
+      +'<div class="org-tree-row"'+drag+'>'
+      +(branch.children.length?'<button type="button" class="org-tree-toggle" data-org-focus="toggle:'+attr(unit.id)+'" aria-label="'+attr((expanded?'收合':'展開')+' '+unit.name)+'" aria-expanded="'+expanded+'" aria-controls="org-tree-children-'+attr(unit.id)+'" onclick="membershipOrgWorkspaceToggleBranch(\''+attr(unit.id)+'\')"><span aria-hidden="true">'+(expanded?'▾':'▸')+'</span></button>':'<span class="org-tree-toggle-spacer" aria-hidden="true"></span>')
+      +'<button type="button" class="org-tree-select" data-org-focus="select:'+attr(unit.id)+'" data-org-unit-id="'+attr(unit.id)+'"'+(selected?' aria-current="true"':'')+' onclick="membershipOrgWorkspaceSelect(\''+attr(unit.id)+'\')"><span class="org-tree-name">'+escAttr(unit.name)+'</span><span class="org-tree-meta">'+escAttr(subtitle)+'</span></button></div>'
+      +(children.length?'<ul class="org-tree-children" id="org-tree-children-'+attr(unit.id)+'"'+(expanded?'':' hidden')+'>'+children.join('')+'</ul>':'')+'</li>';
+  }
+  return membershipOrgEngine().graphTree(graph,true).map(function(branch){return branchHtml(branch,0);}).join('');
+}
+function membershipOrgWorkspaceAdvancedHtml(graph,editable){
+  if(!editable)return'';
+  var selected=MEMBERSHIP_ORG_DRAFT.batchUnitIds||[];
+  var batch='<section class="org-batch-controls"><h4>批次搬移單位</h4><div class="org-batch-unit-list">'+graph.units.filter(function(unit){return unit.unitType!=='shareholders';}).map(function(unit){
+    return'<label><input type="checkbox" data-org-focus="batch:'+attr(unit.id)+'" '+(selected.indexOf(unit.id)>-1?'checked':'')+' onchange="membershipOrgToggleBatchUnit(\''+attr(unit.id)+'\',this.checked)">'+escAttr(unit.name)+(unit.active?'':'（已停用）')+'</label>';
+  }).join('')+'</div>'+(selected.length?'<div class="org-batch-actions"><select id="membership-org-batch-parent" aria-label="批次搬移目標" onchange="membershipOrgWorkspaceSetBatchParent(this.value)">'+membershipOrgUnitOptions(graph,MEMBERSHIP_ORG_WORKSPACE_UI.batchParent,'')+'</select><button class="btn-g" onclick="membershipOrgBatchMove()">搬移已選 '+selected.length+' 個單位</button><button class="btn-g" onclick="membershipOrgClearBatchSelection()">清除選取</button></div>':'<p>先選擇要搬移的單位。</p>')+'</section>';
+  return membershipOrgWorkspaceDetails('management','進階管理','org-workspace-advanced',batch+'<button class="btn-g" onclick="membershipOrgAddReportingOverride()">新增直屬主管例外</button>'+membershipOrgReportingOverridesHtml(editable));
+}
+function membershipOrgWorkspaceHtml(graph,editable){
+  var state=MEMBERSHIP_ORG_WORKSPACE_UI,unit=graph.units.find(function(item){return item.id===state.selectedUnitId;});
+  if(!unit){unit=graph.units.find(function(item){return item.active&&item.unitType==='department';})||graph.units.find(function(item){return item.active;})||graph.units[0];state.selectedUnitId=unit?unit.id:'';}
+  if(!unit)return'<div class="membership-org-empty">目前沒有組織單位</div>';
+  var path=membershipOrgWorkspacePath(graph,unit.id),scope=membershipOrgEngine().effectiveEntityScope(graph,unit.id);
+  var companies=(scope.entityCodes||[]).map(function(code){var entity=graph.legalEntities.find(function(row){return row.code===code;});return entity?entity.shortName||entity.legalName||code:code;});
+  var scopeLabel=scope.mode==='all'?'全集團'+(companies.length?' · '+companies.join('、'):''):companies.join('、')||'尚未指定';
+  var actions=editable?'<div class="org-detail-actions"><button class="btn-g" data-org-focus="edit-unit" onclick="openMembershipOrgUnitEditor(\''+attr(unit.parentId||'')+'\',\''+attr(unit.id)+'\')">編輯單位</button>'+(membershipOrgAllowedChildTypes(unit.unitType).length?'<button class="btn-g" data-org-focus="add-child" onclick="membershipOrgAddChild(\''+attr(unit.id)+'\')">新增下層單位</button>':'')+'<button class="btn-g" data-org-focus="add-member" onclick="membershipOrgAddAssignment(\''+attr(unit.id)+'\')">新增成員</button></div>':'';
+  var treeHtml=membershipOrgWorkspaceTreeHtml(graph,editable);
+  return'<div class="org-workspace'+(state.navOpen?' is-nav-open':'')+'" onkeydown="membershipOrgWorkspaceKeydown(event)">'
+    +'<button type="button" class="org-mobile-nav-toggle" id="org-workspace-mobile-toggle" aria-controls="org-workspace-navigation" aria-expanded="'+state.navOpen+'" onclick="membershipOrgWorkspaceToggleNav()">選擇部門：'+escAttr(unit.name)+'</button>'
+    +'<aside class="org-workspace-nav" id="org-workspace-navigation" aria-label="部門導覽"><div class="org-nav-header"><h3>部門導覽</h3><label class="org-search" for="org-workspace-search">搜尋部門<input id="org-workspace-search" type="search" placeholder="名稱或代碼" value="'+attr(state.query)+'" oninput="membershipOrgWorkspaceSearch(this.value,event)" oncompositionend="membershipOrgWorkspaceSearch(this.value,event)"></label></div><ul class="org-tree-list">'+treeHtml+'</ul>'+(!treeHtml?'<p class="org-search-empty" role="status">找不到符合的部門，請調整搜尋文字。</p>':'')+'</aside>'
+    +'<section class="org-workspace-detail" aria-labelledby="org-workspace-detail-title" data-org-selected-unit-id="'+attr(unit.id)+'">'
+    +'<div class="org-breadcrumb" role="navigation" aria-label="目前單位位置">'+path.map(function(parent,index){return index===path.length-1?'<span aria-current="location">'+escAttr(parent.name)+'</span>':'<button type="button" data-org-focus="breadcrumb:'+attr(parent.id)+'" onclick="membershipOrgWorkspaceSelect(\''+attr(parent.id)+'\')">'+escAttr(parent.name)+'</button><span aria-hidden="true">›</span>';}).join('')+'</div>'
+    +'<header class="org-detail-header"><div class="org-detail-title"><span class="membership-org-badge">'+escAttr(membershipOrgUnitTypeLabel(unit.unitType))+'</span>'+(unit.active?'':'<span class="membership-org-badge off">已停用</span>')+'<h3 id="org-workspace-detail-title" tabindex="-1">'+escAttr(unit.name)+'</h3><p>'+escAttr(unit.code)+(editable?' · 草稿內容，發布後才生效':'')+'</p></div>'+actions+'</header>'
+    +'<dl class="org-detail-facts"><div><dt>主管</dt><dd>'+escAttr(membershipOrgWorkspaceHeadLabel(unit,graph,'permanent'))+'</dd></div><div><dt>代理主管</dt><dd>'+escAttr(membershipOrgWorkspaceHeadLabel(unit,graph,'acting'))+'</dd></div><div><dt>公司範圍</dt><dd>'+escAttr(scopeLabel)+'</dd></div><div><dt>表單歸屬</dt><dd>'+(unit.isPostingUnit?'可作為費用與表單歸屬':'不作為費用與表單歸屬')+'</dd></div></dl>'
+    +'<section class="org-members"><h4>成員與任職</h4>'+membershipOrgAssignmentRowsHtml(unit,graph,editable)+'</section>'
+    +(editable?membershipOrgWorkspaceDetails('unit:'+unit.id,'進階單位設定','org-unit-advanced',membershipOrgNodeHtml({unit:unit,children:[]},graph,editable,{hideAssignments:true})):'')
+    +membershipOrgWorkspaceAdvancedHtml(graph,editable)+'</section></div>';
 }
 function membershipOrgImpactHtml(impact){
   impact=impact||{};if(!Object.keys(impact).length)return'';
@@ -35291,6 +35453,7 @@ function membershipOrgReportingOverridesHtml(editable){
     +'</div>';
 }
 function renderMembershipOrgManager(){
+  var workspaceFocus=membershipOrgWorkspaceCapture();
   var status=el('membership-org-runtime-status'),tree=el('membership-org-tree'),summary=el('membership-org-summary'),toolbar=el('membership-org-draft-toolbar');
   if(status)status.innerHTML=membershipOrgStatusHtml();
   if(!tree)return;
@@ -35309,22 +35472,24 @@ function renderMembershipOrgManager(){
   }
   var validation=editable?engine.validateDraftGraph(graph):null;
   if(summary)summary.textContent=graph.units.filter(function(u){return u.active;}).length+' 個啟用單位 · '+graph.assignments.filter(function(a){return a.active;}).length+' 筆任職'+(editable?' · 草稿編輯中':'');
-  tree.innerHTML=engine.graphTree(graph,true).map(function(branch){return membershipOrgNodeHtml(branch,graph,editable);}).join('')||'<div class="membership-org-empty">目前沒有組織單位</div>';
+  tree.innerHTML=membershipOrgWorkspaceHtml(graph,editable);
   if(toolbar){
     if(!draft){toolbar.innerHTML='';}
     else{
       var warnings=(MEMBERSHIP_ORG_DRAFT.validation&&MEMBERSHIP_ORG_DRAFT.validation.warnings)||validation&&validation.warnings||[];
       var errors=(MEMBERSHIP_ORG_DRAFT.validation&&MEMBERSHIP_ORG_DRAFT.validation.errors)||validation&&validation.errors||[];
       var actions='';
-      var selectedCount=(MEMBERSHIP_ORG_DRAFT.batchUnitIds||[]).length;
-      if(editable)actions='<button class="btn-g" onclick="saveMembershipOrgDraft()">儲存草稿</button><button class="btn-g" onclick="validateMembershipOrgDraft()">驗證與影響預覽</button><button class="btn-p" onclick="submitMembershipOrgDraft()">送交執行長</button><button class="btn-g" onclick="membershipOrgAddReportingOverride()">直屬主管例外</button><button class="btn-g" style="color:#8a1010" onclick="cancelMembershipOrgDraft()">作廢草稿</button>'
-        +(selectedCount?'<select id="membership-org-batch-parent" aria-label="批次搬移目標">'+membershipOrgUnitOptions(graph,'','')+'</select><button class="btn-g" onclick="membershipOrgBatchMove()">搬移已選 '+selectedCount+' 個單位</button><button class="btn-g" onclick="membershipOrgClearBatchSelection()">清除選取</button>':'');
+      if(editable)actions='<button class="btn-g" onclick="saveMembershipOrgDraft()">儲存草稿</button><button class="btn-g" onclick="validateMembershipOrgDraft()">驗證與影響預覽</button><button class="btn-p" onclick="submitMembershipOrgDraft()">送交執行長</button><button class="btn-g" style="color:#8a1010" onclick="cancelMembershipOrgDraft()">作廢草稿</button>';
       if(draft.status==='pending_review'&&membershipOrgCanPublish())actions='<button class="btn-p" onclick="publishMembershipOrgDraft()">核准並發布</button><button class="btn-g" onclick="rejectMembershipOrgDraft()">退回草稿</button><button class="btn-g" style="color:#8a1010" onclick="cancelMembershipOrgDraft()">作廢草稿</button>';
       if(draft.status==='scheduled'&&membershipOrgCanPublish())actions='<button class="btn-g" onclick="cancelMembershipOrgSchedule()">取消排程</button>';
-      toolbar.innerHTML='<div class="membership-org-draft-bar"><div class="membership-org-draft-meta"><strong>'+escAttr(draft.title||'組織異動')+'</strong> · '+membershipOrgVersionStatusLabel(draft.status)+' · revision '+escAttr(draft.revision||1)+(MEMBERSHIP_ORG_DRAFT.dirty?' · 尚未儲存':'')+'<br>原因：'+escAttr(draft.reason||'')+(errors.length?'<br><span style="color:#a23d32">錯誤：'+escAttr(errors.slice(0,4).join('；'))+'</span>':'')+(warnings.length?'<br><span style="color:#94601d">提醒：'+escAttr(warnings.slice(0,4).join('；'))+'</span>':'')+membershipOrgImpactHtml(MEMBERSHIP_ORG_DRAFT.impact)+'</div><div class="membership-org-draft-actions">'+actions+'<button class="btn-g" onclick="closeMembershipOrgDraft()">關閉草稿</button></div></div>'+membershipOrgReportingOverridesHtml(editable);
+      toolbar.innerHTML='<div class="membership-org-draft-bar"><div class="membership-org-draft-meta"><strong>'+escAttr(draft.title||'組織異動')+'</strong> · '+membershipOrgVersionStatusLabel(draft.status)+' · revision '+escAttr(draft.revision||1)+(MEMBERSHIP_ORG_DRAFT.dirty?' · 尚未儲存':'')+'<br>原因：'+escAttr(draft.reason||'')+(errors.length?'<br><span style="color:#a23d32">錯誤：'+escAttr(errors.slice(0,4).join('；'))+'</span>':'')+(warnings.length?'<br><span style="color:#94601d">提醒：'+escAttr(warnings.slice(0,4).join('；'))+'</span>':'')+membershipOrgImpactHtml(MEMBERSHIP_ORG_DRAFT.impact)+'</div><div class="membership-org-draft-actions">'+actions+'<button class="btn-g" onclick="closeMembershipOrgDraft()">關閉草稿</button></div></div>';
     }
   }
+  Array.from(tree.querySelectorAll('details[data-org-detail-key]')).forEach(function(node){node.addEventListener('toggle',function(){membershipOrgWorkspaceRememberDetail(node);});});
+  var workspaceSearch=el('org-workspace-search');
+  if(workspaceSearch)workspaceSearch.addEventListener('compositionend',function(event){membershipOrgWorkspaceSearch(this.value,event);});
   enhanceLongSelects(tree);
+  membershipOrgWorkspaceRestore(workspaceFocus);
 }
 window.__financeInjectMembershipOrgAdminSmokeState=function(runtime,draft){
   if(['127.0.0.1','localhost'].indexOf(String(location.hostname||'').toLowerCase())<0)return false;
