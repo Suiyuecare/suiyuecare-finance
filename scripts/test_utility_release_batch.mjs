@@ -173,6 +173,30 @@ try{
   // well. This verifies file/directive/marker compatibility without executing
   // production SQL; the domain suite owns execution of those SQL contracts.
   const repo=fileURLToPath(new URL('..',import.meta.url));
+  // These three files also run directly through `supabase db query --file`,
+  // outside the rehearsal renderer. The CLI sends SQL to PostgreSQL and does
+  // not interpret psql metacommands (release 34332884768 failed on \set).
+  const assertStandaloneCanary=source=>{
+    assert.doesNotMatch(source,/^\s*\\/m,'Standalone canaries must be pure SQL without psql metacommands');
+    assert.match(source,/^begin isolation level repeatable read;$/m);
+    assert.equal((source.match(/^rollback;$/gm)||[]).length,1,'Standalone canaries retain exactly one outer rollback');
+    assert.doesNotMatch(source,/^\s*commit\s*;/im);
+    for(const section of ['CORE','ROLLBACK_CHECK']){
+      const start='-- FINANCE_AUTHENTICATED_CANARY_'+section+'_BEGIN';
+      const end='-- FINANCE_AUTHENTICATED_CANARY_'+section+'_END';
+      assert.equal(source.split(start).length,2);assert.equal(source.split(end).length,2);
+      assert.ok(source.indexOf(start)<source.indexOf(end),'Canary sections remain ordered');
+    }
+  };
+  const standaloneCanaries=['finance_production_authenticated_canary.sql','finance_finalize_accounting_lines_canary.sql','finance_utility_tax_canary.sql'];
+  for(const filename of standaloneCanaries){
+    const raw=fs.readFileSync(path.join(repo,'scripts',filename),'utf8');
+    assertStandaloneCanary(raw);
+    assert.throws(()=>assertStandaloneCanary('\\set ON_ERROR_STOP on\n'+raw),/pure SQL without psql metacommands/,'The previously failing standalone transport must be rejected: '+filename);
+    for(const metacommand of ['\\i unsafe.sql','\\echo unsafe','\\set ON_ERROR_STOP off']){
+      assert.throws(()=>assertStandaloneCanary(raw+'\n  '+metacommand+'\n'),/pure SQL without psql metacommands/);
+    }
+  }
   const actualRehearsal=path.join(dir,'actual-rehearsal.sql');
   const renderedCli=spawnSync(process.execPath,[guardPath,'prepare-utility-rehearsal',
     '--migration-dir',path.join(repo,'supabase/migrations'),'--output',actualRehearsal,
@@ -190,4 +214,5 @@ try{
   console.log('PASS utility release: exact version, all '+(prerequisites.length-1)+' prerequisites, frontend prerequisite, three authenticated canaries, full fingerprint rollback, six canary failures, atomic apply, stale ledger and reapply rejection');
   console.log('PASS utility canary parser: '+accepted.length+' CLI transports, '+rejected.length+' unsafe shapes, five malformed inputs, CLI exit statuses and object-only manifests');
   console.log('PASS utility CLI renderer accepts the actual migration, postflight and three canary files; real SQL domain execution remains a separate gate');
+  console.log('PASS three standalone canaries are pure SQL with intact rollback/markers; the failed psql transport and other metacommands are rejected');
 }finally{await db.close();fs.rmSync(dir,{recursive:true});}
