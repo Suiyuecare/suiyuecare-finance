@@ -36,12 +36,15 @@ const AUDIT_MIGRATIONS = Object.freeze(['20260907154404','20260907154739','20260
 const RELEASE_PHASE_DATABASE_AUDIT = 'database_audit_20260907';
 const CASE_MIGRATIONS = Object.freeze(['20260908065050']);
 const RELEASE_PHASE_DATABASE_CASES = 'database_cases_20260908';
+const UTILITY_MIGRATIONS = Object.freeze(['20260909083825']);
+const RELEASE_PHASE_DATABASE_UTILITY = 'database_utility_tax_20260909';
 const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...MIGRATION_CHAIN,
   ...REVIEWED_POST_BASELINE_MIGRATIONS,
   MIGRATION_HUMAN_ACCOUNTING_AUTHORITY,
   ...AUDIT_MIGRATIONS,
-  ...CASE_MIGRATIONS
+  ...CASE_MIGRATIONS,
+  ...UTILITY_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -51,6 +54,7 @@ const RELEASE_PHASES = Object.freeze({
   [RELEASE_PHASE_DATABASE_V3]: MIGRATION_V3,
   [RELEASE_PHASE_DATABASE_AUDIT]: AUDIT_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_CASES]: CASE_MIGRATIONS.join(','),
+  [RELEASE_PHASE_DATABASE_UTILITY]: UTILITY_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING]: MIGRATION_HUMAN_ACCOUNTING_AUTHORITY
 });
 const FRONTEND_RELEASE_CONTRACT = 'expense-submit-resilience-v3-20260827';
@@ -60,8 +64,8 @@ const PRODUCTION_BASELINE_LEDGER = Object.freeze({
   sha256: '23680167bee6cfefcdbd7eb951907da61955019e24368d6e13e9ac1282422cd6'
 });
 // The SQL gate catalog retains historical v1/v2 contracts for exact-state
-// verification. The protected workflow itself only accepts releasePlan's two
-// explicit frontend_compat/database_v3 pairs.
+// verification. The protected workflow itself only accepts validateTarget's two
+// explicit frontend_compat/database_utility_tax_20260909 pairs.
 const SUPPORTED_GATE_PHASES = Object.freeze([
   Object.freeze([]),
   Object.freeze([MIGRATION_V1]),
@@ -69,7 +73,8 @@ const SUPPORTED_GATE_PHASES = Object.freeze([
   Object.freeze([MIGRATION_V3]),
   Object.freeze([MIGRATION_HUMAN_ACCOUNTING_AUTHORITY]),
   AUDIT_MIGRATIONS,
-  CASE_MIGRATIONS
+  CASE_MIGRATIONS,
+  UTILITY_MIGRATIONS
 ]);
 const SUPPORTED_GATE_SUFFIXES = SUPPORTED_GATE_PHASES;
 
@@ -143,7 +148,7 @@ function deploymentHost(record) { return String(record.url || '').replace(/^http
 function validateTarget(env, candidate, releasePhase, versionsText, expectedRef) {
   canonicalSha(candidate);
   releasePlan(releasePhase, versionsText);
-  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_CASES].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use the fixed database cases phase');
+  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_UTILITY].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use the fixed utility tax phase');
   expectedRef = projectRef(expectedRef);
   if (expectedRef !== PRODUCTION_CATALOG.supabaseProjectRef) fail('Supabase project ref is not the immutable Finance production catalog target');
   for (const name of ['SUPABASE_ACCESS_TOKEN', 'FINANCE_SUPABASE_URL', 'FINANCE_SUPABASE_ANON_KEY', 'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']) {
@@ -229,6 +234,12 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
   const remote = readLedgerVersions(ledgerPath);
   assertProductionLedgerBaseline(remote, baseline);
   const missing = MIGRATION_CHAIN.filter((version) => !remote.includes(version));
+  if (plan.releasePhase === RELEASE_PHASE_DATABASE_UTILITY) {
+    const prerequisites=[...MIGRATION_CHAIN,...REVIEWED_POST_BASELINE_MIGRATIONS,MIGRATION_HUMAN_ACCOUNTING_AUTHORITY,...AUDIT_MIGRATIONS,...CASE_MIGRATIONS];
+    if(prerequisites.some(v=>!remote.includes(v))) fail('utility tax phase requires the complete reviewed authority chain, audit batch and database cases batch');
+    if(UTILITY_MIGRATIONS.some(v=>!local.some(name=>name.startsWith(v+'_')))) fail('utility tax migration file is missing');
+    return remote.includes(UTILITY_MIGRATIONS[0])?'applied':'pending';
+  }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_CASES) {
     const prerequisites=[...MIGRATION_CHAIN,...REVIEWED_POST_BASELINE_MIGRATIONS,MIGRATION_HUMAN_ACCOUNTING_AUTHORITY,...AUDIT_MIGRATIONS];
     if(prerequisites.some(v=>!remote.includes(v))) fail('database cases phase requires the complete reviewed authority chain and audit migration batch');
@@ -253,6 +264,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     }
     if(AUDIT_MIGRATIONS.some(version=>!remote.includes(version))) fail('frontend_compat requires the complete audit migration batch');
     if(CASE_MIGRATIONS.some(version=>!remote.includes(version))) fail('frontend_compat requires the complete database cases migration batch');
+    if(UTILITY_MIGRATIONS.some(version=>!remote.includes(version))) fail('frontend_compat requires the complete utility tax migration batch');
     return 'compat';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
@@ -317,7 +329,8 @@ function extractMarkedSql(source, startMarker, endMarker, label) {
 
 function authenticatedCanarySections(canaryPath) {
   if (!canaryPath) fail('authenticated canary path is required for migration rehearsal');
-  const source = fs.readFileSync(canaryPath, 'utf8');
+  const raw = fs.readFileSync(canaryPath, 'utf8');
+  const source = raw.startsWith('\\set') ? stripPsqlDirectives(raw, path.basename(canaryPath)) : raw;
   if (!/^--[^\n]*\n(?:--[^\n]*\n)*\s*begin isolation level repeatable read;/i.test(source)
       || !/^\s*rollback\s*;/im.test(source)
       || /^\s*commit\s*;/im.test(source)) {
@@ -362,7 +375,7 @@ function prepareRehearsal(sourcePath, outputPath, target, fingerprintPath, canar
 
 function sqlLiteral(value) { return `'${String(value).replace(/'/g, "''")}'`; }
 function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATABASE_AUDIT) {
-  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES].includes(releasePhase))fail('unsupported fixed database batch');
+  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY].includes(releasePhase))fail('unsupported fixed database batch');
   releasePlan(releasePhase,versionsText);
   const files=migrationFiles(directory);
   return migrationPhase(versionsText).map(version=>{
@@ -374,17 +387,18 @@ function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATA
     return {version,filename,source};
   });
 }
-function prepareAuditBatchRehearsal(directory,outputPath,versionsText,fingerprintPath,canaryPath,postflightPath,releasePhase=RELEASE_PHASE_DATABASE_AUDIT,caseCanaryPath=null) {
+function prepareAuditBatchRehearsal(directory,outputPath,versionsText,fingerprintPath,canaryPath,postflightPath,releasePhase=RELEASE_PHASE_DATABASE_AUDIT,caseCanaryPath=null,utilityCanaryPath=null) {
   const batch=readAuditBatch(directory,versionsText,releasePhase);
   const canary=authenticatedCanarySections(canaryPath);
   const fingerprint=stripPsqlDirectives(fs.readFileSync(fingerprintPath,'utf8'),path.basename(fingerprintPath)).trim();
   if(!/^with\b/i.test(fingerprint)||/\b(?:insert\s+into|update\s+\S+\s+set|delete\s+from|alter\s+table|create\s+(?:table|index|schema|function|policy)|drop\s+(?:table|index|schema|function|policy)|truncate\s+|vacuum\b|call\s+|copy\s+)\b/i.test(fingerprint))fail('audit fingerprint must be a pure read-only CTE query');
   const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
   assertCliAtomicMigration(postflight,'audit postflight');
-  const extraCanary=releasePhase===RELEASE_PHASE_DATABASE_CASES?authenticatedCanarySections(caseCanaryPath):{core:'',rollbackCheck:''};
+  const extraCanary=[RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY].includes(releasePhase)?authenticatedCanarySections(caseCanaryPath):{core:'',rollbackCheck:''};
+  const utilityCanary=releasePhase===RELEASE_PHASE_DATABASE_UTILITY?authenticatedCanarySections(utilityCanaryPath):{core:'',rollbackCheck:''};
   const sources=batch.map(item=>item.source.trimEnd()).join('\n');
   const tag='$finance_audit_rollback_assert$';
-  if([sources,fingerprint,postflight,canary.core,canary.rollbackCheck,extraCanary.core,extraCanary.rollbackCheck].some(value=>value.includes(tag)))fail('audit rehearsal assertion tag collision');
+  if([sources,fingerprint,postflight,canary.core,canary.rollbackCheck,extraCanary.core,extraCanary.rollbackCheck,utilityCanary.core,utilityCanary.rollbackCheck].some(value=>value.includes(tag)))fail('audit rehearsal assertion tag collision');
   writeExclusive(outputPath,`begin isolation level repeatable read;
 set local lock_timeout = '5s';
 set local statement_timeout = '180s';
@@ -395,9 +409,11 @@ ${sources}
 ${postflight}
 ${canary.core}
 ${extraCanary.core}
+${utilityCanary.core}
 rollback to savepoint finance_release_migration;
 ${canary.rollbackCheck}
 ${extraCanary.rollbackCheck}
+${utilityCanary.rollbackCheck}
 create temporary table finance_release_fingerprint_after on commit drop as
 ${fingerprint}
 do ${tag}
@@ -463,14 +479,16 @@ function prepareGateQuery(sourcePath, outputPath, versionsText) {
 function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
   const plan = releasePlan(releasePhase, versionsText);
   const sourceName = path.basename(sourcePath);
-  if ([RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)) {
+  if ([RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)) {
     if(sourceName!=='finance_production_db_postflight.sql') fail('audit phase requires the reviewed existing-v3 postflight');
     const base=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),sourceName).replace(/:'migration_versions'/g,sqlLiteral(MIGRATION_V3));
     const auditPath=path.join(path.dirname(sourcePath),'finance_audit_20260907_postflight.sql');
     const audit=stripPsqlDirectives(fs.readFileSync(auditPath,'utf8'),path.basename(auditPath));
-    const cases=[RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)
+    const cases=[RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)
       ?stripPsqlDirectives(fs.readFileSync(path.join(path.dirname(sourcePath),'finance_finalize_accounting_lines_postflight.sql'),'utf8'),'finance_finalize_accounting_lines_postflight.sql'):'';
-    writeExclusive(outputPath,`begin read only;\nset local statement_timeout = '60s';\n${base.trimEnd()}\n${audit.trimEnd()}\n${cases.trimEnd()}\nrollback;\n`);
+    const utility=[RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)
+      ?stripPsqlDirectives(fs.readFileSync(path.join(path.dirname(sourcePath),'finance_utility_tax_postflight.sql'),'utf8'),'finance_utility_tax_postflight.sql'):'';
+    writeExclusive(outputPath,`begin read only;\nset local statement_timeout = '60s';\n${base.trimEnd()}\n${audit.trimEnd()}\n${cases.trimEnd()}\n${utility.trimEnd()}\nrollback;\n`);
     return true;
   }
   if (plan.releasePhase === RELEASE_PHASE_FRONTEND_COMPAT) {
@@ -593,6 +611,25 @@ function verifyFinalizeCanary(inputPath) {
   if(matches.length!==1)fail('finalize canary output must contain exactly one result');
   const result=typeof matches[0]==='string'?JSON.parse(matches[0]):matches[0];
   assert.deepStrictEqual(result,{canary:'authenticated_finalize_accounting_lines',ok:true,rolled_back:true,accounting_lines_consistent:true},'authenticated finalize rollback canary did not complete safely');
+  return true;
+}
+
+function verifyUtilityCanary(inputPath) {
+  // Accept the pinned CLI's row arrays and boundary/rows wrappers; retain the
+  // object-only manifest reader and require exactly one complete SQL result.
+  let payload;
+  try { payload=JSON.parse(fs.readFileSync(inputPath,'utf8')); }
+  catch(error) { fail(`${path.basename(inputPath)} is not valid JSON: ${error.message}`); }
+  const matches=[];
+  const visit=value=>{
+    if(!value||typeof value!=='object')return;
+    if(Object.hasOwn(value,'utility_tax_canary_result'))matches.push(value.utility_tax_canary_result);
+    Object.values(value).forEach(visit);
+  };
+  visit(payload);
+  if(matches.length!==1)fail('utility canary output must contain exactly one result');
+  const result=typeof matches[0]==='string'?JSON.parse(matches[0]):matches[0];
+  assert.deepStrictEqual(result,{canary:'authenticated_utility_tax_v1',ok:true,rolled_back:true,utility_input_tax_absent:true},'authenticated utility rollback canary did not complete safely');
   return true;
 }
 
@@ -754,6 +791,7 @@ function verifyReceipt(receiptPath, deploymentPath, manifestPath, indexPath, can
 function manifestSha(file) { return sha256File(file); }
 
 const api = {
+  UTILITY_MIGRATIONS, RELEASE_PHASE_DATABASE_UTILITY, verifyUtilityCanary,
   CASE_MIGRATIONS, RELEASE_PHASE_DATABASE_CASES, verifyFinalizeCanary,
   AUDIT_MIGRATIONS, RELEASE_PHASE_DATABASE_AUDIT, prepareAuditBatchRehearsal, prepareAuditBatchApply, readAuditBatch,
   PRODUCTION_CATALOG, PRODUCTION_BASELINE_LEDGER, MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_CHAIN,
@@ -782,6 +820,8 @@ if (require.main === module) {
     else if (command === 'prepare-audit-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'), arg('output'), arg('migration-versions'), arg('fingerprint'), arg('authenticated-canary'), arg('audit-postflight'));
     else if (command === 'prepare-cases-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('authenticated-canary'),arg('case-postflight'),RELEASE_PHASE_DATABASE_CASES,arg('case-canary'));
     else if (command === 'prepare-cases-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('case-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_CASES);
+    else if (command === 'prepare-utility-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('authenticated-canary'),arg('utility-postflight'),RELEASE_PHASE_DATABASE_UTILITY,arg('case-canary'),arg('utility-canary'));
+    else if (command === 'prepare-utility-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('utility-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_UTILITY);
     else if (command === 'prepare-audit-apply') prepareAuditBatchApply(arg('migration-dir'), arg('output'), arg('migration-versions'), arg('ledger'), arg('audit-postflight'));
     else if (command === 'prepare-rehearsal') prepareRehearsal(arg('migration'), arg('output'), arg('migration-version'), arg('fingerprint'), arg('authenticated-canary'));
     else if (command === 'prepare-gate-query') prepareGateQuery(arg('input'), arg('output'), arg('migration-versions'));
@@ -790,6 +830,7 @@ if (require.main === module) {
     else if (command === 'prepare-apply') prepareApply(arg('migration'), arg('output'), arg('migration-version'), arg('ledger'));
     else if (command === 'normalize-query-rows') normalizeQueryRows(arg('input'), arg('output'));
     else if (command === 'verify-finalize-canary') verifyFinalizeCanary(arg('input'));
+    else if (command === 'verify-utility-canary') verifyUtilityCanary(arg('input'));
     else if (command === 'verify-authenticated-canary') verifyAuthenticatedCanary(arg('input'));
     else if (command === 'verify-supabase-public-key') verifySupabasePublicKey(arg('api-keys-json'), process.env.FINANCE_SUPABASE_ANON_KEY);
     else if (command === 'verify-candidate') verifyCandidate(arg('local-manifest'), arg('remote-manifest'), arg('candidate-sha'), arg('deployment-url'));

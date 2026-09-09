@@ -15,7 +15,7 @@ const c={Promise,WeakMap,Set,console,REQS:[],S:{user:{id:'reviewer'},demoLogin:f
  canEditAccountingLineAmounts:()=>false,canEditAccountingLineSubjects:()=>false,accountingReviewDraftHtml:()=>'',
  fmt:n=>String(n),escAttr:v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])),
  getSb:()=>({from(table){const query={table,filters:[],then(resolve,reject){calls.push(query);return Promise.resolve(typeof response[table]==='function'?response[table]():response[table]).then(resolve,reject);}};for(const method of ['select','eq','order','range','maybeSingle'])query[method]=(...args)=>{query.filters.push([method,...args]);return query;};return query;}})};
-c.window=c;vm.createContext(c);vm.runInContext(helper+'\n'+['buildAccountingLines','entriesFromAccountingLines','pettyCashVoucherEntries','accountingLinesHtml'].map(fn).join('\n'),c);
+c.window=c;vm.createContext(c);vm.runInContext(helper+'\n'+['accountingUtilityBillDetected','buildAccountingLines','entriesFromAccountingLines','pettyCashVoucherEntries','accountingLinesHtml'].map(fn).join('\n'),c);
 const old={id:'line_1',description:'匿名修繕',departmentCode:'D1',netAmount:657,taxAmount:33,grossAmount:690,debitAccount:'6299',debitAccountName:'舊科目',creditAccount:'1111',creditAccountName:'零用金'};
 const corrected={...old,netAmount:690,taxAmount:0,debitAccount:'6207',debitAccountName:'修繕費',creditAccount:'1112',manualOverride:true,manualFields:['debitAccount','netAmount','taxAmount'],reviewedAt:'2026-09-06T08:53:16Z'};
 function request(){return {id:'request-a',no:'ANON-001',status:'completed',type:'petty_cash_request',amt:690,eid:'E1',dc:'D1',ver:7,voucherId:'V-001',ledgerPostedAt:'2026-09-06',tenantId:tenant,formPayload:{accountingLines:[clone(old)]}};}

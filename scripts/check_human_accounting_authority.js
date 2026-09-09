@@ -35,6 +35,9 @@ const runtime=new Function(
   'controlledCreditAccountForRequest','accountingLaborFeeDetected',
   'expenseDebitAccounts','accountingLineIsSystemFee',
   [
+    functionSource('accountingUtilityBillDetected'),
+    functionSource('requestLedgerPostedAt'),
+    functionSource('requestPostingLocked'),
     functionSource('accountingManualActorSnapshot'),
     functionSource('accountingManualFieldNames'),
     functionSource('accountingLineManualFields'),
