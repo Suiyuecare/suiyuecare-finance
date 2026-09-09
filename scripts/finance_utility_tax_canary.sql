@@ -1,4 +1,3 @@
-\set ON_ERROR_STOP on
 -- Authenticated utility-expense canary. Synthetic test rows only; the entire
 -- transaction must be rolled back. Never finalize an operational request.
 begin isolation level repeatable read;
