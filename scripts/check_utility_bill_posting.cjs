@@ -105,6 +105,8 @@ const report=[];
   assert.ok(!trace.alerts.some(x=>x.includes('此申請單正在入帳中')),'failed entry construction can be retried');
   report.push({name:invalid.name,serialCalls:0,rpcCalls:0,lockReleased:true,originalPreserved:true});
  }
- console.log('PASS real doConfirmVoucher: '+report.length+' utility/ordinary/refund/supplement/failure cases');
- console.log(JSON.stringify(report,null,2));
+ report.forEach(result=>console.log('PASS real doConfirmVoucher: '+result.name));
+ console.log('OK: '+report.length+' utility/ordinary/refund/supplement/failure cases');
+ const outputIndex=process.argv.indexOf('--output');
+ if(outputIndex>=0){assert.ok(process.argv[outputIndex+1],'--output requires an evidence JSON path');fs.writeFileSync(path.resolve(process.argv[outputIndex+1]),JSON.stringify(report,null,2));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
