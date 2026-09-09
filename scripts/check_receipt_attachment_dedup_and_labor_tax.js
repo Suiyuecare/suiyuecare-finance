@@ -54,6 +54,7 @@ function functionSource(name){
   throw new Error('Unclosed function '+name);
 }
 const laborRuntime=new Function('num','BUSINESS_TAX_RATE',[
+  functionSource('accountingUtilityBillDetected'),
   functionSource('accountingLaborFeeDetected'),
   functionSource('accountingManualFieldNames'),
   functionSource('accountingLineManualFields'),

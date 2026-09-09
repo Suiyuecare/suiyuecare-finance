@@ -93,3 +93,12 @@ supabase/.temp
 
 !scripts/fixtures/finance_finalize_expense_baseline_20260908.sql
 !scripts/fixtures/finance_finalize_dependencies_20260908.sql
+
+# Water/electricity expense rule and exact protected release checks
+!scripts/check_utility_bill_input_tax.js
+!scripts/check_utility_gross_expense_guard.js
+!scripts/check_utility_bill_browser.cjs
+!scripts/check_utility_bill_posting.cjs
+!scripts/test_utility_release_batch.mjs
+!scripts/finance_utility_tax_postflight.sql
+!scripts/finance_utility_tax_canary.sql

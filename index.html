@@ -5821,13 +5821,18 @@ async function postAdvanceDisbursementEvent(r){
   saveLocalAppStateSoon();
   return true;
 }
+function advanceUsesUtilityAccountingLines(r){
+  var p=(r&&r.formPayload)||{};
+  return !!(r&&r.type==='advance_request'&&Array.isArray(p.accountingLines)&&p.accountingLines.length&&
+    p.accountingLines.concat(Array.isArray(p.lazyRows)?p.lazyRows:[]).some(accountingUtilityBillDetected));
+}
 function advanceFinalAccountingHtml(r,prefix){
   prefix=prefix||'advance-final';
   var fp=(r&&r.formPayload)||{};
   var selected=fp.advanceFinalDebitAccount||advanceDefaultFinalDebitCode();
   var original=advanceOriginalAmount(r);
   return'<div class="fg"><label class="fl">最後實際支出金額 *</label><input type="number" min="0" id="'+prefix+'-amt" value="'+(advanceActualAmount(r)||'')+'" placeholder="請依最後發票與 Excel 明細填寫" oninput="renderAdvanceSettlementPreview('+original+',\''+prefix+'\')"></div>'
-    +'<div class="fg"><label class="fl">最後認列費用科目 *</label><select id="'+prefix+'-dr">'+advanceFinalAccountOptions(selected,r&&r.eid,r&&r.dc)+'</select><div style="font-size:10px;color:#8b7358;margin-top:3px">預支申請送出時先以 1191 暫付款控管；最後會計入帳時，三表改依本欄費用科目與最後憑據金額認列。</div></div>'
+    +(advanceUsesUtilityAccountingLines(r)?'<div class="fg"><label class="fl">最後認列費用科目</label><div style="font-size:12px;color:#334155">依會計覆核明細逐筆入帳</div><div style="font-size:10px;color:#8b7358;margin-top:3px">請在會計明細調整各筆科目；水費、電費全額列費用，其他項目保留各自稅額。</div></div>':'<div class="fg"><label class="fl">最後認列費用科目 *</label><select id="'+prefix+'-dr">'+advanceFinalAccountOptions(selected,r&&r.eid,r&&r.dc)+'</select><div style="font-size:10px;color:#8b7358;margin-top:3px">預支申請送出時先以 1191 暫付款控管；最後會計入帳時，三表改依本欄費用科目與最後憑據金額認列。</div></div>')
     +'<div id="'+prefix+'-settlement-preview" style="font-size:11px;color:#334155;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:7px;margin-bottom:7px">多退少補：依最後金額自動計算</div>'
     +'<label style="display:flex;gap:6px;align-items:flex-start;font-size:11px;color:#334155;margin-bottom:7px"><input id="'+prefix+'-settlement-confirm" type="checkbox" style="width:auto;margin-top:2px">我已確認實體憑據收回，且多退少補現金已完成（退回公司或公司補匯）</label>';
 }
@@ -15748,12 +15753,18 @@ function taxLedgerRefs(eid,period,account){
   ledgerRows(eid,period).forEach(function(r){if(String(r.ac)===String(account)&&r.ref)refs[r.ref]=true;});
   return refs;
 }
-function requestTaxAmount(r){
+function requestTaxAmount(r,forPosting){
   if(r&&r.type==='hr_expense_request')return 0;
   var p=(r&&r.formPayload)||{};
+  if(forPosting&&Array.isArray(p.accountingLines)&&p.accountingLines.length){
+    return p.accountingLines.reduce(function(sum,line){
+      if(accountingUtilityBillDetected(line)&&(num(line.taxAmount)!==0||num(line.netAmount)!==num(line.grossAmount)))throw new Error('水費、電費須全額列費用且進項稅額為 0，請回會計明細覆核後再入帳。');
+      return sum+(line.systemFee?0:Math.max(0,num(line.taxAmount)));
+    },0);
+  }
   var rows=[].concat(p.lazyRows||[]);
   if(p.travelInfo&&Array.isArray(p.travelInfo.rows))rows=rows.concat(p.travelInfo.rows);
-  return rows.reduce(function(s,row){return s+lazyTaxAmount(row||{});},0);
+  return rows.reduce(function(s,row){return s+lazyAmountParts(row||{},!forPosting&&requestPostingLocked(r)).tax;},0);
 }
 function requestGrossAmount(r){
   if(!r)return 0;
@@ -15763,9 +15774,9 @@ function requestGrossAmount(r){
   // 只屬於採購／預支等有正式差額結算的流程，不能覆蓋一般申請本金。
   return num(r.amt||r.amount);
 }
-function requestNetTaxSplit(r,amount){
+function requestNetTaxSplit(r,amount,forPosting){
   var gross=num(amount||requestGrossAmount(r));
-  var tax=Math.min(gross,Math.max(0,requestTaxAmount(r)));
+  var tax=Math.min(gross,Math.max(0,requestTaxAmount(r,forPosting)));
   return {gross:gross,tax:tax,net:Math.max(0,gross-tax)};
 }
 function acctName(code){
@@ -16035,6 +16046,15 @@ function rowAccountingText(row,r){
   ];
   return String(pieces.filter(Boolean).join(' ')).toLowerCase();
 }
+function accountingUtilityBillDetected(row){
+  row=row||{};
+  // This is the company's expense treatment, not a statutory tax exemption.
+  // Match this line only: 6202 also includes gas, and a request may mix expenses.
+  var text=[row.item,row.description,row.label,row.itemName].map(function(value){return String(value||'').trim();}).find(function(value){return !!value;})||'';
+  text=text.replace(/\s/g,'');
+  if(/瓦斯|郵電|電信|電話|工程|修繕|維修|安裝|材料|設備|補助|補貼|飲水機|電腦/.test(text))return false;
+  return /水費|電費|水電費/.test(text);
+}
 function accountingLaborFeeDetected(row){
   row=row||{};
   var code=String(row.debitAccount||row.debit_account||row.accountCode||row.account_code||'').trim();
@@ -16098,7 +16118,7 @@ function inferDebitAccountForLine(row,type,r){
   r=r||{};
   var text=rowAccountingText(row,r);
   var ctx=detectUsageContext(row,type,r,text);
-  var gross=lazyRowTotal(row)||num(row.grossAmount||row.total||row.amount);
+  var gross=lazyRowTotal(row);
   var assetNote=detectAssetizationNote(row,type,r,text,gross);
   var taxNote=taxAccountingNote(row,r);
   var reasonBase='AI判定：申請類型='+requestTypeAccountingLabel(type)+'；使用情境='+ctx.label+'；'+ctx.reason;
@@ -16317,15 +16337,20 @@ function buildAccountingLines(r){
   if(posted&&posted.status==='ready'&&posted.lines)return posted.lines.map(function(line){return cloneSettingValue(line);});
   var fp=r.formPayload||{};
   if(Array.isArray(fp.accountingLines)&&fp.accountingLines.length){
+    if(requestPostingLocked(r))return fp.accountingLines.map(function(line){return cloneSettingValue(line);});
     return fp.accountingLines.map(function(line,i){return normalizeAccountingLine(line,r,i);});
   }
   var rows=sourceRowsForAccounting(r);
   return rows.map(function(row,i){
-    var gross=lazyRowTotal(row)||num(row.grossAmount||row.total||row.amount);
-    var tax=Math.min(gross,Math.max(0,lazyTaxAmount(row)||num(row.taxAmount||row.tax)));
+    var parts=lazyAmountParts(row,requestPostingLocked(r));
+    var gross=parts.gross;
+    var tax=Math.min(gross,Math.max(0,parts.tax));
     var net=Math.max(0,gross-tax);
     var inf=inferDebitAccountForLine(row,r.type,r)||{code:(r&&r.dr)||'6299',name:(r&&r.drN)||acctName((r&&r.dr)||'6299')||'待指定',reason:'系統找不到可用借方科目，暫以申請類型預設科目建立，待會計覆核。'};
     var rowManualFields=accountingLineManualFields(row);
+    if(accountingUtilityBillDetected(row)&&(accountingLineFieldIsHuman(row,'taxAmount')||accountingLineFieldIsHuman(row,'netAmount'))){
+      tax=Math.min(gross,Math.max(0,num(row.taxAmount)));net=Object.prototype.hasOwnProperty.call(row,'netAmount')?num(row.netAmount):gross-tax;
+    }
     var manualDefaults=fp.accountingManualDefaults||{};
     var defaultManualFields=Array.isArray(manualDefaults.manualFields)?manualDefaults.manualFields:[];
     if(accountingLaborFeeDetected(Object.assign({},row,{debitAccount:inf.code,debitAccountName:inf.name}))
@@ -16382,6 +16407,7 @@ function normalizeAccountingLine(line,r,i){
   var humanTax=accountingLineFieldIsHuman(line,'taxAmount');
   var humanNet=accountingLineFieldIsHuman(line,'netAmount');
   if(((r&&r.type==='hr_expense_request')||laborFee)&&!humanTax&&!humanNet){tax=0;net=gross;}
+  if(accountingUtilityBillDetected(line)&&!requestPostingLocked(r)&&!humanTax&&!humanNet){tax=0;net=gross;}
   if(!Object.prototype.hasOwnProperty.call(line,'netAmount'))net=Math.max(0,gross-tax);
   var cr=accountingLineCreditAccount(line,r);
   var normalized={
@@ -16404,10 +16430,10 @@ function normalizeAccountingLine(line,r,i){
   normalized.reviewedAt=line.reviewedAt||null;
   return preserveAccountingManualAuthority(line,normalized);
 }
-function accountingLineAmountInput(prefix,i,field,value){
+function accountingLineAmountInput(prefix,i,field,value,utilityBill){
   var label={netAmount:'未稅/費用',taxAmount:'進項稅額',grossAmount:'含稅'}[field]||field;
   var key={netAmount:'net',taxAmount:'tax',grossAmount:'gross'}[field]||field;
-  return '<input id="'+prefix+'-'+key+'-'+i+'" type="number" min="0" step="1" value="'+escAttr(Math.round(num(value)))+'" aria-label="'+label+'" title="'+label+'" style="width:112px;max-width:100%;text-align:right;font-family:var(--font-sans);font-weight:750;font-size:12px;padding:6px 8px" oninput="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onblur="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onchange="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')">';
+  return '<input'+(utilityBill?' data-utility-bill="true"':'')+(utilityBill&&field==='taxAmount'?' readonly aria-readonly="true"':'')+' id="'+prefix+'-'+key+'-'+i+'" type="number" min="0" step="1" value="'+escAttr(Math.round(num(value)))+'" aria-label="'+label+'" title="'+label+'" style="width:112px;max-width:100%;text-align:right;font-family:var(--font-sans);font-weight:750;font-size:12px;padding:6px 8px" oninput="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onblur="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onchange="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')">';
 }
 window.syncAccountingLineAmountInputs=function(prefix,i,field){
   var netEl=el(prefix+'-net-'+i),taxEl=el(prefix+'-tax-'+i),grossEl=el(prefix+'-gross-'+i);
@@ -16415,7 +16441,10 @@ window.syncAccountingLineAmountInputs=function(prefix,i,field){
   var net=Math.max(0,Math.round(num(netEl.value)));
   var tax=Math.max(0,Math.round(num(taxEl.value)));
   var gross=Math.max(0,Math.round(num(grossEl.value)));
-  if(field==='grossAmount'){
+  if(grossEl.dataset&&grossEl.dataset.utilityBill==='true'){
+    if(field==='netAmount')gross=net;
+    net=gross;tax=0;
+  }else if(field==='grossAmount'){
     if(tax>gross)tax=gross;
     net=Math.max(0,gross-tax);
   }else{
@@ -16446,13 +16475,14 @@ function accountingLinesHtml(r,editable,title){
   if(posted)head='<div style="font-size:12px;line-height:1.7;margin-bottom:10px">正式傳票 '+escAttr(posted.voucher.no)+' · 以下為與已入帳分錄核對一致的會計明細。既有簽核與付款紀錄保留；後續更正請由會計辦理調整。'+(r.type==='petty_cash_request'&&!pettyIsInitial(r)?' 零用金依兩段分錄核銷並補足額度，完整借貸列於下方正式傳票。':'')+'</div>';
   var rows=lines.map(function(line,i){
     var amountEditable=editable&&canEditAccountingLineAmounts(r)&&!line.locked;
+    var utilityBill=amountEditable&&accountingUtilityBillDetected(line)&&!requestPostingLocked(r);
     var subjectEditable=editable&&canEditAccountingLineSubjects(r)&&!line.locked;
     return'<tr>'
       +'<td style="text-align:center;color:#94a3b8">'+(i+1)+'</td>'
-      +'<td><div style="font-size:11px;font-weight:650;color:#334155">'+escAttr(line.description)+'</div></td>'
-      +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'netAmount',line.netAmount):fmt(line.netAmount))+'</td>'
-      +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'taxAmount',line.taxAmount):fmt(line.taxAmount))+'</td>'
-      +'<td style="text-align:right;font-family:var(--font-sans);font-weight:650">'+(amountEditable?accountingLineAmountInput(prefix,i,'grossAmount',line.grossAmount):fmt(line.grossAmount))+'</td>'
+      +'<td><div style="font-size:11px;font-weight:650;color:#334155">'+escAttr(line.description)+'</div>'+(utilityBill?'<div style="font-size:11px;color:#8b7358">水電帳單全額列費用，不拆進項稅</div>':'')+'</td>'
+      +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'netAmount',utilityBill?line.grossAmount:line.netAmount,utilityBill):fmt(line.netAmount))+'</td>'
+      +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'taxAmount',utilityBill?0:line.taxAmount,utilityBill):fmt(line.taxAmount))+'</td>'
+      +'<td style="text-align:right;font-family:var(--font-sans);font-weight:650">'+(amountEditable?accountingLineAmountInput(prefix,i,'grossAmount',line.grossAmount,utilityBill):fmt(line.grossAmount))+'</td>'
       +'<td>'+(subjectEditable?'<select id="'+prefix+'-dr-'+i+'" style="font-size:11px" onchange="syncAccountingLineSubjectTax(\''+prefix+'\','+i+')">'+accountOptionsHtml(line.debitAccount,'debit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-dr">'+escAttr(line.debitAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.debitAccountName)+'</div>')+'</td>'
       +'<td>'+(posted&&r.type==='petty_cash_request'&&!pettyIsInitial(r)?'<span class="acct-cr">1111</span><div style="font-size:10px;color:#64748b">零用金核銷；補足另貸 1112</div>':(subjectEditable?'<select id="'+prefix+'-cr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.creditAccount,'credit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-cr">'+escAttr(line.creditAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.creditAccountName)+'（系統鎖定）</div>'))+'</td>'
       +'</tr>';
@@ -16464,7 +16494,8 @@ function expenseInvoiceReviewGroups(r){
   var rows=(fp.lazyRows||[]).filter(function(x){return x&&!x.systemFee;});
   var groups=[],map={};
   rows.forEach(function(row,idx){
-    var gross=lazyRowTotal(row)||num(row.grossAmount||row.total||row.amount);
+    var parts=lazyAmountParts(row,requestPostingLocked(r));
+    var gross=parts.gross;
     var hasSignal=!!(row.no||row.date||row.file||row.buyerTaxId||row.buyerTax||row.sellerTaxId||row.sellerTax);
     if(!gross&&!row.item&&!hasSignal)return;
     var invNo=String(row.no||row.invoiceNo||row.invoice_number||row.invoiceNumber||'').trim();
@@ -16476,8 +16507,8 @@ function expenseInvoiceReviewGroups(r){
       groups.push(map[key]);
     }
     var g=map[key];
-    var tax=lazyTaxAmount(row)||num(row.taxAmount||row.tax);
-    var net=lazyNetAmount(row)||num(row.netAmount||row.amount);
+    var tax=parts.tax;
+    var net=parts.net;
     g.total+=gross;g.tax+=tax;g.net+=net;
     if(!g.no&&invNo)g.no=invNo;
     if(!g.file&&file)g.file=file;
@@ -16544,6 +16575,7 @@ function collectAccountingLinesFromDom(r){
     if(tax>gross)tax=gross;
     if(grossEl&&Math.abs(gross-(net+tax))>0.5)net=Math.max(0,gross-tax);
     else gross=net+tax;
+    if(accountingUtilityBillDetected(line)){tax=0;net=gross;}
     var next=Object.assign({},line,{
       netAmount:net,
       taxAmount:tax,
@@ -16647,6 +16679,9 @@ function canBulkApproveWithoutAccountingLineCollection(r,step){
 function entriesFromAccountingLines(r,totalFallback,bankFee){
   var lines=principalAccountingLines(buildAccountingLines(r)),entries=[];
   if(!lines.length)return null;
+  if(!requestPostingLocked(r)&&lines.some(function(line){return accountingUtilityBillDetected(line)&&(num(line.taxAmount)!==0||num(line.netAmount)!==num(line.grossAmount));})){
+    throw new Error('水費、電費須全額列費用且進項稅額為 0，請回會計明細覆核後再入帳。');
+  }
   var target=num(totalFallback);
   var current=lines.reduce(function(s,line){return s+num(line.grossAmount);},0);
   var hasHumanAmounts=lines.some(function(line){return ['netAmount','taxAmount','grossAmount'].some(function(field){return accountingLineFieldIsHuman(line,field);});});
@@ -18107,8 +18142,9 @@ function normalizeLazyTaxMode(v){
   if(v==='exempt'||v==='免稅'||v==='不計稅'||v==='no_tax')return 'exempt';
   return '';
 }
-function lazyTaxMode(r){
+function lazyTaxMode(r,preserveHistoricalTax){
   if(!r)return 'exempt';
+  if(!preserveHistoricalTax&&accountingUtilityBillDetected(r))return 'exempt';
   var humanAmount=accountingLineManualFields(r).some(function(field){return ['netAmount','taxAmount','grossAmount'].indexOf(field)>-1;});
   if(accountingLaborFeeDetected(r)&&!humanAmount)return 'exempt';
   var mode=normalizeLazyTaxMode(r.taxMode||r.amountTaxMode||r.tax_mode);
@@ -18118,15 +18154,19 @@ function lazyTaxMode(r){
   if(lazyHasValue(r,'grossAmount')||lazyHasValue(r,'total'))return 'gross_inclusive';
   return 'net_exclusive';
 }
-function lazyAmountParts(r){
+function lazyAmountParts(r,preserveHistoricalTax){
   r=r||{};
-  var mode=lazyTaxMode(r),rate=BUSINESS_TAX_RATE;
+  var mode=lazyTaxMode(r,preserveHistoricalTax),rate=BUSINESS_TAX_RATE;
   var gross=num(r.grossAmount||r.total||r.amount||0);
   var net=num(r.netAmount||r.subtotal||0);
   var tax=num(r.taxAmount||r.tax||0);
   var hasGross=lazyHasValue(r,'grossAmount')||lazyHasValue(r,'total')||lazyHasValue(r,'amount');
   var hasNet=lazyHasValue(r,'netAmount')||lazyHasValue(r,'subtotal');
   var hasTax=lazyHasValue(r,'taxAmount')||lazyHasValue(r,'tax');
+  if(!preserveHistoricalTax&&accountingUtilityBillDetected(r)){
+    var billGross=lazyHasValue(r,'grossAmount')?num(r.grossAmount):lazyHasValue(r,'total')?num(r.total):lazyHasValue(r,'amount')?num(r.amount):(hasNet?net+tax:Math.max(0,(num(r.qty)||1)*num(r.unitPrice||r.unit||0)));
+    return {net:Math.max(0,billGross),tax:0,gross:Math.max(0,billGross),mode:'exempt'};
+  }
   var manualFields=accountingLineManualFields(r);
   var manualNet=manualFields.indexOf('netAmount')>-1;
   var manualTax=manualFields.indexOf('taxAmount')>-1;
@@ -18215,19 +18255,20 @@ function renderLazySheet(){
     return;
   }
   var rows=S.lazyRows.map(function(r,i){
+    var utilityBill=accountingUtilityBillDetected(r);
     return'<tr>'
       +'<td style="width:34px;text-align:center;color:#94a3b8">'+(i+1)+'</td>'
       +'<td><input value="'+escAttr(r.no||'')+'" onchange="lazyEdit('+i+',\'no\',this.value)"></td>'
       +'<td><input type="date" value="'+escAttr(r.date||'')+'" onchange="lazyEdit('+i+',\'date\',this.value)"></td>'
       +'<td><input value="'+escAttr(r.buyerTaxId||r.buyerTax||'')+'" onchange="lazyEdit('+i+',\'buyerTaxId\',this.value)"></td>'
       +'<td><input value="'+escAttr(r.sellerTaxId||r.sellerTax||'')+'" onchange="lazyEdit('+i+',\'sellerTaxId\',this.value)"></td>'
-      +'<td><input value="'+escAttr(r.item||'')+'" onchange="lazyEdit('+i+',\'item\',this.value)"></td>'
+      +'<td><input value="'+escAttr(r.item||'')+'" onchange="lazyEdit('+i+',\'item\',this.value)"><span id="lazy-utility-note-'+i+'"'+(utilityBill?'':' hidden')+' style="font-size:11px;padding:4px 5px;color:#8b7358">水電帳單全額列費用，不拆進項稅</span></td>'
       +'<td><input type="number" min="0" step="0.01" value="'+escAttr(r.qty||1)+'" onchange="lazyEdit('+i+',\'qty\',this.value)"></td>'
       +'<td><input value="'+escAttr(r.unitName||'')+'" placeholder="個" onchange="lazyEdit('+i+',\'unitName\',this.value)"></td>'
-      +'<td><input type="number" min="0" step="1" value="'+escAttr(r.unitPrice||r.unit||0)+'" onchange="lazyEdit('+i+',\'unitPrice\',this.value)"></td>'
-      +'<td><select onchange="lazyEdit('+i+',\'taxMode\',this.value)">'+lazyTaxModeOptions(r)+'</select></td>'
+      +'<td><input id="lazy-unit-price-'+i+'" type="number" min="0" step="1" value="'+escAttr(utilityBill?lazyRowTotal(r)/(num(r.qty)||1):(r.unitPrice||r.unit||0))+'" onchange="lazyEdit('+i+',\'unitPrice\',this.value)"></td>'
+      +'<td><select id="lazy-mode-'+i+'"'+(utilityBill?' disabled aria-label="水電帳單不拆進項稅"':'')+' onchange="lazyEdit('+i+',\'taxMode\',this.value)">'+lazyTaxModeOptions(r)+'</select></td>'
       +'<td><input id="lazy-net-'+i+'" type="number" min="0" step="1" value="'+escAttr(lazyNetAmount(r))+'" oninput="lazyDraftEdit('+i+',\'netAmount\',this.value)" onchange="lazyEdit('+i+',\'netAmount\',this.value)"></td>'
-      +'<td><input id="lazy-tax-'+i+'" type="number" min="0" step="1" value="'+escAttr(lazyTaxAmount(r))+'" oninput="lazyDraftEdit('+i+',\'taxAmount\',this.value)" onchange="lazyEdit('+i+',\'taxAmount\',this.value)"></td>'
+      +'<td><input id="lazy-tax-'+i+'"'+(utilityBill?' readonly aria-readonly="true"':'')+' type="number" min="0" step="1" value="'+escAttr(lazyTaxAmount(r))+'" oninput="lazyDraftEdit('+i+',\'taxAmount\',this.value)" onchange="lazyEdit('+i+',\'taxAmount\',this.value)"></td>'
       +'<td><input id="lazy-gross-'+i+'" type="number" min="0" step="1" value="'+escAttr(lazyRowTotal(r))+'" oninput="lazyDraftEdit('+i+',\'grossAmount\',this.value)" onchange="lazyEdit('+i+',\'grossAmount\',this.value)"></td>'
       +'<td style="font-size:10px;color:#94a3b8;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(r.file||'')+'</td>'
       +'<td style="width:30px;text-align:center"><button onclick="lazyDel('+i+')" style="border:none;background:transparent;color:#94a3b8;cursor:pointer">×</button></td>'
@@ -18241,6 +18282,13 @@ function renderLazySheet(){
   if(nextScroll){nextScroll.scrollLeft=oldLeft;nextScroll.scrollTop=oldTop;}
 }
 function syncLazyAmountDraftDom(i,row){
+  var utilityBill=accountingUtilityBillDetected(row);
+  var taxInput=el('lazy-tax-'+i),modeInput=el('lazy-mode-'+i),note=el('lazy-utility-note-'+i);
+  if(taxInput){taxInput.readOnly=utilityBill;taxInput.setAttribute('aria-readonly',String(utilityBill));if(utilityBill)taxInput.value=0;}
+  if(modeInput){modeInput.disabled=utilityBill;modeInput.value=lazyTaxMode(row);}
+  if(note)note.hidden=!utilityBill;
+  var unitPriceInput=el('lazy-unit-price-'+i);
+  if(utilityBill&&unitPriceInput&&document.activeElement!==unitPriceInput)unitPriceInput.value=row.unitPrice;
   [['net',row.netAmount],['tax',row.taxAmount],['gross',row.grossAmount]].forEach(function(pair){
     var input=el('lazy-'+pair[0]+'-'+i);
     if(input&&document.activeElement!==input)input.value=Math.round(num(pair[1]));
@@ -18250,9 +18298,14 @@ function applyLazyEditValue(i,k,v,finalize,render){
   var r=S.lazyRows[i];if(!r)return;
   if(r.systemFee){syncLazyBankFeeRow(true);alert('銀行手續費由系統依法人與銀行設定自動計算，不可手動修改。');return;}
   var amountFields=['netAmount','taxAmount','grossAmount'];
-  if(amountFields.concat(['qty','unitPrice','taxMode']).indexOf(k)>-1&&!r._manualDraftBefore)r._manualDraftBefore=cloneSettingValue(r);
+  if(amountFields.concat(['qty','unitPrice','taxMode','item']).indexOf(k)>-1&&!r._manualDraftBefore)r._manualDraftBefore=cloneSettingValue(r);
+  var priorGross=lazyRowTotal(r),priorNet=lazyNetAmount(r),priorQty=num(r.qty)||1;
   r[k]=(k==='qty'||k==='unitPrice'||k==='total'||k==='netAmount'||k==='taxAmount'||k==='grossAmount')?num(v):v;
-  if(k==='qty'||k==='unitPrice'){
+  if(accountingUtilityBillDetected(r)){
+    var billGross=(k==='netAmount'||k==='grossAmount'||k==='total')?Math.max(0,num(v)):k==='qty'?Math.max(0,(num(r.qty)||1)*priorGross/priorQty):k==='unitPrice'?Math.max(0,(num(r.qty)||1)*num(r.unitPrice)):priorGross;
+    r.netAmount=billGross;r.taxAmount=0;r.grossAmount=billGross;r.total=billGross;r.taxMode='exempt';
+    r.unitPrice=billGross/(num(r.qty)||1);
+  }else if(k==='qty'||k==='unitPrice'){
     var base=Math.max(0,(num(r.qty)||1)*num(r.unitPrice||r.unit||0));
     if(lazyTaxMode(r)==='gross_inclusive'){
       r.grossAmount=base;r.total=base;
@@ -18270,7 +18323,8 @@ function applyLazyEditValue(i,k,v,finalize,render){
     r.total=r.grossAmount;
   }else if(k==='taxAmount'){
     r.taxAmount=Math.max(0,num(r.taxAmount));
-    r.grossAmount=lazyNetAmount(r)+r.taxAmount;
+    r.netAmount=Math.max(0,lazyHasValue(r,'netAmount')?num(r.netAmount):priorNet);
+    r.grossAmount=r.netAmount+r.taxAmount;
     r.total=r.grossAmount;
   }else if(k==='grossAmount'){
     r.taxMode='gross_inclusive';
@@ -18300,7 +18354,13 @@ window.lazyEdit=function(i,k,v){
 };
 function finalizeLazyAccountingDrafts(){
   (S.lazyRows||[]).forEach(function(row){
-    if(!row||!row._manualDraftBefore)return;
+    if(!row)return;
+    if(accountingUtilityBillDetected(row)){
+      if(!row._manualDraftBefore)row._manualDraftBefore=cloneSettingValue(row);
+      var parts=lazyAmountParts(row);
+      row.netAmount=parts.gross;row.taxAmount=0;row.grossAmount=parts.gross;row.total=parts.gross;row.taxMode='exempt';row.unitPrice=parts.gross/(num(row.qty)||1);
+    }
+    if(!row._manualDraftBefore)return;
     var before=row._manualDraftBefore;
     delete row._manualDraftBefore;
     markAccountingManualAuthority(before,row,'new_request_submit_flush',accountingChangedFields(before,row,['netAmount','taxAmount','grossAmount']));
@@ -18388,6 +18448,7 @@ function invoiceRowsFromOcr(data,fileName){
     var row={no:no,date:date,buyerTaxId:buyerTaxId,sellerTaxId:sellerTaxId,item:itemName,qty:qty,unitName:x.unit||x.unit_name||x.unitName||'',unitPrice:unitPrice,netAmount:net,taxAmount:tax,grossAmount:gross,total:gross,taxMode:taxMode,file:fileName,accountingSubjectSuggestion:accountingSubjectSuggestion,usageContextSuggestion:usageContextSuggestion,taxTreatmentSuggestion:taxTreatmentSuggestion,assetizationSuggestion:assetizationSuggestion};
     var parts=lazyAmountParts(row);
     row.netAmount=parts.net;row.taxAmount=parts.tax;row.grossAmount=parts.gross;row.total=parts.gross;
+    if(accountingUtilityBillDetected(row)){row.taxMode='exempt';row.unitPrice=parts.gross/qty;}
     return row;
   });
 }
@@ -23207,7 +23268,8 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
     if(!advanceReady.ok){alert(advanceReady.msg);return;}
     var finalAmt=num((el(advancePrefix+'-amt')||{}).value);
     if(!finalAmt){alert('請填寫最後實際支出金額，作為三表最後入帳調整依據。');return;}
-    var finalAcct=accountByCode((el(advancePrefix+'-dr')||{}).value||advanceDefaultFinalDebitCode());
+    var utilityAdvanceLines=advanceUsesUtilityAccountingLines(r)?principalAccountingLines(r.formPayload.accountingLines):[];
+    var finalAcct=accountByCode(utilityAdvanceLines.length?utilityAdvanceLines[0].debitAccount:((el(advancePrefix+'-dr')||{}).value||advanceDefaultFinalDebitCode()));
     if(!finalAcct){alert('請選擇最後認列費用科目。');return;}
     var settle=advanceSettlementInfo(r,finalAmt);
     if(settle.diff!==0&&!((el(advancePrefix+'-settlement-confirm')||{}).checked)){alert('請先勾選確認多退少補現金已完成。');return;}
@@ -23313,13 +23375,27 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
   r.amt=entryAmt;
   var bankFee=r.type==='advance_request'?0:requestBankFeeAmount(r);
   var voucherEntries=[];
+  try{
+  // This completed work copy is a new posting, so validate its current review
+  // explicitly instead of treating it as a locked historical request.
+  requestTaxAmount(r,true);
   if(r.type==='advance_request'){
     var originalAdvance=advanceOriginalAmount(r);
     var advanceDiff=entryAmt-originalAdvance;
-    var advanceSplit=requestNetTaxSplit(r,entryAmt);
-    var advanceDebit=advanceSplit.tax>0?advanceSplit.net:entryAmt;
-    if(advanceDebit>0)voucherEntries.push({t:'dr',ac:r.dr,an:r.drN,dept:r.dc,amt:advanceDebit});
-    if(advanceSplit.tax>0)voucherEntries.push({t:'dr',ac:'1144',an:'進項稅額',dept:r.dc,amt:advanceSplit.tax});
+    if(advanceUsesUtilityAccountingLines(r)){
+      var advanceLines=principalAccountingLines(r.formPayload.accountingLines);
+      var advanceLinesTotal=advanceLines.reduce(function(sum,line){return sum+num(line.grossAmount);},0);
+      if(!advanceLines.length||Math.abs(advanceLinesTotal-entryAmt)>0.01)throw new Error('會計明細合計與最後實際支出金額不一致，請核對後再入帳。');
+      advanceLines.forEach(function(line){
+        if(num(line.netAmount)>0)voucherEntries.push({t:'dr',ac:line.debitAccount,an:line.debitAccountName,dept:line.departmentCode||r.dc,amt:num(line.netAmount)});
+        if(num(line.taxAmount)>0)voucherEntries.push({t:'dr',ac:'1144',an:'進項稅額',dept:line.departmentCode||r.dc,amt:num(line.taxAmount)});
+      });
+    }else{
+      var advanceSplit=requestNetTaxSplit(r,entryAmt,true);
+      var advanceDebit=advanceSplit.tax>0?advanceSplit.net:entryAmt;
+      if(advanceDebit>0)voucherEntries.push({t:'dr',ac:r.dr,an:r.drN,dept:r.dc,amt:advanceDebit});
+      if(advanceSplit.tax>0)voucherEntries.push({t:'dr',ac:'1144',an:'進項稅額',dept:r.dc,amt:advanceSplit.tax});
+    }
     if(advanceDiff<0)voucherEntries.push({t:'dr',ac:'1112',an:'銀行存款-預支退回',dept:r.dc,amt:Math.abs(advanceDiff)});
     voucherEntries.push({t:'cr',ac:'1191',an:'暫付款',dept:r.dc,amt:originalAdvance});
     if(advanceDiff>0)voucherEntries.push({t:'cr',ac:'1112',an:'銀行存款-預支補匯',dept:r.dc,amt:advanceDiff});
@@ -23328,13 +23404,18 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
   }else{
     voucherEntries=entriesFromAccountingLines(r,entryAmt,bankFee)||[];
     if(!voucherEntries.length){
-      var split=requestNetTaxSplit(r,entryAmt);
+      var split=requestNetTaxSplit(r,entryAmt,true);
       var debitAmt=split.tax>0?split.net:entryAmt;
       if(debitAmt>0)voucherEntries.push({t:'dr',ac:r.dr,an:r.drN,dept:r.dc,amt:debitAmt});
       if(split.tax>0)voucherEntries.push({t:'dr',ac:'1144',an:'進項稅額',dept:r.dc,amt:split.tax});
       if(bankFee>0)voucherEntries.push({t:'dr',ac:'6290',an:'手續費',dept:r.dc,amt:bankFee});
       voucherEntries.push({t:'cr',ac:r.cr,an:r.crN,dept:r.dc,amt:entryAmt+bankFee});
     }
+  }
+  }catch(accountingError){
+    delete POSTING_IN_FLIGHT[lockKey];
+    alert((accountingError.message||'請重新核對會計明細。')+' 尚未取得傳票編號或入帳。');
+    return;
   }
   var creditAmount=voucherEntries.reduce(function(s,e){return s+(e.t==='cr'?e.amt:0);},0);
   var debitAmount=voucherEntries.reduce(function(s,e){return s+(e.t==='dr'?e.amt:0);},0);

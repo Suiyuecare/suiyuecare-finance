@@ -74,6 +74,8 @@ try{
  await assert.rejects(()=>db.exec(fs.readFileSync(apply,'utf8')),/ledger changed/);await db.exec('rollback');
  fs.writeFileSync(ledger,[...legacy,...guard.CASE_MIGRATIONS].join('\n')+'\n');
  assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'applied');
+ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/utility tax migration batch/);
+ fs.appendFileSync(ledger,guard.UTILITY_MIGRATIONS.join('\n')+'\n');
  assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
  assert.throws(()=>guard.prepareAuditBatchApply(migrationDir,path.join(dir,'again.sql'),versions,ledger,postflight,baseline,phase),/must be pending/);
  const expectedCanary={canary:'authenticated_finalize_accounting_lines',ok:true,rolled_back:true,accounting_lines_consistent:true};
