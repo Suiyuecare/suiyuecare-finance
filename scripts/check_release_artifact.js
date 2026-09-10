@@ -107,6 +107,35 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+    'scripts/check_financial_statements.cjs',
+    'scripts/check_financial_statement_runtime.cjs',
+    'scripts/check_management_report_engine.cjs',
+    'scripts/check_tax_report_engine.js',
+  'scripts/check_tax_workpaper_adapter.js',
+  'scripts/check_reporting_workspace_boundaries.cjs',
+    'scripts/check_finance_reporting_profiles.js',
+    'scripts/check_canonical_receivables.js',
+    'scripts/check_receivables_engine.cjs',
+    'scripts/test_reports_release_batch.mjs',
+    'scripts/check_reporting_workspace_browser.cjs',
+    'scripts/finance_reports_20260910_fingerprint.sql',
+    'scripts/finance_canonical_receivables_postflight.sql',
+    'scripts/finance_canonical_receivables_canary.sql',
+    'scripts/finance_reporting_profiles_postflight.sql',
+    'scripts/finance_reporting_profiles_canary.sql',
+    'scripts/fixtures/finance_receivables_schema_20260910.sql',
+    'assets/engines/financial-statements.js',
+    'assets/engines/receivables-engine.js',
+    'assets/engines/management-report-engine.js',
+    'assets/engines/reporting-workspace.js',
+    'assets/engines/tax-report-engine.js',
+    'assets/styles/reporting-workspace.css',
+    'docs/FINANCIAL_STATEMENT_MODEL.md',
+    'docs/finance-receivables-contract.md',
+    'docs/finance-reporting-contract.md',
+    'docs/finance-reporting-implementation.md',
+    'docs/reference/taiwan-vat-401-403-404-official-20230831.pdf',
+
     '.github/workflows/finance-production-release.yml',
     '.github/workflows/stability-gate.yml',
     '.gitignore',
@@ -232,6 +261,12 @@ if (buildConfig.target !== 'production' && /var\s+SUPABASE_(?:ANON|PUBLISHABLE)_
 }
 if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(builtIndex)) {
   fail('artifact contains a forbidden Supabase elevated key');
+}
+
+const requiredReportArtifacts=["assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
+for(const item of requiredReportArtifacts){
+  const built=path.join(OUTPUT,item),source=path.join(ROOT,item);
+  if(!fs.existsSync(built)||!fs.readFileSync(built).equals(fs.readFileSync(source)))fail('report artifact is missing or differs from its exact source: '+item);
 }
 
 const sourceRecords = fileRecords(releaseSourceFiles());

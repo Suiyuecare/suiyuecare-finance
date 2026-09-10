@@ -174,3 +174,12 @@ permissions. New SQL, migration ledger entry and domain postflight commit togeth
 and promotion consumes the previously sealed deployment only after both canaries
 and all postflights pass again. Isolated PGlite tests are local regression evidence;
 they do not constitute a production migration or successful production rehearsal.
+
+
+## 2026-09-10 報表與應收帳款固定批次
+
+新候選只允許 `frontend_compat=none` 或 `database_reports_20260910=20260910064324,20260910064325`。完整 v3／historical authority／audit 六份／cases／utility 是前置；兩版未全數套用不可提升前台。舊 phase 只保留前置查核，不接受 dispatch。
+
+`pnpm test:financial-reporting` 納入固定 preflight；來源與 artifact manifest 必须包含五個新 engine、reporting CSS、所有行為／SQL／release 測試、兩個 domain postflight/canary、完整 fingerprint、匿名 fixture 及官方 401/403/404 PDF。PDF 由固定來源檔複製到 www/docs/reference，與 source 雜湊逐一核對。
+
+本地真 PostgreSQL engine 的 `test_reports_release_batch.mjs` 驗兩份 migration＋ledger＋postflight 同交易、五個 authenticated canary core／rollback check、中途失敗與 stale ledger 拒絕，以及新增／既有財務表等筆數變更的指紋。完整正式 schema 的 rollback rehearsal 仍是不可略過的發布前置；本地 fixture 不冒充正式環境驗收。

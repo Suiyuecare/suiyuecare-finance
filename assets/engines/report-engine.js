@@ -171,6 +171,7 @@
       return inScope(close) && close.period === period && close.status === 'closed';
     });
     var warnings = [];
+    if (datasets.statementSources && datasets.statementSources.complete !== true) warnings.push('分類帳、發票或申請單尚未完整載入，資料完整性未確認');
     if (!bankAccounts.length) warnings.push('尚未設定銀行帳戶');
     if (!bankTransactions.length) warnings.push('本期間尚無銀行交易明細');
     if (!bankStatementImports.length) warnings.push('本期間尚無銀行匯入批次');

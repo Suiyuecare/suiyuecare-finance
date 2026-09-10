@@ -59,6 +59,35 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'scripts/check_financial_statements.cjs',
+  'scripts/check_financial_statement_runtime.cjs',
+  'scripts/check_management_report_engine.cjs',
+  'scripts/check_tax_report_engine.js',
+  'scripts/check_tax_workpaper_adapter.js',
+  'scripts/check_reporting_workspace_boundaries.cjs',
+  'scripts/check_finance_reporting_profiles.js',
+  'scripts/check_canonical_receivables.js',
+  'scripts/check_receivables_engine.cjs',
+  'scripts/test_reports_release_batch.mjs',
+  'scripts/check_reporting_workspace_browser.cjs',
+  'scripts/finance_reports_20260910_fingerprint.sql',
+  'scripts/finance_canonical_receivables_postflight.sql',
+  'scripts/finance_canonical_receivables_canary.sql',
+  'scripts/finance_reporting_profiles_postflight.sql',
+  'scripts/finance_reporting_profiles_canary.sql',
+  'scripts/fixtures/finance_receivables_schema_20260910.sql',
+  'assets/engines/financial-statements.js',
+  'assets/engines/receivables-engine.js',
+  'assets/engines/management-report-engine.js',
+  'assets/engines/reporting-workspace.js',
+  'assets/engines/tax-report-engine.js',
+  'assets/styles/reporting-workspace.css',
+  'docs/FINANCIAL_STATEMENT_MODEL.md',
+  'docs/finance-receivables-contract.md',
+  'docs/finance-reporting-contract.md',
+  'docs/finance-reporting-implementation.md',
+  'docs/reference/taiwan-vat-401-403-404-official-20230831.pdf',
+
   '.github/workflows/finance-production-release.yml',
   '.github/workflows/stability-gate.yml',
   '.gitignore',
@@ -149,6 +178,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
 ]);
 
 const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
+  'test:financial-reporting': "node scripts/check_financial_statements.cjs && node scripts/check_financial_statement_runtime.cjs && node scripts/check_management_report_engine.cjs && node scripts/check_tax_report_engine.js && node scripts/check_tax_workpaper_adapter.js && node scripts/check_reporting_workspace_boundaries.cjs && node scripts/check_finance_reporting_profiles.js && node scripts/check_canonical_receivables.js && node scripts/check_receivables_engine.cjs && node scripts/test_reports_release_batch.mjs",
   'test:database-cases': "node scripts/test_posted_accounting_view.cjs && node scripts/check_attachment_download_names.cjs && node scripts/check_procurement_payment_handler.js && node scripts/check_finalize_accounting_lines_atomic.js && node scripts/test_cases_release_batch.mjs && node scripts/check_utility_gross_expense_guard.js && node scripts/test_utility_release_batch.mjs",
   'test:audit-remediation': "node scripts/check_finance_auth_recovery_regressions.js && node scripts/test_current_identity_runtime_sql.mjs && node scripts/check_finance_org_regressions.js && node scripts/check_procurement_human_event_contract.js && node scripts/check_expense_accounting_corrections.js && node scripts/check_receipt_atomic_workflow.js && node scripts/check_receipt_revenue_compatibility.js && node scripts/check_receipt_notification_ui.js && node scripts/test_hris_attendance_identity_boundary.mjs && node scripts/test_html_render_security.cjs && node scripts/test_diagnostic_outbox.cjs && node scripts/test_audit_release_batch.mjs && node scripts/check_approval_postflight.js && node scripts/check_utility_bill_input_tax.js && node scripts/check_utility_bill_posting.cjs",
   'release:source-integrity': 'node scripts/check_release_source_integrity.js',
@@ -156,12 +186,30 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'release:migration-lineage': 'node scripts/check_migration_lineage_contract.js',
   'release:production-contract': 'node scripts/check_finance_production_release_contract.js',
   'release:root-cause-regressions': 'node scripts/check_root_cause_regressions.js && node scripts/check_submission_identity_directory_contract.js && node scripts/check_notification_staff_access_reconciliation_contract.js && node scripts/check_membership_org_expense_submission_contract.js && node scripts/check_submission_applicant_identity_contract.js && node scripts/check_submission_persona_routes.js && node scripts/test_expense_route_authority_v2.js && node scripts/check_incident_account_org_repair.js && node scripts/check_final_accountant_self_post_contract.js && node scripts/check_formal_cashier_self_disbursement_contract.js && node scripts/check_human_accounting_authority.js',
-  'release:preflight': 'pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases',
+  'release:preflight': 'pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting',
   'release:verify-artifact': 'node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js',
   'release:build': 'pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact'
 });
 
 const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
+  'scripts/check_financial_statements.cjs',
+  'scripts/check_financial_statement_runtime.cjs',
+  'scripts/check_management_report_engine.cjs',
+  'scripts/check_tax_report_engine.js',
+  'scripts/check_tax_workpaper_adapter.js',
+  'scripts/check_reporting_workspace_boundaries.cjs',
+  'scripts/check_finance_reporting_profiles.js',
+  'scripts/check_canonical_receivables.js',
+  'scripts/check_receivables_engine.cjs',
+  'scripts/test_reports_release_batch.mjs',
+  'scripts/check_reporting_workspace_browser.cjs',
+  'scripts/finance_reports_20260910_fingerprint.sql',
+  'scripts/finance_canonical_receivables_postflight.sql',
+  'scripts/finance_canonical_receivables_canary.sql',
+  'scripts/finance_reporting_profiles_postflight.sql',
+  'scripts/finance_reporting_profiles_canary.sql',
+  'scripts/fixtures/finance_receivables_schema_20260910.sql',
+
   'scripts/build_www.js',
   'scripts/finance_build_environment.js',
   'scripts/check_environment_isolation_contract.js',
