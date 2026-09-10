@@ -86,6 +86,8 @@ const root = path.resolve(__dirname, '..');
 const auditPostflight=fs.readFileSync(path.join(root,'scripts/finance_audit_20260907_postflight.sql'),'utf8');
 for(const name of ['finance_org_integrity_postflight.sql','finance_approval_audit_postflight.sql'])assert.ok(auditPostflight.includes(fs.readFileSync(path.join(root,'scripts',name),'utf8').trim()),'combined postflight must include exact domain contract: '+name);
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/finance-production-release.yml'), 'utf8');
+assert.deepEqual(guard.REPORT_POSTFLIGHT_FILES,['finance_production_db_postflight.sql','finance_audit_20260907_postflight.sql','finance_finalize_accounting_lines_postflight.sql','finance_utility_tax_postflight.sql','finance_production_human_accounting_canary.sql','finance_canonical_receivables_postflight.sql','finance_reporting_profiles_postflight.sql'],'Reports must retain every inherited/new postflight in its transaction');
+for(const name of guard.REPORT_POSTFLIGHT_FILES){assert.ok(workflow.includes('cp scripts/'+name+' "$BUNDLE/release-tools/scripts/"'),'Every reports transaction check must be sealed: '+name);for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert.ok(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'scripts/"+name+"'"),'Reports postflight must be source-pinned: '+name);}
 assert.deepEqual([...workflow.matchAll(/^          - (frontend_compat|database_\S+)$/gm)].map(match=>match[1]), ['frontend_compat','database_reports_20260910'], 'Only current frontend and exact reports phase may be dispatched; archived phases remain queryable only');
 const releaseGuide = fs.readFileSync(path.join(root, 'docs/FINANCE_PRODUCTION_RELEASE.md'), 'utf8');
 const required = [
@@ -415,12 +417,14 @@ try {
   fs.writeFileSync(path.join(temp,'finance_audit_20260907_postflight.sql'), '\\set ON_ERROR_STOP on\nselect 2;\n');
   fs.writeFileSync(path.join(temp,'finance_finalize_accounting_lines_postflight.sql'), '\\set ON_ERROR_STOP on\nselect 3;\n');
   fs.writeFileSync(path.join(temp,'finance_utility_tax_postflight.sql'), '\\set ON_ERROR_STOP on\nselect 4;\n');
+  fs.writeFileSync(path.join(temp,'finance_production_human_accounting_canary.sql'), '\\set ON_ERROR_STOP on\nselect 7;\n');
   fs.writeFileSync(path.join(temp,'finance_canonical_receivables_postflight.sql'), '\\set ON_ERROR_STOP on\nselect 5;\n');
   fs.writeFileSync(path.join(temp,'finance_reporting_profiles_postflight.sql'), '\\set ON_ERROR_STOP on\nselect 6;\n');
   guard.preparePhaseQuery(phasePostflightSource, compatGateOutput, 'frontend_compat', 'none');
   assert.match(fs.readFileSync(compatGateOutput, 'utf8'), /'20260827052447'/);
   assert.match(fs.readFileSync(compatGateOutput, 'utf8'), /select 2;[\s\S]+select 3;[\s\S]+select 4;/, 'Frontend compatibility requires audit, finalize and utility postflights');
   assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 4;[\s\S]+select 5;[\s\S]+select 6;/,'Frontend requires both reports domains');
+  assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 4;[\s\S]+select 7;[\s\S]+select 5;/,'Recovery and frontend gates preserve the human accounting check in the shared full chain');
   const reportsGateOutput=path.join(temp,'reports-gate-rendered.sql');
   guard.preparePhaseQuery(phasePostflightSource,reportsGateOutput,guard.RELEASE_PHASE_DATABASE_REPORTS,guard.REPORT_MIGRATIONS.join(','));
   assert.match(fs.readFileSync(reportsGateOutput,'utf8'),/^begin read only;[\s\S]+select 4;[\s\S]+select 5;[\s\S]+select 6;[\s\S]+rollback;\s*$/);

@@ -40,6 +40,15 @@ const UTILITY_MIGRATIONS = Object.freeze(['20260909083825']);
 const RELEASE_PHASE_DATABASE_UTILITY = 'database_utility_tax_20260909';
 const REPORT_MIGRATIONS = Object.freeze(['20260910064324','20260910064325']);
 const RELEASE_PHASE_DATABASE_REPORTS = 'database_reports_20260910';
+const REPORT_POSTFLIGHT_FILES = Object.freeze([
+  'finance_production_db_postflight.sql',
+  'finance_audit_20260907_postflight.sql',
+  'finance_finalize_accounting_lines_postflight.sql',
+  'finance_utility_tax_postflight.sql',
+  'finance_production_human_accounting_canary.sql',
+  'finance_canonical_receivables_postflight.sql',
+  'finance_reporting_profiles_postflight.sql'
+]);
 const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...MIGRATION_CHAIN,
   ...REVIEWED_POST_BASELINE_MIGRATIONS,
@@ -431,12 +440,26 @@ function reportsRehearsalRollbackCheck(source) {
   if(!opening.test(source))fail('reports rollback check must preserve its reviewed declaration-free DO block');
   return source.replace(opening,(_,prefix)=>`${prefix}declare\n${declarations.join('\n')}\nbegin\n${reads.join('\n')}\n`);
 }
+function reportsPostflightChain(postflightPath,profilePostflightPath) {
+  const directory=path.dirname(postflightPath);
+  if(path.resolve(path.dirname(profilePostflightPath))!==path.resolve(directory))fail('reports postflights must use the same sealed source directory');
+  return REPORT_POSTFLIGHT_FILES.map(name=>{
+    const sourcePath=name==='finance_canonical_receivables_postflight.sql'?postflightPath:name==='finance_reporting_profiles_postflight.sql'?profilePostflightPath:path.join(directory,name);
+    let source=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),name);
+    if(name==='finance_production_db_postflight.sql'){
+      if(!/:'migration_versions'/.test(source))fail('reports chain requires the reviewed v3 migration phase marker');
+      source=source.replace(/:'migration_versions'/g,sqlLiteral(MIGRATION_V3));
+    }
+    assertCliAtomicMigration(source,`reports postflight ${name}`);
+    return `-- Reviewed reports postflight: ${name}\n${source.trimEnd()}`;
+  }).join('\n');
+}
 function prepareAuditBatchRehearsal(directory,outputPath,versionsText,fingerprintPath,canaryPath,postflightPath,releasePhase=RELEASE_PHASE_DATABASE_AUDIT,caseCanaryPath=null,utilityCanaryPath=null,reportCanaryPaths=[],profilePostflightPath=null) {
   const batch=readAuditBatch(directory,versionsText,releasePhase);
   const canary=authenticatedCanarySections(canaryPath);
   const fingerprint=stripPsqlDirectives(fs.readFileSync(fingerprintPath,'utf8'),path.basename(fingerprintPath)).trim();
   if(!/^with\b/i.test(fingerprint)||/\b(?:insert\s+into|update\s+\S+\s+set|delete\s+from|alter\s+table|create\s+(?:table|index|schema|function|policy)|drop\s+(?:table|index|schema|function|policy)|truncate\s+|vacuum\b|call\s+|copy\s+)\b/i.test(fingerprint))fail('audit fingerprint must be a pure read-only CTE query');
-  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath))+(releasePhase===RELEASE_PHASE_DATABASE_REPORTS?'\n'+stripPsqlDirectives(fs.readFileSync(profilePostflightPath,'utf8'),path.basename(profilePostflightPath)):'');
+  const postflight=releasePhase===RELEASE_PHASE_DATABASE_REPORTS?reportsPostflightChain(postflightPath,profilePostflightPath):stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
   assertCliAtomicMigration(postflight,'audit postflight');
   const extraCanary=[RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS].includes(releasePhase)?authenticatedCanarySections(caseCanaryPath):{core:'',rollbackCheck:''};
   const utilityCanary=[RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS].includes(releasePhase)?authenticatedCanarySections(utilityCanaryPath):{core:'',rollbackCheck:''};
@@ -477,7 +500,7 @@ rollback;
   return true;
 }
 function prepareAuditBatchApply(directory,outputPath,versionsText,ledgerPath,postflightPath,baseline=PRODUCTION_BASELINE_LEDGER,releasePhase=RELEASE_PHASE_DATABASE_AUDIT,profilePostflightPath=null) {
-  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath))+(releasePhase===RELEASE_PHASE_DATABASE_REPORTS?'\n'+stripPsqlDirectives(fs.readFileSync(profilePostflightPath,'utf8'),path.basename(profilePostflightPath)):'');
+  const postflight=releasePhase===RELEASE_PHASE_DATABASE_REPORTS?reportsPostflightChain(postflightPath,profilePostflightPath):stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
   assertCliAtomicMigration(postflight,'audit postflight');
   const batch=readAuditBatch(directory,versionsText,releasePhase);
   verifyLedger('pre',ledgerPath,directory,releasePhase,versionsText,baseline);
@@ -527,6 +550,12 @@ function prepareGateQuery(sourcePath, outputPath, versionsText) {
 function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
   const plan = releasePlan(releasePhase, versionsText);
   const sourceName = path.basename(sourcePath);
+  if([RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)){
+    if(sourceName!=='finance_production_db_postflight.sql')fail('reports compatibility requires the reviewed existing-v3 postflight');
+    const directory=path.dirname(sourcePath),postflight=reportsPostflightChain(path.join(directory,'finance_canonical_receivables_postflight.sql'),path.join(directory,'finance_reporting_profiles_postflight.sql'));
+    writeExclusive(outputPath,`begin read only;\nset local statement_timeout = '60s';\n${postflight}\nrollback;\n`);
+    return true;
+  }
   if ([RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)) {
     if(sourceName!=='finance_production_db_postflight.sql') fail('audit phase requires the reviewed existing-v3 postflight');
     const base=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),sourceName).replace(/:'migration_versions'/g,sqlLiteral(MIGRATION_V3));
@@ -858,7 +887,7 @@ function verifyReceipt(receiptPath, deploymentPath, manifestPath, indexPath, can
 function manifestSha(file) { return sha256File(file); }
 
 const api = {
-  REPORT_MIGRATIONS, RELEASE_PHASE_DATABASE_REPORTS, verifyReportsCanary,
+  REPORT_MIGRATIONS, REPORT_POSTFLIGHT_FILES, RELEASE_PHASE_DATABASE_REPORTS, verifyReportsCanary,
   UTILITY_MIGRATIONS, RELEASE_PHASE_DATABASE_UTILITY, verifyUtilityCanary,
   CASE_MIGRATIONS, RELEASE_PHASE_DATABASE_CASES, verifyFinalizeCanary,
   AUDIT_MIGRATIONS, RELEASE_PHASE_DATABASE_AUDIT, prepareAuditBatchRehearsal, prepareAuditBatchApply, readAuditBatch,

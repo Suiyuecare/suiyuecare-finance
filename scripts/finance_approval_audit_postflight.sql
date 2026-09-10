@@ -1,3 +1,53 @@
+-- Receipt implementation may remain v1 or use the exact backwards-compatible
+-- v1 -> v2 SQL delegate. Validate the callable delegate AND its implementation.
+-- This block is also executed verbatim by the canonical receivables fixture.
+do $receipt_implementation_postflight$
+declare v_oid oid;v_source text;v_compact text;v_marker text;v_role text;
+begin
+ v_oid:=to_regprocedure('public.finance_invoice_receipt_action_v1(text[],text,text,jsonb,text,jsonb,text)');
+ if v_oid is null then raise exception 'Receipt v1 entrypoint is missing';end if;
+ select prosrc into v_source from pg_proc where oid=v_oid;
+ v_compact:=regexp_replace(lower(v_source),'[[:space:]]','','g');
+ if position('finance_invoice_receipt_action_v2' in v_compact)>0 then
+  if v_compact<>'selectpublic.finance_invoice_receipt_action_v2(p_invoice_ids,p_action,p_idempotency_key,p_expected_versions,p_note,p_files,p_data_environment,null,null);'
+   or not exists(select 1 from pg_proc p join pg_language l on l.oid=p.prolang where p.oid=v_oid and l.lanname='sql' and p.prosecdef and 'search_path=""'=any(p.proconfig)
+    and p.proargnames=array['p_invoice_ids','p_action','p_idempotency_key','p_expected_versions','p_note','p_files','p_data_environment'] and p.prorettype='jsonb'::regtype) then
+   raise exception 'Receipt v1 must delegate all original arguments exactly to v2 with null optional amount/date';
+  end if;
+  v_oid:=to_regprocedure('public.finance_invoice_receipt_action_v2(text[],text,text,jsonb,text,jsonb,text,jsonb,date)');
+  if v_oid is null or not has_function_privilege('authenticated',v_oid,'EXECUTE') then raise exception 'Receipt v2 missing or authenticated ACL absent';end if;
+  foreach v_role in array array['anon','service_role'] loop
+   if has_function_privilege(v_role,v_oid,'EXECUTE') then raise exception 'Receipt v2 over-granted to %',v_role;end if;
+  end loop;
+  if not exists(select 1 from pg_proc p join pg_language l on l.oid=p.prolang where p.oid=v_oid and p.prosecdef and pg_get_userbyid(p.proowner)='postgres' and l.lanname='plpgsql' and 'search_path=""'=any(p.proconfig)
+   and p.proargnames=array['p_invoice_ids','p_action','p_idempotency_key','p_expected_versions','p_note','p_files','p_data_environment','p_amounts','p_received_date'] and p.prorettype='jsonb'::regtype) then
+   raise exception 'Receipt v2 definer/search_path/signature contract failed';
+  end if;
+  select prosrc into v_source from pg_proc where oid=v_oid;
+  v_compact:=regexp_replace(lower(v_source),'[[:space:]]','','g');
+  foreach v_marker in array array[
+   'a:=private.finance_correction_actor_v1();',
+   'private.finance_correction_role_v1(a.tenant_id,a.id,null,array[casewhenp_action=''submit''then''accountant''else''ceo''end])',
+   'forv_idinselectidfromunnest(p_invoice_ids)idorderbyidloop',
+   'select*intoifrompublic.invoiceswheretenant_id=a.tenant_idanddata_environment=p_data_environmentandid=v_idforupdate;',
+   'ifi.row_versionisdistinctfrom(p_expected_versions->>v_id)::bigintthen',
+   'public.can_read_invoice(i)isdistinctfromtrue',
+   'private.finance_receipt_files_valid_v1(i,v_files,a.id)',
+   'private.finance_receipt_files_valid_v1(i,i.receipt_files)',
+   'private.finance_receipt_route_ready_v1(i.steps)',
+   'private.finance_assert_period_open(a.tenant_id,p_data_environment,i.entity_id,v_date,',
+   'writing_transaction=pg_current_xact_id()::text',
+   'v_result:=private.finance_receipt_revenue_ready_v1(i.id);',
+   'ifv_result->>''ok''isdistinctfrom''true''orcoalesce((v_result->>''deferred'')::boolean,false)then'
+  ] loop
+   if position(v_marker in v_compact)=0 then raise exception 'Receipt v2 safety contract absent: %',v_marker;end if;
+  end loop;
+ else
+  if position('p_expected_versions->>v_id' in v_source)=0 or position('for update' in v_source)=0 or position('finance_receipt_revenue_ready_v1(i.id)' in v_source)=0 then raise exception 'Receipt CAS/locking/revenue contract absent';end if;
+ end if;
+end;
+$receipt_implementation_postflight$;
+
 -- Repeatable, read-only postflight: catalog inspection and pure JSON functions.
 -- Safe before COMMIT of the exact release batch or after it. No business row,
 -- ledger, notification, storage object or transaction capability is written.
@@ -42,8 +92,6 @@ begin
  end if;
  select prosrc into v_source from pg_proc where oid='private.finance_receipt_write_allowed_v1(uuid,text,text)'::regprocedure;
  if position('writing_transaction=pg_current_xact_id()::text' in v_source)=0 or position('p_id=any(o.invoice_ids)' in v_source)=0 then raise exception 'Receipt capability must bind current transaction and exact source IDs';end if;
- select prosrc into v_source from pg_proc where oid='public.finance_invoice_receipt_action_v1(text[],text,text,jsonb,text,jsonb,text)'::regprocedure;
- if position('p_expected_versions->>v_id' in v_source)=0 or position('for update' in v_source)=0 or position('finance_receipt_revenue_ready_v1(i.id)' in v_source)=0 then raise exception 'Receipt CAS/locking/revenue contract absent';end if;
  select prosrc into v_source from pg_proc where oid='private.finance_receipt_revenue_ready_v1(text)'::regprocedure;
  if position('post_invoice_revenue_v2_internal(i.id,true)' in v_source)=0 or position('v_matches<>1' in v_source)=0 or position('l.source_id=i.id' in v_source)=0 or position('l.voided_at is null' in v_source)=0 or position('finance_assert_period_open' in v_source)>0 then raise exception 'Existing receipt revenue must verify a complete source-bound family without old-period posting';end if;
  select prosrc into v_source from pg_proc where oid='private.finance_expense_guard_direct_update()'::regprocedure;
