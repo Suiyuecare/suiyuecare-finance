@@ -139,9 +139,9 @@ promotion job 重新驗證同一 candidate receipt、DB postflight、兩種 auth
 固定兩份 migration 為 `20260910064324_finance_canonical_receivables_v1.sql` 與 `20260910064325_finance_reporting_profiles_v1.sql`。單份、倒序、混入其他版本、缺少任一既有 authority/audit/cases/utility 前置，或只套了一份的 partial ledger，都直接拒絕。整批已 applied 的重試僅跑驗證，不再次執行 migration。
 
 1. 封存一次建立的 unaliased candidate、所有新舊 gate／canary、migration catalog、首頁與 manifest；後续 job 只能讀同一 artifact。
-2. 跑既有 `database_utility_tax_20260909` 前置（保留所有舊 postflight）後，在同一 `REPEATABLE READ` 交易先取得指紋、savepoint、兩份 migration、兩份 domain postflight、五個 authenticated canary core，再回滾 savepoint、五個 rollback check、比較同一 snapshot 的前後指紋，最後整筆 rollback。
+2. 跑既有 `database_utility_tax_20260909` 前置後，在同一 `REPEATABLE READ` 交易先取得指紋、savepoint、兩份 migration、完整七份新舊檢查（v3、audit 合併、finalize、utility、人工會計 authority、AR、profile）、五個 authenticated canary core，再回滾 savepoint、五個 rollback check、比較同一 snapshot 的前後指紋，最後整筆 rollback。首次安裝回滾後新增表已不存在，guard 只對固定七張新增表延後解析查詢，既有表的殘留檢查與完整指紋仍保留。
 3. `finance_reports_20260910_fingerprint.sql` 保留所有既有 schema／函式 ACL／RLS／trigger 與帳務內容雜湊，並涵蓋 AR、報表設定及修訂稽核、收款、催收、銀行與通知相關表。新增表不存在時記錄 absent；存在時雜湊完整列內容，等筆數更改也會被偵測。只輸出單一總指紋，不回傳業務資料。
-4. Apply 以 advisory lock 加 migration ledger table lock，再核對 captured ledger，於同一交易依序套兩份 migration、存精確原 SQL 到 ledger、執行 AR 與 profile postflight，最後才 commit。任何一份 migration 或 postflight 失敗會整批回滾。
+4. Apply 以 advisory lock 加 migration ledger table lock，再核對 captured ledger，於同一交易依序套兩份 migration、存精確原 SQL 到 ledger、執行與演練相同的完整七份新舊檢查，最後才 commit。任一舊或新契約失敗都會回滾兩份 migration 與 ledger，不能延到 commit 後才驗證。已 applied 的恢復與 `frontend_compat` 也使用同一份檢查清單，以唯讀交易執行並禁止重套 migration。
 5. Apply 後以及 promotion 前，再跑完整新舊 postflight、既有送件／退回／重送、finalize、utility 三個 canary、AR 與 profile 兩個新 canary、人工會計 authority 檢查。Standalone canary 必須純 SQL，不能含 psql `\set`；postflight 仍保留首行 `\set ON_ERROR_STOP on`，由 guard 檢查並移除後執行。
 6. 新 canary JSON 接受 CLI row array／boundary wrapper／stringified jsonb，但必須恰一個正確 marker、固定四欄完全相符且所有旗標為 boolean true；空白、重複 marker、缺欄／多欄、false、一個字串 `true` 均拒絕。一般 manifest 仍限 JSON object。
 7. 所有檢查完成後才 promote 封存的同一 deployment；禁止重新 build 或以新 deployment 取代原 candidate。失敗以同一 run 的 Re-run failed jobs 續行。

@@ -116,6 +116,25 @@ async function refund(db,event,amount,expected,opts={}){await as(db,opts.actor||
  await deny('REST cannot reset already refunded amount',()=>db.query('update public.invoice_lifecycle_events set refund_amount=0 where id=$1',[split.event_id]));
  await deny('old unkeyed refund endpoint explicitly requires upgrade',()=>db.query('select public.refund_invoice_receipt($1,1,\'old call\')',[split.event_id]));
  await as(db,'ceo');await deny('caller GUC alone cannot forge refund source capability',()=>db.exec("set app.finance_ar_actor='accountant';set app.finance_ar_operation='ar-forged';insert into public.ledger_entries(tenant_id,data_environment,entity_id,source_id,posting_key) values('"+tenant+"','test','FICT-CO','fake','invoice_refund:forged')"));
+ // Run the exact changed legacy-domain DO against the real v1 delegate/v2.
+ // The unrelated legacy domains retain their existing full fixture suite;
+ // the protected runner executes every complete original postflight file.
+ await admin(db,"set audit.uid='';set request.jwt.claim.sub='';set request.jwt.claims='{}'");
+ const receiptPostflight=read('scripts/finance_approval_audit_postflight.sql').match(/do \$receipt_implementation_postflight\$[\s\S]*?\$receipt_implementation_postflight\$;/)[0];
+ const combinedReceiptPostflight=read('scripts/finance_audit_20260907_postflight.sql').match(/do \$receipt_implementation_postflight\$[\s\S]*?\$receipt_implementation_postflight\$;/)[0];
+ assert.equal(receiptPostflight,combinedReceiptPostflight);await db.exec(receiptPostflight);await db.exec(combinedReceiptPostflight);check('both exact legacy postflight receipt blocks accept verified v1 delegate and actual v2',true);
+ const v1Signature='public.finance_invoice_receipt_action_v1(text[],text,text,jsonb,text,jsonb,text)',v2Signature='public.finance_invoice_receipt_action_v2(text[],text,text,jsonb,text,jsonb,text,jsonb,date)';
+ const v1Definition=(await db.query('select pg_get_functiondef($1::regprocedure) definition',[v1Signature])).rows[0].definition;
+ const v2Definition=(await db.query('select pg_get_functiondef($1::regprocedure) definition',[v2Signature])).rows[0].definition;
+ async function rejectPostflight(label,mutation){await db.exec('begin;'+mutation);let failure;try{await db.exec(receiptPostflight);}catch(e){failure=e;}finally{await db.exec('rollback;');}check(label,failure&&failure.code==='P0001');await db.exec(receiptPostflight);}
+ await rejectPostflight('delegate cannot drop or replace original reviewed versions',v1Definition.replace('p_idempotency_key,p_expected_versions,p_note',"p_idempotency_key,'{}'::jsonb,p_note"));
+ await rejectPostflight('delegate cannot supply an invented receipt amount or date',v1Definition.replace('p_data_environment,null,null',"p_data_environment,null,current_date"));
+ await rejectPostflight('v2 authenticated authority cannot be broadened to anonymous','grant execute on function '+v2Signature+' to anon;');
+ await rejectPostflight('v2 cannot lose security definer','alter function '+v2Signature+' security invoker;');
+ await rejectPostflight('v2 cannot use a caller-controlled search path','alter function '+v2Signature+" set search_path='public';");
+ await rejectPostflight('v2 cannot omit exact invoice CAS',v2Definition.replace('if i.row_version is distinct from (p_expected_versions->>v_id)::bigint then','if false then'));
+ await rejectPostflight('v2 cannot omit source row lock',v2Definition.replace('and id=v_id for update;','and id=v_id;'));
+ await rejectPostflight('v2 cannot omit revenue readiness verification',v2Definition.replace('v_result:=private.finance_receipt_revenue_ready_v1(i.id);',"v_result:='{\"ok\":true}'::jsonb;"));
  // Run the exact committed postflight with no authenticated context.
  await admin(db,"set audit.uid='';set request.jwt.claim.sub='';set request.jwt.claims='{}'");await db.exec(read('scripts/finance_canonical_receivables_postflight.sql').replace(/^\\set ON_ERROR_STOP on\r?\n/,''));check('exact postflight runs in empty auth context',true);
  // Execute the exact SQL canary using structural Auth/org fixtures. This
