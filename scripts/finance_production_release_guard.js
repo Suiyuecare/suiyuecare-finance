@@ -401,6 +401,36 @@ function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATA
     return {version,filename,source};
   });
 }
+function reportsRehearsalRollbackCheck(source) {
+  // These seven relations are created by the fixed reports batch. After rolling
+  // back that batch on first installation they do not exist. Keep every original
+  // predicate, but plan its SELECT only when the relation exists. Existing-table
+  // checks and the complete before/after schema/data fingerprint remain intact.
+  const optionalChecks = [
+    ['private.finance_ar_terms_v1', "invoice_id='__finance_ar_canary_20260910__'"],
+    ['private.finance_ar_receipts_v1', "invoice_id='__finance_ar_canary_20260910__'"],
+    ['private.finance_ar_refunds_v1', "invoice_id='__finance_ar_canary_20260910__'"],
+    ['private.finance_ar_audit_v1', "invoice_id='__finance_ar_canary_20260910__'"],
+    ['private.finance_ar_operations_v1', "invoice_id='__finance_ar_canary_20260910__' or operation_key like 'canary-ar-%20260910'"],
+    ['private.finance_reporting_profile_revisions_v1', "reason='__finance_reporting_profiles_canary_20260910__'"],
+    ['public.finance_reporting_profiles', "profile#>>array['tax','periods','2099-11-01/2099-12-31','priorCarryforwardTax']='123456.78'"]
+  ];
+  const declarations=[],reads=[];
+  for(const [relation,predicate] of optionalChecks){
+    if(!source.includes(relation))continue;
+    const expression=`exists(select 1 from ${relation} where ${predicate})`;
+    if(source.split(expression).length!==2)fail(`reports rollback check changed its reviewed predicate for ${relation}`);
+    const variable=`finance_optional_report_check_${declarations.length}`;
+    source=source.replace(expression,variable);
+    if(source.includes(relation))fail(`reports rollback check has an unguarded reference to ${relation}`);
+    declarations.push(`  ${variable} boolean := false;`);
+    reads.push(`  if to_regclass(${sqlLiteral(relation)}) is not null then\n    execute ${sqlLiteral('select '+expression)} into ${variable};\n  end if;`);
+  }
+  if(!declarations.length)return source;
+  const opening=/^(do\s+\$[a-z0-9_]*\$\s*)begin\b/i;
+  if(!opening.test(source))fail('reports rollback check must preserve its reviewed declaration-free DO block');
+  return source.replace(opening,(_,prefix)=>`${prefix}declare\n${declarations.join('\n')}\nbegin\n${reads.join('\n')}\n`);
+}
 function prepareAuditBatchRehearsal(directory,outputPath,versionsText,fingerprintPath,canaryPath,postflightPath,releasePhase=RELEASE_PHASE_DATABASE_AUDIT,caseCanaryPath=null,utilityCanaryPath=null,reportCanaryPaths=[],profilePostflightPath=null) {
   const batch=readAuditBatch(directory,versionsText,releasePhase);
   const canary=authenticatedCanarySections(canaryPath);
@@ -431,7 +461,7 @@ rollback to savepoint finance_release_migration;
 ${canary.rollbackCheck}
 ${extraCanary.rollbackCheck}
 ${utilityCanary.rollbackCheck}
-${reportCanaries.map(item=>item.rollbackCheck).join('\n')}
+${reportCanaries.map(item=>reportsRehearsalRollbackCheck(item.rollbackCheck)).join('\n')}
 create temporary table finance_release_fingerprint_after on commit drop as
 ${fingerprint}
 do ${tag}
