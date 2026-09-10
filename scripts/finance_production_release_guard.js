@@ -38,13 +38,16 @@ const CASE_MIGRATIONS = Object.freeze(['20260908065050']);
 const RELEASE_PHASE_DATABASE_CASES = 'database_cases_20260908';
 const UTILITY_MIGRATIONS = Object.freeze(['20260909083825']);
 const RELEASE_PHASE_DATABASE_UTILITY = 'database_utility_tax_20260909';
+const REPORT_MIGRATIONS = Object.freeze(['20260910064324','20260910064325']);
+const RELEASE_PHASE_DATABASE_REPORTS = 'database_reports_20260910';
 const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...MIGRATION_CHAIN,
   ...REVIEWED_POST_BASELINE_MIGRATIONS,
   MIGRATION_HUMAN_ACCOUNTING_AUTHORITY,
   ...AUDIT_MIGRATIONS,
   ...CASE_MIGRATIONS,
-  ...UTILITY_MIGRATIONS
+  ...UTILITY_MIGRATIONS,
+  ...REPORT_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -55,6 +58,7 @@ const RELEASE_PHASES = Object.freeze({
   [RELEASE_PHASE_DATABASE_AUDIT]: AUDIT_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_CASES]: CASE_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_UTILITY]: UTILITY_MIGRATIONS.join(','),
+  [RELEASE_PHASE_DATABASE_REPORTS]: REPORT_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING]: MIGRATION_HUMAN_ACCOUNTING_AUTHORITY
 });
 const FRONTEND_RELEASE_CONTRACT = 'expense-submit-resilience-v3-20260827';
@@ -65,7 +69,7 @@ const PRODUCTION_BASELINE_LEDGER = Object.freeze({
 });
 // The SQL gate catalog retains historical v1/v2 contracts for exact-state
 // verification. The protected workflow itself only accepts validateTarget's two
-// explicit frontend_compat/database_utility_tax_20260909 pairs.
+// explicit frontend_compat/database_reports_20260910 pairs.
 const SUPPORTED_GATE_PHASES = Object.freeze([
   Object.freeze([]),
   Object.freeze([MIGRATION_V1]),
@@ -74,7 +78,8 @@ const SUPPORTED_GATE_PHASES = Object.freeze([
   Object.freeze([MIGRATION_HUMAN_ACCOUNTING_AUTHORITY]),
   AUDIT_MIGRATIONS,
   CASE_MIGRATIONS,
-  UTILITY_MIGRATIONS
+  UTILITY_MIGRATIONS,
+  REPORT_MIGRATIONS
 ]);
 const SUPPORTED_GATE_SUFFIXES = SUPPORTED_GATE_PHASES;
 
@@ -148,7 +153,7 @@ function deploymentHost(record) { return String(record.url || '').replace(/^http
 function validateTarget(env, candidate, releasePhase, versionsText, expectedRef) {
   canonicalSha(candidate);
   releasePlan(releasePhase, versionsText);
-  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_UTILITY].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use the fixed utility tax phase');
+  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_REPORTS].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use the fixed financial reports phase');
   expectedRef = projectRef(expectedRef);
   if (expectedRef !== PRODUCTION_CATALOG.supabaseProjectRef) fail('Supabase project ref is not the immutable Finance production catalog target');
   for (const name of ['SUPABASE_ACCESS_TOKEN', 'FINANCE_SUPABASE_URL', 'FINANCE_SUPABASE_ANON_KEY', 'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']) {
@@ -234,6 +239,14 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
   const remote = readLedgerVersions(ledgerPath);
   assertProductionLedgerBaseline(remote, baseline);
   const missing = MIGRATION_CHAIN.filter((version) => !remote.includes(version));
+  if (plan.releasePhase === RELEASE_PHASE_DATABASE_REPORTS) {
+    const prerequisites=[...MIGRATION_CHAIN,...REVIEWED_POST_BASELINE_MIGRATIONS,MIGRATION_HUMAN_ACCOUNTING_AUTHORITY,...AUDIT_MIGRATIONS,...CASE_MIGRATIONS,...UTILITY_MIGRATIONS];
+    if(prerequisites.some(v=>!remote.includes(v))) fail('reports phase requires the complete reviewed authority chain, audit, cases and utility batches');
+    if(REPORT_MIGRATIONS.some(v=>!local.some(name=>name.startsWith(v+'_')))) fail('reports migration file is missing');
+    const installed=REPORT_MIGRATIONS.filter(v=>remote.includes(v));
+    if(installed.length!==0&&installed.length!==REPORT_MIGRATIONS.length)fail('reports phase is partially installed; no mutation is permitted');
+    return installed.length?'applied':'pending';
+  }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_UTILITY) {
     const prerequisites=[...MIGRATION_CHAIN,...REVIEWED_POST_BASELINE_MIGRATIONS,MIGRATION_HUMAN_ACCOUNTING_AUTHORITY,...AUDIT_MIGRATIONS,...CASE_MIGRATIONS];
     if(prerequisites.some(v=>!remote.includes(v))) fail('utility tax phase requires the complete reviewed authority chain, audit batch and database cases batch');
@@ -265,6 +278,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(AUDIT_MIGRATIONS.some(version=>!remote.includes(version))) fail('frontend_compat requires the complete audit migration batch');
     if(CASE_MIGRATIONS.some(version=>!remote.includes(version))) fail('frontend_compat requires the complete database cases migration batch');
     if(UTILITY_MIGRATIONS.some(version=>!remote.includes(version))) fail('frontend_compat requires the complete utility tax migration batch');
+    if(REPORT_MIGRATIONS.some(version=>!remote.includes(version))) fail('frontend_compat requires the complete financial reports migration batch');
     return 'compat';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
@@ -375,7 +389,7 @@ function prepareRehearsal(sourcePath, outputPath, target, fingerprintPath, canar
 
 function sqlLiteral(value) { return `'${String(value).replace(/'/g, "''")}'`; }
 function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATABASE_AUDIT) {
-  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY].includes(releasePhase))fail('unsupported fixed database batch');
+  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS].includes(releasePhase))fail('unsupported fixed database batch');
   releasePlan(releasePhase,versionsText);
   const files=migrationFiles(directory);
   return migrationPhase(versionsText).map(version=>{
@@ -387,18 +401,20 @@ function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATA
     return {version,filename,source};
   });
 }
-function prepareAuditBatchRehearsal(directory,outputPath,versionsText,fingerprintPath,canaryPath,postflightPath,releasePhase=RELEASE_PHASE_DATABASE_AUDIT,caseCanaryPath=null,utilityCanaryPath=null) {
+function prepareAuditBatchRehearsal(directory,outputPath,versionsText,fingerprintPath,canaryPath,postflightPath,releasePhase=RELEASE_PHASE_DATABASE_AUDIT,caseCanaryPath=null,utilityCanaryPath=null,reportCanaryPaths=[],profilePostflightPath=null) {
   const batch=readAuditBatch(directory,versionsText,releasePhase);
   const canary=authenticatedCanarySections(canaryPath);
   const fingerprint=stripPsqlDirectives(fs.readFileSync(fingerprintPath,'utf8'),path.basename(fingerprintPath)).trim();
   if(!/^with\b/i.test(fingerprint)||/\b(?:insert\s+into|update\s+\S+\s+set|delete\s+from|alter\s+table|create\s+(?:table|index|schema|function|policy)|drop\s+(?:table|index|schema|function|policy)|truncate\s+|vacuum\b|call\s+|copy\s+)\b/i.test(fingerprint))fail('audit fingerprint must be a pure read-only CTE query');
-  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
+  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath))+(releasePhase===RELEASE_PHASE_DATABASE_REPORTS?'\n'+stripPsqlDirectives(fs.readFileSync(profilePostflightPath,'utf8'),path.basename(profilePostflightPath)):'');
   assertCliAtomicMigration(postflight,'audit postflight');
-  const extraCanary=[RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY].includes(releasePhase)?authenticatedCanarySections(caseCanaryPath):{core:'',rollbackCheck:''};
-  const utilityCanary=releasePhase===RELEASE_PHASE_DATABASE_UTILITY?authenticatedCanarySections(utilityCanaryPath):{core:'',rollbackCheck:''};
+  const extraCanary=[RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS].includes(releasePhase)?authenticatedCanarySections(caseCanaryPath):{core:'',rollbackCheck:''};
+  const utilityCanary=[RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS].includes(releasePhase)?authenticatedCanarySections(utilityCanaryPath):{core:'',rollbackCheck:''};
+  if(releasePhase===RELEASE_PHASE_DATABASE_REPORTS&&reportCanaryPaths.length!==2)fail('reports rehearsal requires both authenticated domain canaries');
+  const reportCanaries=releasePhase===RELEASE_PHASE_DATABASE_REPORTS?reportCanaryPaths.map(authenticatedCanarySections):[];
   const sources=batch.map(item=>item.source.trimEnd()).join('\n');
   const tag='$finance_audit_rollback_assert$';
-  if([sources,fingerprint,postflight,canary.core,canary.rollbackCheck,extraCanary.core,extraCanary.rollbackCheck,utilityCanary.core,utilityCanary.rollbackCheck].some(value=>value.includes(tag)))fail('audit rehearsal assertion tag collision');
+  if([sources,fingerprint,postflight,canary.core,canary.rollbackCheck,extraCanary.core,extraCanary.rollbackCheck,utilityCanary.core,utilityCanary.rollbackCheck,...reportCanaries.flatMap(item=>[item.core,item.rollbackCheck])].some(value=>value.includes(tag)))fail('audit rehearsal assertion tag collision');
   writeExclusive(outputPath,`begin isolation level repeatable read;
 set local lock_timeout = '5s';
 set local statement_timeout = '180s';
@@ -410,10 +426,12 @@ ${postflight}
 ${canary.core}
 ${extraCanary.core}
 ${utilityCanary.core}
+${reportCanaries.map(item=>item.core).join('\n')}
 rollback to savepoint finance_release_migration;
 ${canary.rollbackCheck}
 ${extraCanary.rollbackCheck}
 ${utilityCanary.rollbackCheck}
+${reportCanaries.map(item=>item.rollbackCheck).join('\n')}
 create temporary table finance_release_fingerprint_after on commit drop as
 ${fingerprint}
 do ${tag}
@@ -428,8 +446,8 @@ rollback;
 `);
   return true;
 }
-function prepareAuditBatchApply(directory,outputPath,versionsText,ledgerPath,postflightPath,baseline=PRODUCTION_BASELINE_LEDGER,releasePhase=RELEASE_PHASE_DATABASE_AUDIT) {
-  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
+function prepareAuditBatchApply(directory,outputPath,versionsText,ledgerPath,postflightPath,baseline=PRODUCTION_BASELINE_LEDGER,releasePhase=RELEASE_PHASE_DATABASE_AUDIT,profilePostflightPath=null) {
+  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath))+(releasePhase===RELEASE_PHASE_DATABASE_REPORTS?'\n'+stripPsqlDirectives(fs.readFileSync(profilePostflightPath,'utf8'),path.basename(profilePostflightPath)):'');
   assertCliAtomicMigration(postflight,'audit postflight');
   const batch=readAuditBatch(directory,versionsText,releasePhase);
   verifyLedger('pre',ledgerPath,directory,releasePhase,versionsText,baseline);
@@ -479,16 +497,18 @@ function prepareGateQuery(sourcePath, outputPath, versionsText) {
 function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
   const plan = releasePlan(releasePhase, versionsText);
   const sourceName = path.basename(sourcePath);
-  if ([RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)) {
+  if ([RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)) {
     if(sourceName!=='finance_production_db_postflight.sql') fail('audit phase requires the reviewed existing-v3 postflight');
     const base=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),sourceName).replace(/:'migration_versions'/g,sqlLiteral(MIGRATION_V3));
     const auditPath=path.join(path.dirname(sourcePath),'finance_audit_20260907_postflight.sql');
     const audit=stripPsqlDirectives(fs.readFileSync(auditPath,'utf8'),path.basename(auditPath));
-    const cases=[RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)
+    const cases=[RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)
       ?stripPsqlDirectives(fs.readFileSync(path.join(path.dirname(sourcePath),'finance_finalize_accounting_lines_postflight.sql'),'utf8'),'finance_finalize_accounting_lines_postflight.sql'):'';
-    const utility=[RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)
+    const utility=[RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)
       ?stripPsqlDirectives(fs.readFileSync(path.join(path.dirname(sourcePath),'finance_utility_tax_postflight.sql'),'utf8'),'finance_utility_tax_postflight.sql'):'';
-    writeExclusive(outputPath,`begin read only;\nset local statement_timeout = '60s';\n${base.trimEnd()}\n${audit.trimEnd()}\n${cases.trimEnd()}\n${utility.trimEnd()}\nrollback;\n`);
+    const reports=[RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)
+      ?['finance_canonical_receivables_postflight.sql','finance_reporting_profiles_postflight.sql'].map(name=>stripPsqlDirectives(fs.readFileSync(path.join(path.dirname(sourcePath),name),'utf8'),name)).join('\n'):'';
+    writeExclusive(outputPath,`begin read only;\nset local statement_timeout = '60s';\n${base.trimEnd()}\n${audit.trimEnd()}\n${cases.trimEnd()}\n${utility.trimEnd()}\n${reports.trimEnd()}\nrollback;\n`);
     return true;
   }
   if (plan.releasePhase === RELEASE_PHASE_FRONTEND_COMPAT) {
@@ -630,6 +650,23 @@ function verifyUtilityCanary(inputPath) {
   if(matches.length!==1)fail('utility canary output must contain exactly one result');
   const result=typeof matches[0]==='string'?JSON.parse(matches[0]):matches[0];
   assert.deepStrictEqual(result,{canary:'authenticated_utility_tax_v1',ok:true,rolled_back:true,utility_input_tax_absent:true},'authenticated utility rollback canary did not complete safely');
+  return true;
+}
+
+function verifyReportsCanary(inputPath,domain) {
+  const contracts={
+    receivables:{marker:'canonical_receivables_canary_result',result:{canary:'authenticated_canonical_receivables_v1',ok:true,rolled_back:true,receivables_consistent:true}},
+    profiles:{marker:'reporting_profiles_canary_result',result:{canary:'authenticated_reporting_profiles_v1',ok:true,rolled_back:true,profile_authority_preserved:true}}
+  };
+  const contract=contracts[domain];if(!contract)fail('reports canary domain must be receivables or profiles');
+  let payload;
+  try{payload=JSON.parse(fs.readFileSync(inputPath,'utf8'));}catch(error){fail(`${path.basename(inputPath)} is not valid JSON: ${error.message}`);}
+  const matches=[];
+  const visit=value=>{if(!value||typeof value!=='object')return;if(Object.hasOwn(value,contract.marker))matches.push(value[contract.marker]);Object.values(value).forEach(visit);};
+  visit(payload);
+  if(matches.length!==1)fail('reports canary output must contain exactly one result');
+  const result=typeof matches[0]==='string'?JSON.parse(matches[0]):matches[0];
+  assert.deepStrictEqual(result,contract.result,'authenticated reports rollback canary did not complete safely');
   return true;
 }
 
@@ -791,6 +828,7 @@ function verifyReceipt(receiptPath, deploymentPath, manifestPath, indexPath, can
 function manifestSha(file) { return sha256File(file); }
 
 const api = {
+  REPORT_MIGRATIONS, RELEASE_PHASE_DATABASE_REPORTS, verifyReportsCanary,
   UTILITY_MIGRATIONS, RELEASE_PHASE_DATABASE_UTILITY, verifyUtilityCanary,
   CASE_MIGRATIONS, RELEASE_PHASE_DATABASE_CASES, verifyFinalizeCanary,
   AUDIT_MIGRATIONS, RELEASE_PHASE_DATABASE_AUDIT, prepareAuditBatchRehearsal, prepareAuditBatchApply, readAuditBatch,
@@ -820,6 +858,8 @@ if (require.main === module) {
     else if (command === 'prepare-audit-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'), arg('output'), arg('migration-versions'), arg('fingerprint'), arg('authenticated-canary'), arg('audit-postflight'));
     else if (command === 'prepare-cases-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('authenticated-canary'),arg('case-postflight'),RELEASE_PHASE_DATABASE_CASES,arg('case-canary'));
     else if (command === 'prepare-cases-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('case-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_CASES);
+    else if (command === 'prepare-reports-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('authenticated-canary'),arg('receivables-postflight'),RELEASE_PHASE_DATABASE_REPORTS,arg('case-canary'),arg('utility-canary'),[arg('receivables-canary'),arg('profiles-canary')],arg('profiles-postflight'));
+    else if (command === 'prepare-reports-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('receivables-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_REPORTS,arg('profiles-postflight'));
     else if (command === 'prepare-utility-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('authenticated-canary'),arg('utility-postflight'),RELEASE_PHASE_DATABASE_UTILITY,arg('case-canary'),arg('utility-canary'));
     else if (command === 'prepare-utility-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('utility-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_UTILITY);
     else if (command === 'prepare-audit-apply') prepareAuditBatchApply(arg('migration-dir'), arg('output'), arg('migration-versions'), arg('ledger'), arg('audit-postflight'));
@@ -830,6 +870,7 @@ if (require.main === module) {
     else if (command === 'prepare-apply') prepareApply(arg('migration'), arg('output'), arg('migration-version'), arg('ledger'));
     else if (command === 'normalize-query-rows') normalizeQueryRows(arg('input'), arg('output'));
     else if (command === 'verify-finalize-canary') verifyFinalizeCanary(arg('input'));
+    else if (command === 'verify-reports-canary') verifyReportsCanary(arg('input'),arg('domain'));
     else if (command === 'verify-utility-canary') verifyUtilityCanary(arg('input'));
     else if (command === 'verify-authenticated-canary') verifyAuthenticatedCanary(arg('input'));
     else if (command === 'verify-supabase-public-key') verifySupabasePublicKey(arg('api-keys-json'), process.env.FINANCE_SUPABASE_ANON_KEY);

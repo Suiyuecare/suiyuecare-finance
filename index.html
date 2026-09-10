@@ -41,6 +41,12 @@
 <script src="assets/engines/attachment-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/permission-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/report-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/financial-statements.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/tax-report-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/management-report-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/receivables-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/reporting-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
+<link rel="stylesheet" href="assets/styles/reporting-workspace.css?v=__FINANCE_ASSET_VERSION__">
 <script src="assets/engines/organization-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/accounting-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/accounting-corrections.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -97,7 +103,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
 	    <button class="ni" id="nav-bills" onclick="nav('bills',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM4 10h16M8 15h3"/></svg></span>申請繳費單</button>
 	    <button class="ni" id="nav-recv" onclick="nav('recv',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 18h16M6 15l4-4 3 3 5-7"/></svg></span>收款情形<span class="cnt" id="recv-cnt">0</span></button>
     <div class="ns">財務報表</div>
-    <button class="ni" id="nav-rpt" onclick="nav('reports',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"/></svg></span>三表總覽</button>
+    <button class="ni" id="nav-rpt" onclick="nav('reports',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"/></svg></span>財務報表</button>
     <button class="ni" id="nav-ldg" onclick="nav('ledger',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM9 4v16M12 8h4M12 12h4M12 16h4"/></svg></span>部門分類帳</button>
     <button class="ni" id="nav-acc" onclick="nav('accounts',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span>會計科目</button>
     <button class="ni" id="nav-compliance" onclick="nav('compliance',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 7h6M9 11h6M9 15h4M17 19l2 2 3-5"/></svg></span>會計合規</button>
@@ -629,6 +635,8 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
     <div class="recv-page-note" style="background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:9px 13px;margin-bottom:12px;font-size:12px;color:#7c3f00;line-height:1.6">
       會計完成開立發票後，系統會自動列入收款追蹤；會計查帳後上傳收款證明，再由執行長確認入帳。
 	    </div>
+      <div id="finance-receivable-workspace" class="finance-receivable-workspace"></div>
+      <details class="report-legacy-analysis"><summary>發票流程與原銀行對帳工具</summary>
 	    <div class="g4 mobile-second-kpis" style="margin-bottom:12px" id="recv-kpis"></div>
       <button type="button" class="mobile-section-toggle" data-mobile-page-toggle="advanced" aria-expanded="false" onclick="mobileTogglePagePanel('recv','advanced',this)"><span>分析與收款率</span><span aria-hidden="true">＋</span></button>
 	    <div id="bank-recon-panel" class="recv-advanced-panel" data-mobile-page-panel="advanced"></div>
@@ -654,12 +662,13 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
       <div id="recv-detail"></div>
     </div>
     <div class="card recv-advanced-panel" data-mobile-page-panel="advanced" style="padding:13px"><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:8px">月度趨勢</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px" id="recv-trend"></div></div>
+    </details>
   </div>
 
-  <!-- 三表 -->
+  <!-- 財務報表 -->
   <div class="pg" id="pg-reports">
     <div class="mobile-second-page-head reports-page-head" style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
-      <div><div class="ph">三表總覽 <span class="badge b-wait" style="vertical-align:middle">暫編</span></div><div class="ps" id="rpt-sub">未完成流程完全排除；期初、銀行與稅務勾稽完成前不標示正式</div></div>
+      <div><div class="ph">財務報表 <span class="badge b-wait" style="vertical-align:middle">暫編</span></div><div class="ps" id="rpt-sub">依正式分類帳產生；期初、銀行、稅務與月結持續核對</div></div>
       <button type="button" class="btn-g mobile-page-toggle" data-mobile-page-toggle="filter" aria-expanded="false" onclick="mobileTogglePagePanel('reports','filter',this)">公司與期間</button>
       <div class="mobile-second-filter-panel reports-filter-panel" data-mobile-page-panel="filter" style="display:flex;gap:6px;flex-wrap:wrap">
         <select id="rpt-ent" onchange="window.buildReports()" style="width:auto;font-size:11px"><option value="all">全部法人</option></select>
@@ -668,6 +677,8 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
         <button class="btn-s mobile-secondary-action" style="font-size:11px" onclick="exportReports()">&#8595; 匯出 CSV</button>
       </div>
     </div>
+    <div id="finance-report-workspace" class="finance-report-workspace"></div>
+    <details class="report-legacy-analysis"><summary>趨勢分析、原三表圖解與進階稽核</summary>
     <div id="rpt-investor-kpis" class="statement-investor-summary mobile-second-kpis"></div>
     <div class="statement-investor-health reports-health-panel">
       <div class="statement-health-head">
@@ -790,6 +801,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
         <div class="statement-detail-body"><div id="report-health-gate"></div></div>
       </details>
     </div>
+    </details>
   </div>
 
   <!-- 分類帳 -->
@@ -1975,7 +1987,7 @@ var MEMBERSHIP_ROLE_BOARD_ROLE_ID='';
 var LEGACY_PERMISSION_BOARD_ROLE='ceo';
 var PAGE_LABELS={
   dashboard:'儀表板',newreq:'新增申請',expenses:'放款申請',approvals:'簽核管理',
-  vouchers:'傳票查詢',shareholder:'股東 / 公司間往來',invoices:'開立發票',bills:'申請繳費單',recv:'收款情形',reports:'三表總覽',
+  vouchers:'傳票查詢',shareholder:'股東 / 公司間往來',invoices:'開立發票',bills:'申請繳費單',recv:'收款情形',reports:'財務報表',
   ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',orgchart:'人員主管圖',health:'系統健檢',settings:'系統設定'
 };
 var PERMISSION_PAGES=Object.keys(PAGE_LABELS).filter(function(p){return p!=='detail';});
@@ -5934,6 +5946,8 @@ function mapInv(i){
 	    voucherNo:e.voucherNo||e.voucher_no||'',
 	    status:e.status||'posted',
 	    refundAmount:num(e.refundAmount||e.refund_amount),
+	    arAmount:e.arAmount==null?(e.ar_amount==null?null:num(e.ar_amount)):num(e.arAmount),
+	    refundPayableAmount:e.refundPayableAmount==null?(e.refund_payable_amount==null?null:num(e.refund_payable_amount)):num(e.refundPayableAmount),
 	    refundVoucherId:e.refundVoucherId||e.refund_voucher_id||'',
 	    refundVoucherNo:e.refundVoucherNo||e.refund_voucher_no||'',
 	    refundBankTransactionId:e.refundBankTransactionId||e.refund_bank_transaction_id||'',
@@ -6193,6 +6207,37 @@ var REMOTE_BOOTSTRAP_CONCURRENCY=2;
 var REMOTE_AUDIT_BOOTSTRAP_LIMIT=50;
 var REMOTE_RECOVERY_MAX_ATTEMPTS=1;
 var REMOTE_RECOVERY_BASE_DELAY_MS=15000;
+var STATEMENT_SOURCE_STATE={ledger:{complete:false,status:'not_loaded'},invoices:{complete:false,status:'not_loaded'},expense_requests:{complete:false,status:'not_loaded'}};
+function statementDataIdentity(){return [approvalFastBootstrapIdentity(),currentTenantId(),activeDataEnvironment()].join('|');}
+function statementDataCompleteness(){
+  var identity=statementDataIdentity(),tables={};
+  Object.keys(STATEMENT_SOURCE_STATE).forEach(function(key){
+    var state=STATEMENT_SOURCE_STATE[key];
+    tables[key]=state.identity===identity?Object.assign({},state):{complete:false,status:'not_loaded',rowCount:0};
+  });
+  var list=Object.keys(tables).map(function(k){return tables[k];});
+  return {complete:list.every(function(s){return s.complete===true;}),status:list.some(function(s){return s.status==='loading';})?'loading':(list.every(function(s){return s.complete===true;})?'complete':(list.some(function(s){return s.status==='error';})?'error':'incomplete')),rowCount:tables.ledger.rowCount||0,tables:tables,promise:remoteLoadPromise||null};
+}
+async function loadStatementSourcePages(client,table){
+  var key={ledger_entries:'ledger',invoices:'invoices',expense_requests:'expense_requests'}[table];
+  if(!key)throw new Error('Unsupported statement source');
+  var identity=statementDataIdentity(),tenant=currentTenantId(),environment=activeDataEnvironment();
+  var engine=window.FinanceFinancialStatements;
+  STATEMENT_SOURCE_STATE[key]={identity:identity,complete:false,status:'loading',rowCount:0,loadedAt:null,error:''};
+  try{
+    if(!engine||typeof engine.loadLedgerPages!=='function')throw new Error('報表完整讀取引擎尚未載入');
+    var result=await engine.loadLedgerPages(function(start,end){
+      return withOperationTimeout(client.from(table).select('*',{count:'exact'}).eq('tenant_id',tenant).eq('data_environment',environment).order('id',{ascending:true}).range(start,end),'報表資料分頁 '+table,20000);
+    },{pageSize:1000,isCurrent:function(){return identity===statementDataIdentity();},onProgress:function(progress){if(identity===statementDataIdentity())Object.assign(STATEMENT_SOURCE_STATE[key],progress);}});
+    if(identity!==statementDataIdentity())throw new Error('報表讀取期間登入身分已變更');
+    result.data.sort(function(a,b){return String(b.entry_date||b.created_at||'').localeCompare(String(a.entry_date||a.created_at||''))||String(a.id).localeCompare(String(b.id));});
+    STATEMENT_SOURCE_STATE[key]=Object.assign({identity:identity,error:''},result.completeness);
+    return result;
+  }catch(error){
+    if(identity===statementDataIdentity())STATEMENT_SOURCE_STATE[key]=Object.assign({},STATEMENT_SOURCE_STATE[key],{complete:false,status:'error',error:String(error.message||error)});
+    return {data:null,error:error,count:null};
+  }
+}
 function applyRemoteLimit(query,count){
   var engine=financeDataEngine();
   if(engine&&typeof engine.applyRemoteLimit==='function')return engine.applyRemoteLimit(query,count);
@@ -8299,12 +8344,12 @@ async function performRemoteDataLoad(){
   lastApprovalRuntimeWarning='';
   var jobs=[
     function(){return syncRemoteFinanceUsersDirectory({message:'正在同步人員與簽核權限；其他正式資料會接續載入'}).then(function(result){return {data:result.users||[],error:null};});},
-    function(){return applyRemoteLimit(client.from('expense_requests').select('*',{count:'exact'}).order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.requests);},
+    function(){return loadStatementSourcePages(client,'expense_requests');},
     function(){return loadAccountingData?applyRemoteLimit(client.from('vouchers').select('*').order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.vouchers):Promise.resolve({data:[],error:null});},
     function(){return applyRemoteLimit(client.from('bills').select('*',{count:'exact'}).order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.bills);},
-    function(){return applyRemoteLimit(client.from('invoices').select('*',{count:'exact'}).order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.invoices);},
+    function(){return loadStatementSourcePages(client,'invoices');},
     function(){return applyRemoteLimit(client.from('notifications').select('*').eq('tenant_id',currentTenantId()).eq('data_environment',activeDataEnvironment()).order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.notifications);},
-    function(){return loadAccountingData?applyRemoteLimit(client.from('ledger_entries').select('*').order('entry_date',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.ledger):Promise.resolve({data:[],error:null});},
+    function(){return loadAccountingData?loadStatementSourcePages(client,'ledger_entries'):Promise.resolve({data:[],error:null});},
     function(){return client.from('system_settings').select('*').eq('tenant_id',currentTenantId()).in('key',SYSTEM_SETTINGS_RUNTIME_KEYS);},
     function(){return applyRemoteLimit(client.from('draft_requests').select('*',{count:'exact'}).order('updated_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.optional);},
     function(){return loadAccountingData?loadOptionalTable(client,'period_closes','closed_at',false):Promise.resolve([]);},
@@ -12324,7 +12369,7 @@ function accountingLinesTitleForRequest(r){
 }
 function receiptTaskCandidate(i){
   if(!S.user||!i||!invoiceNeedsReceivableFollowup(i))return false;
-  if(i.status==='unpaid')return currentRoleKey()==='accountant';
+  if(i.status==='unpaid'||i.status==='partial')return currentRoleKey()==='accountant';
   if(i.status==='pending_receipt_review')return currentRoleKey()==='ceo';
   return false;
 }
@@ -14514,7 +14559,7 @@ function normalizeRequestEntityDept(eid,dc){
   return {ok:true,eid:eid,dc:dc,deptEntity:deptEnt||''};
 }
 var financeWorkspaceNavigationRevision=0;
-var PT={dashboard:'經營決策儀表板',newreq:'新增申請',expenses:'放款申請',detail:'申請單詳情',approvals:'簽核管理',vouchers:'傳票查詢',shareholder:'股東 / 公司間往來',invoices:'開立發票',bills:'申請繳費單',recv:'收款情形',reports:'三表總覽',ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',orgchart:'人員主管圖',health:'系統健檢',settings:'系統設定'};
+var PT={dashboard:'經營決策儀表板',newreq:'新增申請',expenses:'放款申請',detail:'申請單詳情',approvals:'簽核管理',vouchers:'傳票查詢',shareholder:'股東 / 公司間往來',invoices:'開立發票',bills:'申請繳費單',recv:'收款情形',reports:'財務報表',ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',orgchart:'人員主管圖',health:'系統健檢',settings:'系統設定'};
 window.nav=function(id,btn){
   return guardedNav(id,btn);
 };
@@ -14763,6 +14808,50 @@ function buildAll(options){
 
 // ══ 真實財務資料計算 ══
 // 原則：儀表板與三表只讀正式分類帳分錄。未入帳資料不補估、不推算，避免前台狀態與正式帳重複計算。
+function statementProfileFor(eid){
+  var workspace=window.FinanceReportingWorkspace;
+  var value=workspace&&typeof workspace.profileFor==='function'?workspace.profileFor(eid):null;
+  return value&&value.profile||value||{};
+}
+function statementMappingsFor(eid){
+  if(eid&&eid!=='all')return statementProfileFor(eid).accountMappings||{};
+  var byEntity={};
+  (ENTS||[]).forEach(function(entity){byEntity[entity.id]=statementProfileFor(entity.id).accountMappings||{};});
+  return {__byEntity:byEntity};
+}
+function statementScopedLedger(eid,departmentCode){
+  return LEDGER.filter(function(r){return inActiveDataEnvironment(r)&&rowTenantId(r)===currentTenantId()&&inEntity(eid,r,'ledger')&&(!departmentCode||departmentCode==='all'||r.dc===departmentCode);});
+}
+function statementCashEvents(eid,departmentCode){
+  return requestCashEvents(eid,'all',false).map(function(event){
+    var req=REQS.find(function(r){return r.no===event.ref&&inActiveDataEnvironment(r)&&rowTenantId(r)===currentTenantId();})||{};
+    return Object.assign({},event,{eid:reqEntity(req),dc:req.dc||'',sourceId:req.id||''});
+  }).filter(function(event){return !departmentCode||departmentCode==='all'||event.dc===departmentCode;});
+}
+function statementCashFlowOverrides(eid){
+  var overrides={};
+  REQS.filter(function(r){return inActiveDataEnvironment(r)&&rowTenantId(r)===currentTenantId();}).forEach(function(r){
+    var txn=r.formPayload&&r.formPayload.shareholderTxn||{},entities=[txn.eid||r.eid,txn.targetEid].filter(Boolean);
+    entities.forEach(function(entity){if(eid!=='all'&&eid!==entity)return;var kind=companyLoanCashFlowKind({ref:r.no,eid:entity});if(kind)overrides[entity+'|'+r.no]=kind;});
+  });
+  return overrides;
+}
+function statementReportModel(eid,period,options){
+  options=options||{};eid=eid||'all';period=period||todayMonth();
+  var engine=window.FinanceFinancialStatements;
+  if(!engine)throw new Error('完整財務報表引擎尚未載入，請重新整理');
+  var profile=statementProfileFor(eid),readState=statementDataCompleteness(),previous=options.comparisonPeriod===null?null:(options.comparisonPeriod||engine.previousPeriod(period)),mappings=statementMappingsFor(eid);
+  var checks=Object.assign({},profile.periodChecks&&profile.periodChecks[period]||{},options.checks||{});
+  ['ociReviewed','openingBalanceVerified','bankReconciled','taxReconciled','periodCloseReady'].forEach(function(k){if(Object.prototype.hasOwnProperty.call(options,k))checks[k]=options[k]===true;});
+  return engine.buildModel({ledger:statementScopedLedger(eid,options.departmentCode),entityId:eid,period:period,comparisonPeriod:previous,departmentCode:options.departmentCode||'all',accountMappings:options.accountMappings||profile.accountMappings||{},accountMappingsByEntity:options.accountMappingsByEntity||mappings.__byEntity,checks:checks,previousChecks:profile.periodChecks&&profile.periodChecks[previous]||{},completeness:options.completeness||readState.tables.ledger,cashEvents:statementCashEvents(eid,options.departmentCode),cashFlowOverrides:statementCashFlowOverrides(eid)});
+}
+function statementExportSheets(eid,period,options){return window.FinanceFinancialStatements.exportSheets(statementReportModel(eid,period,options));}
+function statementProfitLoss(eid,period){
+  var engine=window.FinanceFinancialStatements;
+  if(!engine)throw new Error('完整財務報表引擎尚未載入，請重新整理');
+  var profile=statementProfileFor(eid);
+  return engine.profitLoss(engine.normalizeRows(ledgerRows(eid,period)),statementMappingsFor(eid),profile.periodChecks&&profile.periodChecks[period]||{});
+}
 function normDate(v){return String(v||'').slice(0,10).replace(/\//g,'-');}
 function isReqDone(r){return ['completed','paid','settled','closed'].indexOf(r.status)>-1;}
 function isReqOpen(r){return r.status!=='completed'&&r.status!=='paid'&&r.status!=='settled'&&r.status!=='closed'&&r.status!=='rejected'&&r.status!=='cancelled';}
@@ -14802,32 +14891,32 @@ function periodEnd(period){
   if(/^\d{4}$/.test(period))return period+'-12-31';
   if(/^\d{4}-Q[1-4]$/.test(period)){
     var y=Number(period.slice(0,4)),q=Number(period.slice(6,7)),m=q*3;
-    return new Date(y,m,0).toISOString().slice(0,10);
+    return new Date(Date.UTC(y,m,0)).toISOString().slice(0,10);
   }
   var parts=period.split('-'),yy=Number(parts[0]),mm=Number(parts[1]);
-  return new Date(yy,mm,0).toISOString().slice(0,10);
+  return new Date(Date.UTC(yy,mm,0)).toISOString().slice(0,10);
 }
 function ledgerRowsForEntity(eid,period){
-  return LEDGER.filter(function(r){return inActiveDataEnvironment(r)&&inEntity(eid,r,'ledger')&&inPeriod(r.date,period);});
+  return statementScopedLedger(eid).filter(function(r){return !r.voidedAt&&!r.voided_at&&inPeriod(r.date,period);});
 }
 function ledgerRows(eid,period){return ledgerRowsForEntity(eid,period);}
 function ledgerRowsToPeriodEnd(eid,period){
   var end=periodEnd(period);
-  return LEDGER.filter(function(r){
+  return statementScopedLedger(eid).filter(function(r){
     var d=normDate(r.date);
-    return inActiveDataEnvironment(r)&&inEntity(eid,r,'ledger')&&(!end||d<=end);
+    return !r.voidedAt&&!r.voided_at&&inActiveDataEnvironment(r)&&inEntity(eid,r,'ledger')&&d&&(!end||d<=end);
   });
 }
 function ledgerRowsBeforePeriod(eid,period){
   var start=periodStart(period);
-  return LEDGER.filter(function(r){
+  return statementScopedLedger(eid).filter(function(r){
     var d=normDate(r.date);
-    return inActiveDataEnvironment(r)&&inEntity(eid,r,'ledger')&&start&&d&&d<start;
+    return !r.voidedAt&&!r.voided_at&&inActiveDataEnvironment(r)&&inEntity(eid,r,'ledger')&&start&&d&&d<start;
   });
 }
 function ledgerRowsForDepartment(dept,period,acct,eid){
-  return LEDGER.filter(function(r){
-    return inActiveDataEnvironment(r)&&(!eid||eid==='all'||inEntity(eid,r,'ledger'))&&(dept==='all'||r.dc===dept)&&(acct==='all'||r.ac===acct)&&inPeriod(r.date,period);
+  return statementScopedLedger(eid||'all',dept).filter(function(r){
+    return !r.voidedAt&&!r.voided_at&&inActiveDataEnvironment(r)&&(!eid||eid==='all'||inEntity(eid,r,'ledger'))&&(dept==='all'||r.dc===dept)&&(acct==='all'||r.ac===acct)&&inPeriod(r.date,period);
   });
 }
 function hasLedger(eid,period){return ledgerRows(eid,period).length>0;}
@@ -15196,7 +15285,8 @@ function reportDataCompletenessSummary(eid,period){
       bankAccounts:BANK_ACCOUNTS||[],
       bankTransactions:BANK_TRANSACTIONS||[],
       bankStatementImports:BANK_STATEMENT_IMPORTS||[],
-      periodCloses:PERIOD_CLOSES||[]
+      periodCloses:PERIOD_CLOSES||[],
+      statementSources:statementDataCompleteness()
     },{
       inActiveDataEnvironment:inActiveDataEnvironment,
       inPeriod:inPeriod,
@@ -15315,7 +15405,7 @@ function addGroup(map,key,label,val,dc){
   map[key].v+=Number(val||0);
 }
 function rowsFromMap(map){
-  return Object.keys(map).map(function(k){return map[k];}).filter(function(r){return Math.abs(r.v)>0.4;}).sort(function(a,b){return Math.abs(b.v)-Math.abs(a.v);});
+  return Object.keys(map).map(function(k){return map[k];}).filter(function(r){return Math.abs(r.v)>=0.005;}).sort(function(a,b){return Math.abs(b.v)-Math.abs(a.v);});
 }
 function traceButton(kind,key,label){
   return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openReportTraceModal(\''+kind+'\',\''+String(key||'').replace(/'/g,'\\\'')+'\')">'+(label||'追溯')+'</button>';
@@ -15500,23 +15590,19 @@ function billsFor(eid,period,paidOnly){
   return BILLS.filter(function(b){return inEntity(eid,b,'bill')&&inPeriod(b.due,period)&&(!paidOnly||b.status==='paid');});
 }
 function revenueRows(eid,period){
-  var m={};
-  ledgerRows(eid,period).forEach(function(r){if(isRevAcct(r.ac))addGroup(m,r.ac,acctLabel(r.ac,r.an),(r.cr||0)-(r.dr||0));});
-  return rowsFromMap(m);
+  var pl=statementProfitLoss(eid,period);return pl.revenueRows.concat(pl.otherIncomeRows);
 }
 function expenseRows(eid,period){
-  var m={};
-  ledgerRows(eid,period).forEach(function(r){if(isExpAcct(r.ac))addGroup(m,r.ac,acctLabel(r.ac,r.an),(r.dr||0)-(r.cr||0),r.dc);});
-  return rowsFromMap(m);
+  var pl=statementProfitLoss(eid,period);return pl.costRows.concat(pl.expenseRows,pl.otherExpenseRows,pl.incomeTaxRows);
 }
 function deptExpenseRows(eid,period){
   var m={};
-  ledgerRows(eid,period).forEach(function(r){if(isExpAcct(r.ac))addGroup(m,r.dc,gD(r.dc).n,(r.dr||0)-(r.cr||0),r.dc);});
+  window.FinanceFinancialStatements.departmentRows(window.FinanceFinancialStatements.normalizeRows(ledgerRows(eid,period)),statementMappingsFor(eid)).forEach(function(r){addGroup(m,r.dc,gD(r.dc).n,r.expense,r.dc);});
   return rowsFromMap(m);
 }
 function deptRevenueRows(eid,period){
   var m={};
-  ledgerRows(eid,period).forEach(function(r){if(isRevAcct(r.ac))addGroup(m,r.dc,gD(r.dc).n,(r.cr||0)-(r.dr||0),r.dc);});
+  window.FinanceFinancialStatements.departmentRows(window.FinanceFinancialStatements.normalizeRows(ledgerRows(eid,period)),statementMappingsFor(eid)).forEach(function(r){addGroup(m,r.dc,gD(r.dc).n,r.income,r.dc);});
   return rowsFromMap(m);
 }
 function deptNetRows(eid,period){
@@ -15534,20 +15620,9 @@ function hasExplicitPeriodProfitEntry(eid,period){
   return ledgerRows(eid,period).some(function(r){return String(r.ac)==='3440';});
 }
 function balanceRows(eid,period){
-  var assets={},liabs={},equity={};
-  ledgerRowsToPeriodEnd(eid,period).forEach(function(r){
-    var net=(r.dr||0)-(r.cr||0);
-    if(isAssetAcct(r.ac))addGroup(assets,r.ac,acctLabel(r.ac,r.an),net);
-    if(isLiabAcct(r.ac))addGroup(liabs,r.ac,acctLabel(r.ac,r.an),-net);
-    if(isEquityAcct(r.ac))addGroup(equity,r.ac,acctLabel(r.ac,r.an),-net);
-  });
-  var a=rowsFromMap(assets),l=rowsFromMap(liabs),eq=rowsFromMap(equity);
-  var aTotal=a.reduce(function(s,r){return s+r.v;},0),lTotal=l.reduce(function(s,r){return s+r.v;},0),eqTotal=eq.reduce(function(s,r){return s+r.v;},0);
-  var pl=financeSummary(eid,period).net;
-  var dynamicProfit=!hasExplicitPeriodProfitEntry(eid,period);
-  if(dynamicProfit&&Math.abs(pl)>0.4)addGroup(equity,'3440','3440 本期損益（未月結試算）',pl);
-  eq=rowsFromMap(equity);eqTotal=eq.reduce(function(s,r){return s+r.v;},0);
-  return {assets:a,liabs:l,equity:eq,assetTotal:aTotal,liabTotal:lTotal,equityTotal:eqTotal,dynamicProfit:dynamicProfit,source:ledgerRowsToPeriodEnd(eid,period).length?'ledger':'empty'};
+  var engine=window.FinanceFinancialStatements;
+  if(!engine)throw new Error('完整財務報表引擎尚未載入，請重新整理');
+  return engine.balanceSheet(engine.normalizeRows(ledgerRowsToPeriodEnd(eid,period)),statementMappingsFor(eid));
 }
 function trialBalanceStatus(eid,period){
   var periodRows=ledgerRows(eid,period),toDateRows=ledgerRowsToPeriodEnd(eid,period);
@@ -15556,8 +15631,7 @@ function trialBalanceStatus(eid,period){
   }
   var p=totals(periodRows),td=totals(toDateRows),bs=balanceRows(eid,period),cf=cashFlow(eid,period);
   var assetDiff=bs.assetTotal-(bs.liabTotal+bs.equityTotal);
-  var cashBook=toDateRows.filter(function(r){return isCashAcct(r.ac)&&!isDuplicateRequestCashLedger(r);}).reduce(function(s,r){return s+num(r.dr)-num(r.cr);},0);
-  cashBook+=requestCashEvents(eid,period,true).concat(requestCashEvents(eid,period,false)).reduce(function(s,e){return s+e.amount;},0);
+  var cashBook=toDateRows.filter(function(r){return isCashAcct(r.ac);}).reduce(function(s,r){return s+num(r.dr)-num(r.cr);},0);
   var cashDiff=cf.end-cashBook;
   function pass(diff){return Math.abs(diff)<0.5;}
   var missingRef=periodRows.filter(function(r){return !r.ref&&!r.sourceNo&&!r.voucherNo;});
@@ -15568,7 +15642,7 @@ function trialBalanceStatus(eid,period){
   var checks=[
     {key:'period',name:'本期借貸平衡',diff:p.dr-p.cr,pass:pass(p.dr-p.cr),desc:'本期所有正式分類帳借方應等於貸方。'},
     {key:'to_date',name:'累計借貸平衡',diff:td.dr-td.cr,pass:pass(td.dr-td.cr),desc:'截至本期末所有正式分類帳借方應等於貸方。'},
-    {key:'balance_sheet',name:'資產負債表平衡',diff:assetDiff,pass:pass(assetDiff),desc:'資產總額應等於負債加權益；未月結期間才以 3440 動態試算本期損益。'},
+    {key:'balance_sheet',name:'資產負債表平衡',diff:assetDiff,pass:pass(assetDiff),desc:'資產總額應等於負債加權益；權益包含截至期末尚未結轉的損益試算，未建立正式結帳分錄。'},
     {key:'cash_flow',name:'現金流與帳上現金',diff:cashDiff,pass:pass(cashDiff),desc:'現金流期末現金應與 1111/1112 類科目帳面餘額一致。'},
     {key:'source_ref',name:'來源追溯完整性',diff:missingRef.length,pass:missingRef.length===0,desc:'正式分類帳應有來源單號、傳票號或 posting key。'},
     {key:'entry_shape',name:'分錄格式合理性',diff:oneSided.length,pass:oneSided.length===0,desc:'單筆分錄不可同時有借貸，也不可借貸皆為 0。'},
@@ -15607,13 +15681,12 @@ function isDuplicateRequestCashLedger(row){
 function requestCashEvents(eid,period,before){
   var events=[];
   REQS.forEach(function(r){
-    if(!inActiveDataEnvironment(r))return;
-    ensureRequestCashPostedFromCeo(r);
+    if(!inActiveDataEnvironment(r)||rowTenantId(r)!==currentTenantId())return;
     var posted=requestCashPostedAt(r);
     if(!posted||!inEntity(eid,r,'req'))return;
     var baseDate=fromIsoDate(posted)||todaySlash();
     var amt=requestCashAmount(r);
-    var isInvest=/固定資產|設備|購置/.test((r.desc||'')+' '+(r.drN||''))||String(r.dr||'').indexOf('16')===0;
+    var isInvest=/^(15|16)/.test(String(r.dr||''));
     events.push({date:baseDate,amount:-amt,kind:isInvest?'inv':'op',ref:r.no,desc:(r.tL||'申請')+' 現金撥付 — '+(r.app||'')});
     var fp=r.formPayload||{};
     if(typeof expenseCorrectionCashEvents==='function')events=events.concat(expenseCorrectionCashEvents(r,isInvest?'inv':'op'));
@@ -15640,28 +15713,7 @@ function requestCashEvents(eid,period,before){
   });
 }
 function cashFlow(eid,period){
-  var opIn=0,opOut=0,invOut=0,fin=0;
-  var start=ledgerRowsBeforePeriod(eid,period).filter(function(r){return isCashAcct(r.ac)&&!isDuplicateRequestCashLedger(r);}).reduce(function(s,r){return s+(r.dr||0)-(r.cr||0);},0);
-  start+=requestCashEvents(eid,period,true).reduce(function(s,e){return s+e.amount;},0);
-  ledgerRows(eid,period).forEach(function(r){
-    if(!isCashAcct(r.ac))return;
-    if(isDuplicateRequestCashLedger(r))return;
-    var flow=(r.dr||0)-(r.cr||0),txt=(r.desc||'')+' '+(r.ref||'');
-    var companyLoanKind=companyLoanCashFlowKind(r);
-    if(companyLoanKind==='financing')fin+=flow;
-    else if(companyLoanKind==='investing')invOut+=flow;
-    else if(/股東|借款|資本|增資|籌資/.test(txt))fin+=flow;
-    else if(/設備|固定資產|購置/.test(txt))invOut+=flow;
-    else if(flow>=0)opIn+=flow;
-    else opOut+=flow;
-  });
-  requestCashEvents(eid,period,false).forEach(function(e){
-    if(e.kind==='inv')invOut+=e.amount;
-    else opOut+=e.amount;
-  });
-  var net=opIn+opOut+invOut+fin;
-  var hasCashEvents=requestCashEvents(eid,period,false).length||requestCashEvents(eid,period,true).length;
-  return {start:start,opIn:opIn,opOut:opOut,op:opIn+opOut,inv:invOut,fin:fin,net:net,end:start+net,source:hasLedger(eid,period)||start||hasCashEvents?'ledger':'empty'};
+  return statementReportModel(eid,period,{comparisonPeriod:null}).current.cf;
 }
 function sourceText(s){return s==='ledger'?'正式分類帳分錄':'尚無正式分錄';}
 function voucherByLedgerRef(ref){
@@ -15684,18 +15736,22 @@ function sourceByLedgerRef(ref){
   return {type:'ledger',label:'分類帳',no:ref||'—',id:'',title:'未連結來源',name:'',files:0};
 }
 function ledgerTraceRows(kind,key,eid,period){
-  var rows=ledgerRows(eid,period).filter(function(r){
+  if(kind.indexOf('cash-')===0){
+    var classes={'cash-op-in':'operating','cash-op-out':'operating','cash-invest':'investing','cash-finance':'financing','cash-unclassified':'unclassified'};
+    return cashFlow(eid,period).activities.filter(function(activity){return activity.class===classes[kind]&&(kind!=='cash-op-in'||activity.amount>=0)&&(kind!=='cash-op-out'||activity.amount<0);}).map(function(activity){
+      var r=activity.rows.find(function(row){return isCashAcct(row.ac);})||activity.rows[0]||{};
+      return Object.assign({},r,{amount:activity.amount,desc:(r.desc||'')+' · '+activity.reason,source:sourceByLedgerRef(r.ref),voucher:voucherByLedgerRef(r.ref),virtual:false});
+    });
+  }
+  var base=['asset','liability','equity'].indexOf(kind)>-1?ledgerRowsToPeriodEnd(eid,period):ledgerRows(eid,period);
+  if(kind==='equity'&&key==='unclosed_profit')return base.filter(function(r){return isRevAcct(r.ac)||isExpAcct(r.ac);}).map(function(r){return Object.assign({},r,{amount:num(r.cr)-num(r.dr),source:sourceByLedgerRef(r.ref),voucher:voucherByLedgerRef(r.ref),virtual:true});});
+  var rows=base.filter(function(r){
     var ac=String(r.ac||''),flow=num(r.dr)-num(r.cr),txt=(r.desc||'')+' '+(r.ref||'');
     if(kind==='revenue')return ac===String(key)&&isRevAcct(ac);
     if(kind==='expense')return ac===String(key)&&isExpAcct(ac);
     if(kind==='asset')return ac===String(key)&&isAssetAcct(ac);
     if(kind==='liability')return ac===String(key)&&isLiabAcct(ac);
     if(kind==='equity')return ac===String(key)&&isEquityAcct(ac);
-    if(kind==='cash-op-in')return isCashAcct(ac)&&!isDuplicateRequestCashLedger(r)&&flow>=0&&!/股東|借款|資本|增資|籌資|設備|固定資產|購置/.test(txt);
-    if(kind==='cash-op-out')return isCashAcct(ac)&&!isDuplicateRequestCashLedger(r)&&flow<0&&!/股東|借款|資本|增資|籌資|設備|固定資產|購置/.test(txt);
-    var companyLoanKind=companyLoanCashFlowKind(r);
-    if(kind==='cash-invest')return isCashAcct(ac)&&!isDuplicateRequestCashLedger(r)&&(companyLoanKind==='investing'||/設備|固定資產|購置/.test(txt));
-    if(kind==='cash-finance')return isCashAcct(ac)&&!isDuplicateRequestCashLedger(r)&&(companyLoanKind==='financing'||(!companyLoanKind&&/股東|借款|資本|增資|籌資/.test(txt)));
     return false;
   }).map(function(r){
     var sign=(kind==='revenue'||kind==='liability'||kind==='equity')?-1:1;
@@ -15703,14 +15759,7 @@ function ledgerTraceRows(kind,key,eid,period){
     var amount=(num(r.dr)-num(r.cr))*sign;
     return Object.assign({},r,{amount:amount,source:sourceByLedgerRef(r.ref),voucher:voucherByLedgerRef(r.ref),virtual:false});
   });
-  if(kind==='cash-op-out'||kind==='cash-invest'){
-    requestCashEvents(eid,period,false).forEach(function(ev){
-      if((kind==='cash-invest'&&ev.kind!=='inv')||(kind==='cash-op-out'&&ev.kind==='inv'))return;
-      var req=REQS.find(function(r){return r.no===ev.ref;});
-      rows.push({date:ev.date,desc:ev.desc,eid:eid,dc:req&&req.dc||'',dr:ev.amount>0?ev.amount:0,cr:ev.amount<0?Math.abs(ev.amount):0,ac:'1112',an:'銀行存款',ref:ev.ref,amount:ev.amount,source:sourceByLedgerRef(ev.ref),voucher:voucherByLedgerRef(ev.ref),virtual:true});
-    });
-  }
-  return rows.filter(function(r){return Math.abs(r.amount)>0.4;}).sort(function(a,b){return normDate(b.date).localeCompare(normDate(a.date));});
+  return rows.filter(function(r){return Math.abs(r.amount)>=0.005;}).sort(function(a,b){return normDate(b.date).localeCompare(normDate(a.date));});
 }
 function traceKindLabel(kind){
   return {revenue:'收入來源追溯',expense:'支出來源追溯',asset:'資產來源追溯',liability:'負債來源追溯',equity:'權益來源追溯','cash-op-in':'營業流入追溯','cash-op-out':'營業流出追溯','cash-invest':'投資活動追溯','cash-finance':'籌資活動追溯'}[kind]||'三表來源追溯';
@@ -16946,17 +16995,13 @@ function dashboardMetricFromRemote(row,key,label,eid,dc){
 }
 function dashboardBundleFromRemote(payload,scope,local){
   payload=payload||{};local=local||{};
-  var s=payload.summary||{},p=payload.previousSummary||{},summary=dashTotals([]),previousSummary=dashTotals([]);
-  summary.revenue=num(s.revenue);summary.expense=num(s.expense);summary.net=summary.revenue-summary.expense;summary.activity=Math.abs(summary.revenue)+Math.abs(summary.expense);dashMetricFinish(summary);
-  previousSummary.revenue=num(p.revenue);previousSummary.expense=num(p.expense);previousSummary.net=previousSummary.revenue-previousSummary.expense;previousSummary.activity=Math.abs(previousSummary.revenue)+Math.abs(previousSummary.expense);dashMetricFinish(previousSummary);
-  var companyRows={};(payload.companies||[]).forEach(function(x){companyRows[x.entityId]=x;});
-  var companies=(ENTS||[]).filter(function(e){return e&&e.id&&e.active!==false&&(scope.eid==='all'||e.id===scope.eid);}).map(function(e){var row=dashboardMetricFromRemote(companyRows[e.id]||{},e.id,e.full||e.s,e.id,'');row.short=e.s||e.full;row.color=e.color||'#806f62';return row;});
-  var departments=(payload.departments||[]).map(function(x){var dc=x.departmentCode||'未指定',eid=x.entityId||'';var row=dashboardMetricFromRemote(x,eid+'|'+dc,(gD(dc)||{}).n||dc,eid,dc);row.entityLabel=(gE(eid)||{}).s||eid;return row;}).filter(function(r){return r.activity>.4||r.previous.activity>.4;});
-  var trend=(payload.trend||[]).map(function(x){var row=dashMetricSeed(x.month,x.month);row.month=x.month;row.revenue=num(x.revenue);row.expense=num(x.expense);row.net=row.revenue-row.expense;row.activity=Math.abs(row.revenue)+Math.abs(row.expense);return dashMetricFinish(row);});
+  // The RPC reconciles source documents by original account codes. Financial KPIs
+  // use the complete ledger and the same entity-specific mappings as statements.
+  var s=payload.summary||{};
   var ar=payload.receivables||{},prevAr=payload.previousReceivables||{};
   var receivables={items:(ar.items||[]).map(function(x){return{key:x.invoiceNo||x.key,balance:num(x.balance),invoiceDate:x.invoiceDate||'',due:x.due||'',overdueDays:num(x.overdueDays),buyer:x.buyer||'來源待確認',eid:x.entityId||'',invoiceId:x.invoiceId||''};}),total:num(ar.total),count:num(ar.count),overdueTotal:num(ar.overdueTotal),over90Total:num(ar.over90Total),buckets:(ar.buckets||[]).map(function(x){return{key:x.key,label:x.label,count:num(x.count),total:num(x.total)};}),unknownDue:num(ar.unknownDue)};
   while(receivables.buckets.length<5)receivables.buckets.push({key:'missing_'+receivables.buckets.length,label:'未分類',count:0,total:0});
-  return{scope:scope,rows:local.rows||[],previousRows:local.previousRows||[],summary:summary,previousSummary:previousSummary,companies:companies,departments:departments,receivables:receivables,previousReceivables:{total:num(prevAr.total),count:num(prevAr.count)},trend:trend,reconciliation:payload.reconciliation||null,rowCounts:payload.rowCounts||{},generatedAt:payload.generatedAt||'',latestLedgerAt:payload.latestLedgerAt||'',officialSource:'remote_full',ledgerBalanceDiff:num(s.balanceDiff),missingSourceCount:num(s.missingSourceCount)};
+  return Object.assign({},local,{scope:scope,receivables:receivables,previousReceivables:{total:num(prevAr.total),count:num(prevAr.count)},reconciliation:payload.reconciliation||null,rowCounts:payload.rowCounts||{},generatedAt:payload.generatedAt||'',latestLedgerAt:payload.latestLedgerAt||'',officialSource:'remote_full',ledgerBalanceDiff:num(s.balanceDiff),missingSourceCount:num(s.missingSourceCount)});
 }
 function ensureRemoteDashboardAggregate(scope){
   if(!hasSupabase()||S.demoLogin||!isFinance())return;
@@ -16972,14 +17017,14 @@ function ensureRemoteDashboardAggregate(scope){
 }
 function dashDateInRange(v,start,end){var d=normDate(v);return !!d&&d>=start&&d<=end;}
 function dashLedgerRows(eid,start,end){
-  return LEDGER.filter(function(r){return inActiveDataEnvironment(r)&&!r.voidedAt&&inEntity(eid,r,'ledger')&&dashDateInRange(r.date,start,end);});
+  return statementScopedLedger(eid).filter(function(r){return !r.voidedAt&&!r.voided_at&&dashDateInRange(r.date,start,end);});
 }
 function dashLedgerRowsToEnd(eid,end){
-  return LEDGER.filter(function(r){var d=normDate(r.date);return inActiveDataEnvironment(r)&&!r.voidedAt&&inEntity(eid,r,'ledger')&&d&&d<=end;});
+  return statementScopedLedger(eid).filter(function(r){var d=normDate(r.date);return !r.voidedAt&&!r.voided_at&&d&&d<=end;});
 }
 function dashMetricSeed(key,label,eid,dc){return{key:key,label:label,eid:eid||'',dc:dc||'',revenue:0,expense:0,net:0,margin:null,activity:0};}
 function dashMetricAdd(target,row){
-  var ac=String(row.ac||''),revenue=isRevAcct(ac)?num(row.cr)-num(row.dr):0,expense=isExpAcct(ac)?num(row.dr)-num(row.cr):0;
+  var revenue=ledgerAmountForKind(row,'income'),expense=ledgerAmountForKind(row,'expense');
   target.revenue+=revenue;target.expense+=expense;target.net+=revenue-expense;target.activity+=Math.abs(revenue)+Math.abs(expense);
 }
 function dashMetricFinish(target){target.margin=Math.abs(target.revenue)>0.4?target.net/target.revenue*100:null;return target;}
@@ -17016,18 +17061,18 @@ function dashboardReceivablesAsOf(eid,end){
     if(!groups[key])groups[key]={key:key,balance:0,rows:0};
     groups[key].balance+=num(r.dr)-num(r.cr);groups[key].rows++;
   });
-  var buckets={not_due:{key:'not_due',label:'未到期',count:0,total:0},d1:{key:'d1',label:'逾期 1–30 天',count:0,total:0},d31:{key:'d31',label:'逾期 31–60 天',count:0,total:0},d61:{key:'d61',label:'逾期 61–90 天',count:0,total:0},d90:{key:'d90',label:'逾期 90 天以上',count:0,total:0}};
+  var buckets={unknown:{key:'unknown',label:'缺到期日',count:0,total:0},not_due:{key:'not_due',label:'未到期',count:0,total:0},d1:{key:'d1',label:'逾期 1–30 天',count:0,total:0},d31:{key:'d31',label:'逾期 31–60 天',count:0,total:0},d61:{key:'d61',label:'逾期 61–90 天',count:0,total:0},d90:{key:'d90',label:'逾期 90 天以上',count:0,total:0}};
   var unknownDue=0;
   var items=Object.keys(groups).map(function(key){
     var g=groups[key];if(g.balance<=0.4)return null;
     var inv=(INVS||[]).find(function(i){return String(i.no||'')===key||String(i.id||'')===key||String(i.batchId||'')===key;})||null;
-    var invoiceDate=normDate(inv&&inv.date)||'',due=invoiceDate?dashAddDays(invoiceDate,30):'',days=due?dashDaysBetween(end,due):0,bucket='not_due';
+    var invoiceDate=normDate(inv&&inv.date)||'',due=normDate(inv&&(inv.dueDate||inv.due_date))||'',days=due?dashDaysBetween(end,due):0,bucket=due?'not_due':'unknown';
     if(!due)unknownDue++;
     else if(days>90)bucket='d90';else if(days>60)bucket='d61';else if(days>30)bucket='d31';else if(days>0)bucket='d1';
     buckets[bucket].count++;buckets[bucket].total+=g.balance;
     return{key:key,balance:g.balance,invoice:inv,invoiceDate:invoiceDate,due:due,overdueDays:Math.max(0,days),bucket:bucket,buyer:inv&&(inv.buyer||inv.payer)||'來源待確認',eid:inv&&inv.eid||''};
   }).filter(Boolean).sort(function(a,b){return b.balance-a.balance;});
-  return{items:items,total:items.reduce(function(s,x){return s+x.balance;},0),count:items.length,overdueTotal:items.filter(function(x){return x.overdueDays>0;}).reduce(function(s,x){return s+x.balance;},0),over90Total:buckets.d90.total,buckets:[buckets.not_due,buckets.d1,buckets.d31,buckets.d61,buckets.d90],unknownDue:unknownDue};
+  return{items:items,total:items.reduce(function(s,x){return s+x.balance;},0),count:items.length,overdueTotal:items.filter(function(x){return x.overdueDays>0;}).reduce(function(s,x){return s+x.balance;},0),over90Total:buckets.d90.total,buckets:[buckets.not_due,buckets.d1,buckets.d31,buckets.d61,buckets.d90,buckets.unknown],unknownDue:unknownDue};
 }
 function dashboardTrend(scope){
   var months=scope.mode==='month'?dashMonthsBetween(dashShiftMonth(scope.to,-5),scope.to):scope.months;
@@ -17036,12 +17081,24 @@ function dashboardTrend(scope){
 function dashboardFinancialBundle(scope){
   var first=LEDGER[0]||{},last=LEDGER[LEDGER.length-1]||{};
   var remotePayload=DASH_REMOTE_AGGREGATES[dashboardRemoteKey(scope)]||null;
-  var key=[activeDataEnvironment(),scope.eid,scope.from,scope.to,S.dashDataVersion||0,LEDGER.length,first.id||first.postingKey||'',last.id||last.postingKey||'',INVS.length,remotePayload?(remotePayload.generatedAt||'remote'):'local'].join('|');
+  var state=dashboardFinancialReadState(scope),mappings=statementMappingsFor(scope.eid);
+  var key=[statementDataIdentity(),scope.eid,scope.from,scope.to,S.dashDataVersion||0,LEDGER.length,first.id||first.postingKey||'',last.id||last.postingKey||'',INVS.length,remotePayload?(remotePayload.generatedAt||'remote'):'local',JSON.stringify(state),JSON.stringify(mappings)].join('|');
   if(DASH_FINANCIAL_CACHE.key===key&&DASH_FINANCIAL_CACHE.value)return DASH_FINANCIAL_CACHE.value;
-  var rows=dashLedgerRows(scope.eid,scope.start,scope.end),previousRows=dashLedgerRows(scope.eid,scope.prevStart,scope.prevEnd);
-  var local={scope:scope,rows:rows,previousRows:previousRows,summary:dashTotals(rows),previousSummary:dashTotals(previousRows),companies:dashEntityMetrics(rows,previousRows,scope.eid),departments:dashDepartmentMetrics(rows,previousRows),receivables:dashboardReceivablesAsOf(scope.eid,scope.end),previousReceivables:dashboardReceivablesAsOf(scope.eid,scope.prevEnd),trend:dashboardTrend(scope),officialSource:'local_bootstrap'};
+  var rows=state.ready?dashLedgerRows(scope.eid,scope.start,scope.end):[],previousRows=state.ready?dashLedgerRows(scope.eid,scope.prevStart,scope.prevEnd):[],engine=window.FinanceFinancialStatements;
+  var cashRows=state.ready?engine.normalizeRows(statementScopedLedger(scope.eid).filter(function(r){return !r.voidedAt&&!r.voided_at;})):[],overrides=state.ready?statementCashFlowOverrides(scope.eid):{};
+  var local={scope:scope,rows:rows,previousRows:previousRows,summary:dashTotals(rows),previousSummary:dashTotals(previousRows),companies:state.ready?dashEntityMetrics(rows,previousRows,scope.eid):[],departments:state.ready?dashDepartmentMetrics(rows,previousRows):[],receivables:dashboardReceivablesAsOf(scope.eid,scope.end),previousReceivables:dashboardReceivablesAsOf(scope.eid,scope.prevEnd),trend:state.ready?dashboardTrend(scope):[],financialReady:state.ready,financialMessage:state.message,cashFlow:state.ready?engine.cashFlow(cashRows,{start:scope.start,end:scope.end},mappings,[],overrides):null,previousCashFlow:state.ready?engine.cashFlow(cashRows,{start:scope.prevStart,end:scope.prevEnd},mappings,[],overrides):null,officialSource:'local_bootstrap'};
   var value=remotePayload?dashboardBundleFromRemote(remotePayload,scope,local):local;
   DASH_FINANCIAL_CACHE={key:key,value:value};return value;
+}
+function dashboardFinancialReadState(scope){
+  var online=hasSupabase()&&!S.demoLogin,ledger=statementDataCompleteness().tables.ledger||{},workspace=window.FinanceReportingWorkspace,records=[];
+  if(online&&workspace&&typeof workspace.warmProfiles==='function')workspace.warmProfiles();
+  var ids=scope.eid==='all'?(ENTS||[]).filter(function(e){return e&&e.id&&e.active!==false;}).map(function(e){return e.id;}):[scope.eid];
+  statementScopedLedger(scope.eid).forEach(function(r){var id=ledgerEntity(r);if(id&&ids.indexOf(id)<0)ids.push(id);});
+  if(online)records=ids.map(function(id){var record=workspace&&typeof workspace.profileRecord==='function'?workspace.profileRecord(id):null;return{id:id,loaded:!!(record&&record.loaded),revision:record&&record.revision||0,error:!!(record&&record.error)};});
+  var ready=!!window.FinanceFinancialStatements&&(!online||ledger.complete===true)&&records.every(function(r){return r.loaded;});
+  var failed=online&&(ledger.status==='error'||records.some(function(r){return r.error;}));
+  return{ready:ready,records:records,ledgerStatus:ledger.status||'',loadedAt:ledger.loadedAt||'',message:ready?'':failed?'分類帳或公司報表設定讀取失敗，請重新整理後再試。':'正在讀取完整分類帳與公司報表設定，完成後顯示財務指標。'};
 }
 function dashPctText(delta){return delta&&delta.pct!=null?((delta.pct>=0?'+':'')+delta.pct.toFixed(1)+'%'):'無基期';}
 function dashDeltaTone(delta,kind){
@@ -17058,8 +17115,9 @@ function dashKpiHtml(label,value,delta,kind,note){
   return'<div class="dash-kpi dash-kpi-'+escAttr(kind)+'"><div class="dash-kpi-label">'+escAttr(label)+'</div><div class="dash-kpi-value '+(kind==='expense'?'expense':kind==='net'&&num(value)<0?'loss':'')+'">'+(typeof value==='string'?value:fmt(value))+'</div><div class="dash-kpi-foot"><span class="dash-delta '+dashDeltaTone(delta,kind)+'">'+escAttr(deltaText)+'</span><span>'+escAttr(note||'較上一期')+'</span></div></div>';
 }
 function dashboardRenderKpis(bundle){
-  var s=bundle.summary,p=bundle.previousSummary,marginChange=(s.margin||0)-(p.margin||0),marginDelta={amount:marginChange,pct:p.margin==null?null:marginChange,text:p.margin==null?'無比較基準':((marginChange>=0?'+':'')+marginChange.toFixed(1)+' 個百分點')};
-  el('dash-kpis').innerHTML=dashKpiHtml('淨利',s.net,dashMetricDelta(s.net,p.net),'net','較上一期')+dashKpiHtml('收入',s.revenue,dashMetricDelta(s.revenue,p.revenue),'revenue','較上一期')+dashKpiHtml('支出',s.expense,dashMetricDelta(s.expense,p.expense),'expense','較上一期')+dashKpiHtml('淨利率',s.margin==null?'—':s.margin.toFixed(1)+'%',marginDelta,'margin','較上一期')+dashKpiHtml('應收未收',bundle.receivables.total,dashMetricDelta(bundle.receivables.total,bundle.previousReceivables.total),'receivable',bundle.receivables.count+' 筆');
+  var s=bundle.summary,p=bundle.previousSummary,ready=bundle.financialReady===true,cash=bundle.cashFlow,previousCash=bundle.previousCashFlow;
+  var arReady=bundle.officialSource==='remote_full'||!hasSupabase();
+  el('dash-kpis').innerHTML=dashKpiHtml('收入',ready?s.revenue:'核對中',ready?dashMetricDelta(s.revenue,p.revenue):{text:bundle.financialMessage},'revenue','依公司報表分類')+dashKpiHtml('本期淨利',ready?s.net:'核對中',ready?dashMetricDelta(s.net,p.net):{text:bundle.financialMessage},'net','不含其他綜合損益')+dashKpiHtml('現金淨流量',cash?cash.net:'核對中',cash?dashMetricDelta(cash.net,previousCash.net):{text:bundle.financialMessage},'cash','正式現金分錄')+dashKpiHtml('期末未收',arReady?bundle.receivables.total:'核對中',arReady?dashMetricDelta(bundle.receivables.total,bundle.previousReceivables.total):{text:'核對發票、折讓與收款'},'receivable',arReady?bundle.receivables.count+' 筆':'')+dashKpiHtml('已逾期',arReady?bundle.receivables.overdueTotal:'核對中',{text:'按約定到期日計算'},'overdue','缺日期另列');
 }
 function dashboardSetReconciliationDetails(open,hint,tone){
   var details=el('dash-recon-details'),hintEl=el('dash-recon-hint');
@@ -17088,7 +17146,7 @@ function dashboardRenderReconciliation(bundle){
     {label:'後期表單提前入帳',revenue:r.officialFutureForms,expense:e.officialFutureForms,note:'正常應為 0；若有金額代表日期或流程需覆核。',exception:Math.abs(num(r.officialFutureForms))+Math.abs(num(e.officialFutureForms))>.5},
     {label:'調整與沖銷傳票',revenue:r.officialAdjustments,expense:e.officialAdjustments,note:'會計調整直接影響正式帳，不等於新增一張申請表。'},
     {label:'未連結正式分錄',revenue:r.officialUnlinked,expense:e.officialUnlinked,note:'正常應為 0；有金額時需補來源鏈。',exception:Math.abs(num(r.officialUnlinked))+Math.abs(num(e.officialUnlinked))>.5},
-    {label:'正式分類帳合計',revenue:r.officialAmount,expense:e.officialAmount,note:'此列與上方收入、支出 KPI 完全一致。',total:true}
+    {label:'原科目分類合計',revenue:r.officialAmount,expense:e.officialAmount,note:'依原科目分類核對表單來源；上方 KPI 另套用公司報表分類並排除其他綜合損益及結轉分錄。',total:true}
   ];
   body.innerHTML=bridgeRows.map(function(x){return'<tr class="'+(x.total?'total':x.exception?'exception':'')+'"><td>'+escAttr(x.label)+'</td><td class="money income">'+fmt(x.revenue)+'</td><td class="money expense">'+fmt(x.expense)+'</td><td>'+escAttr(x.note)+'</td></tr>';}).join('');
   var items=(e.exceptions||[]).map(function(x){x.kind='支出';return x;}).concat((r.exceptions||[]).map(function(x){x.kind='收入';return x;})).sort(function(a,b){return Math.abs(num(b.amount))-Math.abs(num(a.amount));}).slice(0,5);
@@ -17096,6 +17154,7 @@ function dashboardRenderReconciliation(bundle){
   exceptions.innerHTML=items.length?'<div class="dash-list-title">本期主要跨期／調整來源</div>'+items.map(function(x){var reason=x.class==='prior_form'?'前期表單本期入帳':x.class==='adjustment'?'調整或沖銷傳票':x.class==='unlinked'?'缺少表單來源':x.class==='future_form'?'後期表單提前入帳':'勾稽差額';return'<div class="dash-recon-exception"><i></i><div><strong>'+escAttr(x.kind+' · '+(x.sourceNo||'來源待確認'))+'</strong><span>'+escAttr(reason)+(x.formDate?' · 表單 '+x.formDate:'')+(x.entryDate?' · 入帳 '+x.entryDate:'')+'</span></div><b>'+fmt(x.amount)+'</b></div>';}).join(''):'<div class="dash-empty">本期沒有跨期、調整或未連結來源。</div>';
 }
 function dashboardRenderVerdict(bundle){
+  if(bundle.financialReady===false){el('dash-verdict-title').textContent='財務資料核對中';el('dash-verdict-sub').textContent=bundle.financialMessage;el('dash-verdict-points').innerHTML='';return;}
   var scope=bundle.scope||dashboardScope(),s=bundle.summary,delta=dashMetricDelta(s.net,bundle.previousSummary.net),losses=bundle.companies.filter(function(r){return r.net<-.4;}).length,ar=bundle.receivables,period=scope.mode==='month'?dashMonthText(scope.to):'所選期間';
   el('dash-verdict-title').textContent=period+(s.net>=0?'淨利 ':'虧損 ')+fmt(Math.abs(s.net));
   el('dash-verdict-sub').textContent=(delta.pct==null?'目前沒有可比較的前一期資料':'較 '+scope.prevLabel+' '+(delta.amount>=0?'改善 ':'減少 ')+fmt(Math.abs(delta.amount))+'（'+dashPctText(delta)+'）')+' · 淨利率 '+(s.margin==null?'無法計算':s.margin.toFixed(1)+'%');
@@ -17114,6 +17173,7 @@ function dashCompactAmount(value){
 }
 function dashboardRenderTrend(bundle){
   var rows=bundle.trend||[],box=el('dash-trend-chart');
+  if(bundle.financialReady===false){box.innerHTML='<div class="dash-empty" role="status">'+escAttr(bundle.financialMessage)+'</div>';return;}
   if(!rows.some(function(r){return r.activity>0.4;})){box.innerHTML='<div class="dash-empty dash-empty-state"><strong>這段期間還沒有正式損益</strong><span>完成簽核並正式入帳後，趨勢會顯示在這裡。</span></div>';return;}
   if(!rows.some(function(r){return r.month===S.dashTrendFocus;}))S.dashTrendFocus=rows[rows.length-1].month;
   var width=Math.max(620,rows.length*94),height=270,pad={l:58,r:18,t:20,b:42},values=rows.reduce(function(a,r){return a.concat([num(r.revenue),num(r.expense),num(r.net)]);},[0]),max=Math.max.apply(null,values),min=Math.min.apply(null,values);
@@ -17176,11 +17236,13 @@ function dashDepartmentGroups(rows){
     return group;
   }).sort(function(a,b){return a.order-b.order||String(a.label).localeCompare(String(b.label));});
 }
+function dashDepartmentCenterKind(row){var profile=window.FinanceReportingWorkspace&&window.FinanceReportingWorkspace.profileFor(row.eid);return profile&&Array.isArray(profile.costCenters)&&(profile.costCenters.find(function(c){return c.departmentCode===row.dc;})||{}).kind||'';}
 function dashMobileMetricRow(row,kind){
-  var isCompany=kind==='company',name=isCompany?row.label:(row.dc+' '+row.label),status=row.activity<.4?'無入帳':row.net<-.4?'虧損':'獲利',statusClass=row.activity<.4?'b-gray':row.net<-.4?'b-rej':'b-ok',action=isCompany?"setDashEntity('"+escAttr(row.eid)+"')":"openDashboardDepartment('"+escAttr(row.eid)+"','"+escAttr(row.dc)+"')",actionLabel=isCompany?'只看這家公司':'查看正式來源',style=isCompany?'':' style="--dash-company-color:'+dashSafeCompanyColor(row.eid)+'"';
+  var isCompany=kind==='company',name=isCompany?row.label:(row.dc+' '+row.label),status=!isCompany&&['cost','shared'].includes(dashDepartmentCenterKind(row))?'成本中心':row.activity<.4?'無入帳':row.net<-.4?'負數損益':'獲利',statusClass=!isCompany&&['cost','shared'].includes(dashDepartmentCenterKind(row))?'b-gray':row.activity<.4?'b-gray':row.net<-.4?'b-rej':'b-ok',action=isCompany?"setDashEntity('"+escAttr(row.eid)+"')":"openDashboardDepartment('"+escAttr(row.eid)+"','"+escAttr(row.dc)+"')",actionLabel=isCompany?'只看這家公司':'查看正式來源',style=isCompany?'':' style="--dash-company-color:'+dashSafeCompanyColor(row.eid)+'"';
   return'<details class="dash-mobile-metric '+(isCompany?'':'dash-mobile-department')+'"'+style+'><summary><div><span class="badge '+statusClass+'">'+status+'</span><strong>'+escAttr(name)+'</strong></div><div class="dash-mobile-net"><small>淨利</small><b class="'+(row.net<0?'loss':'profit')+'">'+fmt(row.net)+'</b>'+dashTableChange(row)+'</div></summary><div class="dash-mobile-metric-body"><dl><div><dt>收入</dt><dd class="income">'+fmt(row.revenue)+'</dd></div><div><dt>支出</dt><dd class="expense">'+fmt(row.expense)+'</dd></div><div><dt>淨利率</dt><dd>'+dashMarginText(row.margin)+'</dd></div></dl><button type="button" class="btn-g" onclick="'+action+'">'+actionLabel+'</button></div></details>';
 }
 function dashboardRenderDepartments(bundle){
+  if(bundle.financialReady===false){var loading=escAttr(bundle.financialMessage);el('dash-dept-body').innerHTML='<tr><td colspan="7" class="dash-empty">'+loading+'</td></tr>';el('dash-dept-mobile').innerHTML='<div class="dash-empty" role="status">'+loading+'</div>';el('dash-dept-count').textContent='財務資料核對中';el('dash-department-company-legend').innerHTML='';el('dash-dept-toggle').style.display='none';return;}
   var groups=dashDepartmentGroups(bundle.departments),body=el('dash-dept-body'),mobile=el('dash-dept-mobile'),toggle=el('dash-dept-toggle'),legend=el('dash-department-company-legend'),count=el('dash-dept-count');
   var total=groups.reduce(function(sum,group){return sum+group.rows.length;},0),shown=groups.reduce(function(sum,group){return sum+group.visibleRows.length;},0),hasCollapsed=groups.some(function(group){return group.rows.length>3;});
   if(toggle){toggle.style.display=hasCollapsed?'inline-flex':'none';toggle.textContent=S.dashDeptExpanded?'收合為各公司前 3 名':'展開全部（'+total+' 個部門）';}
@@ -17199,22 +17261,23 @@ function dashboardSyncOrganization(){
 }
 function dashboardRenderReceivables(bundle){
   var ar=bundle.receivables,scope=bundle.scope||dashboardScope(),summary=el('dash-ar-summary'),aging=el('dash-ar-aging'),top=el('dash-ar-top');
+  if(hasSupabase()&&!S.demoLogin&&bundle.officialSource!=='remote_full'){summary.textContent='正在核對正式應收、折讓與收款…';aging.innerHTML='';top.innerHTML='';return;}
   summary.innerHTML='<div class="dash-ar-primary"><span>期末應收餘額</span><strong>'+fmt(ar.total)+'</strong><small>'+ar.count+' 筆正式應收</small></div><div class="dash-ar-facts"><div><span>已逾期</span><b class="'+(ar.overdueTotal>.4?'warn':'')+'">'+fmt(ar.overdueTotal)+'</b></div><div><span>90 天以上</span><b class="'+(ar.over90Total>.4?'bad':'')+'">'+fmt(ar.over90Total)+'</b></div></div>';
   var colors=['#3f7b5b','#78916f','#c7a14e','#c87832','#a33a32'],labels=ar.buckets.map(function(b,i){var p=ar.total?Math.min(100,b.total/ar.total*100):0;return{b:b,p:p,color:colors[i]||'#806f62'};}),aria=labels.map(function(x){return x.b.label+' '+fmt(x.b.total)+'，'+x.p.toFixed(1)+'%';}).join('；');
   aging.innerHTML='<div class="dash-aging-head"><div><strong>帳齡結構</strong><span>截至 '+escAttr(scope.end)+'</span></div><small>顏色越接近紅色，催收優先度越高</small></div><div class="dash-aging-stack" role="img" aria-label="'+escAttr(aria||'目前沒有應收帳款')+'">'+labels.map(function(x){return'<span style="width:'+x.p.toFixed(2)+'%;background:'+x.color+'" title="'+escAttr(x.b.label+' '+fmt(x.b.total))+'"></span>';}).join('')+'</div><div class="dash-aging-legend">'+labels.map(function(x){return'<div><i style="background:'+x.color+'"></i><span>'+escAttr(x.b.label)+'</span><strong>'+fmt(x.b.total)+'</strong><small>'+x.b.count+' 筆 · '+x.p.toFixed(1)+'%</small></div>';}).join('')+'</div>';
-  top.innerHTML=ar.items.length?'<div class="dash-list-title">前五大未收款</div>'+ar.items.slice(0,5).map(function(x){var overdue=x.overdueDays>0;return'<div class="dash-action-row dash-ar-row"><div><strong>'+escAttr(x.key)+' · '+escAttr(x.buyer)+'</strong><span>到期日 '+escAttr(x.due||'未記錄')+' · '+(overdue?'已逾期 '+x.overdueDays+' 天':'尚未逾期')+'</span></div><div class="dash-ar-row-value"><b>'+fmt(x.balance)+'</b><span class="badge '+(x.overdueDays>90?'b-rej':overdue?'b-wait':'b-ok')+'">'+(x.overdueDays>90?'優先催收':overdue?'已逾期':'未到期')+'</span></div></div>';}).join(''):'<div class="dash-empty dash-empty-state"><strong>目前沒有應收未收</strong><span>截至期末的正式應收餘額為 0。</span></div>';
+  top.innerHTML=ar.items.length?'<div class="dash-list-title">前五大未收款</div>'+ar.items.slice(0,5).map(function(x){var overdue=x.overdueDays>0;return'<div class="dash-action-row dash-ar-row"><div><strong>'+escAttr(x.key)+' · '+escAttr(x.buyer)+'</strong><span>到期日 '+escAttr(x.due||'未記錄')+' · '+(!x.due?'到期日待補':overdue?'已逾期 '+x.overdueDays+' 天':'尚未逾期')+'</span></div><div class="dash-ar-row-value"><b>'+fmt(x.balance)+'</b><span class="badge '+(x.overdueDays>90?'b-rej':overdue?'b-wait':'b-ok')+'">'+(!x.due?'待補日期':x.overdueDays>90?'優先催收':overdue?'已逾期':'未到期')+'</span></div></div>';}).join(''):'<div class="dash-empty dash-empty-state"><strong>目前沒有應收未收</strong><span>截至期末的正式應收餘額為 0。</span></div>';
 }
 function dashboardSystemState(){
   var checks=(SYSTEM_HEALTH_STATE.tableChecks||[]).concat(SYSTEM_HEALTH_STATE.rpcChecks||[],SYSTEM_HEALTH_STATE.identityChecks||[],SYSTEM_HEALTH_STATE.approvalChecks||[],SYSTEM_HEALTH_STATE.workflowChecks||[],SYSTEM_HEALTH_STATE.customizationChecks||[]),fail=checks.filter(function(x){return x.status==='fail';}).length,warn=checks.filter(function(x){return x.status==='warn';}).length,last=SYSTEM_HEALTH_STATE.lastRun||'',stale=last&&(Date.now()-new Date(last).getTime()>86400000),level=!hasSupabase()||fail?'fail':(!last||warn||stale?'warn':'ok');
   return{level:level,fail:fail,warn:warn,last:last,stale:!!stale,label:level==='ok'?'系統正常':level==='fail'?'系統異常':'系統待確認'};
 }
 function dashboardRiskRows(bundle,pm){
-  var risks=[],sys=dashboardSystemState(),lossCompanies=bundle.companies.filter(function(r){return r.net<-.4;}),lossDepts=bundle.departments.filter(function(r){return r.net<-.4;}),missingRefs=bundle.officialSource==='remote_full'?num(bundle.missingSourceCount):bundle.rows.filter(function(r){return !r.ref&&!r.sourceNo&&!r.voucherNo&&!r.postingKey;}).length,balanceDiff=bundle.officialSource==='remote_full'?num(bundle.ledgerBalanceDiff):bundle.rows.reduce(function(s,r){return s+num(r.dr)-num(r.cr);},0),rpcAlerts=(SYSTEM_HEALTH_STATE.rpcChecks||[]).filter(function(x){return x.status==='fail'||x.status==='warn';});
+  var risks=[],sys=dashboardSystemState(),lossCompanies=bundle.companies.filter(function(r){return r.net<-.4;}),lossDepts=bundle.departments.filter(function(r){return r.net<-.4&&!['cost','shared'].includes(dashDepartmentCenterKind(r));}),missingRefs=bundle.officialSource==='remote_full'?num(bundle.missingSourceCount):bundle.rows.filter(function(r){return !r.ref&&!r.sourceNo&&!r.voucherNo&&!r.postingKey;}).length,balanceDiff=bundle.officialSource==='remote_full'?num(bundle.ledgerBalanceDiff):bundle.rows.reduce(function(s,r){return s+num(r.dr)-num(r.cr);},0),rpcAlerts=(SYSTEM_HEALTH_STATE.rpcChecks||[]).filter(function(x){return x.status==='fail'||x.status==='warn';});
   if(sys.level==='fail')risks.push({level:'high',title:'系統健檢有異常',detail:'目前有 '+sys.fail+' 項失敗，請先確認正式連線、身份與 RPC。',owner:'系統管理員',action:'health'});
   else if(sys.level==='warn')risks.push({level:'warn',title:sys.last?(sys.stale?'系統健檢已超過 24 小時':'系統健檢有提醒'):'尚未執行系統健檢',detail:sys.last?('注意 '+sys.warn+' 項；最後檢查 '+sys.last.slice(0,16).replace('T',' ')):'尚未取得正式 Data API、Auth 與 RPC 健康結果。',owner:'系統管理員',action:'health'});
   if(Math.abs(balanceDiff)>.5)risks.push({level:'high',title:'所選期間借貸不平衡',detail:'正式分類帳借貸差額不為零，三表不可視為可用。',owner:'會計',action:'reports'});
   if(rpcAlerts.length)risks.push({level:'high',title:'會計健康檢查有 '+rpcAlerts.length+' 項提醒',detail:'包含入帳、月結、銀行對帳或輔助台帳檢查，需到系統健檢確認。',owner:'會計／系統管理員',action:'health'});
-  if(bundle.receivables.over90Total>.4)risks.push({level:'high',title:'逾期 90 天以上應收 '+fmt(bundle.receivables.over90Total),detail:'共 '+bundle.receivables.buckets[4].count+' 筆，應優先確認催收與呆帳風險。',owner:'會計／執行長',action:'recv'});
+  if(bundle.receivables.over90Total>.4)risks.push({level:'high',title:'逾期 90 天以上應收 '+fmt(bundle.receivables.over90Total),detail:'共 '+((bundle.receivables.buckets||[]).find(function(b){return b.key==='d90';})||{count:0}).count+' 筆，應優先確認催收與呆帳風險。',owner:'會計／執行長',action:'recv'});
   if(lossCompanies.length)risks.push({level:'warn',title:lossCompanies.length+' 家公司在所選期間虧損',detail:'合計虧損 '+fmt(Math.abs(lossCompanies.reduce(function(s,r){return s+r.net;},0)))+'，可在部門損益中依公司分組查看。',owner:'執行長',action:'reports'});
   if(lossDepts.length)risks.push({level:'warn',title:lossDepts.length+' 個部門支出高於收入',detail:'請從部門表查看科目與正式分類帳來源。',owner:'部門主管／執行長',action:'ledger'});
   if(missingRefs)risks.push({level:'high',title:missingRefs+' 筆分類帳缺少來源',detail:'所選期間存在無來源單號、傳票號或 posting key 的分錄。',owner:'會計',action:'ledger'});
@@ -17234,8 +17297,9 @@ function dashboardRenderRisks(bundle,pm){
 }
 function dashboardRenderFreshness(bundle){
   var scope=bundle.scope||dashboardScope(),key=dashboardRemoteKey(scope),fresh=el('dash-data-freshness'),executive=el('dash-executive'),pending=!!DASH_REMOTE_PENDING[key]&&!DASH_REMOTE_AGGREGATES[key],failed=DASH_REMOTE_ERRORS[key]||'',stamp=bundle.generatedAt||bundle.latestLedgerAt||'';
-  var text=bundle.officialSource==='remote_full'?'正式資料更新 '+(stamp?String(stamp).slice(0,16).replace('T',' '):'完成'):failed?'完整資料讀取失敗':pending?'正在核對完整資料':'正在載入正式資料';
-  if(fresh){fresh.textContent=text;fresh.className=failed?'warn':bundle.officialSource==='remote_full'?'ok':'loading';}
+  if(bundle.financialReady===false)pending=true;
+  var text=bundle.financialReady===false?bundle.financialMessage:bundle.officialSource==='remote_full'?'正式資料更新 '+(stamp?String(stamp).slice(0,16).replace('T',' '):'完成'):failed?'完整資料讀取失敗':pending?'正在核對完整資料':'正在載入正式資料';
+  if(fresh){fresh.textContent=text;fresh.className=failed?'warn':pending?'loading':bundle.officialSource==='remote_full'?'ok':'loading';}
   if(executive){executive.classList.toggle('dash-loading',pending);executive.setAttribute('aria-busy',pending?'true':'false');}
 }
 function dashboardSyncControls(scope){
@@ -17292,9 +17356,11 @@ window.setDashboardAggregateFixtureForTest=function(payload){
   if(activeDataEnvironment()!==DATA_ENV_TEST||!canUseTestEnvironment())return false;
   var scope=dashboardScope();DASH_REMOTE_AGGREGATES[dashboardRemoteKey(scope)]=payload||{};DASH_FINANCIAL_CACHE={key:'',value:null};buildDash();return true;
 };
-window.openDashboardReceivables=function(){var scope=dashboardScope();S.recvEntity=scope.eid;S.recvMonthFrom='';S.recvMonthTo=scope.to;nav('recv',null);};
+window.openDashboardReceivables=function(){var scope=dashboardScope();S.recvEntity=scope.eid;S.recvMonthFrom='';S.recvMonthTo=scope.to;if(window.FinanceReportingWorkspace){window.FinanceReportingWorkspace.state.arAsOf=scope.end;window.FinanceReportingWorkspace.state.arDepartment='all';window.FinanceReportingWorkspace.state.arQuery='';window.FinanceReportingWorkspace.state.arBucket='open';}nav('recv',null);};
 window.openDashboardDepartment=function(eid,dc){
+  if(!statementDataCompleteness().tables.ledger.complete){alert('完整分類帳尚未讀取完成，請重新整理後再查看部門來源。');return;}
   var scope=dashboardScope(),rows=dashLedgerRows(eid,scope.start,scope.end).filter(function(r){return r.dc===dc;}).sort(function(a,b){return normDate(b.date).localeCompare(normDate(a.date));}),totals=dashTotals(rows),rev=ledgerBreakdownRows(rows,'income',5),exp=ledgerBreakdownRows(rows,'expense',5);
+  if(window.FinanceReportingWorkspace){window.FinanceReportingWorkspace.openSourceRows(rows,0,(gE(eid).full||eid)+' / '+((gD(dc)||{}).n||dc)+' · '+scope.label);return;}
   S.ledgerInvestorRows=rows;S.ledgerInvestorStats=ledgerInvestorStats(rows,{acct:'all',q:''});
   var title=el('m-voucher-title');if(title)title.textContent=(gD(dc)||{}).n+' · '+scope.label;
   el('m-voucher-body').innerHTML='<div class="dash-modal-summary"><div><span>收入</span><strong>'+fmt(totals.revenue)+'</strong></div><div><span>支出</span><strong>'+fmt(totals.expense)+'</strong></div><div><span>淨利</span><strong class="'+(totals.net<0?'loss':'')+'">'+fmt(totals.net)+'</strong></div></div><div class="dash-modal-breakdown"><div><h3>主要收入科目</h3>'+(rev.map(function(x){return'<p><span>'+escAttr(x.name)+'</span><b>'+fmt(x.v)+'</b></p>';}).join('')||'<p>沒有收入科目</p>')+'</div><div><h3>主要支出科目</h3>'+(exp.map(function(x){return'<p><span>'+escAttr(x.name)+'</span><b>'+fmt(x.v)+'</b></p>';}).join('')||'<p>沒有支出科目</p>')+'</div></div><div class="dash-list-title">最近正式分類帳來源</div><div class="dash-modal-ledger">'+(rows.slice(0,12).map(function(r,i){return'<div><span>'+escAttr(r.date)+' · '+escAttr(r.ac+' '+r.an)+'<small>'+escAttr(r.desc||r.ref||'無摘要')+'</small></span><b>'+fmt(Math.max(num(r.dr),num(r.cr)))+'</b><button class="btn-g" onclick="openLedgerEntryModal('+i+')">檢視</button></div>';}).join('')||'<div class="dash-empty">沒有正式分類帳來源。</div>')+'</div>';
@@ -26544,7 +26610,7 @@ window.openReportVoucherModal=function(kind,account){
       +'<div style="background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:8px"><div style="font-size:10px;color:#a08060;margin-bottom:2px">法人 / 期間</div><div style="font-size:12px;color:#334155">'+(ent.s||eid)+' · '+period+'</div></div>'
       +'<div style="background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:8px"><div style="font-size:10px;color:#a08060;margin-bottom:2px">合計 / 筆數</div><div style="font-size:12px;font-weight:650;color:var(--brtxt)">'+fmt(total)+' · '+rows.length+' 筆</div></div>'
     +'</div>'
-    +'<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:9px">以下資料只取正式分類帳分錄，與三表總覽金額同源；不含暫估或尚未入帳資料。</div>'
+    +'<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:9px">以下資料只取正式分類帳分錄，與財務報表金額同源；不含暫估或尚未入帳資料。</div>'
     +(rows.length?'<div style="overflow-x:auto"><table style="min-width:760px"><thead><tr><th>日期</th><th>單號</th><th>摘要 / 部門</th><th style="text-align:right">借方</th><th style="text-align:right">貸方</th><th style="text-align:right">分類金額</th><th>操作</th></tr></thead><tbody>'+rows.map(rowHtml).join('')+'</tbody></table></div>':'<div style="text-align:center;padding:28px;color:#94a3b8;border:1.5px dashed #e0d0b8;border-radius:9px;font-size:12px">此分類目前沒有正式傳票分錄</div>');
   document.getElementById('m-voucher').style.display='flex';
 };
@@ -27507,8 +27573,11 @@ window.archivePeriodDocuments=async function(){
   await auditLog('憑證封存',gE(eid).s+' '+period,'封存 '+docs.length+' 張申請單',{eid:eid,period:period});buildCompliance();
 };
 window.exportAnnualPackage=async function(){
-  var eid=compEntity(),period=compPeriod(),e=gE(eid),vs=vouchersForPeriod(eid,period),sum=financeSummary(eid,period),bs=balanceRows(eid,period);
-  var csv='年度財報與合規匯出\\n法人,'+e.full+'\\n期間,'+period+'\\n匯出時間,'+new Date().toISOString()+'\\n\\n損益摘要\\n收入,'+sum.revenue+'\\n支出,'+sum.expense+'\\n淨利,'+sum.net+'\\n\\n資產負債\\n資產,'+bs.assetTotal+'\\n負債,'+bs.liabTotal+'\\n權益,'+bs.equityTotal+'\\n\\n傳票清單\\n傳票,日期,摘要,金額,調整來源\\n'+vs.map(function(v){return [v.no,v.date,'"'+String(v.desc).replace(/"/g,'""')+'"',v.total,v.adjusts||''].join(',');}).join('\\n')+'\\n\\nAudit Log\\n時間,人員,動作,標的,說明\\n'+AUDIT_LOGS.map(function(a){return [a.time,a.user,a.action,a.target,'"'+String(a.detail).replace(/"/g,'""')+'"'].join(',');}).join('\\n');
+  var eid=compEntity(),period=compPeriod(),e=gE(eid),vs=vouchersForPeriod(eid,period);
+  var sheets=statementExportSheets(eid,period);
+  sheets.push({name:'傳票清單',rows:[['傳票','日期','摘要','金額','調整來源']].concat(vs.map(function(v){return [v.no,v.date,v.desc,v.total,v.adjusts||''];}))});
+  sheets.push({name:'Audit Log',rows:[['時間','人員','動作','標的','說明']].concat(AUDIT_LOGS.filter(function(a){return inActiveDataEnvironment(a)&&(eid==='all'||a.eid===eid)&&inPeriod(a.time,period);}).map(function(a){return [a.time,a.user,a.action,a.target,a.detail];}))});
+  var csv=statementSheetsCsv(sheets);
   dlCSV(csv,'annual_compliance_'+e.id+'_'+period+'.csv');await auditLog('年度財報匯出',e.s+' '+period,'下載合規年度包',{eid:eid,period:period});buildCompliance();
 };
 window.approveAnnualReview=async function(){
@@ -28909,51 +28978,54 @@ window.submitBill=async function(){
 };
 
 // ══ 收款情形 ══
+function recvCanonicalSnapshot(){
+  var workspace=window.FinanceReportingWorkspace,scope={entity:S.recvEntity||'all',department:'all',asOf:todayIso()};
+  var data=workspace&&typeof workspace.receivablesForScope==='function'?workspace.receivablesForScope(scope):null;
+  if(!data&&workspace&&typeof workspace.loadReceivables==='function')workspace.loadReceivables(false,scope);
+  return data&&data.complete===true&&Array.isArray(data.items)?data:null;
+}
+function recvCanonicalSummary(rows,data){
+  var engine=window.FinanceReceivablesEngine;
+  if(!engine)return {ready:false,originalAmount:null,receivedAmount:null,outstandingAmount:null,pendingReceiptAmount:null};
+  return engine.summarizeInvoices(rows,data&&data.items);
+}
+function recvCanonicalMoney(value){return typeof value==='number'&&Number.isFinite(value)?fmt(value):'未核對';}
+function recvCanonicalRate(summary){return summary.ready&&summary.originalAmount>0?Math.round(summary.receivedAmount/summary.originalAmount*100):null;}
+function recvCanonicalMonthGroups(rows,data){
+  if(!data||!window.FinanceReceivablesEngine)return [];
+  var selected=new Set(rows.map(function(row){return row.id;})),items=data.items.filter(function(row){return selected.has(row.invoiceId);});
+  if(!recvCanonicalSummary(rows,data).ready)return [];
+  return window.FinanceReceivablesEngine.group(items,function(row){var d=String(row.invoiceDate||'');return /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(d)?d.slice(0,7):'unknown';});
+}
 window.buildRecv=function buildRecv(){
   var all=recvBaseInvoices();
   normalizeRecvEntity(all);
   var rangedAll=recvInvoicesForMonthRange(all);
   renderRecvEntitySelects(all,rangedAll);
   renderRecvMonthRangeControls();
-  var recvInvs=recvInvoicesForSelectedEntity(rangedAll);
-  var recvGroups=uniqueInvoiceGroups(recvInvs);
-  var counts=recvCounts(recvGroups);
+  var recvInvs=recvInvoicesForSelectedEntity(rangedAll),recvGroups=uniqueInvoiceGroups(recvInvs),counts=recvCounts(recvGroups);
   updateRecvSidebarBadge(recvCounts(uniqueInvoiceGroups(all)).notPaid);
-  var tA=recvInvs.reduce(function(s,i){return s+(i.total||0);},0);
-  var tP=recvInvs.filter(function(i){return recvStatusKey(i)==='paid';}).reduce(function(s,i){return s+(i.total||0);},0);
-  var waitReview=recvGroups.filter(function(i){return recvGroupStatusKey(i)==='pending_receipt_review';}).reduce(function(s,i){return s+invoiceGroupTotal(i);},0);
-  var unpaidTotal=recvGroups.filter(function(i){return recvGroupStatusKey(i)!=='paid';}).reduce(function(s,i){return s+invoiceGroupTotal(i);},0);
-  var rate=tA?Math.round(tP/tA*100):0;
-  var entityLabel=recvEntityLabel(),periodLabel=recvMonthRangeLabel();
-  if(el('recv-sub'))el('recv-sub').textContent=entityLabel+' · '+periodLabel+' · 應收 '+recvGroups.length+' 筆（明細 '+recvInvs.length+' 張），未入帳 '+counts.notPaid+' 筆';
-  if(el('recv-rate-pill'))el('recv-rate-pill').textContent='未入帳 '+counts.notPaid+' 筆';
-  if(el('recv-unpaid-hint'))el('recv-unpaid-hint').textContent=entityLabel+' 目前未入帳 '+counts.notPaid+' 筆；其中未收 '+counts.unpaid+' 筆、部分已收 '+(counts.partial||0)+' 筆、待執行長確認 '+counts.pending_receipt_review+' 筆。';
+  var canonical=recvCanonicalSnapshot(),summary=recvCanonicalSummary(recvInvs,canonical),tA=summary.originalAmount,tP=summary.receivedAmount,rate=recvCanonicalRate(summary);
+  var entityLabel=recvEntityLabel(),periodLabel=recvMonthRangeLabel(),asOf=canonical&&canonical.asOf||todayIso();
+  if(el('recv-sub'))el('recv-sub').textContent=entityLabel+' · '+periodLabel+' · 發票 '+recvGroups.length+' 筆（明細 '+recvInvs.length+' 張）；金額截至 '+asOf;
+  if(el('recv-rate-pill'))el('recv-rate-pill').textContent=summary.ready?'已核對正式分錄':'金額待核對';
+  if(el('recv-unpaid-hint'))el('recv-unpaid-hint').textContent=entityLabel+' 收款流程：未收 '+counts.unpaid+' 筆、部分已收 '+(counts.partial||0)+' 筆、待執行長確認 '+counts.pending_receipt_review+' 筆；流程狀態不代表未收金額。';
   el('recv-kpis').innerHTML=[
-    {l:'應收帳款',v:fmt(tA),s:recvGroups.length+' 筆 / '+recvInvs.length+' 張明細'},
-    {l:'已收入帳',v:fmt(tP),s:'收款率 '+rate+'%'},
-    {l:'待執行長確認',v:fmt(waitReview),c:counts.pending_receipt_review,s:counts.pending_receipt_review+' 筆'},
-    {l:'未入帳',v:fmt(unpaidTotal),c:counts.notPaid,s:counts.notPaid+' 筆'}
-	  ].map(function(s){return'<div class="sc" style="'+(s.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:'+(s.c?'#b03010':'#1e293b')+'">'+s.v+'</div>'+(s.s?'<div style="font-size:11px;color:#94a3b8;margin-top:1px">'+s.s+'</div>':'')+'</div>';}).join('');
-	  renderBankReconciliationPanel(recvInvs);
-	  renderRecvRateSummary(recvGroups,counts,tA,tP,rate);
-  var em={};recvGroups.forEach(function(i){var leader=invoiceGroupLeader(i),k=leader.eid||'unknown';if(!em[k])em[k]={eid:k,en:leader.en||gE(k).s||'未指定',cnt:0,unpaid:0,partial:0,review:0,total:0,paid:0};var e=em[k],status=recvGroupStatusKey(leader),groupRows=invoiceGroupRows(leader);e.cnt++;e.total+=invoiceGroupTotal(leader);e.paid+=groupRows.filter(function(row){return recvStatusKey(row)==='paid';}).reduce(function(s,row){return s+(row.total||0);},0);if(status==='pending_receipt_review')e.review++;else if(status==='partial')e.partial++;else if(status==='unpaid')e.unpaid++;});
-  el('recv-etbl').innerHTML=Object.values(em).map(function(e){var r=e.total?Math.round(e.paid/e.total*100):0;return'<tr><td><span class="ep" style="font-size:9px">'+e.en+'</span></td><td style="text-align:right">'+e.cnt+'</td><td style="text-align:right;color:#b03010;font-weight:500">'+e.unpaid+'</td><td style="text-align:right;color:#4a2890;font-weight:500">'+e.review+'</td><td style="text-align:right;font-weight:500">'+fmt(e.total)+'</td><td style="text-align:right;color:#1a5010;font-weight:500">'+fmt(e.paid)+'</td><td><div style="display:flex;align-items:center;gap:5px"><div style="flex:1;height:5px;background:var(--warm);border-radius:99px;overflow:hidden"><div style="width:'+r+'%;height:100%;background:'+(r>80?'#2a9040':'var(--br)')+';border-radius:99px"></div></div><span style="font-size:11px;font-weight:500;min-width:28px;text-align:right">'+r+'%</span></div></td></tr>';}).join('')||'<tr><td colspan="7" style="text-align:center;padding:18px;color:#94a3b8">目前沒有已交付待收款的發票</td></tr>';
+    {l:'原始發票金額',v:recvCanonicalMoney(tA),s:recvGroups.length+' 筆 / '+recvInvs.length+' 張明細'},
+    {l:'正式實收',v:recvCanonicalMoney(tP),s:rate==null?'票面實收比待核對':'原始票面實收比 '+rate+'%'},
+    {l:'待執行長確認',v:recvCanonicalMoney(summary.pendingReceiptAmount),c:counts.pending_receipt_review,s:'依本次送審金額'},
+    {l:'未收餘額',v:recvCanonicalMoney(summary.outstandingAmount),c:counts.notPaid,s:summary.ready?'已扣除折讓與實際收款':'正式餘額讀取完成前不估算'}
+  ].map(function(x){return'<div class="sc" style="'+(x.c?'background:#fde8d8;border-color:#f0c0a0':'')+'"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+x.l+'</div><div style="font-size:17px;font-weight:500;color:'+(x.c?'#b03010':'#1e293b')+'">'+x.v+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+x.s+'</div></div>';}).join('');
+  renderBankReconciliationPanel(recvInvs);
+  renderRecvRateSummary(recvGroups,counts,tA,tP,rate);
+  var entities={};recvInvs.forEach(function(i){var k=i.eid||'unknown';if(!entities[k])entities[k]=[];entities[k].push(i);});
+  el('recv-etbl').innerHTML=Object.keys(entities).map(function(eid){var rows=entities[eid],groups=uniqueInvoiceGroups(rows),c=recvCounts(groups),value=recvCanonicalSummary(rows,canonical),r=recvCanonicalRate(value),name=rows[0].en||gE(eid).s||'未指定';return'<tr><td><span class="ep" style="font-size:9px">'+escAttr(name)+'</span></td><td style="text-align:right">'+groups.length+'</td><td style="text-align:right;color:#b03010">'+(c.unpaid+c.partial)+'</td><td style="text-align:right;color:#4a2890">'+c.pending_receipt_review+'</td><td style="text-align:right">'+recvCanonicalMoney(value.originalAmount)+'</td><td style="text-align:right;color:#1a5010">'+recvCanonicalMoney(value.receivedAmount)+'</td><td title="正式實收 / 原始發票金額">'+(r==null?'未核對':r+'%')+'</td></tr>';}).join('')||'<tr><td colspan="7" style="text-align:center;padding:18px;color:#94a3b8">目前沒有已交付待收款的發票</td></tr>';
   renderRecvDetail();
-  var byMonth={};
-  recvInvs.forEach(function(i){
-    var rm=invoiceReceivableMonth(i);
-    if(!byMonth[rm])byMonth[rm]={m:rm,total:0,paid:0,cnt:0,paidCnt:0,unpaid:0};
-    byMonth[rm].total+=i.total||0;byMonth[rm].cnt++;
-    if(i.status!=='paid')byMonth[rm].unpaid+=i.total||0;
-    var pm=invoicePaidMonth(i);
-    if(pm){
-      if(!byMonth[pm])byMonth[pm]={m:pm,total:0,paid:0,cnt:0,paidCnt:0,unpaid:0};
-      byMonth[pm].paid+=i.total||0;byMonth[pm].paidCnt++;
-    }
-  });
-  var trend=Object.keys(byMonth).sort(function(a,b){if(a==='未指定')return 1;if(b==='未指定')return-1;return a.localeCompare(b);}).slice(-6).map(function(k){return byMonth[k];});
-  el('recv-trend').innerHTML=trend.length?trend.map(function(m){var r2=m.total?Math.round(Math.min(m.paid/m.total*100,100)):0;var label=m.m==='未指定'?'未指定月份':m.m.replace('-','年')+'月';return'<div class="sc"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:5px">'+label+'</div><div style="display:grid;gap:4px;font-size:11px"><div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">開立應收</span><strong style="color:#334155">'+fmt(m.total)+'</strong></div><div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">實際收款</span><strong style="color:#1a5010">'+fmt(m.paid)+'</strong></div><div style="display:flex;justify-content:space-between"><span style="color:#94a3b8">未收餘額</span><strong style="color:#b03010">'+fmt(m.unpaid)+'</strong></div></div><div style="font-size:10px;color:#94a3b8;margin-top:6px">應收 '+m.cnt+' 張 · 實收 '+m.paidCnt+' 張</div><div style="height:4px;background:var(--warm);border-radius:99px;overflow:hidden;margin-top:5px"><div style="width:'+r2+'%;height:100%;background:'+(r2>80?'#2a9040':'var(--br)')+';border-radius:99px"></div></div></div>';}).join(''):'<div style="grid-column:1/-1;text-align:center;padding:18px;color:#94a3b8;font-size:12px">目前沒有可計算的收款趨勢資料</div>';
-	}
+  var months=recvCanonicalMonthGroups(recvInvs,canonical).sort(function(a,b){return a.key==='unknown'?1:b.key==='unknown'?-1:a.key.localeCompare(b.key);});
+  var note='<div style="grid-column:1/-1;font-size:12px;color:#64748b">依開票月份分組，顯示截至 '+escAttr(asOf)+' 的累計實收與未收；不是各月銀行收款流量。開票日期未核對者另列。</div>';
+  el('recv-trend').innerHTML=note+(summary.ready?months.map(function(group){var x=group.summary,label=group.key==='unknown'?'開票日期未核對':group.key.replace('-','年')+'月開票';return'<div class="sc"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:5px">'+label+'</div><div style="display:grid;gap:4px;font-size:11px">'+[['原始發票',x.originalAmount],['累計實收',x.receivedAmount],['未收餘額',x.outstandingAmount]].map(function(row){return'<div style="display:flex;justify-content:space-between"><span style="color:#64748b">'+row[0]+'</span><strong>'+recvCanonicalMoney(row[1])+'</strong></div>';}).join('')+'</div><div style="font-size:10px;color:#64748b;margin-top:6px">'+x.count+' 張發票</div></div>';}).join(''):'<div style="grid-column:1/-1;text-align:center;padding:18px;color:#64748b;font-size:12px">月別金額尚未核對，請待正式餘額讀取完成。</div>');
+}
+
 	function bankRowsForSelectedEntity(){
 	  var v=S.recvEntity||'all';
 	  return (BANK_TRANSACTIONS||[]).filter(function(t){return inActiveDataEnvironment(t)&&(v==='all'||t.eid===v)&&recvMonthInRange(monthKey(t.date));});
@@ -28976,31 +29048,15 @@ window.buildRecv=function buildRecv(){
 	  });
 	  return dups;
 	}
-	function bankReconciliationHealthForEntity(recvInvs){
-	  var txs=bankRowsForSelectedEntity();
-	  var inflows=txs.filter(function(t){return t.amount>0&&t.matchStatus!=='ignored';});
-	  var outflows=txs.filter(function(t){return t.amount<0&&t.matchStatus!=='ignored';});
-	  var unmatchedInflows=inflows.filter(function(t){return t.matchStatus==='unmatched';});
-	  var unmatchedOutflows=outflows.filter(function(t){return t.matchStatus==='unmatched';});
-	  var paidInvs=(recvInvs||[]).filter(function(i){return i.status==='paid';});
-	  var paidInvoiceWithoutBank=paidInvs.filter(function(i){return !bankMatchesForTarget('invoices',i.id).length;});
-	  var eid=S.recvEntity||'all';
-	  var paidBills=(BILLS||[]).filter(function(b){return inActiveDataEnvironment(b)&&b.status==='paid'&&(eid==='all'||b.eid===eid);});
-	  var paidBillWithoutBank=paidBills.filter(function(b){return !bankMatchesForTarget('bills',b.id).length;});
-	  var inflowWithoutTarget=inflows.filter(function(t){return !bankMatchedToArTarget(t);});
-	  return {
-	    txs:txs,
-	    latestImport:(BANK_STATEMENT_IMPORTS||[]).filter(function(x){return inActiveDataEnvironment(x)&&(eid==='all'||x.eid===eid);}).sort(function(a,b){return String(b.importedAt||'').localeCompare(String(a.importedAt||''));})[0]||null,
-	    unmatchedInflows:unmatchedInflows,
-	    unmatchedOutflows:unmatchedOutflows,
-	    paidInvoiceWithoutBank:paidInvoiceWithoutBank,
-	    paidBillWithoutBank:paidBillWithoutBank,
-	    inflowWithoutTarget:inflowWithoutTarget,
-	    duplicateCount:bankDuplicateCount(txs),
-	    unmatchedInflowAmount:unmatchedInflows.reduce(function(s,t){return s+t.amount;},0),
-	    unmatchedOutflowAmount:unmatchedOutflows.reduce(function(s,t){return s+Math.abs(t.amount);},0)
-	  };
-	}
+	function bankReconciliationHealthForEntity(){
+  var data=recvCanonicalSnapshot(),r=data&&data.reconciliation;
+  if(!r)return {ready:false,visible:false,items:[],amount:null,count:null};
+  if(r.bankVisible!==true)return {ready:true,visible:false,items:[],amount:null,count:null};
+  var items=r.unmatchedBankItems,valid=Array.isArray(items)&&typeof r.unmatchedBankAmount==='number'&&Number.isFinite(r.unmatchedBankAmount)&&Number.isInteger(r.unmatchedBankCount)&&r.unmatchedBankCount===items.length;
+  valid=valid&&items.every(function(row){return row&&['amount','matchedAmount','remainingAmount'].every(function(k){return typeof row[k]==='number'&&Number.isFinite(row[k]);})&&row.remainingAmount>=0;});
+  return valid?{ready:true,visible:true,items:items,amount:r.unmatchedBankAmount,count:r.unmatchedBankCount,asOf:data.asOf,differences:items.filter(function(row){return row.differenceFlag;}).length}:{ready:false,visible:true,items:[],amount:null,count:null};
+}
+
 	function bankTxShort(t){
 	  var acct=(BANK_ACCOUNTS||[]).find(function(a){return a.id===t.bankAccountId;})||{};
 	  return (t.date||'—')+' · '+(acct.bankName||'銀行')+' · '+(t.ref||t.traceNo||t.counterparty||t.desc||'未填摘要');
@@ -29013,29 +29069,15 @@ window.buildRecv=function buildRecv(){
 	    return'<div style="display:flex;justify-content:space-between;gap:8px;background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:7px"><span>'+escAttr(bankTxShort(x))+'</span><strong style="color:'+(x.amount>0?'#1a5010':'#8a1010')+'">'+fmt(Math.abs(x.amount||0))+'</strong></div>';
 	  }).join('')+(items.length>6?'<div style="font-size:11px;color:#94a3b8;text-align:right">另有 '+(items.length-6)+' 筆未列出</div>':'')+'</div></div>';
 	}
-	function renderBankReconciliationPanel(recvInvs){
-	  var box=el('bank-recon-panel');if(!box)return;
-	  if(!productModuleEnabled('bank-reconciliation')){box.innerHTML='';return;}
-	  if(!isFinance()){box.innerHTML='';return;}
-	  var h=bankReconciliationHealthForEntity(recvInvs);
-	  var installed=(BANK_ACCOUNTS.length||BANK_TRANSACTIONS.length||BANK_RECONCILIATION_MATCHES.length||BANK_STATEMENT_IMPORTS.length);
-	  var risk=h.unmatchedInflows.length+h.paidInvoiceWithoutBank.length+h.paidBillWithoutBank.length+h.inflowWithoutTarget.length+h.duplicateCount;
-	  var installNote=installed?'最近匯入：'+(h.latestImport?(h.latestImport.statementPeriod||h.latestImport.sourceFileName||normDate(h.latestImport.importedAt)||'已匯入'):'尚無匯入批次'):'尚未載入銀行對帳資料；正式 DB 需先套用 bank_reconciliation_foundation_20260612.sql 並匯入銀行明細。';
-	  box.innerHTML='<div class="card" style="margin-bottom:12px;border-color:'+(risk?'#f0b090':'#d7e8c8')+'"><div class="chd"><div><span class="cht">銀行對帳風險</span><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+escAttr(installNote)+'</div></div><span class="badge '+(risk?'b-wait':'b-ok')+'">'+(risk?risk+' 件待處理':'目前無風險')+'</span></div><div style="padding:11px 13px"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">'
-	    +[
-	      {l:'未配對銀行入帳',v:h.unmatchedInflows.length,s:fmt(h.unmatchedInflowAmount)},
-	      {l:'已收發票缺銀行配對',v:h.paidInvoiceWithoutBank.length,s:'發票'},
-	      {l:'已收繳費單缺銀行配對',v:h.paidBillWithoutBank.length,s:'繳費單'},
-	      {l:'銀行入帳無應收目標',v:h.inflowWithoutTarget.length,s:'需確認是否漏開票'},
-	      {l:'疑似重複銀行交易',v:h.duplicateCount,s:'筆'}
-	    ].map(function(x){return'<div class="sc" style="'+(x.v?'background:#fff1e8;border-color:#f0b090':'')+'"><div style="font-size:11px;color:#a08060">'+x.l+'</div><div style="font-size:18px;font-weight:900;color:'+(x.v?'#8a1010':'#1f2a44')+'">'+x.v+'</div><div style="font-size:11px;color:#94a3b8">'+x.s+'</div></div>';}).join('')
-	    +'</div>'
-	    +bankIssueList('銀行入帳未配單',h.unmatchedInflows,'bank')
-	    +bankIssueList('已收發票但沒有銀行配對',h.paidInvoiceWithoutBank,'invoice')
-	    +bankIssueList('已收繳費單但沒有銀行配對',h.paidBillWithoutBank,'bill')
-	    +bankIssueList('銀行入帳沒有應收目標',h.inflowWithoutTarget,'bank')
-	    +'</div></div>';
-	}
+	function renderBankReconciliationPanel(){
+  var box=el('bank-recon-panel');if(!box)return;
+  if(!productModuleEnabled('bank-reconciliation')||!isFinance()){box.innerHTML='';return;}
+  var result=bankReconciliationHealthForEntity(),heading='<div class="chd"><div><span class="cht">銀行入帳核銷</span><div style="font-size:11px;color:#64748b;margin-top:2px">'+escAttr(recvEntityLabel())+' · 公司範圍；不依發票月份或部門分攤</div></div></div>';
+  if(!result.ready||!result.visible){box.innerHTML='<div class="card" style="margin-bottom:12px">'+heading+'<div style="padding:12px;color:#64748b" role="status">'+(!result.ready?'銀行核銷餘額尚未核對，請待正式資料讀取完成；讀取失敗時可於應收追蹤重新核對。':'目前帳號無銀行核銷明細讀取權限；未顯示銀行金額。')+'</div></div>';return;}
+  var cards=result.items.map(function(row){return'<div data-bank-remainder="'+escAttr(row.id)+'" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px"><div style="min-width:0;flex:1 1 160px;overflow-wrap:anywhere"><strong>'+escAttr(row.date||'日期未核對')+' · '+escAttr(row.counterparty||row.referenceNo||row.id)+'</strong><div style="font-size:11px;color:#64748b">'+escAttr(row.description||'未填摘要')+'</div><div style="font-size:11px;color:#64748b">入帳 '+recvCanonicalMoney(row.amount)+' · 已核銷 '+recvCanonicalMoney(row.matchedAmount)+(row.differenceFlag?' · 核銷超額，需查明差異':'')+'</div></div><div style="text-align:right"><span style="font-size:11px;color:#64748b">尚未核銷</span><div style="font-weight:700;color:#9a3412">'+recvCanonicalMoney(row.remainingAmount)+'</div></div></div>';}).join('');
+  box.innerHTML='<div class="card" style="margin-bottom:12px">'+heading+'<div style="padding:11px 13px"><div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;margin-bottom:10px"><div>尚未核銷 <strong>'+recvCanonicalMoney(result.amount)+'</strong> · '+result.count+' 筆完整清單</div><small style="color:#64748b">截至 '+escAttr(result.asOf||todayIso())+(result.differences?' · '+result.differences+' 筆核銷差異':'')+'</small></div><div style="display:grid;gap:6px">'+(cards||'<div style="padding:10px;color:#64748b">此範圍目前沒有待核銷銀行入帳；不代表全部帳務風險已排除。</div>')+'</div></div></div>';
+}
+
 	window.recvTab=function(t,btn){
   S.recvT=t;
   ['rt-single','rt-batch'].forEach(function(id){var b=el(id);if(b)b.classList.remove('on');});
@@ -29105,6 +29147,7 @@ function recvEntityLabel(){
 }
 function recvStatusKey(i){
   if(!i)return'unpaid';
+  if(i.status==='partial')return'partial';
   if(i.status==='paid')return'paid';
   if(i.status==='pending_receipt_review')return'pending_receipt_review';
   if(i.status==='partial')return'partial';
@@ -29125,16 +29168,17 @@ function invoiceGroupReceiptCounts(i){
 function recvGroupStatusKey(i){
   var rows=invoiceGroupRows(i);
   if(!rows.length)return recvStatusKey(i);
-  var paid=0,pending=0,unpaid=0;
+  var paid=0,pending=0,unpaid=0,partial=0;
   rows.forEach(function(row){
     var k=recvStatusKey(row);
     if(k==='paid')paid++;
     else if(k==='pending_receipt_review')pending++;
+    else if(k==='partial')partial++;
     else unpaid++;
   });
   if(paid===rows.length)return'paid';
   if(pending>0)return'pending_receipt_review';
-  if(paid>0)return'partial';
+  if(paid>0||partial>0)return'partial';
   return'unpaid';
 }
 function recvStatusShortLabel(i){
@@ -29157,7 +29201,7 @@ function renderRecvRateSummary(items,counts,total,paid,rate){
     {l:'目前公司',v:recvEntityLabel(),s:'可由右上方切換'},
     {l:'應收筆數',v:items.length+' 筆',s:'整批發票會合併成一筆'},
     {l:'未入帳提醒',v:counts.notPaid+' 筆',s:'未收 '+counts.unpaid+' / 部分 '+(counts.partial||0)+' / 待執行長確認 '+counts.pending_receipt_review},
-    {l:'收款率',v:rate+'%',s:fmt(paid)+' / '+fmt(total)}
+    {l:'原始票面實收比',v:rate==null?'未核對':rate+'%',s:recvCanonicalMoney(paid)+' / '+recvCanonicalMoney(total)}
   ].map(function(x){return'<div class="sc" style="background:#fff;border-color:#efd7b8"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+x.l+'</div><div style="font-size:16px;font-weight:650;color:#334155;word-break:break-word">'+x.v+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">'+x.s+'</div></div>';}).join('');
 }
 function renderRecvFilterButtons(counts){
@@ -29197,9 +29241,10 @@ function recvInvoiceRowHtml(i,RECV){
   var unpaidBadge=groupCount>1?'<span class="badge '+(receiptCounts.unpaid?'b-wait':'b-ok')+'">未收 '+receiptCounts.unpaid+' / '+receiptCounts.total+' 張</span>':'';
   var typeText=groupCount>1?('已收 '+paidCount+' / '+receiptCounts.total+' 張 · 未收 '+receiptCounts.unpaid+' 張'):invoiceIdentifierType(leader.identifierType);
   captureReceiptReviewVersions(leader);
-  var canUploadReceipt=canActReceipt(leader)&&k==='unpaid'&&S.user&&currentRoleKey()==='accountant';
+  var receiptTarget=rows.find(function(row){return canActReceipt(row)&&['unpaid','partial'].includes(recvStatusKey(row));});
+  var canUploadReceipt=!!receiptTarget&&S.user&&currentRoleKey()==='accountant';
   var canReviewReceipt=canActReceipt(leader)&&k==='pending_receipt_review'&&S.user&&currentRoleKey()==='ceo';
-  return'<div class="recv-item" data-mobile-record-card="receivable" onclick="showRecvInvoiceDetail(\''+leader.id+'\')" title="點開查看收款與傳票細節"><div class="recv-item-main"><div class="recv-item-title"><div style="font-size:12px;font-weight:650;color:#334155">'+escAttr(title)+'</div><span class="badge '+cls+'">'+recvStatusShortLabel(leader)+'</span>'+(groupCount>1?'<span class="badge b-blue">整批 '+groupCount+' 張</span>'+unpaidBadge:'')+'</div><div class="recv-item-buyer">'+escAttr(buyer)+'</div><div class="recv-item-meta">'+proofText+' · '+escAttr(follow)+'</div></div><div class="recv-item-amount"><div>'+fmt(groupTotal)+'</div><small>'+escAttr(typeText)+'</small></div><div class="recv-item-actions">'+(canUploadReceipt?'<label onclick="event.stopPropagation()">上傳證明<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="event.stopPropagation();submitReceiptReview(\''+leader.id+'\',this)"></label>':'')+(canReviewReceipt?'<button class="btn-g" onclick="event.stopPropagation();approveReceiptReview(\''+leader.id+'\')">確認已收</button>':'')+'</div></div>';
+  return'<div class="recv-item" data-mobile-record-card="receivable" onclick="showRecvInvoiceDetail(\''+leader.id+'\')" title="點開查看收款與傳票細節"><div class="recv-item-main"><div class="recv-item-title"><div style="font-size:12px;font-weight:650;color:#334155">'+escAttr(title)+'</div><span class="badge '+cls+'">'+recvStatusShortLabel(leader)+'</span>'+(groupCount>1?'<span class="badge b-blue">整批 '+groupCount+' 張</span>'+unpaidBadge:'')+'</div><div class="recv-item-buyer">'+escAttr(buyer)+'</div><div class="recv-item-meta">'+proofText+' · '+escAttr(follow)+'</div></div><div class="recv-item-amount"><div>'+fmt(groupTotal)+'</div><small>'+escAttr(typeText)+'</small></div><div class="recv-item-actions">'+(canUploadReceipt?'<label onclick="event.stopPropagation()">上傳證明<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="event.stopPropagation();submitReceiptReview(\''+(receiptTarget?receiptTarget.id:leader.id)+'\',this)"></label>':'')+(canReviewReceipt?'<button class="btn-g" onclick="event.stopPropagation();approveReceiptReview(\''+leader.id+'\')">確認已收</button>':'')+'</div></div>';
 }
 	function singleInvoiceDetailHtml(i){
 	  if(!i)return'';
@@ -29222,7 +29267,7 @@ function recvInvoiceRowHtml(i,RECV){
 	function invoiceLifecycleEventHtml(events){
 	  if(!events.length)return'<div style="font-size:12px;color:#94a3b8;padding:12px;border:1.5px dashed #e0d0b8;border-radius:8px">目前尚無發票作廢、折讓、退款或重開事件。</div>';
 	  return'<div style="overflow-x:auto"><table style="min-width:960px"><thead><tr><th>日期</th><th>事件</th><th>事件號</th><th>原因</th><th style="text-align:right">金額</th><th>傳票</th><th>退款</th><th>操作</th></tr></thead><tbody>'+events.map(function(e){
-	    var refundable=e.status==='posted'&&e.settlementAccountCode==='2131'&&num(e.total)>num(e.refundAmount);
+	    var refundable=e.status==='posted'&&e.settlementAccountCode==='2131'&&num(e.refundPayableAmount==null?e.total:e.refundPayableAmount)>num(e.refundAmount);
 	    return'<tr><td>'+escAttr(normDate(e.date)||'—')+'</td><td><span class="badge '+(e.type==='refund'?'b-blue':e.type==='void'?'b-wait':'b-purp')+'">'+invoiceLifecycleTypeLabel(e.type)+'</span></td><td style="font-family:var(--font-sans);color:#64748b">'+escAttr(e.no||'—')+'</td><td>'+escAttr(e.reason||'—')+'</td><td style="text-align:right;font-weight:650">'+fmt(e.total||e.refundAmount||0)+'</td><td>'+(e.voucherNo?'<button class="btn-s" style="font-size:11px;padding:5px 8px" onclick="showVoucherById(\''+(e.voucherId||e.voucherNo)+'\')">'+escAttr(e.voucherNo)+'</button>':'<span style="font-size:11px;color:#94a3b8">—</span>')+'</td><td>'+(e.refundVoucherNo?'<button class="btn-s" style="font-size:11px;padding:5px 8px" onclick="showVoucherById(\''+(e.refundVoucherId||e.refundVoucherNo)+'\')">'+escAttr(e.refundVoucherNo)+'</button>':(refundable?'<span class="badge b-wait">待退款</span>':'<span style="font-size:11px;color:#94a3b8">—</span>'))+'</td><td>'+(refundable&&canManageInvoiceLifecycle()?'<button class="btn-g" style="font-size:11px;padding:5px 8px;color:#8a1010" onclick="refundInvoiceLifecycleEvent(\''+e.id+'\')">登錄退款</button>':'<span style="font-size:11px;color:#94a3b8">—</span>')+'</td></tr>';
 	  }).join('')+'</tbody></table></div>';
 	}
@@ -29284,21 +29329,42 @@ function recvInvoiceRowHtml(i,RECV){
 	    await refreshAfterInvoiceLifecycle(inv.id);
 	  }catch(err){invoiceLifecycleRpcFailed('發票折讓',err);}
 	};
+	var FINANCE_REFUND_PENDING_OPERATIONS=Object.create(null);
 	window.refundInvoiceLifecycleEvent=async function(eventId){
 	  var ev=(INVOICE_LIFECYCLE_EVENTS||[]).find(function(e){return e.id===eventId;});if(!ev)return;
 	  if(!canManageInvoiceLifecycle()){alert('此功能僅開放會計、行政部門主任與執行長。');return;}
-	  var remaining=Math.max(0,num(ev.total)-num(ev.refundAmount));
-	  var amount=invoiceNumberValue(prompt('請輸入實際退款金額。',String(remaining)));
-	  if(!amount||amount<=0){alert('退款金額必須大於 0。');return;}
-	  if(amount>remaining+0.5){alert('退款金額不可超過待退款餘額。');return;}
-	  var reason=prompt('請輸入退款付款原因。','發票作廢/折讓退款');
-	  if(!reason)return;
+	  var identity=approvalFastBootstrapIdentity()+'|'+activeDataEnvironment(),key=identity+'|'+ev.id,operation=FINANCE_REFUND_PENDING_OPERATIONS[key];
+	  if(operation&&operation.running){alert('本次退款正在處理，請稍候。');return;}
+	  if(!operation){
+	    var remaining=Math.max(0,num(ev.refundPayableAmount==null?ev.total:ev.refundPayableAmount)-num(ev.refundAmount));
+	    var amount=invoiceNumberValue(prompt('請輸入本次實際退款金額。待退款 '+fmt(remaining),String(remaining)));
+	    if(!amount||amount<=0)return;
+	    if(amount>remaining+0.005){alert('退款金額不可超過待退款餘額。');return;}
+	    var reason=prompt('請輸入退款付款原因。','發票作廢／折讓退款');if(!reason)return;
+	    operation=FINANCE_REFUND_PENDING_OPERATIONS[key]={running:false,args:{p_lifecycle_event_id:ev.id,p_refund_amount:amount,p_reason:reason,p_refund_date:todayIso(),p_bank_transaction_id:null,p_idempotency_key:crypto.randomUUID(),p_expected_refund_amount:num(ev.refundAmount)}};
+	  }
+	  operation.running=true;
+	  var definiteRejection=false;
 	  try{
-	    var rpc=await callAccountingRpc('refund_invoice_receipt',{p_lifecycle_event_id:ev.id,p_refund_amount:amount,p_reason:reason,p_refund_date:todayIso(),p_bank_transaction_id:null});
-	    if(rpc&&rpc.missing){alert('發票退款功能尚未在正式系統完成同步，這次動作尚未執行。請通知系統管理員補齊發票生命週期設定。');return;}
+	    var response=await getSb().rpc('refund_invoice_receipt_v2',operation.args);
+	    if(identity!==approvalFastBootstrapIdentity()+'|'+activeDataEnvironment())throw new Error('登入身分已變更，請以原身分確認退款結果。');
+	    if(response.error){var errorCode=String(response.error.code||'').toUpperCase();definiteRejection=/^(?:(?:22|23|28|40|42|55)[A-Z0-9]{3}|P0001|PGRST20[024])$/.test(errorCode)&&!expenseApplicantRevisionRpcErrorIsAmbiguous(response.error);throw response.error;}
+	    if(!response.data||response.data.ok!==true)throw new Error('退款回應不完整，結果待確認；重試將沿用相同操作識別碼。');
+	    if(window.FinanceReportingWorkspace)window.FinanceReportingWorkspace.invalidate();
 	    await refreshAfterInvoiceLifecycle(ev.invoiceId);
-	  }catch(err){invoiceLifecycleRpcFailed('發票退款',err);}
+	    if(identity===approvalFastBootstrapIdentity()+'|'+activeDataEnvironment())delete FINANCE_REFUND_PENDING_OPERATIONS[key];
+	  }catch(err){
+      if(definiteRejection){
+        delete FINANCE_REFUND_PENDING_OPERATIONS[key];
+        if(identity===approvalFastBootstrapIdentity()+'|'+activeDataEnvironment()){
+          var refreshed=false;try{await refreshAfterInvoiceLifecycle(ev.invoiceId);refreshed=true;}catch(refreshError){}
+          if(identity===approvalFastBootstrapIdentity()+'|'+activeDataEnvironment())alert('退款未執行：'+(err.message||String(err))+'。'+(refreshed?'已重新核對正式紀錄，請重新輸入本次退款內容。':'最新紀錄尚未同步，請重新整理後再輸入退款內容。'));
+        }
+      }else alert('退款結果需確認：'+(err.message||String(err))+'；請先核對正式紀錄。再次操作會沿用本次識別碼，避免重複退款。');
+    }
+	  finally{operation.running=false;}
 	};
+
 	function recvInvoiceLedgerRows(rows){
   var keys={};
   (rows||[]).forEach(function(x){
@@ -29332,7 +29398,7 @@ window.showRecvInvoiceDetail=function(id){
   var proofCount=receiptFiles.length;
   var actionH='';
   captureReceiptReviewVersions(leader,'modal');
-  if(canActReceipt(leader)&&statusKey==='unpaid'&&S.user&&currentRoleKey()==='accountant')actionH='<label onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:9px;font-size:12px;font-weight:650;background:#e6f4d8;border:1px solid #b0e090;color:#1a5010;cursor:pointer">上傳收款證明<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="submitReceiptReview(\''+leader.id+'\',this)"></label>';
+  if(canActReceipt(leader)&&statusKey==='unpaid'&&S.user&&currentRoleKey()==='accountant')actionH='<label onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:9px;font-size:12px;font-weight:650;background:#e6f4d8;border:1px solid #b0e090;color:#1a5010;cursor:pointer">上傳收款證明<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="submitReceiptReview(\''+(receiptTarget?receiptTarget.id:leader.id)+'\',this)"></label>';
   if(canActReceipt(leader)&&statusKey==='pending_receipt_review'&&S.user&&currentRoleKey()==='ceo')actionH='<button class="btn-p" style="background:#1a7040" onclick="approveReceiptReview(\''+leader.id+'\')">確認已收款入帳</button>';
   openApprModal();
   el('appr-inner').innerHTML=
@@ -29891,10 +29957,10 @@ function statementCashBookBalance(eid,period){
   if(engine&&typeof engine.statementCashBookBalance==='function'){
     return engine.statementCashBookBalance(rows,{
       isCashAccount:function(ac){return isCashAcct(ac);},
-      isDuplicateRequestCashLedger:isDuplicateRequestCashLedger
+      isDuplicateRequestCashLedger:function(){return false;}
     });
   }
-  return rows.filter(function(r){return isCashAcct(r.ac)&&!isDuplicateRequestCashLedger(r);}).reduce(function(s,r){return s+num(r.dr)-num(r.cr);},0);
+  return rows.filter(function(r){return isCashAcct(r.ac);}).reduce(function(s,r){return s+num(r.dr)-num(r.cr);},0);
 }
 function expenseStatementDate(r){
   var engine=financeReportEngine();
@@ -30302,23 +30368,17 @@ window.exportLedger=function(){
   dlCSV(csv,'ledger_'+new Date().toISOString().slice(0,10)+'.csv');
 };
 // FIX 13：三表匯出 CSV
+function statementCsvCell(value){
+  var text=String(value==null?'':value);
+  if(typeof value!=='number'&&/^[\s]*[=+\-@]/.test(text))text="'"+text;
+  return '"'+text.replace(/"/g,'""')+'"';
+}
+function statementSheetsCsv(sheets){return sheets.map(function(sheet){return '【'+sheet.name+'】\n'+sheet.rows.map(function(row){return row.map(statementCsvCell).join(',');}).join('\n');}).join('\n\n')+'\n';}
 window.exportReports=function(){
   var eid=(el('rpt-ent')||{}).value||'E1';var month=(el('rpt-month')||{}).value||todayMonth();
   var e=gE(eid);
-  var b=balanceRows(eid,month),revRows=revenueRows(eid,month),expRows=expenseRows(eid,month),cf=cashFlow(eid,month),tb=trialBalanceStatus(eid,month);
-  var csv='歲悅長照集團 三表匯出（暫編）\n報表狀態,暫編\n正式限制,期初試算表、銀行對帳、稅務勾稽與月結檢查完成前不得作為正式財報\n法人,'+e.full+'\n期間,'+month+'\n資料來源,'+sourceText((hasLedger(eid,month)||ledgerRowsToPeriodEnd(eid,month).length)?'ledger':'empty')+'\n生成日期,'+new Date().toISOString().slice(0,10)+'\n\n';
-  csv+='【資產負債表】\n項目,金額\n';
-  b.assets.forEach(function(r){csv+=r.n+','+Math.round(r.v)+'\n';});
-  csv+='資產合計,'+Math.round(b.assetTotal)+'\n';
-  b.liabs.forEach(function(r){csv+=r.n+','+Math.round(r.v)+'\n';});
-  b.equity.forEach(function(r){csv+=r.n+','+Math.round(r.v)+'\n';});
-  csv+='\n【損益表】\n項目,金額,佔收入%\n';
-  var totalRev=revRows.reduce(function(s,r){return s+r.v;},0),totalExp=expRows.reduce(function(s,r){return s+r.v;},0);
-  revRows.forEach(function(r){csv+=r.n+','+Math.round(r.v)+','+(totalRev?(r.v/totalRev*100).toFixed(1):'0.0')+'%\n';});
-  expRows.forEach(function(r){csv+=r.n+','+Math.round(r.v)+','+(totalRev?(r.v/totalRev*100).toFixed(1):'0.0')+'%\n';});
-  csv+='本期損益,'+Math.round(totalRev-totalExp)+','+(totalRev?((totalRev-totalExp)/totalRev*100).toFixed(1):'0.0')+'%\n';
-  csv+='\n【現金流量表】\n項目,金額\n';
-  csv+='營業流入,'+Math.round(cf.opIn)+'\n營業流出,'+Math.round(cf.opOut)+'\n投資活動,'+Math.round(cf.inv)+'\n籌資活動,'+Math.round(cf.fin)+'\n本期現金淨變動,'+Math.round(cf.net)+'\n期末現金,'+Math.round(cf.end)+'\n';
+  var tb=trialBalanceStatus(eid,month);
+  var csv=statementSheetsCsv(statementExportSheets(eid,month));
   csv+='\n【三表試算平衡】\n檢查項目,結果,差額,說明\n';
   tb.checks.forEach(function(c){csv+=[c.name,c.pass?'通過':'異常',Math.round(c.diff),'"'+String(c.desc).replace(/"/g,'""')+'"'].join(',')+'\n';});
   if(tb.issues.length){
@@ -37315,8 +37375,10 @@ function ledgerRowMatchesQuery(r,q){
 }
 function ledgerAmountForKind(r,kind){
   var dr=num(r&&r.dr),cr=num(r&&r.cr),ac=String(r&&r.ac||'');
-  if(kind==='income')return isRevAcct(ac)?Math.max(0,cr-dr):0;
-  if(kind==='expense')return isExpAcct(ac)?Math.max(0,dr-cr):0;
+  var mappings=statementProfileFor(ledgerEntity(r)).accountMappings||{},engine=window.FinanceFinancialStatements,c=engine.accountClass(ac,mappings);
+  if((mappings[ac]||{}).ociCategory||r.closingEntry||['period_close','closing_entry','year_end_close'].indexOf(r.sourceType)>-1)return 0;
+  if(kind==='income')return c==='revenue'||c==='otherIncome'?cr-dr:0;
+  if(kind==='expense')return ['cost','expense','otherExpense','incomeTax'].indexOf(c)>-1?dr-cr:0;
   return Math.max(0,Math.abs(dr-cr));
 }
 function ledgerBreakdownRows(rows,kind,limit){
@@ -37377,16 +37439,16 @@ function ledgerDepartmentComparisonRows(rows){
     map[dc].income+=ledgerAmountForKind(r,'income');
     map[dc].expense+=ledgerAmountForKind(r,'expense');
   });
-  return Object.keys(map).map(function(k){var r=map[k];r.net=r.income-r.expense;r.total=r.income+r.expense;return r;})
-    .filter(function(r){return r.total>0.4;})
-    .sort(function(a,b){return b.total-a.total;}).slice(0,10);
+  return Object.keys(map).map(function(k){var r=map[k];r.net=r.income-r.expense;r.total=Math.abs(r.income)+Math.abs(r.expense);return r;})
+    .filter(function(r){return r.total>=0.005;})
+    .sort(function(a,b){return b.total-a.total;});
 }
 function ledgerRenderDepartmentBars(rows){
   var box=el('ldg-dept-bar');if(!box)return;
   var arr=ledgerDepartmentComparisonRows(rows);
   var max=Math.max.apply(null,arr.map(function(r){return r.total;}))||1;
   box.innerHTML=arr.length?arr.map(function(r){
-    var totalPct=Math.max(4,r.total/max*100),incomePct=r.total?Math.round(r.income/r.total*totalPct):0,expensePct=Math.max(0,totalPct-incomePct);
+    var totalPct=Math.max(4,r.total/max*100),incomePct=r.total?Math.round(Math.abs(r.income)/r.total*totalPct):0,expensePct=Math.max(0,totalPct-incomePct);
     return '<div class="ledger-dept-bar-row">'+
       '<div class="ledger-dept-bar-name">'+escAttr(r.name||r.dc)+'</div>'+
       '<div class="ledger-dept-bar-track" title="收入 '+fmt(r.income)+' / 支出 '+fmt(r.expense)+'"><div class="ledger-dept-bar-income" style="width:'+incomePct+'%"></div><div class="ledger-dept-bar-expense" style="width:'+expensePct+'%"></div></div>'+
@@ -37790,6 +37852,50 @@ function createFinanceApprovalRuntime(){
   });
 }
 window.FinanceApprovalRuntime=createFinanceApprovalRuntime();
+function createFinanceReportingRuntime(){
+  return Object.freeze({
+    state:function(){return S;},user:function(){return S.user;},role:function(){return currentRoleKey();},
+    tenant:function(){return currentTenantId();},environment:function(){return activeDataEnvironment();},today:function(){return todayIso();},
+    identityBlocked:function(){return financeWorkspaceIdentityBlocked;},permissionIdentity:function(){return JSON.stringify(CURRENT_PERMISSION_SNAPSHOT);},
+    postingDepartments:function(eid){return deptSelectRowsForPreferred('',eid==='all'?null:eid);},
+    entities:function(){return ENTS;},departments:function(){return DEPTS;},users:function(){return USERS;},accounts:function(){return ACCTS;},
+    ledger:function(){return LEDGER;},invoices:function(){return INVS;},requests:function(){return REQS;},
+    postedAccountingLines:function(r){var view=postedAccountingView(r);return view&&view.status==='ready'?view.lines:null;},
+    statementModel:function(eid,period,opts){return statementReportModel(eid,period,opts);},
+    completeness:function(){return statementDataCompleteness();},
+    exportSheets:function(eid,period,opts){return statementExportSheets(eid,period,opts);},
+    modelFromLedger:function(rows,period,profiles){var mappings={};Object.keys(profiles||{}).forEach(function(eid){mappings[eid]=profiles[eid].accountMappings||{};});return window.FinanceFinancialStatements.buildModel({ledger:rows,entityId:'all',period:period,accountMappingsByEntity:mappings,completeness:statementDataCompleteness()});},
+    rpc:function(name,args){if(!hasSupabase()||!S.user||financeWorkspaceIdentityBlocked)return Promise.reject(new Error('請以有效本人帳號登入後讀取正式資料。'));return getSb().rpc(name,args);},
+    reload:async function(){if(hasSupabase())await loadRemoteData();},
+    refreshViews:function(){buildRecv();buildDash();buildReports();buildApprovals();},
+    refreshDashboard:function(){buildDash();},
+    refreshReceivables:function(){if(S.page==='recv')buildRecv();},
+    openInvoice:function(id){showRecvInvoiceDetail(id);},
+    openLedger:function(row){S.ledgerInvestorRows=[row];S.ledgerInvestorStats=ledgerInvestorStats([row],{acct:'all',q:''});openLedgerEntryModal(0);},
+    receiptAction:async function(id,action,note,version){
+      var invoice=INVS.find(function(i){return i.id===id;});if(!invoice)throw new Error('發票尚未讀取，請重新整理。');
+      var availability=approvalRecordsActionAvailability('invoices',[invoice],{kind:'recv'});if(!availability.ok)throw new Error(availability.message||'目前無法執行此收款動作。');
+      var versions={};versions[id]=version;return financeReceiptAction([invoice],action,note,[],versions);
+    },
+    submitReceipt:async function(id,version,options){
+      var invoice=INVS.find(function(i){return i.id===id;});if(!invoice)throw new Error('發票尚未讀取，請重新整理。');
+      if(currentRoleKey()!=='accountant'||!canActReceipt(invoice))throw new Error('這筆收款目前不可操作，請重新整理核對權限與狀態。');
+      var expected=approvalFastBootstrapIdentity()+'|'+activeDataEnvironment(),versions={},amounts={};versions[id]=version;amounts[id]=options.amount;
+      if(!options.uploadedFiles){var files=await Promise.all(options.files.map(fileToAttachment));options.uploadedFiles=await uploadAttachmentsToSupabase(files,{recordType:'invoices',recordNo:invoice.no,kind:'receipt_proof',date:options.receivedDate,entityId:invoice.eid,departmentCode:invoice.dc});}
+      if(expected!==approvalFastBootstrapIdentity()+'|'+activeDataEnvironment())throw new Error('登入身分已變更，請使用原身分確認收款證明。');
+      return financeReceiptAction([invoice],'submit',options.note,options.uploadedFiles,versions,{amounts:amounts,receivedDate:options.receivedDate});
+    }
+  });
+}
+if(window.FinanceReportingWorkspace){
+  window.FinanceReportingWorkspace.install(createFinanceReportingRuntime());
+  var legacyBuildReportsForWorkspace=window.buildReports;
+  window.buildReports=function(){var result=legacyBuildReportsForWorkspace.apply(this,arguments);window.FinanceReportingWorkspace.renderReports();return result;};
+  var legacyBuildDashForWorkspace=window.buildDash;
+  window.buildDash=function(){var result=legacyBuildDashForWorkspace.apply(this,arguments);if(isFinance())window.FinanceReportingWorkspace.warmProfiles();return result;};
+  var legacyBuildRecvForWorkspace=window.buildRecv;
+  window.buildRecv=function(){var result=legacyBuildRecvForWorkspace.apply(this,arguments);window.FinanceReportingWorkspace.renderReceivables();return result;};
+}
 installApprovalActionLocks();
 installActionFeedbackWrappers();
 setDemoLoginVisibility();

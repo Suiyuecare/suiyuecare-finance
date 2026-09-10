@@ -58,5 +58,6 @@ copyFile('assets/templates/labor_service_fee.docx', 'www/assets/templates/labor_
 copyFile('docs/歲悅會計系統_V4修訂重點.html', 'www/docs/歲悅會計系統_V4修訂重點.html');
 copyFile('docs/歲悅會計系統教育訓練手冊_橘色版.docx', 'www/docs/歲悅會計系統教育訓練手冊_橘色版.docx');
 copyFile('docs/歲悅財務管理系統V4_使用教學.pptx', 'www/docs/歲悅財務管理系統V4_使用教學.pptx');
+copyFile('docs/reference/taiwan-vat-401-403-404-official-20230831.pdf', 'www/docs/reference/taiwan-vat-401-403-404-official-20230831.pdf');
 
 console.log(`Built www for Finance ${buildConfig.target} (${buildConfig.runtimeMode}, asset version ${assetVersion}).`);
