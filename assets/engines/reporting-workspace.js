@@ -129,11 +129,21 @@
   function arSummary(rows){var result={outstanding:0,received:0,pending:0,overdue:0,unknown:0,credit:0};rows.forEach(function(r){result.outstanding+=Math.max(0,n(r.outstandingAmount));result.received+=n(r.receivedAmount);result.pending+=n(r.pendingReceiptAmount);if(n(r.overdueDays)>0)result.overdue+=Math.max(0,n(r.outstandingAmount));if(!r.dueDate)result.unknown+=Math.max(0,n(r.outstandingAmount));result.credit+=Math.max(0,-n(r.outstandingAmount));});return result;}
   function arBadge(r){return r.status==='pending_receipt_review'?'收款待確認':r.balanceStatus==='settled'?'已結清':r.balanceStatus==='credit'?'溢收待處理':r.balanceStatus==='unrecognized'?'尚未認列應收':!r.dueDate?'到期日待補':n(r.overdueDays)>0?'逾期 '+r.overdueDays+' 天':r.balanceStatus==='partial'?'部分已收':'未到期';}
   function arActions(r){return button('明細／追款','receivable-detail','data-invoice="'+h(r.invoiceId)+'"');}
+  function arMatchesQuery(row,query){
+    var texts=[row.invoiceNo,row.buyer,row.ownerName],search=global.FinanceDocumentSearch;
+    if(search&&typeof search.matches==='function'){
+      // Search only known canonical balances; never infer amounts from status
+      // or coerce missing/unknown values into searchable zeroes.
+      var amounts=['originalAmount','recognizedAmount','outstandingAmount','receivedAmount','allowanceAmount','arAllowanceAmount','pendingReceiptAmount','refundPayable','refundedAmount'].map(function(key){return row[key];}).filter(function(value){return typeof value==='number'&&Number.isFinite(value);});
+      return search.matches(query,{texts:texts,amounts:amounts});
+    }
+    var textQuery=String(query||'').trim().toLowerCase();return !textQuery||texts.join(' ').toLowerCase().includes(textQuery);
+  }
   function renderReceivables(){syncSession();var box=el('finance-receivable-workspace');if(!box||!runtime)return;var scope=arScope(),key=arKey(scope),record=receivables.get(key);
-    var header='<div class="rw-toolbar"><div><h2>應收追蹤</h2><p>'+h(entityName(scope.entity))+' · 截至 '+h(scope.asOf)+'</p></div><div class="rw-actions">'+button('重新核對','reload-receivables')+button('匯出應收 Excel','export-receivables')+'</div></div><div class="rw-form" style="margin-bottom:16px">'+field('資料截止日','rw-ar-asof',scope.asOf,'date')+select('部門','rw-ar-department',scope.department,[['all','全部授權部門']].concat(departmentsFor(scope.entity,true).map(function(d){return[d.c,d.n];})))+field('搜尋客戶／單號','rw-ar-query',state.arQuery,'search','placeholder="輸入客戶或單號"')+'</div>';
+    var header='<div class="rw-toolbar"><div><h2>應收追蹤</h2><p>'+h(entityName(scope.entity))+' · 截至 '+h(scope.asOf)+'</p></div><div class="rw-actions">'+button('重新核對','reload-receivables')+button('匯出應收 Excel','export-receivables')+'</div></div><div class="rw-form" style="margin-bottom:16px">'+field('資料截止日','rw-ar-asof',scope.asOf,'date')+select('部門','rw-ar-department',scope.department,[['all','全部授權部門']].concat(departmentsFor(scope.entity,true).map(function(d){return[d.c,d.n];})))+field('搜尋客戶／單號／金額','rw-ar-query',state.arQuery,'search','placeholder="輸入客戶、單號或金額"')+'</div>';
     if(!record){box.innerHTML=header+notice('正在核對發票、折讓與正式收款分錄…');if(!pending.has(key))loadReceivables().then(function(){if(arKey(arScope())===key)renderReceivables();});return;}
     if(record.error){box.innerHTML=header+notice('應收資料讀取失敗：'+record.error+'。讀取成功前不顯示估算餘額。',true);return;}
-    var data=record.data,query=state.arQuery.trim().toLowerCase(),base=data.items.filter(function(r){return !query||[r.invoiceNo,r.buyer,r.ownerName].join(' ').toLowerCase().includes(query);}),summary=arSummary(base);
+    var data=record.data,base=data.items.filter(function(r){return arMatchesQuery(r,state.arQuery);}),summary=arSummary(base);
     var buckets=[['all','全部'],['open','未結清'],['pending','收款待確認'],['not_due','未到期'],['d1','逾期1–30天'],['d31','31–60天'],['d61','61–90天'],['d90','91天以上'],['unknown','缺到期日']];
     var filtered=base.filter(function(r){var key=state.arBucket;if(key==='all')return true;if(key==='open')return n(r.outstandingAmount)>.005;if(key==='pending')return n(r.pendingReceiptAmount)>.005;return r.agingBucket===key&&n(r.outstandingAmount)>.005;}).sort(function(a,b){return String(a.entityId).localeCompare(String(b.entityId))||String(a.departmentCode).localeCompare(String(b.departmentCode))||String(a.buyer).localeCompare(String(b.buyer))||n(b.outstandingAmount)-n(a.outstandingAmount);});
     state.arPage=Math.max(0,Math.min(state.arPage,Math.ceil(filtered.length/PAGE_SIZE)-1));var visible=filtered.slice(state.arPage*PAGE_SIZE,(state.arPage+1)*PAGE_SIZE);

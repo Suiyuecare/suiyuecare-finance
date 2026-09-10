@@ -117,6 +117,14 @@ function releaseSourceFiles() {
     'scripts/check_canonical_receivables.js',
     'scripts/check_receivables_engine.cjs',
     'scripts/test_reports_release_batch.mjs',
+    'scripts/check_document_amount_search.cjs',
+    'scripts/check_document_amount_search_browser.cjs',
+    'scripts/check_reporting_workspace_amount_search.cjs',
+    'scripts/check_history_amount_search.cjs',
+    'scripts/test_amount_search_release_batch.mjs',
+    'scripts/finance_amount_search_fingerprint.sql',
+    'scripts/finance_amount_search_postflight.sql',
+    'scripts/finance_amount_search_canary.sql',
     'scripts/check_reporting_workspace_browser.cjs',
     'scripts/finance_reports_20260910_fingerprint.sql',
     'scripts/finance_canonical_receivables_postflight.sql',
@@ -125,6 +133,7 @@ function releaseSourceFiles() {
     'scripts/finance_reporting_profiles_canary.sql',
     'scripts/fixtures/finance_receivables_schema_20260910.sql',
     'assets/engines/financial-statements.js',
+    'assets/engines/document-search.js',
     'assets/engines/receivables-engine.js',
     'assets/engines/management-report-engine.js',
     'assets/engines/reporting-workspace.js',
@@ -263,7 +272,7 @@ if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(builtIndex)) {
   fail('artifact contains a forbidden Supabase elevated key');
 }
 
-const requiredReportArtifacts=["assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
+const requiredReportArtifacts=["assets/engines/document-search.js","assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
 for(const item of requiredReportArtifacts){
   const built=path.join(OUTPUT,item),source=path.join(ROOT,item);
   if(!fs.existsSync(built)||!fs.readFileSync(built).equals(fs.readFileSync(source)))fail('report artifact is missing or differs from its exact source: '+item);
