@@ -142,3 +142,16 @@ supabase/.temp
 # Bill attachment regression checks retained in the sealed source.
 !scripts/check_bill_approval_attachment_flow.cjs
 !scripts/check_bill_attachment_browser.cjs
+
+# Reporting source integrity and reconciliation protected release
+!scripts/finance_reporting_integrity_fingerprint.sql
+!scripts/finance_ar_reconciliation_postflight.sql
+!scripts/finance_ar_reconciliation_canary.sql
+!scripts/finance_tax_source_integrity_postflight.sql
+!scripts/finance_tax_source_integrity_canary.sql
+!scripts/test_reporting_integrity_release_batch.mjs
+!scripts/check_tax_source_integrity.cjs
+!scripts/check_tax_source_runtime.cjs
+!scripts/check_ar_reconciliation_scope.cjs
+!scripts/check_ar_export_reconciliation_ui.cjs
+!scripts/check_department_statement_export.cjs
