@@ -156,3 +156,20 @@ supabase/.temp
 !scripts/check_ar_export_reconciliation_ui.cjs
 !scripts/check_department_statement_export.cjs
 !scripts/fixtures/finance_department_new_form_baseline_20260911.sql
+
+# Accountant audit preparation and exact protected release checks
+!assets/engines/audit-readiness-engine.js
+!assets/engines/audit-workspace.js
+!assets/styles/audit-workspace.css
+!docs/finance-cpa-audit-guide.md
+!docs/finance-audit-readiness-contract.md
+!scripts/check_audit_readiness_engine.cjs
+!scripts/check_finance_audit_readiness.cjs
+!scripts/check_audit_workspace_runtime.cjs
+!scripts/check_compliance_commit.cjs
+!scripts/check_audit_workspace_browser.cjs
+!scripts/test_audit_readiness_release_batch.mjs
+!scripts/finance_audit_readiness_fingerprint.sql
+!scripts/finance_audit_readiness_postflight.sql
+!scripts/finance_audit_readiness_canary.sql
+!scripts/fixtures/finance_audit_readiness_fixture.cjs

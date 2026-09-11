@@ -1,0 +1,25 @@
+'use strict';
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
+function between(a,b){const start=source.indexOf(a),end=source.indexOf(b,start);assert(start>=0&&end>start,a);return source.slice(start,end);}
+const implementation=between('async function upsertComplianceRemote(', '\nfunction sanitizeDraftFile(')+between('var COMPLIANCE_ACTIONS_PENDING=', '\nfunction adjustmentEntriesFromVoucher(')+between('window.archivePeriodDocuments=','\nwindow.exportAnnualPackage=')+between('window.approveAnnualReview=','\n// ══ 開立發票');
+let tests=0;
+function fixture(){const calls=[],alerts=[],stores=[],logs=[];let resolve;
+ const c={console,Set,Date,Math,Error,Promise,S:{user:{n:'Fictional reviewer'},demoLogin:false},PERIOD_CLOSES:[],ARCHIVES:[],ANNUAL_REVIEWS:[],REQS:[],INVS:[],identity:'reviewer',env:'test',transport:'success',
+  compEntity:()=> 'A',compPeriod:()=> '2026-09',isFinance:()=>true,currentUserIsPermanentCeo:()=>true,periodClosed:()=>false,periodTrialBalanceStatus:()=>({ok:true,debit:100,credit:100,diff:0,rows:2}),fmt:String,isReqOpen:()=>false,inEntity:()=>true,inPeriod:()=>true,invoiceRevenuePostedAt:()=>true,hasInvoiceRevenueLedger:()=>true,confirm:()=>true,gE:()=>({s:'Fictional A'}),sourceDocsForPeriod:()=>[],normalizeFiles:x=>x||[],buildCompliance:()=>{},saveComplianceStore:(name,rows)=>stores.push([name,rows.length]),auditLog:async(...args)=>{logs.push(args);return{ok:true};},hasSupabase:()=>true,requireRemotePersistence:()=>true,allowSchemaFallback:()=>false,remoteTableMissing:()=>false,withRemoteTenantScope:(_,row)=>row,
+  alert:v=>alerts.push(v)};
+ c.approvalFastBootstrapIdentity=()=>c.identity;c.activeDataEnvironment=()=>c.env;c.inActiveDataEnvironment=r=>r.dataEnv===c.env;
+ c.getSb=()=>({from:table=>({upsert:async row=>{calls.push({table,row});if(c.transport==='failure')return{error:{message:'permission denied'}};if(c.transport==='pending')return await new Promise(r=>resolve=r);return{error:null};}})});
+ c.window=c;vm.createContext(c);vm.runInContext(implementation,c);return{c,calls,alerts,stores,logs,resolve:v=>resolve(v)};
+}
+(async()=>{
+for(const [name,collection] of [['closeAccountingPeriod','PERIOD_CLOSES'],['archivePeriodDocuments','ARCHIVES'],['approveAnnualReview','ANNUAL_REVIEWS']]){
+ let f=fixture();f.c.transport='failure';f.c[collection].push({id:'previous',eid:'A',period:'2026-09',dataEnv:'test'});await f.c[name]();assert.equal(f.c[collection].length,1);assert.equal(f.c[collection][0].id,'previous');assert.equal(f.stores.length,0);assert.equal(f.logs.length,0);assert.match(f.alerts[0],/尚未確認保存完成/);tests++;
+ f=fixture();f.c.transport='pending';const pending=f.c[name]();assert.equal(f.calls.length,1);assert.equal(f.c[collection].length,0);await f.c[name]();assert.equal(f.calls.length,1,'same operation is single-flight');f.resolve({error:null});await pending;assert.equal(f.c[collection].length,1);assert.equal(f.stores.length,1);assert.equal(f.logs.length,1);tests++;
+ f=fixture();f.c.transport='pending';const switched=f.c[name]();f.c.identity='another-account';f.resolve({error:null});await switched;assert.equal(f.c[collection].length,0);assert.equal(f.stores.length,0);tests++;
+}
+const f=fixture();f.c.AUDIT_LOGS=[];f.c.allowLocalPersistence=()=>false;f.c.currentRoleKey=()=> 'ceo';f.c.dbInsert=async()=>({ok:false,error:{message:'denied'}});vm.runInContext(between('async function auditLog(', '\nfunction csvCell('),f.c);assert.equal((await f.c.auditLog('test','target','detail')).ok,false);assert.equal(f.c.AUDIT_LOGS.length,0);assert.equal(f.stores.length,0);tests++;
+f.c.dbInsert=async()=>({ok:true});await f.c.auditLog('test','target','detail');assert.equal(f.c.AUDIT_LOGS.length,1);tests++;
+const d={REQS:[{id:'missing',kind:'request',eid:'A',date:'2026-09-01',dataEnv:'test',tenant:'tenant',files:[]}],INVS:[{id:'invoice',kind:'invoice',eid:'A',date:'2026-09-01',dataEnv:'test',tenant:'tenant',files:['invoice-file']}],BILLS:[{id:'bill',kind:'bill',eid:'A',date:'2026-09-01',dataEnv:'test',tenant:'tenant',files:['bill-file']},{id:'other-env',eid:'A',date:'2026-09-01',dataEnv:'production',tenant:'tenant'},{id:'other-company',eid:'B',date:'2026-09-01',dataEnv:'test',tenant:'tenant'},{id:'other-tenant',eid:'A',date:'2026-09-01',dataEnv:'test',tenant:'other'}],inActiveDataEnvironment:r=>r.dataEnv==='test',rowTenantId:r=>r.tenant,currentTenantId:()=> 'tenant',inEntity:(eid,r)=>r.eid===eid,inPeriod:(d,p)=>d.startsWith(p),accountingControlRecordDate:(_,r)=>r.date,accountingControlFiles:(_,r)=>r.files||[]};vm.createContext(d);vm.runInContext(between('function sourceDocsForPeriod(', '\nfunction vouchersForPeriod('),d);assert.deepEqual(Array.from(d.sourceDocsForPeriod('A','2026-09'),r=>r.id),['missing','invoice','bill']);assert.equal(d.REQS[0].sourceDocumentType,undefined,'source records never mutated');tests++;
+console.log('PASS compliance save/identity/single-flight/audit-log/source-population checks: '+tests);
+})().catch(e=>{console.error(e);process.exitCode=1;});

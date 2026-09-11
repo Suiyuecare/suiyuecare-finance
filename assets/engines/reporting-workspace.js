@@ -46,14 +46,15 @@
   function renderReports(){
     syncSession();var box=el('finance-report-workspace');if(!box||!runtime)return;
     var scope=reportScope();if(state.lastReportEntity!==scope.eid){state.department='all';state.lastReportEntity=scope.eid;}if(scope.eid==='all')runtime.entities().forEach(function(e){loadingProfile({eid:e.id});});else loadingProfile(scope);
-    var labels={bs:'資產負債表',pl:'綜合損益表',cf:'現金流量表',tax:'401／403',management:'公司與部門'};
+    var labels={bs:'資產負債表',pl:'綜合損益表',cf:'現金流量表',tax:'401／403',management:'公司與部門',audit:'會計師查帳'};
     var model=reportModel(scope);
-    box.innerHTML='<div class="rw-toolbar"><div><h2>財務報表</h2><p>'+h(entityName(scope.eid))+' · '+h(scope.period)+' · 新臺幣元</p></div><div class="rw-actions">'+button('公司報表設定','settings','',false)+button('匯出 Excel','export-xlsx','',true)+button('列印／PDF','export-pdf')+'</div></div>'
+    box.innerHTML='<div class="rw-toolbar"><div><h2>財務報表</h2><p>'+h(entityName(scope.eid))+' · '+h(scope.period)+' · 新臺幣元</p></div><div class="rw-actions">'+button('公司報表設定','settings','',false)+(state.tab==='audit'?'':button('匯出 Excel','export-xlsx','',true)+button('列印／PDF','export-pdf'))+'</div></div>'
       +'<div class="rw-tabs" role="tablist" aria-label="財務報表">'+Object.keys(labels).map(function(key){return '<button type="button" role="tab" id="rw-tab-'+key+'" aria-controls="rw-report-panel" aria-selected="'+(state.tab===key)+'" tabindex="'+(state.tab===key?0:-1)+'" data-rw-action="report-tab" data-tab="'+key+'">'+labels[key]+'</button>';}).join('')+'</div>'
       +profileNotice(scope)+'<div id="rw-report-panel" role="tabpanel" tabindex="0" aria-labelledby="rw-tab-'+state.tab+'">'+renderReportBody(scope,model)+'</div>';
   }
   function reportProfilesReady(scope){return runtime.entities().filter(function(e){return scope.eid==='all'||e.id===scope.eid;}).every(function(e){var record=profileRecord(e.id);return record&&record.loaded&&!record.error;});}
   function renderReportBody(scope,model){
+    if(state.tab==='audit')return '<section id="finance-audit-workspace">'+(global.FinanceAuditWorkspace?global.FinanceAuditWorkspace.view(scope):notice('查帳元件尚未載入，請重新整理。',true))+'</section>';
     if(!reportProfilesReady(scope))return notice('正在讀取公司報表設定；若讀取未完成，請重新讀取後再試。')+button('重新讀取公司設定','reload-profile');
     if(state.tab!=='tax'&&(!model.completeness||!model.completeness.complete))return notice('正在完整讀取正式分類帳，資料核對完成後才顯示報表金額。',true);
     if(state.tab==='tax')return renderTax(scope);
