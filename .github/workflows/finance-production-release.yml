@@ -8,14 +8,14 @@ on:
         required: true
         type: string
       release_phase:
-        description: frontend_compat publishes UI after all reviewed migrations; database_amount_search_20260910 applies the exact participant-scoped amount search migration
+        description: frontend_compat publishes UI after all reviewed migrations; database_reporting_integrity_20260911 applies the exact reporting integrity batch
         required: true
         type: choice
         options:
           - frontend_compat
-          - database_amount_search_20260910
+          - database_reporting_integrity_20260911
       migration_versions:
-        description: frontend_compat=none; database_amount_search_20260910=20260910083000
+        description: frontend_compat=none; database_reporting_integrity_20260911=20260911135457,20260911135514
         required: true
         type: string
       confirmation:
@@ -177,6 +177,11 @@ jobs:
           cp scripts/finance_utility_tax_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_reports_20260910_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_amount_search_fingerprint.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_reporting_integrity_fingerprint.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_ar_reconciliation_postflight.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_tax_source_integrity_postflight.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_ar_reconciliation_canary.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_tax_source_integrity_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_amount_search_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_amount_search_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_canonical_receivables_postflight.sql "$BUNDLE/release-tools/scripts/"
@@ -410,6 +415,30 @@ jobs:
           if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then
             run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
               "$RUNNER_TEMP/finance-compatibility-gate.sql" "$RUNNER_TEMP/finance-compatibility-gate.json"
+          elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_reporting_integrity_20260911"; then
+            node "$GUARD" prepare-phase-query --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
+              --output "$RUNNER_TEMP/finance-reporting-integrity-prerequisites.sql" \
+              --release-phase database_amount_search_20260910 --migration-versions 20260910083000
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-reporting-integrity-prerequisites.sql" --output json) > "$RUNNER_TEMP/reporting-integrity-prerequisites.json"
+            node "$GUARD" prepare-reporting-integrity-rehearsal --migration-dir "$TOOLS/supabase/migrations" \
+              --output "$RUNNER_TEMP/finance-reporting-integrity-rehearsal.sql" --migration-versions "$MIGRATION_VERSIONS" \
+              --fingerprint "$TOOLS/scripts/finance_reporting_integrity_fingerprint.sql" \
+              --authenticated-canary "$TOOLS/scripts/finance_production_authenticated_canary.sql" \
+              --case-canary "$TOOLS/scripts/finance_finalize_accounting_lines_canary.sql" \
+              --utility-canary "$TOOLS/scripts/finance_utility_tax_canary.sql" \
+              --receivables-canary "$TOOLS/scripts/finance_canonical_receivables_canary.sql" \
+              --profiles-canary "$TOOLS/scripts/finance_reporting_profiles_canary.sql" \
+              --amount-search-canary "$TOOLS/scripts/finance_amount_search_canary.sql" \
+              --ar-reconciliation-canary "$TOOLS/scripts/finance_ar_reconciliation_canary.sql" \
+              --tax-source-canary "$TOOLS/scripts/finance_tax_source_integrity_canary.sql" \
+              --receivables-postflight "$TOOLS/scripts/finance_canonical_receivables_postflight.sql" \
+              --profiles-postflight "$TOOLS/scripts/finance_reporting_profiles_postflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-reporting-integrity-rehearsal.sql" --output json) > "$RUNNER_TEMP/reporting-integrity-rehearsal.json"
+            node "$GUARD" prepare-reporting-integrity-apply --migration-dir "$TOOLS/supabase/migrations" \
+              --output "$RUNNER_TEMP/finance-reporting-integrity-apply.sql" --migration-versions "$MIGRATION_VERSIONS" --ledger "$LEDGER" \
+              --receivables-postflight "$TOOLS/scripts/finance_canonical_receivables_postflight.sql" \
+              --profiles-postflight "$TOOLS/scripts/finance_reporting_profiles_postflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-reporting-integrity-apply.sql" --output json) > "$RUNNER_TEMP/reporting-integrity-apply.json"
           elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_amount_search_20260910"; then
             node "$GUARD" prepare-phase-query --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
               --output "$RUNNER_TEMP/finance-amount-search-prerequisites.sql" \
@@ -541,7 +570,7 @@ jobs:
             node "$GUARD" prepare-apply --migration "$MIGRATION" --output "$APPLY" \
               --migration-version "$MIGRATION_VERSIONS" --ledger "$LEDGER"
             (cd "$TOOLS" && supabase db query --linked --file "$APPLY" --output json) > "$RUNNER_TEMP/apply-result.json"
-          elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910"; }; then
+          elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911"; }; then
             echo "Exact DB phase is already applied; recovering with postflight only and no mutation."
           else
             echo "Unexpected phase state: $PHASE_STATE" >&2
@@ -560,31 +589,37 @@ jobs:
             --output json) > "$RUNNER_TEMP/authenticated-canary-after.json"
           node "$GUARD" verify-authenticated-canary \
             --input "$RUNNER_TEMP/authenticated-canary-after.json"
-          if test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked \
               --file scripts/finance_finalize_accounting_lines_canary.sql \
               --output json) > "$RUNNER_TEMP/finalize-accounting-canary.json"
             node "$GUARD" verify-finalize-canary \
               --input "$RUNNER_TEMP/finalize-accounting-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked \
               --file scripts/finance_utility_tax_canary.sql \
               --output json) > "$RUNNER_TEMP/utility-tax-canary.json"
             node "$GUARD" verify-utility-canary \
               --input "$RUNNER_TEMP/utility-tax-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_canonical_receivables_canary.sql --output json) > "$RUNNER_TEMP/receivables-canary.json"
             node "$GUARD" verify-reports-canary --domain receivables --input "$RUNNER_TEMP/receivables-canary.json"
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_reporting_profiles_canary.sql --output json) > "$RUNNER_TEMP/reporting-profiles-canary.json"
             node "$GUARD" verify-reports-canary --domain profiles --input "$RUNNER_TEMP/reporting-profiles-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_amount_search_canary.sql --output json) > "$RUNNER_TEMP/amount-search-canary.json"
             node "$GUARD" verify-amount-search-canary --input "$RUNNER_TEMP/amount-search-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "frontend_compat" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910"; then
+          if test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "frontend_compat"; then
+            (cd "$TOOLS" && supabase db query --linked --file scripts/finance_ar_reconciliation_canary.sql --output json) > "$RUNNER_TEMP/ar-reconciliation-canary.json"
+            node "$GUARD" verify-reports-canary --domain ar_reconciliation --input "$RUNNER_TEMP/ar-reconciliation-canary.json"
+            (cd "$TOOLS" && supabase db query --linked --file scripts/finance_tax_source_integrity_canary.sql --output json) > "$RUNNER_TEMP/tax-source-integrity-canary.json"
+            node "$GUARD" verify-reports-canary --domain tax_source_integrity --input "$RUNNER_TEMP/tax-source-integrity-canary.json"
+          fi
+          if test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "frontend_compat" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911"; then
             node "$GUARD" prepare-read-only-query \
               --input "$TOOLS/scripts/finance_production_human_accounting_canary.sql" \
               --output "$RUNNER_TEMP/human-accounting-canary.sql"
@@ -717,31 +752,37 @@ jobs:
             --output json) > "$RUNNER_TEMP/promotion-authenticated-canary.json"
           node "$GUARD" verify-authenticated-canary \
             --input "$RUNNER_TEMP/promotion-authenticated-canary.json"
-          if test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked \
               --file scripts/finance_finalize_accounting_lines_canary.sql \
               --output json) > "$RUNNER_TEMP/promotion-finalize-accounting-canary.json"
             node "$GUARD" verify-finalize-canary \
               --input "$RUNNER_TEMP/promotion-finalize-accounting-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked \
               --file scripts/finance_utility_tax_canary.sql \
               --output json) > "$RUNNER_TEMP/promotion-utility-tax-canary.json"
             node "$GUARD" verify-utility-canary \
               --input "$RUNNER_TEMP/promotion-utility-tax-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_canonical_receivables_canary.sql --output json) > "$RUNNER_TEMP/promotion-receivables-canary.json"
             node "$GUARD" verify-reports-canary --domain receivables --input "$RUNNER_TEMP/promotion-receivables-canary.json"
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_reporting_profiles_canary.sql --output json) > "$RUNNER_TEMP/promotion-reporting-profiles-canary.json"
             node "$GUARD" verify-reports-canary --domain profiles --input "$RUNNER_TEMP/promotion-reporting-profiles-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_amount_search_canary.sql --output json) > "$RUNNER_TEMP/promotion-amount-search-canary.json"
             node "$GUARD" verify-amount-search-canary --input "$RUNNER_TEMP/promotion-amount-search-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "frontend_compat" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910"; then
+          if test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "frontend_compat"; then
+            (cd "$TOOLS" && supabase db query --linked --file scripts/finance_ar_reconciliation_canary.sql --output json) > "$RUNNER_TEMP/promotion-ar-reconciliation-canary.json"
+            node "$GUARD" verify-reports-canary --domain ar_reconciliation --input "$RUNNER_TEMP/promotion-ar-reconciliation-canary.json"
+            (cd "$TOOLS" && supabase db query --linked --file scripts/finance_tax_source_integrity_canary.sql --output json) > "$RUNNER_TEMP/promotion-tax-source-integrity-canary.json"
+            node "$GUARD" verify-reports-canary --domain tax_source_integrity --input "$RUNNER_TEMP/promotion-tax-source-integrity-canary.json"
+          fi
+          if test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "frontend_compat" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911"; then
             node "$GUARD" prepare-read-only-query \
               --input "$TOOLS/scripts/finance_production_human_accounting_canary.sql" \
               --output "$RUNNER_TEMP/promotion-human-accounting-canary.sql"

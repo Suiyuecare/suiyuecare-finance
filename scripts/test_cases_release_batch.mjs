@@ -80,6 +80,8 @@ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','no
 fs.appendFileSync(ledger,guard.REPORT_MIGRATIONS.join('\n')+'\n');
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/amount search migration/);
 fs.appendFileSync(ledger,guard.AMOUNT_SEARCH_MIGRATIONS.join('\n')+'\n');
+assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/reporting integrity migration batch/);
+fs.appendFileSync(ledger,guard.REPORTING_INTEGRITY_MIGRATIONS.join('\n')+'\n');
  assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
  assert.throws(()=>guard.prepareAuditBatchApply(migrationDir,path.join(dir,'again.sql'),versions,ledger,postflight,baseline,phase),/must be pending/);
  const expectedCanary={canary:'authenticated_finalize_accounting_lines',ok:true,rolled_back:true,accounting_lines_consistent:true};

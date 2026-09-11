@@ -66,8 +66,8 @@ check('explicit cash mapping is honored; noncash cannot hide actual cash movemen
  const rows=tx('2026-09-12',[['1901',100,0],['1112',0,100]]);assert.equal(model(rows,{accountMappings:{1901:{cashFlowClass:'investing'}}}).current.cf.inv,-100);assert.equal(model(rows,{accountMappings:{1901:{cashFlowClass:'noncash'}}}).current.cf.unclassified,-100);
 });
 check('unposted request events are separate and cannot fabricate cash or cross entity scope',()=>{
- const events=[{eid:'E1',ref:'REQ1',date:'2026-09-12',amount:-90},{eid:'E2',ref:'REQ2',date:'2026-09-12',amount:-900}];const m=model([],{cashEvents:events});assert.equal(m.current.cf.end,0);assert.equal(m.current.cf.unpostedCashAmount,-90);assert.equal(m.current.cf.unpostedCashEvents.length,1);
- const rows=tx('2026-09-12',[['6204',90,0],['1112',0,90]]).map(r=>({...r,ref:'REQ1'}));assert.equal(model(rows,{cashEvents:events}).current.cf.unpostedCashEvents.length,0);
+ const events=[{eventId:'REQ1:cash',sourceId:'REQ1',eid:'E1',ref:'REQ1',date:'2026-09-12',amount:-90},{eid:'E2',ref:'REQ2',date:'2026-09-12',amount:-900}];const m=model([],{cashEvents:events});assert.equal(m.current.cf.end,0);assert.equal(m.current.cf.unpostedCashAmount,-90);assert.equal(m.current.cf.unpostedCashEvents.length,1);
+ const rows=tx('2026-09-12',[['6204',90,0],['1112',0,90]]).map(r=>({...r,ref:'REQ1',sourceId:'REQ1'}));assert.equal(model(rows,{cashEvents:events}).current.cf.unpostedCashEvents.length,0);
 });
 check('department and PL net refunds/credit notes identically without clipping negatives',()=>{
  const rows=tx('2026-09-01',[['1112',100,0],['4101',0,100]]).concat(tx('2026-09-02',[['4101',20,0],['1112',0,20]]),tx('2026-09-03',[['6204',30,0],['1112',0,30]]),tx('2026-09-04',[['1112',10,0],['6204',0,10]]));const m=model(rows);assert.equal(m.current.pl.netProfit,60);assert.deepEqual([m.current.departments[0].income,m.current.departments[0].expense,m.current.departments[0].net],[80,20,60]);
@@ -79,6 +79,53 @@ check('voided and invalid ledger rows cannot silently become reliable figures',(
  const rows=tx('2026-09-01',[['1112',100,0],['4101',0,100]],{voidedAt:'2026-09-02'}).concat(tx('bad-date',[['1112',200,0],['4101',0,200]]));const m=model(rows);assert.equal(m.current.pl.netProfit,0);assert.ok(m.warnings.some(w=>w.code==='invalid_rows'));assert.equal(m.readyForReview,false);
 });
 check('decimal cents are retained; zero comparison does not invent a growth rate',()=>{const m=model(tx('2026-09-01',[['1112',0.25,0],['4101',0,0.25]]));assert.equal(m.current.pl.netProfit,0.25);assert.equal(m.changes.netProfit.percent,null);});
+check('comparison differences are period-labelled, block review and export with warnings',()=>{
+ const rows=tx('2025-09-01',[['1112',100,0]]).concat(tx('2025-10-01',[['2131',0,100]]),tx('2026-09-01',[['1112',20,0],['2131',0,20]]));
+ const m=model(rows,{comparisonPeriod:'2025-09',previousChecks:ready});assert.equal(m.current.trialBalance.ok,true);assert.equal(m.previous.trialBalance.ok,false);assert.equal(m.readyForReview,false);
+ const w=m.warnings.find(w=>w.code==='comparison_statement_difference');assert.equal(w.period,'2025-09');assert.match(w.message,/比較期間 2025-09/);
+ assert.ok(engine.exportSheets(m).find(s=>s.name==='覆核事項').rows.some(r=>r[0]==='comparison_statement_difference'));
+});
+check('comparison review attestations cannot borrow completed current-period checks',()=>{
+ const m=model(tx('2026-08-01',[['1112',100,0],['2131',0,100]]),{previousChecks:{...ready,bankReconciled:false}});assert.ok(m.warnings.some(w=>w.code==='comparison_bankReconciled'&&w.period==='2026-08'));assert.equal(m.readyForReview,false);
+});
+check('department export explicitly identifies its scope while company export says all departments',()=>{
+ const rows=tx('2026-09-01',[['1112',100,0],['4101',0,100]]);
+ const department=engine.exportSheets(model(rows,{departmentCode:'D1'}))[0].rows;assert.deepEqual(department.find(r=>r[0]==='部門'),['部門','D1']);assert.match(department.find(r=>r[0]==='範圍')[1],/部門分析/);
+ assert.deepEqual(engine.exportSheets(model(rows))[0].rows.find(r=>r[0]==='部門'),['部門','全部部門']);
+});
+const cashEvent=(id,amount,extra={})=>({eventId:id,eid:'E1',sourceId:'REQUEST',sourceTypes:['expense_request'],date:'2026-09-10',amount,...extra});
+const cashPosting=(amount,extra={})=>tx('2026-09-10',amount<0?[['6204',-amount,0],['1112',0,-amount]]:[['1112',amount,0],['6204',0,amount]]).map(r=>({...r,sourceId:'REQUEST',sourceType:'expense_request',...extra}));
+check('old advance disbursement cannot hide later settlement even for the same date and amount',()=>{
+ const rows=cashPosting(-20,{sourceType:'advance_disbursement'}),m=model(rows,{cashEvents:[cashEvent('settlement',-20)]});assert.equal(m.current.cf.unpostedCashAmount,-20);assert.equal(m.current.cf.bookEnd,-20);
+ const prior=cashPosting(-20,{date:'2026-08-10'});assert.equal(model(prior,{cashEvents:[cashEvent('settlement',-20)]}).current.cf.unpostedCashEvents.length,1);
+});
+check('split cash lines and many events reconcile only exact signed totals once',()=>{
+ const split=cashPosting(-20,{voucherNo:'V-SPLIT'}).concat(cashPosting(-30,{voucherNo:'V-SPLIT'}));
+ assert.equal(model(split,{cashEvents:[cashEvent('one',-50,{voucherNo:'V-SPLIT'})]}).current.cf.unpostedCashEvents.length,0);
+ const combined=cashPosting(-50,{voucherNo:'V-COMBINED'}),events=[cashEvent('original',-20,{voucherNo:'V-COMBINED'}),cashEvent('correction',-30,{voucherNo:'V-COMBINED'})];
+ const m=model(combined,{cashEvents:events});assert.equal(m.current.cf.unpostedCashEvents.length,0);assert.equal(m.current.cf.end,-50);assert.equal(m.current.cf.cashEventReconciliation.length,2);
+ assert.equal(model(combined,{cashEvents:events.concat(events[0])}).current.cf.cashEventReconciliation.length,2,'duplicate event identity is not a second cash movement');
+});
+check('partial amounts and opposing directions cannot be hidden by equal net totals',()=>{
+ const m=model(cashPosting(-10),{cashEvents:[cashEvent('expected',-20)]});assert.equal(m.current.cf.unpostedCashEvents[0].reason,'cash_amount_mismatch');assert.equal(m.current.cf.end,-10);
+ const sameNet=model(cashPosting(-20),{cashEvents:[cashEvent('paid',-30),cashEvent('refund',10)]});assert.equal(sameNet.current.cf.unpostedCashEvents.length,2);
+});
+check('same source across vouchers, missing identity and foreign company stay unresolved',()=>{
+ const rows=cashPosting(-20,{voucherNo:'V1'}).concat(cashPosting(-30,{voucherNo:'V2'}));assert.equal(model(rows,{cashEvents:[cashEvent('ambiguous',-50)]}).current.cf.unpostedCashEvents[0].reason,'ambiguous_cash_transactions');
+ assert.equal(model(cashPosting(-20),{cashEvents:[cashEvent('',-20)]}).current.cf.unpostedCashEvents[0].reason,'missing_event_identity');
+ assert.equal(model(cashPosting(-20,{eid:'E2'}),{cashEvents:[cashEvent('foreign',-20)]}).current.cf.unpostedCashEvents.length,1);
+});
+check('conflicting event IDs and overlapping explicit cash claims cannot clear warnings',()=>{
+ const rows=cashPosting(-20,{voucherNo:'V1'}),event=cashEvent('same',-20,{voucherNo:'V1'});
+ assert.equal(model(rows,{cashEvents:[event,{...event,amount:-30}]}).current.cf.unpostedCashEvents[0].reason,'conflicting_event_identity');
+ const split=cashPosting(-20,{voucherNo:'V-SPLIT',postingKey:'A'}).concat(cashPosting(-30,{voucherNo:'V-SPLIT',postingKey:'B'}));
+ const m=model(split,{cashEvents:[cashEvent('all',-50,{voucherNo:'V-SPLIT'}),cashEvent('subset',-20,{voucherNo:'V-SPLIT',postingKeys:['A']})]});assert.equal(m.current.cf.unpostedCashEvents.length,2);assert.ok(m.current.cf.unpostedCashEvents.every(e=>e.reason==='overlapping_cash_claims'));
+});
+check('invalid event amount/date stays reviewable and comparative event details survive export',()=>{
+ const events=[cashEvent('prior',-20,{date:'2026-08-10'}),cashEvent('invalid-amount',true),cashEvent('invalid-date',-5,{date:'2026-09-31'})];const m=model([],{cashEvents:events});
+ assert.equal(m.current.cf.unpostedCashEvents.find(e=>e.eventId==='invalid-amount').amount,null);assert.equal(m.current.cf.unpostedCashEvents.find(e=>e.eventId==='invalid-date').reason,'invalid_event_date');
+ assert.ok(m.warnings.some(w=>w.code==='comparison_unposted_cash'));const exported=engine.exportSheets(m).find(s=>s.name==='現金流量表').rows;assert.ok(exported.some(r=>r[0]==='2026-08'&&r[2]==='prior'&&r[4]===-20));assert.ok(exported.some(r=>r[2]==='invalid-amount'&&r[4]===null));assert.equal(m.current.cf.end,0);
+});
 check('all export sheets retain comparison, cash opening/closing and draft notes',()=>{
  const m=model(tx('2026-08-01',[['1112',100,0],['4101',0,100]]).concat(tx('2026-09-01',[['1112',50,0],['4101',0,50]])));const sheets=engine.exportSheets(m);assert.equal(sheets.length,6);const cf=sheets.find(s=>s.name==='現金流量表');assert.deepEqual(cf.rows.find(r=>r[0]==='期初現金'),['期初現金',100,0,100]);assert.equal(sheets[1].rows.find(r=>r[0]==='綜合損益總額')[1],50);for(const s of sheets)assert.match(s.rows[0][0],/暫編/);
 });

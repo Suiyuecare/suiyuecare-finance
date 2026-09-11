@@ -127,6 +127,49 @@
     if(profitClass(c)||/^112|^114|^1191|^211|^212|^213[124]|^214|^2195/.test(ac)||ac==='2191'||ac==='2199'||ac==='AA1'||ac==='AA2')return 'operating';
     return 'unclassified';
   }
+  // A cash line can satisfy one event group only. Source equality alone never
+  // establishes that a later refund/settlement was posted.
+  function reconcileCashEvents(rows,events,bounds) {
+    var cash=rows.filter(function(r){return isCash(r.ac);}),seen=Object.create(null),items=[],groups=Object.create(null);
+    (events||[]).filter(function(e){return !validDate(date(e.date))||inBounds({date:date(e.date)},bounds);}).forEach(function(e){
+      var item=Object.assign({},e,{amount:round(e.amount),status:'unmatched',reason:''}),key=String(e.eid||'')+'|'+String(e.eventId||'');
+      var signature=JSON.stringify([date(e.date),e.amount,e.sourceId,e.voucherNo,e.sourceTypes,e.postingKeys]);
+      if(e.eventId&&seen[key]){if(seen[key].signature!==signature){seen[key].item.reason='conflicting_event_identity';seen[key].item.status='unmatched';}return;}
+      if(e.eventId)seen[key]={signature:signature,item:item};
+      items.push(item);
+      if(!validDate(date(e.date))){item.reason='invalid_event_date';return;}
+      if(!e.eventId||!e.eid||(!e.sourceId&&!e.voucherNo)){item.reason='missing_event_identity';return;}
+      if(e.amount==null||e.amount===''||typeof e.amount==='boolean'||!Number.isFinite(Number(e.amount))){item.amount=null;item.reason='invalid_event_amount';return;}
+      if(Math.abs(Number(e.amount))<EPS){item.status='matched';return;}
+      var keys=Array.isArray(e.postingKeys)?e.postingKeys:[],types=Array.isArray(e.sourceTypes)?e.sourceTypes:[];
+      var candidates=cash.filter(function(r){
+        if(r.eid!==String(e.eid)||r.date!==date(e.date))return false;
+        if(e.voucherNo&&r.voucherNo!==String(e.voucherNo))return false;
+        if(e.sourceId&&r.sourceId!==String(e.sourceId)&&!(e.voucherNo&&!r.sourceId))return false;
+        if(types.length&&types.indexOf(r.sourceType)<0)return false;
+        return !keys.length||keys.indexOf(r.postingKey)>-1;
+      });
+      if(!candidates.length){item.reason='no_matching_cash_lines';return;}
+      if(keys.length&&keys.some(function(k){return !candidates.some(function(r){return r.postingKey===k;});})){item.reason='incomplete_posting_keys';return;}
+      if(!e.voucherNo&&!keys.length&&new Set(candidates.map(function(r){return r.voucherNo||r.ref||'';})).size>1){item.reason='ambiguous_cash_transactions';return;}
+      var groupKey=candidates.map(function(r){return r.index;}).sort(function(a,b){return a-b;}).join(',');
+      if(!groups[groupKey])groups[groupKey]={rows:candidates,items:[]};
+      groups[groupKey].items.push(item);
+    });
+    var claimed=Object.create(null);
+    Object.keys(groups).forEach(function(key){groups[key].rows.forEach(function(r){(claimed[r.index]||(claimed[r.index]=[])).push(key);});});
+    Object.keys(groups).forEach(function(key){var group=groups[key],reason='';
+      if(group.items.some(function(e){return e.reason;}))reason='conflicting_event_identity';
+      else if(group.rows.some(function(r){return claimed[r.index].length>1;}))reason='overlapping_cash_claims';
+      else {
+        var expectedIn=sum(group.items,function(e){return Math.max(0,e.amount);}),expectedOut=sum(group.items,function(e){return Math.min(0,e.amount);});
+        var actualIn=sum(group.rows,function(r){return Math.max(0,r.dr-r.cr);}),actualOut=sum(group.rows,function(r){return Math.min(0,r.dr-r.cr);});
+        if(Math.abs(expectedIn-actualIn)>=EPS||Math.abs(expectedOut-actualOut)>=EPS)reason='cash_amount_mismatch';
+      }
+      group.items.forEach(function(e){e.reason=reason;e.status=reason?'unmatched':'matched';if(!reason)e.ledgerIds=group.rows.map(function(r){return r.id||r.postingKey||'';});});
+    });
+    return items;
+  }
   function cashFlow(rows,bounds,mappings,cashEvents,overrides) {
     mappings=mappings||{};overrides=overrides||{};
     var before=rows.filter(function(r){return bounds.start&&r.date<bounds.start;});
@@ -158,11 +201,8 @@
     ['opIn','opOut','inv','fin','unclassified'].forEach(function(k){out[k]=round(out[k]);});
     out.op=round(out.opIn+out.opOut);out.net=round(out.op+out.inv+out.fin+out.unclassified);out.end=round(out.start+out.net);
     out.bookEnd=sum(toEnd.filter(function(r){return isCash(r.ac);}),function(r){return r.dr-r.cr;});out.reconciliationDifference=round(out.end-out.bookEnd);
-    (cashEvents||[]).forEach(function(e){
-      if(!inBounds({date:date(e.date)},bounds))return;
-      var matching=rows.some(function(r){return isCash(r.ac)&&r.eid===String(e.eid||'')&&((e.ref&&r.ref===e.ref)||(e.sourceId&&r.sourceId===e.sourceId));});
-      if(!matching)out.unpostedCashEvents.push(Object.assign({},e,{amount:round(e.amount)}));
-    });
+    out.cashEventReconciliation=reconcileCashEvents(rows,cashEvents,bounds);
+    out.unpostedCashEvents=out.cashEventReconciliation.filter(function(e){return e.status!=='matched';});
     out.unpostedCashAmount=sum(out.unpostedCashEvents,'amount');out.source=rows.length?'ledger':'empty';return out;
   }
   function departmentRows(rows,mappings) {
@@ -193,7 +233,7 @@
     var unknown=current.filter(function(r){return accountClass(r,mappings)==='unclassified';});
     if(unknown.length)warnings.push(warning('unclassified_accounts',unknown.length+' 筆科目尚未配置報表分類'));
     if(cf.activities.some(function(a){return a.class==='unclassified';}))warnings.push(warning('unclassified_cash','仍有現金交易待指定活動分類'));
-    if(cf.unpostedCashEvents.length)warnings.push(warning('unposted_cash',cf.unpostedCashEvents.length+' 筆已放款表單尚無正式現金分錄，另列待入帳'));
+    if(cf.unpostedCashEvents.length)warnings.push(warning('unposted_cash',cf.unpostedCashEvents.length+' 筆現金事件尚未逐筆核對入帳日期、識別與金額，另列待核對；未補入帳上現金'));
     if(bs.dynamicProfit)warnings.push(warning('unclosed_profit','權益包含截至期末尚未結轉的損益試算；未自動建立結帳分錄'));
     if(!checks.ociReviewed)warnings.push(warning('oci_review','其他綜合損益尚待確認；未配置或零金額不代表已確認不適用'));
     return {period:period,bounds:bounds,rowCount:current.length,cumulativeRowCount:cumulative.length,bs:bs,pl:pl,cf:cf,trialBalance:trial,departments:departmentRows(current,mappings),warnings:warnings};
@@ -205,6 +245,10 @@
     var period=String(input.period||'all'),all=scopeRows(input),prevPeriod=input.comparisonPeriod===null?null:(input.comparisonPeriod||previousPeriod(period));
     var current=periodModel(all,period,input),prev=prevPeriod?periodModel(all,prevPeriod,Object.assign({},input,{checks:input.previousChecks||{}})):null;
     var completeness=Object.assign({complete:false,status:'unknown',rowCount:all.length},input.completeness||{}),warnings=current.warnings.slice(),checks=input.checks||{};
+    if(prev){
+      [['openingBalanceVerified','期初餘額尚未確認'],['bankReconciled','銀行對帳尚未確認'],['taxReconciled','稅務勾稽尚未確認'],['periodCloseReady','本期結帳檢查尚未確認']].forEach(function(x){if((input.previousChecks||{})[x[0]]!==true)prev.warnings.push(warning(x[0],x[1]));});
+      prev.warnings.forEach(function(w){warnings.push(Object.assign({},w,{code:'comparison_'+w.code,period:prevPeriod,comparison:true,message:'比較期間 '+prevPeriod+'：'+w.message}));});
+    }
     if(completeness.complete!==true)warnings.unshift(warning('incomplete_ledger','正式分類帳尚未完整載入或驗證失敗；此報表不能視為完整餘額'));
     [['openingBalanceVerified','期初餘額尚未確認'],['bankReconciled','銀行對帳尚未確認'],['taxReconciled','稅務勾稽尚未確認'],['periodCloseReady','本期結帳檢查尚未確認']].forEach(function(x){if(checks[x[0]]!==true)warnings.push(warning(x[0],x[1]));});
     if(!input.entityId||input.entityId==='all')warnings.push(warning('aggregate_scope','全部法人為管理加總，未執行合併抵銷'));
@@ -213,7 +257,8 @@
   }
   function exportSheets(model) {
     var current=model.current,previous=model.previous;
-    var intro=[['財務報表（暫編）'],['法人',model.entityId],['期間',model.period],['比較期間',model.previousPeriod||'無'],['範圍',model.scope==='aggregate'?'全部法人管理加總（未合併抵銷）':'單一法人'],['資料完整',model.completeness.complete===true?'已完整載入':'尚未完整驗證']];
+    var department=model.departmentCode&&model.departmentCode!=='all'?model.departmentCode:null;
+    var intro=[['財務報表（暫編）'],['法人',model.entityId],['期間',model.period],['比較期間',model.previousPeriod||'無'],['範圍',department?'部門分析（非完整法人三表）':model.scope==='aggregate'?'全部法人管理加總（未合併抵銷）':'單一法人'],['部門',department||'全部部門'],['資料完整',model.completeness.complete===true?'已完整載入':'尚未完整驗證']];
     function sheet(name,rows){return {name:name,rows:intro.concat([[]],rows)};}
     function fields(spec,now,old){return [['項目','本期','前期','差額']].concat(spec.map(function(x){var a=now[x[0]],b=old?old[x[0]]:null;return [x[1],a,b,b==null?null:round(a-b)];}));}
     function accountComparison(a,b){var map=Object.create(null);(a||[]).forEach(function(r){map[r.key]={name:r.n,current:r.v,previous:0};});(b||[]).forEach(function(r){if(!map[r.key])map[r.key]={name:r.n,current:0,previous:0};map[r.key].previous=r.v;});return Object.keys(map).sort().map(function(k){var r=map[k];return [r.name,r.current,previous?r.previous:null,previous?round(r.current-r.previous):null];});}
@@ -221,7 +266,10 @@
     bs=bs.concat(fields([['assetTotal','資產合計'],['liabTotal','負債合計'],['equityTotal','權益合計'],['balanceDifference','資產負債差額']],current.bs,previous&&previous.bs).slice(1));
     var pl=fields([['revenue','營業收入'],['cost','直接成本'],['grossProfit','毛利'],['operatingExpense','營業費用'],['operatingProfit','營業利益'],['otherIncome','營業外收入'],['otherExpense','營業外費用'],['profitBeforeTax','稅前損益'],['incomeTax','所得稅費用（利益）'],['netProfit','本期損益'],['ociReclassifiable','其他綜合損益：可重分類'],['ociNonreclassifiable','其他綜合損益：不重分類'],['ociTotal','其他綜合損益合計'],['comprehensiveIncome','綜合損益總額']],current.pl,previous&&previous.pl);
     pl.push([],['科目明細','本期','前期','差額']);['revenueRows','costRows','expenseRows','otherIncomeRows','otherExpenseRows','incomeTaxRows','ociRows'].forEach(function(k){pl=pl.concat(accountComparison(current.pl[k],previous&&previous.pl[k]));});
-    var cf=fields([['start','期初現金'],['opIn','營業活動流入'],['opOut','營業活動流出'],['op','營業活動淨額'],['inv','投資活動淨額'],['fin','籌資活動淨額'],['unclassified','待分類現金淨額'],['net','本期現金淨變動'],['end','期末現金'],['bookEnd','分類帳期末現金'],['reconciliationDifference','現金勾稽差額'],['unpostedCashAmount','表單放款待入帳（未計入帳上現金）']],current.cf,previous&&previous.cf);
+    var cf=fields([['start','期初現金'],['opIn','營業活動流入'],['opOut','營業活動流出'],['op','營業活動淨額'],['inv','投資活動淨額'],['fin','籌資活動淨額'],['unclassified','待分類現金淨額'],['net','本期現金淨變動'],['end','期末現金'],['bookEnd','分類帳期末現金'],['reconciliationDifference','現金勾稽差額'],['unpostedCashAmount','現金事件待核對（未計入帳上現金）']],current.cf,previous&&previous.cf);
+    cf.push([],['現金事件待核對明細（不補入帳上現金）'],['期間','事件日期','事件識別','來源單號','預期現金異動','核對原因']);
+    var cashReasons={missing_event_identity:'缺少可核對事件識別',invalid_event_date:'事件日期無效',invalid_event_amount:'事件金額無效',conflicting_event_identity:'相同事件識別內容衝突',no_matching_cash_lines:'找不到同公司、日期及來源的現金分錄',incomplete_posting_keys:'指定現金分錄尚未完整取得',ambiguous_cash_transactions:'同來源符合多筆傳票，無法唯一識別',overlapping_cash_claims:'多組事件重複引用同筆現金分錄',cash_amount_mismatch:'現金流入或流出金額與事件不符'};
+    [current,previous].filter(Boolean).forEach(function(p){p.cf.unpostedCashEvents.forEach(function(e){cf.push([p.period,e.date||'',e.eventId||'',e.ref||e.sourceId||'',e.amount,cashReasons[e.reason]||'尚未完成逐筆核對']);});});
     return [sheet('資產負債表',bs),sheet('綜合損益表',pl),sheet('現金流量表',cf),sheet('試算平衡',[['檢查','差額','結果']].concat(current.trialBalance.checks.map(function(c){return [c.name,c.diff,c.pass?'通過':'異常'];}))),sheet('部門損益',[['法人','部門','收入','費用','損益']].concat(current.departments.map(function(r){return [r.eid,r.dc,r.income,r.expense,r.net];}))),sheet('覆核事項',[['項目','說明']].concat(model.warnings.map(function(w){return [w.code,w.message];})))];
   }
   async function loadLedgerPages(fetchPage,options) {

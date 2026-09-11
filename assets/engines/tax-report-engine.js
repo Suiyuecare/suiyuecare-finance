@@ -58,6 +58,7 @@
     if(!Array.isArray(input.purchases)){purchasesOK=false;issue('PURCHASES_SOURCE_FORMAT','進項來源清單無效或尚未載入');}
     if(form==='403'&&tax.deductionMethod==='direct'&&date(tax.directMethodSince)&&date(period.end)&&tax.directMethodSince>period.end)issue('DIRECT_METHOD_PERIOD','所選申報期早於直接扣抵法開始日，請核對適用方法');
     if(complete.sales!==true){salesOK=false;issue('SALES_INCOMPLETE','銷項憑證清單尚未確認完整');}
+    if(Object.prototype.hasOwnProperty.call(complete,'taxSources')&&complete.taxSources!==true)issue('TAX_SOURCES_INCOMPLETE','憑證來源版本及正式帳面稅尚未完整核對');
     if(complete.purchases!==true){purchasesOK=false;issue('PURCHASES_INCOMPLETE','進項憑證清單尚未確認完整');}
     if(date(period.start)&&date(period.end)){
       var start=new Date(period.start+'T00:00:00Z'),end=new Date(period.end+'T00:00:00Z'),next=new Date(end);next.setUTCDate(end.getUTCDate()+1);
@@ -68,6 +69,8 @@
     function visit(row,kind){
       row=row||{};var id=text(row.id),r=Object.assign({},copy(row),{kind:kind,issues:[],included:false}),valid=true,n=amount(row.netAmount),t=amount(row.originalTaxAmount),g=amount(row.grossAmount),sign=row.isReturn===true?-1:1,format=text(row.formatCode),taxClass=text(row.taxClass),isUtility=utility(row);
       function bad(code,message){valid=false;r.issues.push(code);issue(code,message,id);}
+      if(row.sourceBindingStatus&&row.sourceBindingStatus!=='verified')bad('SOURCE_BINDING_REVIEW','憑證來源版本未綁定、已變更或尚未驗證，請重新核對');
+      if(kind==='purchase'&&row.bookTaxStatus==='unresolved')bad('BOOK_TAX_UNRESOLVED','正式帳面進項稅尚未核對完成');
       if(row.sourceAvailable===false)bad('SOURCE_UNAVAILABLE','原始來源或明細目前無法核對；舊分類不可單獨作為申報依據');
       if(!id)bad('DOCUMENT_ID','憑證缺少穩定來源識別碼');
       if(id&&seen[kind+'|'+id])bad('DUPLICATE_DOCUMENT','同一來源憑證重複，未重複加總');seen[kind+'|'+id]=true;
@@ -183,7 +186,7 @@
     var info=[['文件性質','401／403 預填工作底稿；不可作為已完成電子申報證明'],['狀態',w.status],['法人',w.entityId],['期間',w.period.start+' ~ '+w.period.end],['正式申報完成',false]];
     w.officialSources.forEach(function(s){info.push(['官方來源',s.title,s.url,s.accessed,s.sha256||'']);});
     var fieldRows=[['官方欄碼','欄位','預填金額（空白=待設定）','已知小計','狀態','來源識別碼']].concat(w.fields.map(function(f){return[f.code,f.label,f.value,f.knownSubtotal,f.status,f.sourceIds.join(';')];}));
-    function docRows(kind){return [['來源','日期','憑證號','格式代號','課稅別','原始未稅','原始稅額','原始總額','帳面進項稅','扣抵分類','用途','預估扣抵稅','原始憑證','問題']].concat(w.documents.filter(function(d){return d.kind===kind;}).map(function(d){return[d.id,d.date,d.number,d.formatCode,d.taxClass,d.originalNetAmount,d.originalTaxAmount,d.grossAmount,d.bookTaxAmount,d.deduction||'',d.usage||'',d.claimedTaxAmount,d.evidenceReference||'',d.issues.join(';')];}));}
+    function docRows(kind){return [['來源','日期','憑證號','格式代號','課稅別','原始未稅','原始稅額','原始總額','帳面進項稅','扣抵分類','用途','預估扣抵稅','原始憑證','問題','帳面稅核對狀態','來源版本狀態']].concat(w.documents.filter(function(d){return d.kind===kind;}).map(function(d){return[d.id,d.date,d.number,d.formatCode,d.taxClass,d.originalNetAmount,d.originalTaxAmount,d.grossAmount,d.bookTaxAmount,d.deduction||'',d.usage||'',d.claimedTaxAmount,d.evidenceReference||'',d.issues.join(';'),({ready:'已核對',not_posted:'未入帳',not_applicable:'不適用',unresolved:'待核對'})[d.bookTaxStatus]||(d.bookTaxAmount==null?'待核對':'已核對'),({verified:'已核對來源版本',unverified:'須重新核對',changed:'來源已變更',loading:'讀取中'})[d.sourceBindingStatus]||'待確認'];}));}
     return [{name:'工作底稿說明',rows:info},{name:(w.form||'待設定')+'欄位核對',rows:fieldRows},{name:'銷項憑證',rows:docRows('sale')},{name:'進項扣抵明細',rows:docRows('purchase')},{name:'調整與勾稽',rows:[['程度','檢核代碼','說明','來源']].concat(w.checks.map(function(c){return[c.severity,c.code,c.message,c.sourceIds.join(';')];}))}];
   }
   var api={version:1,validateProfile:validateProfile,buildWorkpaper:buildWorkpaper,workbookSheets:workbookSheets,officialSources:copy(sources),fieldDefinitions:copy(defs)};

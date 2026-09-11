@@ -1,0 +1,93 @@
+#!/usr/bin/env node
+'use strict';
+// Runs actual new migration/RPC SQL locally; no credentials or network access.
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite');
+const db=new PGlite();const t='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',other='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';let tests=0,revision=0,profile;
+const run=async(sql,args=[])=>db.query(sql,args),read=async()=> (await run("select public.finance_reporting_profile_read_v1('A','test') result")).rows[0].result;
+async function check(name,fn){await fn();tests++;console.log('PASS '+name);}
+async function as(role='ceo'){await db.exec('reset role');await run("select set_config('fixture.actor',$1,false),set_config('fixture.tenant',$2,false),set_config('fixture.permission','true',false)",[role,t]);await db.exec('set role authenticated');}
+async function admin(sql,args=[]){await db.exec('reset role');return run(sql,args);}
+async function save(p=profile,rev=revision,reason='Reviewed change'){const r=(await run("select public.finance_reporting_profile_save_v1('A',$1,$2,$3,'test') result",[rev,JSON.stringify(p),reason])).rows[0].result;profile=r.profile;revision=r.revision;return r;}
+async function denied(fn,code){let err;try{await fn();}catch(e){err=e;}assert(err,'expected rejection');assert.equal(err.code,code,err.message);}
+function clone(x){return JSON.parse(JSON.stringify(x));}
+(async()=>{
+await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;create schema private;
+create table public.finance_users(id text,role text,tenant_id uuid,auth_user_id uuid,active boolean,google_link_status text);
+create table public.system_settings(tenant_id uuid,key text,value jsonb,primary key(tenant_id,key));
+create table public.finance_department_units(tenant_id uuid,id uuid,code text,active boolean,is_posting_unit boolean);
+create table public.finance_department_entity_scopes(tenant_id uuid,unit_id uuid,entity_code text,active boolean);
+create table public.invoices(id text,tenant_id uuid,entity_id text,data_environment text,amount numeric,tax numeric);
+create table public.expense_requests(id text,tenant_id uuid,entity_id text,data_environment text,form_payload jsonb);
+create function auth.uid() returns uuid language sql stable as $$select case when current_setting('fixture.actor',true)='anonymous' then null::uuid else '11111111-1111-1111-1111-111111111111'::uuid end$$;
+create function public.current_tenant_id() returns uuid language sql stable as $$select current_setting('fixture.tenant')::uuid$$;
+create function public.current_finance_user_id() returns text language sql stable as $$select current_setting('fixture.actor')$$;
+create function public.current_finance_role() returns text language sql stable as $$select current_setting('fixture.actor')$$;
+create function public.is_finance_admin() returns boolean language sql stable as $$select public.current_finance_role() in ('ceo','admin_director')$$;
+create function private.finance_expense_optional_permission_allows(uuid,text,text,jsonb) returns boolean language sql stable as $$select current_setting('fixture.permission',true)='true' and coalesce(current_setting('fixture.denied_entity',true),'')<>$4->>'entity_id'$$;
+`);
+for(const role of ['ceo','admin_director','accountant','board','external_audit','employee','anonymous'])await run('insert into public.finance_users values($1,$1,$2,$3,true,$4)',[role,t,'11111111-1111-1111-1111-111111111111','bound']);
+for(const tenant of [t,other]){
+ await run('insert into public.system_settings values($1,$2,$3)',[tenant,'entities',JSON.stringify([{id:'A'},{id:'B'}])]);await run('insert into public.system_settings values($1,$2,$3)',[tenant,'accounts',JSON.stringify([{c:'4101'},{c:'6202'},{c:'1130'},{c:'2136'}])]);
+}
+await run('insert into public.system_settings values($1,$2,$3)',[t,'role_permissions',JSON.stringify({ceo:{reports:'edit',settings:'edit'},accountant:{reports:'edit',settings:'none'},admin_director:['reports','settings'],board:['reports'],external_audit:['reports']})]);
+for(const [i,c,e]of [[1,'D1','A'],[2,'D2','A'],[3,'D3','B']]){const id=`00000000-0000-0000-0000-00000000000${i}`;await run('insert into public.finance_department_units values($1,$2,$3,true,true)',[t,id,c]);await run('insert into public.finance_department_entity_scopes values($1,$2,$3,true)',[t,id,e]);}
+for(const [id,tenant,e,env]of [['inv-a',t,'A','test'],['inv-b',t,'B','test'],['inv-prod',t,'A','production'],['inv-other',other,'A','test']])await run('insert into public.invoices values($1,$2,$3,$4,100,5)',[id,tenant,e,env]);
+await run('insert into public.expense_requests values($1,$2,$3,$4,$5)', ['req-a',t,'A','test',JSON.stringify({accountingLines:[{description:'水費',netAmount:105,taxAmount:0,grossAmount:105}]})]);
+const migration=fs.readFileSync(path.join(__dirname,'../supabase/migrations/20260910064325_finance_reporting_profiles_v1.sql'),'utf8');
+await db.exec('begin;'+migration+'\ncommit;');await as();
+
+await admin('select 1');await db.exec(`alter table public.invoices add column no text default 'AA00000001',add column invoice_date date default '2026-08-10',add column total numeric default 105,add column description text default 'Fixture sale',add column tax_id text default '12345675',add column row_version bigint default 1,add column voided_at timestamptz,add column receipt_files jsonb default '[]';
+alter table public.expense_requests add column amount numeric default 105,add column description text default 'Fixture expense',add column ver integer default 1,add column files jsonb default '[]',add column actual_files jsonb default '[]',add column voided_at timestamptz;
+update public.expense_requests set form_payload='{"lazyRows":[{"no":"AA00000001","date":"2026-08-10","item":"Fixture stationery","grossAmount":105}],"accountingLines":[{"description":"水費","netAmount":105,"taxAmount":0,"grossAmount":105}]}';`);
+// A previously reviewed legacy classification remains audited and unbound.
+await as();profile=(await read()).profile;profile.documents['expense_request:req-a:0']={sourceType:'expense_request',sourceId:'req-a',sourceLineId:'0',taxClass:'taxable',formatCode:'25',deduction:'not_claimed_policy',originalNetAmount:100,originalTaxAmount:5,grossAmount:105,classificationReason:'Legacy original certificate review'};await save();const legacy=clone(profile),legacyRevision=revision;
+await admin('select 1');await db.exec("create function public.can_read_invoice(public.invoices) returns boolean language sql stable as $$select coalesce(current_setting('fixture.row_denied',true),'')<>$1.id$$;create function public.can_read_expense_request(public.expense_requests) returns boolean language sql stable as $$select coalesce(current_setting('fixture.row_denied',true),'')<>$1.id$$;");await db.exec('begin;'+fs.readFileSync(path.join(__dirname,'../supabase/migrations/20260911135514_finance_tax_source_integrity_v1.sql'),'utf8')+'\ncommit;');await as('accountant');
+const key='expense_request:req-a:0',selector={key,sourceType:'expense_request',sourceId:'req-a',sourceLineId:'0'};
+async function sources(list=[selector],entity='A',env='test'){return (await run('select public.finance_reporting_tax_sources_v1($1,$2,$3) result',[entity,JSON.stringify(list),env])).rows[0].result;}
+async function bind(p=clone(profile)){p.documents[key].sourceBinding=(await sources()).sources[key].binding;return p;}
+await check('Migration never auto-attests or rewrites old classifications/history',async()=>{let r=await read();assert.deepEqual(r.profile,legacy);assert.equal(r.revision,legacyRevision);let h=(await run("select public.finance_reporting_profile_history_v1('A','test') h")).rows[0].h;assert.deepEqual(h[0].profile,legacy);assert.equal(h[0].profile.documents[key].sourceBinding,undefined);});
+await check('Canonical selector returns server SHA256/version and exact source snapshot',async()=>{let r=await sources();assert.equal(r.sources[key].available,true);assert.match(r.sources[key].binding.fingerprint,/^[a-f0-9]{64}$/);assert.equal(r.sources[key].snapshot.line.no,'AA00000001');assert.equal(r.entityId,'A');assert.equal(r.dataEnvironment,'test');assert(!JSON.stringify(r).includes('accountingLines'));});
+await check('Unchanged legacy classification may coexist with a separate audited period edit',async()=>{let p=clone(profile);p.tax.periods={'2026-07-01/2026-08-31':{priorCarryforwardTax:0}};await save(p);assert.equal(profile.documents[key].sourceBinding,undefined);});
+await check('Changed legacy classification without binding rejects atomically',async()=>{let p=clone(profile);p.documents[key].classificationReason='Changed original';await denied(()=>save(p),'22023');assert.equal((await read()).revision,revision);});
+await check('Explicit re-review binds original certificate independently from book tax',async()=>{let p=await bind();await save(p);assert.equal(profile.documents[key].originalTaxAmount,5);let rows=await admin("select form_payload from public.expense_requests where id='req-a'");assert.equal(rows.rows[0].form_payload.accountingLines[0].taxAmount,0);await as('accountant');});
+await check('Same-index replacement changes binding even without row-version increment',async()=>{let oldBinding=clone(profile.documents[key].sourceBinding);await admin(`update public.expense_requests set amount=210,form_payload=jsonb_set(form_payload,'{lazyRows,0}','{"no":"BB00000002","date":"2026-08-11","item":"Replacement repair","grossAmount":210}') where id='req-a'`);await as('accountant');let fresh=(await sources()).sources[key];assert.notDeepEqual(fresh.binding,oldBinding);assert.equal(fresh.snapshot.line.no,'BB00000002');let p=clone(profile);p.documents[key].classificationReason='Attempt stale save';await denied(()=>save(p),'40001');assert.equal((await read()).revision,revision);});
+await check('Forged fingerprint, version, extra binding key and client fingerprint never authorize save',async()=>{for(const mutate of [b=>b.fingerprint='0'.repeat(64),b=>b.version=2,b=>b.untrusted=true]){let p=await bind();mutate(p.documents[key].sourceBinding);await denied(()=>save(p),Object.hasOwn(p.documents[key].sourceBinding,'untrusted')?'22023':'40001');}});
+await check('Fresh explicit review accepts changed original amount and keeps old audit row',async()=>{let p=await bind();Object.assign(p.documents[key],{number:'BB00000002',date:'2026-08-11',originalNetAmount:200,originalTaxAmount:10,grossAmount:210,classificationReason:'Re-reviewed replaced certificate'});await save(p);let h=(await run("select public.finance_reporting_profile_history_v1('A','test') h")).rows[0].h;assert(h.some(r=>r.profile.documents[key].grossAmount===105));assert.equal(h[0].profile.documents[key].grossAmount,210);});
+await check('Attachment-only replacement invalidates server evidence binding',async()=>{let before=(await sources()).sources[key];await admin(`update public.expense_requests set files='[{"path":"new-original.pdf"}]' where id='req-a'`);await as('accountant');let after=(await sources()).sources[key];assert.deepEqual(before.snapshot,after.snapshot);assert.notDeepEqual(before.binding,after.binding);let p=clone(profile);p.documents[key].classificationReason='Stale evidence';await denied(()=>save(p),'40001');});
+await check('Company, environment and tenant cannot expose another source',async()=>{for(const [id,e,env]of [['inv-b','A','test'],['inv-other','A','test'],['inv-prod','A','test'],['inv-a','A','production']]){let r=await sources([{key:'invoice:'+id,sourceType:'invoice',sourceId:id}],e,env);assert.deepEqual(r.sources['invoice:'+id],{available:false});}});
+await check('Existing row visibility denial prevents source evidence exposure and fresh classification',async()=>{await run("select set_config('fixture.row_denied','req-a',false)");assert.equal((await sources()).sources[key].available,false);let p=clone(profile);p.documents[key].classificationReason='Denied row attempt';await denied(()=>save(p),'40001');await run("select set_config('fixture.row_denied','',false)");});
+await check('Duplicate/alias/oversized selectors fail closed',async()=>{await denied(()=>sources([selector,selector]),'22023');await denied(()=>sources([{...selector,key:'alias'}]),'22023');await denied(()=>sources(Array(101).fill(selector)),'22023');});
+await check('Duplicate stable source IDs and removed rows are unavailable',async()=>{await admin(`update public.expense_requests set form_payload='{"lazyRows":[{"id":"same"},{"id":"same"}]}' where id='req-a'`);await as('accountant');let r=await sources([{...selector,key:'expense_request:req-a:same',sourceLineId:'same'}]);assert.equal(r.sources['expense_request:req-a:same'].available,false);assert.equal((await sources()).sources[key].available,false);});
+await check('Voided source cannot be reclassified with old binding',async()=>{await admin("update public.invoices set voided_at=now() where id='inv-a'");await as('accountant');assert.equal((await sources([{key:'invoice:inv-a',sourceType:'invoice',sourceId:'inv-a'}])).sources['invoice:inv-a'].available,false);});
+await check('Anonymous, disabled permission and direct private execution remain denied',async()=>{await as('anonymous');await denied(()=>sources(),'42501');await as('employee');await denied(()=>sources(),'42501');await as('accountant');await denied(()=>run("select private.finance_tax_source_read_v1($1,'A','test','invoice','inv-a',null,false)",[t]),'42501');await admin("select set_config('fixture.permission','false',false)");await db.exec('set role authenticated');await denied(()=>sources(),'42501');await as('accountant');});
+await check('Profile CAS still rejects an already consumed revision',async()=>{let oldRevision=revision;await save(clone(profile));await denied(()=>save(clone(profile),oldRevision),'40001');});
+await check('Existing full profile postflight still passes after new source contract',async()=>{await admin('select 1');await db.exec(fs.readFileSync(path.join(__dirname,'finance_reporting_profiles_postflight.sql'),'utf8').replace(/^\\set ON_ERROR_STOP on\s*/,''));});
+
+await check('New postflight executes read-only without business fixtures or writes',async()=>{await admin('select 1');await db.exec('begin read only;'+fs.readFileSync(path.join(__dirname,'finance_tax_source_integrity_postflight.sql'),'utf8').replace(/^\\set ON_ERROR_STOP on\s*/,'')+'\nrollback;');});
+await check('Unmodified legacy profile and new tax canaries execute exact authenticated SQL and fully roll back',async()=>{
+ await admin('select 1');const canaryTenant='00000000-0000-0000-0000-000000000001';
+ for(const [id,role,uuid]of [['canary-manager','ceo','33333333-3333-3333-3333-333333333333'],['canary-accountant','accountant','44444444-4444-4444-4444-444444444444']])await run('insert into public.finance_users values($1,$2,$3,$4,true,$5)',[id,role,canaryTenant,uuid,'bound']);
+ await run('insert into public.system_settings select $1,key,value from public.system_settings where tenant_id=$2',[canaryTenant,t]);
+ await db.exec(`alter table public.finance_users add column email text default 'fixture@example.invalid';
+ create or replace function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ create or replace function public.current_tenant_id() returns uuid language sql stable as $$select nullif(current_setting('app.current_tenant_id',true),'')::uuid$$;
+ create or replace function public.current_finance_user_id() returns text language sql stable security definer as $$select id from public.finance_users where active and tenant_id=public.current_tenant_id() and auth_user_id=auth.uid() limit 1$$;
+ create or replace function public.current_finance_role() returns text language sql stable security definer as $$select role from public.finance_users where active and tenant_id=public.current_tenant_id() and auth_user_id=auth.uid() limit 1$$;
+ create function public.finance_user_is_approval_identity_ready(t uuid,u text) returns boolean language sql stable as $$select exists(select 1 from public.finance_users where tenant_id=t and id=u and active and google_link_status='bound' and auth_user_id is not null)$$;
+ grant usage on schema auth to authenticated;
+ `);
+
+ await run('insert into public.finance_department_units select $1,id,code,active,is_posting_unit from public.finance_department_units where tenant_id=$2',[canaryTenant,t]);
+ await run('insert into public.finance_department_entity_scopes select $1,unit_id,entity_code,active from public.finance_department_entity_scopes where tenant_id=$2',[canaryTenant,t]);
+ await db.exec('alter table public.finance_department_units add column present_in_source boolean default true;'+fs.readFileSync(path.join(__dirname,'fixtures/finance_department_new_form_baseline_20260911.sql'),'utf8'));
+ await run("insert into public.system_settings values($1,'departments',$2)",[canaryTenant,JSON.stringify([{c:'D1',active:true,isPostingUnit:true,historicalOnly:false,newFormEntityCodes:['A']}])]);
+ await db.exec(`alter table public.invoices add column entity_name text,add column department_code text,add column buyer text,add column status text,add column approval_status text,add column approval_step integer,add column steps jsonb,add column invoice_identifier_type text;
+ create table public.ledger_entries(source_id text);create table public.notification_delivery_events(request_id text,payload jsonb);`);
+ const snapshot=async()=>JSON.stringify((await run("select (select jsonb_agg(to_jsonb(p) order by tenant_id,data_environment,entity_id) from public.finance_reporting_profiles p) p,(select jsonb_agg(to_jsonb(h) order by tenant_id,data_environment,entity_id,revision) from private.finance_reporting_profile_revisions_v1 h) h,(select jsonb_agg(to_jsonb(i) order by id) from public.invoices i) i,(select jsonb_agg(to_jsonb(r) order by id) from public.expense_requests r) r")).rows);
+ const before=await snapshot();
+ for(const [file,key,expected] of [['finance_reporting_profiles_canary.sql','reporting_profiles_canary_result',{canary:'authenticated_reporting_profiles_v1',ok:true,rolled_back:true,profile_authority_preserved:true}],['finance_tax_source_integrity_canary.sql','tax_source_integrity_canary_result',{canary:'authenticated_tax_source_integrity_v1',ok:true,rolled_back:true,source_binding_preserved:true}]]){
+  const text=fs.readFileSync(path.join(__dirname,file),'utf8');assert(!/^\\/m.test(text));const results=await db.exec(text);assert.deepEqual(results.at(-1).rows[0][key],expected);assert.equal(await snapshot(),before);
+ }
+});
+console.log(JSON.stringify({ok:true,tests}));await db.close();
+})().catch(e=>{console.error(e);process.exitCode=1;});

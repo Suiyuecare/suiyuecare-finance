@@ -27,3 +27,38 @@ assert.equal(costOnly.budgetComplete,true);assert.equal(costOnly.budgetVariance,
 const missingSide=engine.build({profiles:{F1:{budgets:[{...reviewed,id:'sep-income',period:'2026-09',departmentCode:'A',accountCode:'4101',amount:100},{...reviewed,id:'oct-cost',period:'2026-10',departmentCode:'A',accountCode:'6202',amount:20}]}},ledger:[],start:'2026-09-01',end:'2026-10-31'}).rows[0];assert.equal(missingSide.budgetComplete,false,'a different side in each month is not a complete profit budget');assert.equal(missingSide.budgetVariance,null);
 const duplicatePair=engine.eliminationLedger({profiles:{F1:{eliminations:[elimination]},F2:{eliminations:[{...elimination,counterpartyEntityId:'F1',lines:elimination.lines.map(l=>({...l,debit:l.debit?70:0,credit:l.credit?70:0}))}]}},start:'2026-09-01',end:'2026-09-30'});assert.equal(duplicatePair.rows.length,0,'conflicting mirror copy must not apply whichever sorts first');assert.equal(duplicatePair.applied.length,0);assert.equal(duplicatePair.warnings.filter(w=>w.code==='duplicate_elimination').length,1);
 console.log('Management report engine: signed movements, rounding, draft/reviewed, overlap, budgets and elimination scope PASS');
+let monthlyChecks=0;
+function monthlyCheck(name,fn){fn();monthlyChecks++;console.log('PASS '+name);}
+function budgetModel(change={},range={start:'2026-09-01',end:'2026-09-30'}){return engine.build({profiles:{F1:{costCenters:[{departmentCode:'A',kind:'cost'}],budgets:[{...reviewed,id:'monthly-budget',period:'2026-09',departmentCode:'A',accountCode:'6202',amount:300,...change}]}},ledger:[{id:'month-cost',eid:'F1',dc:'A',ac:'6202',dr:100,date:'2026-09-20'}],...range});}
+monthlyCheck('full-month reviewed budget applies exactly, without daily proration',()=>{
+ const m=budgetModel({effectiveFrom:'2026-08-15',effectiveTo:'2026-09-30'});assert.equal(m.rows[0].budgetExpense,300);assert.equal(m.rows[0].budgetVariance,200);assert.equal(m.warnings.length,0);
+});
+monthlyCheck('mid-month start, mid-month end and uncovered month warn instead of silently applying or dropping budgets',()=>{
+ for(const change of [{effectiveFrom:'2026-09-15'},{effectiveTo:'2026-09-29'},{effectiveFrom:'2026-10-01'},{effectiveTo:'2026-08-31'}]){
+  const m=budgetModel(change);assert.equal(m.rows[0].budgetExpense,null);assert.equal(m.rows[0].budgetVariance,null);assert.equal(m.warnings.length,1);assert.match(m.warnings[0].message,/2026-09.*未套用，需調整生效期間／另建核定月額/);
+ }
+});
+monthlyCheck('leap-year February requires coverage through February 29',()=>{
+ const range={start:'2024-02-01',end:'2024-02-29'},common={period:'2024-02',effectiveFrom:'2024-02-01'};
+ assert.equal(budgetModel({...common,effectiveTo:'2024-02-28'},range).warnings.length,1);
+ const valid=budgetModel({...common,effectiveTo:'2024-02-29'},range);assert.equal(valid.warnings.length,0);assert.equal(valid.rows[0].budgetExpense,300);
+});
+monthlyCheck('quarter coverage keeps valid monthly amounts and flags only incomplete target months',()=>{
+ const budgets=['07','08','09'].map(m=>({...reviewed,id:'budget-'+m,period:'2026-'+m,departmentCode:'A',accountCode:'6202',amount:300,effectiveFrom:'2026-'+m+(m==='08'?'-15':'-01')}));
+ const m=engine.build({profiles:{F1:{costCenters:[{departmentCode:'A',kind:'cost'}],budgets}},ledger:[],start:'2026-07-01',end:'2026-09-30'});assert.equal(m.rows[0].budgetExpense,600);assert.equal(m.rows[0].budgetComplete,false);assert.equal(m.rows[0].budgetVariance,null);assert.equal(m.warnings.length,1);assert.equal(m.warnings[0].period,'2026-08');
+});
+monthlyCheck('monthly elimination has the same full-month policy and one warning across its two passes',()=>{
+ for(const change of [{effectiveFrom:'2026-09-15'},{effectiveTo:'2026-09-29'}]){
+  const m=engine.eliminationLedger({profiles:{F1:{eliminations:[{...elimination,...change}]},F2:{}},start:'2026-09-01',end:'2026-09-30'});assert.equal(m.rows.length,0);assert.equal(m.applied.length,0);assert.equal(m.warnings.length,1);assert.match(m.warnings[0].message,/未套用，需調整生效期間／另建核定月額/);
+ }
+ assert.equal(engine.eliminationLedger({profiles:{F1:{eliminations:[{...elimination,effectiveTo:'2026-09-30'}]},F2:{}},start:'2026-09-01',end:'2026-09-30'}).rows.length,2);
+});
+monthlyCheck('same monthly rule ID across companies retains each company warning',()=>{
+ const b={...reviewed,id:'same',period:'2026-09',departmentCode:'A',accountCode:'6202',amount:300,effectiveFrom:'2026-09-15'};
+ const m=engine.build({profiles:{F1:{budgets:[b]},F2:{budgets:[b]}},ledger:[],start:'2026-09-01',end:'2026-09-30'});assert.equal(m.warnings.length,2);assert.deepEqual(m.warnings.map(w=>w.entityId),['F1','F2']);
+});
+monthlyCheck('daily allocations retain their actual transaction effective dates and never rewrite reviewed profiles',()=>{
+ const p={F1:{allocations:[{...rule,effectiveFrom:'2026-09-15'}],budgets:[{...reviewed,id:'keep-reviewed',period:'2026-09',departmentCode:'A',accountCode:'6202',amount:300,effectiveFrom:'2026-09-15'}],eliminations:[{...elimination,effectiveTo:'2026-09-15'}]},F2:{}};const before=JSON.stringify(p);
+ const m=engine.build({profiles:p,ledger:[{id:'before',eid:'F1',dc:'ADMIN',ac:'6202',dr:100,date:'2026-09-14'},{id:'after',eid:'F1',dc:'ADMIN',ac:'6202',dr:100,date:'2026-09-15'}],start:'2026-09-01',end:'2026-09-30'});assert.equal(m.allocationEntries.length,2);assert.ok(m.allocationEntries.every(e=>e.sourceId==='after'));assert.equal(m.allocationNet,0);engine.eliminationLedger({profiles:p,start:'2026-09-01',end:'2026-09-30'});assert.equal(JSON.stringify(p),before);
+});
+console.log('OK: '+monthlyChecks+' monthly policy behavior checks');
