@@ -45,6 +45,7 @@
 <script src="assets/engines/tax-report-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/management-report-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/receivables-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/document-search.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/reporting-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
 <link rel="stylesheet" href="assets/styles/reporting-workspace.css?v=__FINANCE_ASSET_VERSION__">
 <script src="assets/engines/organization-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -279,7 +280,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
         </div>
         <div class="expense-query-search" role="search">
           <span class="expense-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg></span>
-          <input type="search" id="exp-q" aria-label="搜尋放款申請所有內容" autocomplete="off" placeholder="搜尋所有內容：單號、申請人、目的、部門、備註…" oninput="scheduleExpenseFilter()" onsearch="filterExp()" onkeydown="if(event.key==='Escape')clearExpenseKeyword()">
+          <input type="search" id="exp-q" aria-label="搜尋放款申請所有內容與金額" autocomplete="off" placeholder="搜尋單號、申請人、目的、金額、部門、備註…" oninput="scheduleExpenseFilter()" onsearch="filterExp()" onkeydown="if(event.key==='Escape')clearExpenseKeyword()">
           <button type="button" id="exp-q-clear" class="expense-search-clear" aria-label="清除搜尋文字" onclick="clearExpenseKeyword()" hidden>&times;</button>
         </div>
       </div>
@@ -294,7 +295,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
       </div>
       <div class="expense-query-footer">
         <span id="exp-filter-error" class="expense-filter-error" role="alert"></span>
-        <span class="expense-query-hint">可輸入多個關鍵字，以空格分隔並同時比對</span>
+        <span class="expense-query-hint">可用空格組合關鍵字；金額可輸入 1250、1,250 或 NT$1,250</span>
         <span id="exp-result-count" class="expense-result-count" role="status" aria-live="polite">顯示 0 / 0 筆</span>
       </div>
     </section>
@@ -323,7 +324,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
           <button class="tb" role="tab" onclick="apprTab('rejected',this)">被駁回<span id="rejected-appr-cnt" style="font-size:9px;background:#c02020;color:#fff;padding:1px 5px;border-radius:99px;margin-left:3px">—</span></button>
         </div>
         <div class="appr-toolbar">
-          <input type="text" id="appr-q" placeholder="搜尋表單編號、部門、申請人、目的..." oninput="apprSearch(this.value)">
+          <input type="search" id="appr-q" aria-label="搜尋簽核單據與金額" placeholder="搜尋單號、部門、申請人、目的、金額…" oninput="apprSearch(this.value)">
           <span id="appr-list-hint" style="font-size:11px;color:#94a3b8">每頁最多 50 筆</span>
         </div>
       </div>
@@ -354,7 +355,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
         <select id="v-month" onchange="renderVouchers()" style="width:auto"><option value="">全部月份</option><option value="05">2026年5月</option><option value="04">2026年4月</option></select>
         <select id="v-ent" onchange="renderVouchers()" style="width:auto"><option value="">全部法人</option></select>
       </div>
-      <input type="text" id="v-q" class="mobile-second-primary-search" aria-label="搜尋傳票" placeholder="搜尋傳票號/摘要…" oninput="renderVouchers()" style="width:180px;flex:none">
+      <input type="search" id="v-q" class="mobile-second-primary-search" aria-label="搜尋傳票與金額" placeholder="搜尋傳票號、摘要、金額…" oninput="renderVouchers()" style="width:180px;flex:none">
       <button type="button" class="btn-g mobile-page-toggle" data-mobile-page-toggle="filter" aria-expanded="false" onclick="mobileTogglePagePanel('vouchers','filter',this)">篩選</button>
     </div>
     <div class="g4 mobile-second-kpis" id="voucher-stats"></div>
@@ -817,7 +818,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
         <select id="l-acct" onchange="renderLedger()" style="width:auto"><option value="all">全部科目</option></select>
         <select id="l-month" onchange="renderLedger()" style="width:auto"><option value="all">全部月份</option><option value="2026/05">2026年5月</option><option value="2026/04">2026年4月</option><option value="2026/03">2026年3月</option></select>
       </div>
-      <input type="text" id="l-q" class="mobile-second-primary-search" aria-label="搜尋分類帳" placeholder="搜尋摘要、單號、科目、部門…" oninput="renderLedger()" style="width:240px;flex:none">
+      <input type="search" id="l-q" class="mobile-second-primary-search" aria-label="搜尋分類帳與金額" placeholder="搜尋摘要、單號、科目、部門、金額…" oninput="renderLedger()" style="width:240px;flex:none">
       <button type="button" class="btn-g mobile-page-toggle" data-mobile-page-toggle="filter" aria-expanded="false" onclick="mobileTogglePagePanel('ledger','filter',this)">篩選</button>
     </div>
     <div id="ldg-kpis" class="ledger-investor-summary mobile-second-kpis"></div>
@@ -22528,6 +22529,16 @@ function expenseSearchCompact(value){
 function expenseSearchTokens(value){
   return expenseSearchNormalize(value).split(' ').filter(Boolean);
 }
+function financeDocumentMatchesQuery(query,texts,amounts,compactText){
+  return window.FinanceDocumentSearch.matches(query,{texts:texts,amounts:amounts,compactText:compactText===true});
+}
+function requestSearchAmounts(r){
+  if(!r)return[];
+  var amounts=[r.amt,r.amount,r.total,r.actualAmt,r.actual_amount,r.estimatedAmt,r.estimated_amount,r.bankFeeAmount,r.bank_fee_amount];
+  var review=requestReviewAmount(r),known=amounts.some(function(v){return window.FinanceDocumentSearch.amountText(v)!==null;});
+  if(known||review!==0)amounts.unshift(review);
+  return amounts;
+}
 function expensePayloadSearchValues(value,out,depth,key){
   if(depth>6||value==null)return;
   var keyText=String(key||'').replace(/([a-z0-9])([A-Z])/g,'$1_$2').replace(/[\s-]+/g,'_').toLowerCase();
@@ -22566,7 +22577,7 @@ function expenseAttachmentSearchValues(r){
 function expenseSearchIndex(r){
   if(!r)return{normal:'',compact:''};
   if(EXPENSE_SEARCH_CACHE&&EXPENSE_SEARCH_CACHE.has(r))return EXPENSE_SEARCH_CACHE.get(r);
-  var entity=r.eid?gE(r.eid):null,dept=r.dc?gD(r.dc):null,status=expenseStatusKey(r),amount=requestReviewAmount(r);
+  var entity=r.eid?gE(r.eid):null,dept=r.dc?gD(r.dc):null,status=expenseStatusKey(r);
   var values=[
     r.no,r.id,r.voucherId,r.voucher_id,
     r.app,r.applicant,r.applicantId,r.applicant_id,r.applicantEmail,r.applicant_email,
@@ -22577,7 +22588,6 @@ function expenseSearchIndex(r){
     r.payee,r.bankType,r.bankName,r.bankBranch,r.bankNo,r.bankAcc,
     requestFeeBearer(r),r.payType,r.paymentType,
     r.dr,r.drN,r.cr,r.crN,
-    amount,Math.round(num(amount)).toLocaleString('zh-TW'),fmt(amount),
     requestDateText(r),requestExpectedPayText(r),expenseCompletedDate(r),
     status,SL[status]||status
   ];
@@ -22591,17 +22601,14 @@ function expenseSearchIndex(r){
   var searchableValues=values.filter(function(v){return v!==''&&v!=null;});
   var normal=expenseSearchNormalize(searchableValues.join(' \n '));
   var compact=searchableValues.map(expenseSearchCompact).filter(Boolean).join('\u0001');
-  var result={normal:normal,compact:compact};
+  var result={normal:normal,compact:compact,texts:searchableValues,amounts:requestSearchAmounts(r)};
+  result.search=window.FinanceDocumentSearch.createIndex({texts:result.texts,amounts:result.amounts,compactText:true});
   if(EXPENSE_SEARCH_CACHE)EXPENSE_SEARCH_CACHE.set(r,result);
   return result;
 }
 function expenseMatchesQuery(r,query){
-  var tokens=expenseSearchTokens(query);
-  if(!tokens.length)return true;
   var index=expenseSearchIndex(r);
-  return tokens.every(function(token){
-    return index.normal.indexOf(token)>-1||index.compact.indexOf(expenseSearchCompact(token))>-1;
-  });
+  return index.search?window.FinanceDocumentSearch.matchesIndex(query,index.search):financeDocumentMatchesQuery(query,[],[]);
 }
 function expenseComparableDate(value){
   var raw=String(value==null?'':value).trim();
@@ -24388,16 +24395,26 @@ function approvalSearchText(item){
   var d=approvalRowDept(item),type=approvalRowType(item),status=approvalRowStatus(item);
   return [
     approvalRowFormNo(item),d.code,d.name,approvalRowApplicant(item),type.label,
-    approvalRowSummary(item),approvalRowAmount(item),approvalRowApplyDate(item),
+    approvalRowSummary(item),approvalRowApplyDate(item),
     approvalRowExpectedPayDate(item),status.label
   ].join(' ').toLowerCase();
+}
+function approvalMatchesQuery(item,query){
+  var amounts=[approvalRowAmount(item)],rows=item.rows&&item.rows.length?item.rows:[item.raw];
+  if(item.kind==='bill')rows=billGroupApprovalRows(item);
+  else if(item.kind==='inv'||item.kind==='recv')rows=invoiceGroupApprovalRows(item);
+  rows.forEach(function(row){
+    if(item.kind==='req')amounts=amounts.concat(requestSearchAmounts(row));
+    else if(row)amounts=amounts.concat([row.amt,row.amount,row.total,row.tax]);
+  });
+  return financeDocumentMatchesQuery(query,[approvalSearchText(item)],amounts);
 }
 function approvalApplySearchSort(data){
   // History is filtered, ordered, and paged by the participant-scoped RPC.
   // Re-sorting only the current page would present a misleading global order.
   if(S.aT==='h')return (data||[]).slice();
   var q=String(S.apprQuery||'').trim().toLowerCase();
-  var arr=(data||[]).filter(function(item){return !q||approvalSearchText(item).indexOf(q)>-1;});
+  var arr=(data||[]).filter(function(item){return !q||approvalMatchesQuery(item,q);});
   var st=approvalSortState(),field=st.field||'payDate',dir=st.dir==='desc'?-1:1;
   arr.sort(function(a,b){
     var av=approvalSortValue(a,field),bv=approvalSortValue(b,field),res=0;
@@ -26532,7 +26549,7 @@ window.renderVouchers=function(){
   var vm=(el('v-month')||{}).value||'';var ve=(el('v-ent')||{}).value||'';var vq=(el('v-q')||{}).value?el('v-q').value.toLowerCase():'';
   var data=VOUCHERS.filter(function(v){
     var mOk=!vm||(vm==='05'&&v.date.indexOf('2026/05')===0)||(vm==='04'&&v.date.indexOf('2026/04')===0);
-    return mOk&&(!ve||v.eid===ve)&&(!vq||v.no.toLowerCase().indexOf(vq)>-1||v.desc.toLowerCase().indexOf(vq)>-1);
+    return mOk&&(!ve||v.eid===ve)&&financeDocumentMatchesQuery(vq,[v.no,v.desc], [v.total].concat((v.entries||[]).map(function(entry){return entry.amt;})));
   });
   el('voucher-stats').innerHTML=[{l:'傳票總數',v:VOUCHERS.length+' 張'},{l:'已過帳',v:VOUCHERS.filter(function(v){return v.posted;}).length+' 張'},{l:'傳票總額',v:fmt(VOUCHERS.reduce(function(s,v){return s+v.total;},0))},{l:'自動生成率',v:'100%'}].map(function(s){return'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:#1e293b">'+s.v+'</div></div>';}).join('');
   el('voucher-list').innerHTML=data.map(function(v){
@@ -37371,7 +37388,7 @@ function ledgerRowMatchesQuery(r,q){
   if(!q)return true;
   var d=gD(r.dc),ent=gE(r.eid||r.entity_id||entityOfDept(r.dc)),src=sourceByLedgerRef(ledgerSourceRef(r));
   var text=[r.desc,r.an,r.ac,r.dc,d.n,ent.s,ent.full,ledgerSourceRef(r),src.no,src.label].join(' ').toLowerCase();
-  return text.indexOf(q)>-1;
+  return financeDocumentMatchesQuery(q,[text],[r.dr,r.cr]);
 }
 function ledgerAmountForKind(r,kind){
   var dr=num(r&&r.dr),cr=num(r&&r.cr),ac=String(r&&r.ac||'');

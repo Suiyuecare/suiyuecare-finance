@@ -138,6 +138,8 @@ try{
   assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'applied');
   assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/financial reports migration batch/);
   writeLedger([...prerequisites,...guard.UTILITY_MIGRATIONS,...guard.REPORT_MIGRATIONS]);
+  assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/amount search migration/);
+  writeLedger([...prerequisites,...guard.UTILITY_MIGRATIONS,...guard.REPORT_MIGRATIONS,...guard.AMOUNT_SEARCH_MIGRATIONS]);
   assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
   assert.throws(()=>renderApply('reapply'),/must be pending/);
 

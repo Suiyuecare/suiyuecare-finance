@@ -1,0 +1,32 @@
+'use strict';
+// Render the real local app with fictional rows; no remote services or real logins.
+const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
+const {applyBuildEnvironment}=require('./finance_build_environment');
+const root=path.resolve(__dirname,'..'),output=process.env.FINANCE_SEARCH_EVIDENCE||'/tmp/finance-amount-search-browser-20260910';
+const anchor='bootAuthGate();\n\n})();';let html=applyBuildEnvironment(fs.readFileSync(path.join(root,'index.html'),'utf8'),{target:'local',supabaseUrl:'',supabaseAnonKey:''});assert.ok(html.includes(anchor));
+html=html.replace(anchor,'window.__searchTest={run:async function(code){return await eval(code);}};\n'+anchor).replace(/<script\b[^>]*src=["']https?:[^>]*><\/script>/gi,'');
+const server=http.createServer((req,res)=>{const pathname=new URL(req.url,'http://localhost').pathname,file=path.resolve(root,'.'+pathname);if(file!==root&&!file.startsWith(root+path.sep)){res.writeHead(403);return res.end();}if(file===root||file===path.join(root,'index.html')){res.setHeader('content-type','text/html');return res.end(html);}if(!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404);return res.end();}res.setHeader('content-type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'application/octet-stream');res.end(fs.readFileSync(file));});
+let browser;
+(async()=>{fs.mkdirSync(output,{recursive:true});await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;const {chromium}=require('playwright');browser=await chromium.launch({headless:true,channel:'chrome'});const context=await browser.newContext({viewport:{width:1440,height:960}});await context.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.dismiss());await page.goto(origin);await page.waitForFunction(()=>window.__searchTest);const scope=code=>page.evaluate(code=>window.__searchTest.run(code),code);
+await scope(`(async()=>{
+ USERS=[{id:'fixture-ceo',n:'測試主管',email:'ceo@example.invalid',role:'ceo',rL:'執行長',eid:'F1',dc:'CARE',active:true}];ENTS=[{id:'F1',n:'測試照護公司',full:'測試照護公司',s:'測試照護',active:true,color:'#286448'}];DEPTS=[{c:'CARE',n:'照護部',eid:'F1',lv:3,active:true}];ORG_CHART=[];REQS=[];INVS=[];BILLS=[];VOUCHERS=[];NOTIFS=[];quickLogin('ceo');
+ REQS=[{id:'SEARCH-A',no:'EXP-A',amount:1250,description:'測試水費',entity_id:'F1',department_code:'CARE'},{id:'SEARCH-B',no:'EXP-B',amount:12.5,description:'測試小額費用',entity_id:'F1',department_code:'CARE'},{id:'SEARCH-C',no:'EXP-C',amount:999,description:'測試其他費用',entity_id:'F1',department_code:'CARE'},{id:'SEARCH-D',no:'EXP-D',amount:1249.75,description:'測試小數勿捨入',entity_id:'F1',department_code:'CARE'}].map(r=>mapReq(Object.assign({type:'payment_request',applicant:'測試主管',applicant_id:'fixture-ceo',status:'pending_ceo',request_date:'2026-09-10',data_environment:'test',steps:[{r:'執行長',rk:'ceo',uid:'fixture-ceo',n:'測試主管',status:'pending_ceo',a:'pending'}]},r)));
+ VOUCHERS=REQS.map(r=>({id:'V-'+r.id,no:'V-'+r.no,reqId:r.id,eid:'F1',entS:'測試照護',date:'2026/09/10',desc:r.desc,entries:[{t:'dr',ac:'6202',an:'水電費',amt:r.amt},{t:'cr',ac:'1112',an:'銀行存款',amt:r.amt}],total:r.amt,posted:true,creator:'測試主管',dataEnv:'test'}));
+ LEDGER=REQS.map(r=>({id:'L-'+r.id,ref:r.no,date:'2026/09/10',eid:'F1',dc:'CARE',ac:'6202',an:'水電費',desc:r.desc,dr:r.amt,cr:0,dataEnv:'test'}));
+ approvalAllItems=function(){return REQS.map(raw=>({kind:'req',raw}));};
+ await nav('expenses');
+})()`);
+const evidence=[];
+for(const width of [1440,390]){
+ await page.setViewportSize({width,height:960});
+ await scope("nav('expenses')");
+ for(const query of ['1250','1,250','NT$ 1,250','１２５０','1250.00','水費 1,250']){await page.locator('#exp-q').fill(query);await page.waitForFunction(()=>document.querySelector('#exp-result-count').textContent==='顯示 1 / 4 筆');assert.match(await page.locator('#exp-tbody').innerText(),/測試水費/);}
+ await page.locator('#exp-q').fill('12.50');await page.waitForFunction(()=>document.querySelector('#exp-tbody').textContent.includes('測試小額費用'));assert.doesNotMatch(await page.locator('#exp-tbody').innerText(),/測試水費/);
+ await page.locator('#exp-q-clear').click();await page.waitForFunction(()=>document.querySelector('#exp-result-count').textContent==='顯示 4 / 4 筆');await page.locator('#exp-q').fill('1,250');await page.waitForFunction(()=>document.querySelector('#exp-result-count').textContent==='顯示 1 / 4 筆');await page.screenshot({path:path.join(output,'expenses-'+width+'.png')});
+ await scope("nav('vouchers');el('v-month').value='';renderVouchers()");await page.locator('#v-q').fill('NT$1,250');assert.match(await page.locator('#voucher-list').innerText(),/V-EXP-A/);assert.doesNotMatch(await page.locator('#voucher-list').innerText(),/V-EXP-B|V-EXP-C|V-EXP-D/);await page.screenshot({path:path.join(output,'vouchers-'+width+'.png')});
+ await scope("nav('approvals');S.aT='mine';buildApprovals()");await page.locator('#appr-q').fill('NT$1,250');assert.match(await page.locator('#appr-list').innerText(),/EXP-A/);assert.doesNotMatch(await page.locator('#appr-list').innerText(),/EXP-B|EXP-C|EXP-D/);await page.screenshot({path:path.join(output,'approvals-'+width+'.png')});
+ await scope("nav('ledger');['l-ent','l-dept','l-acct','l-month'].forEach(id=>{el(id).value='all';});renderLedger()");await page.locator('#l-q').fill('1,250');const ledger=await scope("LEDGER.filter(r=>ledgerRowMatchesQuery(r,el('l-q').value)).map(r=>r.ref)");assert.deepEqual(ledger,['EXP-A']);await page.screenshot({path:path.join(output,'ledger-'+width+'.png')});
+ const size=await page.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth}));assert.ok(size.scrollWidth<=width,JSON.stringify(size));evidence.push({width,expenseFormats:6,decimalExclusion:true,clear:true,voucher:true,approval:true,ledger:true,noOverflow:true});
+}
+assert.deepEqual(errors,[]);const result={ok:true,fixture:'Fictional local records. No production data, employee credentials, writes or external requests.',evidence,errors};fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();await new Promise(r=>server.close(r));});

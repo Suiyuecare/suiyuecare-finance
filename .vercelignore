@@ -128,3 +128,13 @@ supabase/.temp
 
 !scripts/check_tax_workpaper_adapter.js
 !scripts/check_reporting_workspace_boundaries.cjs
+
+# Document amount search and participant history protected release
+!scripts/check_document_amount_search.cjs
+!scripts/check_document_amount_search_browser.cjs
+!scripts/check_reporting_workspace_amount_search.cjs
+!scripts/check_history_amount_search.cjs
+!scripts/test_amount_search_release_batch.mjs
+!scripts/finance_amount_search_fingerprint.sql
+!scripts/finance_amount_search_postflight.sql
+!scripts/finance_amount_search_canary.sql
