@@ -37,7 +37,7 @@ await scope(`(async()=>{
  }};};
  loadRemoteData=async function(){return true;};
  if(window.FinanceReportingWorkspace){await window.FinanceReportingWorkspace.loadProfile('F1',true);await window.FinanceReportingWorkspace.loadProfile('F2',true);}
- await nav('reports');refreshEntitySelectors();el('rpt-ent').value='F1';syncReportPeriodOptions('2026-09');el('rpt-month').value='2026-09';buildReports();
+ await nav('reports');refreshEntitySelectors();el('rpt-ent').value='F1';el('rpt-ent').dispatchEvent(new Event('change',{bubbles:true}));syncReportPeriodOptions('2026-09');el('rpt-month').value='2026-09';buildReports();
 })()`);
 if(!baseline)await page.waitForFunction(()=>window.FinanceReportingWorkspace.profileFor('F1'));
 await page.evaluate(()=>{window.__capturedReports=[];const write=XLSX.writeFile;XLSX.writeFile=function(wb,name){window.__capturedReports.push({name,sheets:wb.SheetNames.map(name=>({name,rows:XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:null})}))});return write.apply(this,arguments);};});
