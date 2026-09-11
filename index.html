@@ -5368,6 +5368,7 @@ function updateApprovalFileLabel(inp){
   if(!files.length){label.textContent='未選擇任何檔案';return;}
   label.textContent=files.length===1?files[0].name:('已選擇 '+files.length+' 個檔案');
 }
+window.updateApprovalFileLabel=updateApprovalFileLabel;
 function approvalActionFields(noteId,fileId,assignId,opts){
   var engine=financeApprovalEngine();
   if(engine&&typeof engine.approvalActionFieldsHtml==='function')return engine.approvalActionFieldsHtml(noteId,fileId,assignId,approvalActionUiDeps(opts),opts||{});
@@ -26238,8 +26239,18 @@ window.apprReturnPrevious=function(rid){
 window.apprReturnPreviousProc=function(rid){
   return returnPreviousRequestWithFields(rid,'proc-c','proc-files',false).then(function(ok){if(ok)closeAppr();return ok;});
 };
+function billAttachmentFailure(error){
+  alert('附件讀取或上傳失敗，這次簽核尚未送出。\n\n'+friendlyErrorMessage(error,{action:'上傳繳費單附件'})+'\n\n已保留你選擇的檔案，請確認後重試。');
+  return false;
+}
+async function uploadBillActionFiles(b,recordNo,kind,files){
+  try{
+    if(files===undefined)files=await readStepFiles('bill-appr-files');
+    return await uploadAttachmentsToSupabase(files||[],{recordType:'bills',recordNo:recordNo,kind:kind,date:todayIso(),entityId:b.eid,departmentCode:b.dc});
+  }catch(error){billAttachmentFailure(error);return null;}
+}
 window.apprApproveBill=async function(id){
-  var b=BILLS.find(function(x){return x.id===id;});if(!b)return;
+  var b=BILLS.find(function(x){return x.id===id;});if(!b)return false;
   var billActionRows=billGroupRows(b);
   if(!billActionRows.some(canActBill)){alert('目前不是您的繳費單簽核步驟');return;}
   if(!requireApprovalRecordsActionAvailability('bills',billActionRows))return;
@@ -26247,11 +26258,14 @@ window.apprApproveBill=async function(id){
   if(!frozenExpectedSteps){alert('內容已更新，請重新開啟確認最新內容後再處理。');return;}
   var billBatchError=billBatchLimitError(billActionRows.length,'action');if(billBatchError){alert(billBatchError.message);return;}
   var billRevisionRows=billActionRows.filter(function(row){var step=activeStep(row);return step&&step.rk==='applicant_revision';});
-  var p=await approvalActionPayload('bill-appr-c','bill-appr-files','bill-appr-add-user');
+  var p;
+  try{p=await approvalActionPayload('bill-appr-c','bill-appr-files','bill-appr-add-user');}
+  catch(error){return billAttachmentFailure(error);}
   if(!approvalActionPreflight(p,{noteId:'bill-appr-c'}))return;
   if(billRevisionRows.length&&p.addUid){alert('補件重新送出不能同時加簽。請先完成補件；下一位簽核人可在收到單據後再加簽。');return;}
   var recordNo=billGroupCount(b)>1?billGroupNo(b):(b.no||b.id);
-  p.files=await uploadAttachmentsToSupabase(p.files||[],{recordType:'bills',recordNo:recordNo,kind:'bill_approval',date:todayIso(),entityId:b.eid,departmentCode:b.dc});
+  p.files=await uploadBillActionFiles(b,recordNo,'bill_approval',p.files);
+  if(p.files===null)return false;
   var done=0;
   if(billRevisionRows.length){
     var billRevisionSnapshots=billRevisionRows.map(billApprovalSnapshot);
@@ -26279,7 +26293,7 @@ window.apprApproveBill=async function(id){
   if(billGroupCount(b)>1)alert('整批繳費單已處理 '+done+' 張，簽核仍維持一組流程。');
 };
 window.apprReturnPreviousBill=async function(id){
-  var b=BILLS.find(function(x){return x.id===id;});if(!b)return;
+  var b=BILLS.find(function(x){return x.id===id;});if(!b)return false;
   var billActionRows=billGroupRows(b);
   if(!billActionRows.some(canActBill)){alert('目前不是您的繳費單簽核步驟');return;}
   if(!requireApprovalRecordsActionAvailability('bills',billActionRows))return;
@@ -26290,7 +26304,8 @@ window.apprReturnPreviousBill=async function(id){
   if(!confirmReturnPreviousAction(b,{kind:billGroupCount(b)>1?'整批繳費單':'繳費單',count:billGroupCount(b),recordNo:billGroupCount(b)>1?billGroupNo(b):(b.no||b.id)}))return false;
   var c=((el('bill-appr-c')||{}).value||'').trim()||'請上一關補充或修正後重新送出';
   var recordNo=billGroupCount(b)>1?billGroupNo(b):(b.no||b.id);
-  var files=await uploadAttachmentsToSupabase(await readStepFiles('bill-appr-files'),{recordType:'bills',recordNo:recordNo,kind:'bill_return',date:todayIso(),entityId:b.eid,departmentCode:b.dc});
+  var files=await uploadBillActionFiles(b,recordNo,'bill_return');
+  if(files===null)return false;
   var done=0;
   done=await returnBillGroupCore(b,c,files,frozenExpectedSteps);
   if(!done){alert('退回失敗：找不到上一關');return;}
@@ -26298,7 +26313,7 @@ window.apprReturnPreviousBill=async function(id){
 };
 window.apprRejectBill=async function(id){
   var c=(el('bill-appr-c')||{}).value||'';if(!c.trim()){alert('請填寫不通過原因');return;}
-  var b=BILLS.find(function(x){return x.id===id;});if(!b)return;
+  var b=BILLS.find(function(x){return x.id===id;});if(!b)return false;
   var billActionRows=billGroupRows(b);
   if(!billActionRows.some(canActBill)){alert('目前不是您的繳費單簽核步驟');return;}
   if(!requireApprovalRecordsActionAvailability('bills',billActionRows))return;
@@ -26306,7 +26321,8 @@ window.apprRejectBill=async function(id){
   if(!frozenExpectedSteps){alert('內容已更新，請重新開啟確認最新內容後再處理。');return;}
   var billBatchError=billBatchLimitError(billActionRows.length,'action');if(billBatchError){alert(billBatchError.message);return;}
   var recordNo=billGroupCount(b)>1?billGroupNo(b):(b.no||b.id);
-  var files=await uploadAttachmentsToSupabase(await readStepFiles('bill-appr-files'),{recordType:'bills',recordNo:recordNo,kind:'bill_reject',date:todayIso(),entityId:b.eid,departmentCode:b.dc});
+  var files=await uploadBillActionFiles(b,recordNo,'bill_reject');
+  if(files===null)return false;
   var rejected=await rejectBillGroupCore(b,c,files,frozenExpectedSteps);
   if(!rejected){buildBills();buildApprovals();return;}
   buildBills();buildApprovals();closeAppr();
@@ -37801,6 +37817,9 @@ function installActionFeedbackWrappers(){
     ['apprApproveInv','正在核准發票','發票已核准'],
     ['apprReturnPreviousInv','正在退回發票','發票已退回'],
     ['apprRejectInv','正在送出發票不通過','發票不通過已送出'],
+    ['apprApproveBill','正在上傳附件並送出簽核','繳費單簽核處理已送出'],
+    ['apprReturnPreviousBill','正在上傳附件並退回繳費單','繳費單已退回'],
+    ['apprRejectBill','正在上傳附件並送出不通過','繳費單不通過已送出'],
     ['issueInv','正在送出發票申請','發票申請已送出'],
     ['issueBatch','正在送出發票申請','發票申請已送出'],
     ['analyzeBatchInvoiceUpload','正在分析檔案','分析完成'],
