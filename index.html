@@ -37911,6 +37911,8 @@ function createFinanceReportingRuntime(){
     entities:function(){return ENTS;},departments:function(){return DEPTS;},users:function(){return USERS;},accounts:function(){return ACCTS;},
     ledger:function(){return LEDGER;},invoices:function(){return INVS;},requests:function(){return REQS;},
     postedAccountingLines:function(r){var view=postedAccountingView(r);return view&&view.status==='ready'?view.lines:null;},
+    postedAccountingRequired:function(r){return !!postedAccountingViewKey(r);},
+    ensurePostedAccountingLines:async function(r,retry){var view=postedAccountingView(r);if(retry&&view&&view.status!=='loading')POSTED_ACCOUNTING_VIEWS.delete(r);return ensurePostedAccountingView(r);},
     statementModel:function(eid,period,opts){return statementReportModel(eid,period,opts);},
     completeness:function(){return statementDataCompleteness();},
     exportSheets:function(eid,period,opts){return statementExportSheets(eid,period,opts);},
