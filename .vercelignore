@@ -138,3 +138,7 @@ supabase/.temp
 !scripts/finance_amount_search_fingerprint.sql
 !scripts/finance_amount_search_postflight.sql
 !scripts/finance_amount_search_canary.sql
+
+# Bill attachment regression checks retained in the sealed source.
+!scripts/check_bill_approval_attachment_flow.cjs
+!scripts/check_bill_attachment_browser.cjs

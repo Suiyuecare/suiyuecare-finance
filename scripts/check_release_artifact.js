@@ -117,6 +117,8 @@ function releaseSourceFiles() {
     'scripts/check_canonical_receivables.js',
     'scripts/check_receivables_engine.cjs',
     'scripts/test_reports_release_batch.mjs',
+    'scripts/check_bill_approval_attachment_flow.cjs',
+    'scripts/check_bill_attachment_browser.cjs',
     'scripts/check_document_amount_search.cjs',
     'scripts/check_document_amount_search_browser.cjs',
     'scripts/check_reporting_workspace_amount_search.cjs',
