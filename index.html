@@ -48,6 +48,9 @@
 <script src="assets/engines/document-search.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/reporting-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
 <link rel="stylesheet" href="assets/styles/reporting-workspace.css?v=__FINANCE_ASSET_VERSION__">
+<script src="assets/engines/audit-readiness-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/audit-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
+<link rel="stylesheet" href="assets/styles/audit-workspace.css?v=__FINANCE_ASSET_VERSION__">
 <script src="assets/engines/organization-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/accounting-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/accounting-corrections.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -946,7 +949,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
   <!-- 會計合規 -->
   <div class="pg" id="pg-compliance">
     <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:12px">
-      <div><div class="ph">會計合規工作台</div><div class="ps">關帳、沖銷調整、憑證封存、年度財報與審計軌跡</div></div>
+      <div><div class="ph">會計合規工作台</div><div class="ps">關帳、沖銷調整、憑證索引、年度財報與審計軌跡</div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <select id="comp-ent" onchange="buildCompliance()" style="width:auto;font-size:11px"></select>
         <select id="comp-period" onchange="buildCompliance()" style="width:auto;font-size:11px"><option value="2026-05">2026年5月</option><option value="2026-04">2026年4月</option><option value="2026-Q2">2026年Q2</option><option value="2026">2026年全年</option></select>
@@ -969,7 +972,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
       <div class="card" data-mobile-compliance-pane="close"><div class="chd"><span class="cht">2. 傳票作廢 / 沖銷 / 調整</span><button class="btn-g" data-mobile-desktop-only-action onclick="createAdjustmentVoucher()">建立調整</button></div><div class="mobile-desktop-recommended">為避免誤操作，建立沖銷／調整請使用桌機。</div><div style="padding:12px" id="voucher-adjust-box"></div></div>
     </div>
     <div class="g2" style="margin-bottom:12px">
-      <div class="card" data-mobile-compliance-pane="archive"><div class="chd"><span class="cht">3. 憑證保存與封存</span><button class="btn-g" data-mobile-desktop-only-action onclick="archivePeriodDocuments()">封存本期憑證</button></div><div class="mobile-desktop-recommended">正式封存請在桌機完整核對後操作。</div><div style="padding:12px" id="retention-box"></div></div>
+      <div class="card" data-mobile-compliance-pane="archive"><div class="chd"><span class="cht">3. 憑證保存與索引</span><button class="btn-g" data-mobile-desktop-only-action onclick="archivePeriodDocuments()">建立本期憑證索引</button></div><div class="mobile-desktop-recommended">請在桌機核對索引；保存紀錄不代表附件已封存。</div><div style="padding:12px" id="retention-box"></div></div>
       <div class="card" data-mobile-compliance-pane="archive"><div class="chd"><span class="cht">4. 年度財報匯出</span><button class="btn-g" onclick="exportAnnualPackage()">下載年度包</button></div><div style="padding:12px" id="annual-box"></div></div>
     </div>
     <div class="g2" style="margin-bottom:12px">
@@ -5478,15 +5481,19 @@ function saveComplianceStore(name,value){
 }
 async function auditLog(action,target,detail,meta){
   meta=meta||{};
+  var scopeIdentity=approvalFastBootstrapIdentity()+'|'+activeDataEnvironment();
   var row={id:'aud_'+Date.now()+'_'+Math.random().toString(36).slice(2),time:new Date().toISOString(),user:S.user?S.user.n:'系統',role:S.user?currentRoleKey():'system',action:action,target:target,detail:detail||'',eid:meta.eid||meta.entity_id||'',period:meta.period||'',dataEnv:activeDataEnvironment()};
-  AUDIT_LOGS.unshift(row);
-  saveComplianceStore('audit_logs',AUDIT_LOGS);
   var payload={id:row.id,action:row.action,target:row.target,detail:row.detail,actor_name:row.user,actor_role:row.role,created_at:row.time,entity_id:row.eid||null,period:row.period||null,data_environment:row.dataEnv};
   var ins=await dbInsert('compliance_audit_logs',payload);
   if(allowLocalPersistence()&&ins&&ins.ok===false&&ins.error&&isSchemaCacheMiss(ins.error.message)){
     delete payload.entity_id;delete payload.period;delete payload.data_environment;
-    await dbInsert('compliance_audit_logs',payload);
+    ins=await dbInsert('compliance_audit_logs',payload);
   }
+  if(!ins||ins.ok!==true||(requireRemotePersistence()&&!S.demoLogin&&(ins.skipped||ins.demo)))return {ok:false,error:ins&&ins.error||{message:'操作歷程尚未正式保存'}};
+  if(scopeIdentity!==approvalFastBootstrapIdentity()+'|'+activeDataEnvironment())return {ok:true,scopeChanged:true};
+  AUDIT_LOGS.unshift(row);
+  saveComplianceStore('audit_logs',AUDIT_LOGS);
+  return {ok:true};
 }
 function csvCell(v){
   return '"'+String(v==null?'':v).replace(/"/g,'""').replace(/\r?\n/g,' ')+'"';
@@ -6048,7 +6055,9 @@ function mapLedger(l){
   var linkedReq=(REQS||[]).find(function(r){return r.no===ref;});
   var linkedInv=(INVS||[]).find(function(i){return i.no===ref;});
   var dc=l.dc||l.department_code;
-  return {id:l.id||'',date:l.date||fromIsoDate(l.entry_date),desc:l.desc||l.description||'',eid:l.eid||l.entity_id||(linkedReq&&linkedReq.eid)||(linkedInv&&linkedInv.eid)||entityOfDept(dc),dc:dc,dr:num(l.dr||l.debit),cr:num(l.cr||l.credit),ac:l.ac||l.account_code,an:l.an||l.account_name,ref:ref,postingKey:l.postingKey||l.posting_key||'',sourceType:l.sourceType||l.source_type||'',sourceId:l.sourceId||l.source_id||'',sourceNo:l.sourceNo||l.source_no||'',voucherNo:l.voucherNo||l.voucher_no||'',voidedAt:l.voidedAt||l.voided_at||'',dataEnv:rowDataEnvironment(l),tenantId:rowTenantId(l)};
+  function auditValue(a,b){return Object.prototype.hasOwnProperty.call(l,a)?l[a]:Object.prototype.hasOwnProperty.call(l,b)?l[b]:null;}
+  var auditOriginal=l.auditOriginal||{date:auditValue('date','entry_date'),dr:auditValue('dr','debit'),cr:auditValue('cr','credit'),closingEntry:l.closingEntry===true||l.closing_entry===true,manualEntry:l.manualEntry===true||l.manual_entry===true||l.is_manual===true,voucherId:l.voucherId||l.voucher_id||''};
+  return {auditOriginal:auditOriginal,id:l.id||'',date:l.date||fromIsoDate(l.entry_date),desc:l.desc||l.description||'',eid:l.eid||l.entity_id||(linkedReq&&linkedReq.eid)||(linkedInv&&linkedInv.eid)||entityOfDept(dc),dc:dc,dr:num(l.dr||l.debit),cr:num(l.cr||l.credit),ac:l.ac||l.account_code,an:l.an||l.account_name,ref:ref,postingKey:l.postingKey||l.posting_key||'',sourceType:l.sourceType||l.source_type||'',sourceId:l.sourceId||l.source_id||'',sourceNo:l.sourceNo||l.source_no||'',voucherNo:l.voucherNo||l.voucher_no||'',voidedAt:l.voidedAt||l.voided_at||'',dataEnv:rowDataEnvironment(l),tenantId:rowTenantId(l)};
 }
 function mapRemoteDraft(r){
   var payload=r.payload||{};
@@ -26670,7 +26679,13 @@ function ensureComplianceFilters(){
   var ce=el('comp-ent');if(ce&&!ce.options.length)ce.innerHTML=ENTS.map(function(e){return'<option value="'+e.id+'">'+e.s+'</option>';}).join('');
 }
 function sourceDocsForPeriod(eid,period){
-  return REQS.filter(function(r){return inActiveDataEnvironment(r)&&inEntity(eid,r,'req')&&inPeriod(r.date,period)&&(normalizeFiles(r.files).length||normalizeFiles(r.passbookFiles).length||normalizeFiles(r.actualFiles).length);});
+  var rows=[];
+  [['request',REQS,'req'],['invoice',INVS,'inv'],['bill',BILLS,'bill']].forEach(function(group){
+    group[1].filter(function(r){return inActiveDataEnvironment(r)&&rowTenantId(r)===currentTenantId()&&inEntity(eid,r,group[2])&&inPeriod(accountingControlRecordDate(group[0],r),period);}).forEach(function(r){
+      rows.push(Object.assign({},r,{sourceDocumentType:group[0],files:accountingControlFiles(group[0],r),passbookFiles:[],actualFiles:[]}));
+    });
+  });
+  return rows;
 }
 function vouchersForPeriod(eid,period){
   return VOUCHERS.filter(function(v){return inActiveDataEnvironment(v)&&(!eid||v.eid===eid)&&inPeriod(v.date,period);});
@@ -27534,8 +27549,8 @@ window.buildCompliance=function buildCompliance(){
   renderAccountingControlCenter(eid,period);
   el('period-close-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">'+e.full+' · '+period+'<br>關帳後不允許直接改已入帳傳票，只能建立沖銷或調整傳票。</div><div style="margin-top:8px"><span class="badge '+(closed?'b-ok':'b-wait')+'">'+(closed?'已關帳':'尚未關帳')+'</span></div>';
   el('voucher-adjust-box').innerHTML='<div class="fg"><label class="fl">選擇原傳票</label><select id="adj-voucher">'+vs.map(function(v){return'<option value="'+v.id+'">'+v.no+' · '+v.desc.slice(0,24)+'</option>';}).join('')+'</select></div><div class="fr2"><div class="fg"><label class="fl">類型</label><select id="adj-type"><option value="reversal">沖銷傳票</option><option value="adjustment">調整傳票</option></select></div><div class="fg"><label class="fl">調整金額</label><input id="adj-amount" type="number" min="0" placeholder="留空則全額沖銷"></div></div><div class="fg"><label class="fl">原因</label><textarea id="adj-reason" rows="2" placeholder="請填寫錯帳原因、依據與附件位置"></textarea></div>';
-  el('retention-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">本期原始憑證 '+docs.length+' 張申請單，附件路徑採 年/月/法人/部門/單號/檔案類型，憑證、帳簿與財報保存至少 10 年。</div><div style="font-size:10px;color:#94a3b8;margin-top:5px">範例：expense_requests/2026/05/E1/A1101/EXP-2026-0001/request_files/檔名.pdf</div><div style="margin-top:8px">'+ARCHIVES.filter(function(a){return a.eid===eid&&a.period===period;}).map(function(a){return'<span class="badge b-ok" style="margin-right:4px">已封存 '+String(a.time).slice(0,10)+'</span>';}).join('')+'</div>';
-  el('annual-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">年度包包含三表 CSV、傳票清單、憑證對應表、關帳紀錄與 audit log。公司法年度結算可先用此包交由會計師或董事/負責人檢核。</div>';
+  el('retention-box').innerHTML='<div style="font-size:14px;color:#334155;line-height:1.7">本期來源單據 '+docs.length+' 張（含申請、發票與繳費；缺附件也列入）。此功能保存索引件數及保存目標日期，尚未複製、驗證或鎖定附件內容。</div><div style="margin-top:8px">'+ARCHIVES.filter(function(a){return inActiveDataEnvironment(a)&&a.eid===eid&&a.period===period;}).map(function(a){return'<span class="badge b-wait" style="margin-right:4px">已記錄索引 '+escAttr(String(a.time).slice(0,10))+' · 附件保存待驗證</span>';}).join('')+'</div>';
+  el('annual-box').innerHTML='<div style="font-size:14px;color:#334155;line-height:1.7">匯出目前載入的三表暫編資料、傳票清單及操作紀錄。完整查帳資料、權益調節、缺件與內部覆核請至「財務報表 → 會計師查帳」整理；此包不代表已完成會計師簽證。</div>';
   el('audit-box').innerHTML=(AUDIT_LOGS.slice(0,12).map(function(a){return'<div style="padding:6px 0;border-bottom:1px solid #f0e6d6"><div style="font-size:12px;color:#334155;font-weight:650">'+a.action+' · '+a.target+'</div><div style="font-size:10px;color:#94a3b8">'+String(a.time).slice(0,19).replace('T',' ')+' · '+a.user+' · '+a.detail+'</div></div>';}).join('')||'<div style="font-size:12px;color:#94a3b8">尚無 audit log</div>');
   el('lock-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">已入帳傳票 '+locked+' / '+vs.length+' 張鎖定。鎖定資料不可覆寫，系統僅允許沖銷與調整。</div>'+vs.slice(0,6).map(function(v){return'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0e6d6"><span style="font-size:11px">'+v.no+'</span><span class="badge '+(voucherLocked(v)?'b-ok':'b-gray')+'">'+(voucherLocked(v)?'鎖定':'未鎖定')+'</span></div>';}).join('');
   el('doc-map-box').innerHTML=(vs.slice(0,8).map(function(v){var req=REQS.find(function(r){return r.voucherId===v.id||r.no===v.reqId;});var count=req?normalizeFiles(req.files).length+normalizeFiles(req.passbookFiles).length+normalizeFiles(req.actualFiles).length:0;return'<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f0e6d6"><div><div style="font-size:12px;font-weight:650;color:#334155">'+v.no+'</div><div style="font-size:10px;color:#94a3b8">'+(req?req.no+' · '+req.tL:'未找到對應申請')+'</div></div><span class="badge '+(count?'b-ok':'b-rej')+'">'+count+' 份憑證</span></div>';}).join('')||'<div style="font-size:12px;color:#94a3b8">本期尚無傳票</div>');
@@ -27544,6 +27559,24 @@ window.buildCompliance=function buildCompliance(){
     el('backup-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">備份包包含目前資料環境的申請、發票、傳票、分類帳、繳費、系統設定與合規紀錄。還原前會要求輸入確認文字，並留下 audit log。</div>'
       +'<div style="margin-top:8px">'+(BACKUP_EVENTS||[]).slice(0,5).map(function(b){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #f0e6d6"><div><div style="font-size:11px;font-weight:650;color:#334155">'+(b.action==='restore'?'還原':'備份')+' · '+(b.status||'completed')+'</div><div style="font-size:10px;color:#94a3b8">'+String(b.time||'').slice(0,19).replace('T',' ')+' · '+(b.by||'—')+' · '+backupReadableSummary(b.summary)+'</div></div><span class="badge '+(b.action==='restore'?'b-purp':'b-blue')+'">'+dataEnvLabel(b.dataEnv)+'</span></div>';}).join('')+'</div>';
   }
+}
+var COMPLIANCE_ACTIONS_PENDING=new Set();
+async function commitComplianceAction(table,payload,apply,action,target,detail,meta){
+  var token=approvalFastBootstrapIdentity()+'|'+activeDataEnvironment(),operation=token+'|'+table+'|'+payload.entity_id+'|'+payload.period;
+  if(COMPLIANCE_ACTIONS_PENDING.has(operation)){alert('正在保存，請稍候並避免重複送出。');return false;}
+  COMPLIANCE_ACTIONS_PENDING.add(operation);
+  try{
+    var saved=await upsertComplianceRemote(table,payload);
+    if(saved!==true&&!S.demoLogin)throw new Error('伺服器尚未確認正式保存結果');
+    if(token!==approvalFastBootstrapIdentity()+'|'+activeDataEnvironment())return false;
+    apply();
+    try{var audit=await auditLog(action,target,detail,meta);if(audit&&audit.ok===false)alert('主要紀錄已保存，操作歷程尚未保存，請重新整理確認，勿重複執行主要操作。');}catch(error){alert('主要紀錄已保存，操作歷程同步失敗，請重新整理確認。');}
+    if(token===approvalFastBootstrapIdentity()+'|'+activeDataEnvironment())buildCompliance();
+    return true;
+  }catch(error){
+    if(token===approvalFastBootstrapIdentity()+'|'+activeDataEnvironment())alert('尚未確認保存完成：'+(error&&error.message||error)+'。請重新讀取正式資料確認後再試。');
+    return false;
+  }finally{COMPLIANCE_ACTIONS_PENDING.delete(operation);}
 }
 window.closeAccountingPeriod=async function(){
   var eid=compEntity(),period=compPeriod();
@@ -27557,10 +27590,7 @@ window.closeAccountingPeriod=async function(){
   if((openReq||openInv)&&!confirm('此期間仍有未完成資料：未結申請 '+openReq+' 張、未認列發票 '+openInv+' 張。確定仍要關帳嗎？'))return;
   if(!confirm('確定關帳 '+gE(eid).s+' '+period+'？關帳後此月份不能再直接新增、修改或刪除入帳資料，只能在未關帳月份建立沖銷或調整傳票。'))return;
   var row={id:'close_'+Date.now(),eid:eid,period:period,status:'closed',by:S.user?S.user.n:'系統',time:new Date().toISOString(),note:note,dataEnv:activeDataEnvironment()};
-  PERIOD_CLOSES.push(row);
-  saveComplianceStore('period_closes',PERIOD_CLOSES);
-  await upsertComplianceRemote('period_closes',{id:row.id,entity_id:eid,period:period,status:'closed',closed_by:row.by,closed_at:row.time,note:row.note,data_environment:row.dataEnv});
-  await auditLog('會計期間關帳',gE(eid).s+' '+period,note,{eid:eid,period:period});buildCompliance();
+  await commitComplianceAction('period_closes',{id:row.id,entity_id:eid,period:period,status:'closed',closed_by:row.by,closed_at:row.time,note:row.note,data_environment:row.dataEnv},function(){PERIOD_CLOSES.push(row);saveComplianceStore('period_closes',PERIOD_CLOSES);},'會計期間關帳',gE(eid).s+' '+period,note,{eid:eid,period:period});
 };
 function adjustmentEntriesFromVoucher(v,amount){
   var total=num(v&&v.total)||0;
@@ -27612,12 +27642,10 @@ window.createAdjustmentVoucher=async function(){
   await auditLog(type==='reversal'?'建立沖銷傳票':'建立調整傳票',nv.no,'原傳票 '+v.no+'；原因：'+reason,{eid:nv.eid,period:accountingPeriodOf(todayIso())});renderVouchers();buildCompliance();
 };
 window.archivePeriodDocuments=async function(){
+  if(!isFinance()){alert('只有授權會計人員可以建立憑證索引紀錄。');return;}
   var eid=compEntity(),period=compPeriod(),docs=sourceDocsForPeriod(eid,period);
   var row={id:'arc_'+Date.now(),eid:eid,period:period,docs:docs.length,fileCount:docs.reduce(function(s,r){return s+normalizeFiles(r.files).length+normalizeFiles(r.passbookFiles).length+normalizeFiles(r.actualFiles).length;},0),by:S.user?S.user.n:'系統',time:new Date().toISOString(),retainDocsUntil:(Number(period.slice(0,4))+10)+'-12-31',retainBooksUntil:(Number(period.slice(0,4))+10)+'-12-31',dataEnv:activeDataEnvironment()};
-  ARCHIVES.push(row);
-  saveComplianceStore('archives',ARCHIVES);
-  await upsertComplianceRemote('compliance_archives',{id:row.id,entity_id:eid,period:period,docs_count:row.docs,file_count:row.fileCount,archived_by:row.by,archived_at:row.time,retain_docs_until:row.retainDocsUntil,retain_books_until:row.retainBooksUntil,data_environment:row.dataEnv});
-  await auditLog('憑證封存',gE(eid).s+' '+period,'封存 '+docs.length+' 張申請單',{eid:eid,period:period});buildCompliance();
+  await commitComplianceAction('compliance_archives',{id:row.id,entity_id:eid,period:period,docs_count:row.docs,file_count:row.fileCount,archived_by:row.by,archived_at:row.time,retain_docs_until:row.retainDocsUntil,retain_books_until:row.retainBooksUntil,data_environment:row.dataEnv},function(){ARCHIVES.push(row);saveComplianceStore('archives',ARCHIVES);},'建立憑證索引紀錄',gE(eid).s+' '+period,'來源單據 '+docs.length+' 張；附件索引 '+row.fileCount+' 份，未驗證附件內容或封存保存',{eid:eid,period:period});
 };
 window.exportAnnualPackage=async function(){
   var eid=compEntity(),period=compPeriod(),e=gE(eid),vs=vouchersForPeriod(eid,period);
@@ -27630,12 +27658,8 @@ window.exportAnnualPackage=async function(){
 window.approveAnnualReview=async function(){
   if(!S.user||!currentUserIsPermanentCeo()){alert('年度審核建議由執行長帳號執行');return;}
   var eid=compEntity(),period=compPeriod();
-  ANNUAL_REVIEWS=ANNUAL_REVIEWS.filter(function(r){return !(r.eid===eid&&r.period===period);});
   var row={id:'rev_'+Date.now(),eid:eid,period:period,status:'approved',by:S.user.n,time:new Date().toISOString(),dataEnv:activeDataEnvironment()};
-  ANNUAL_REVIEWS.unshift(row);
-  saveComplianceStore('annual_reviews',ANNUAL_REVIEWS);
-  await upsertComplianceRemote('annual_reviews',{id:row.id,entity_id:eid,period:period,status:'approved',reviewed_by:row.by,reviewed_at:row.time,data_environment:row.dataEnv});
-  await auditLog('執行長年度審核',gE(eid).s+' '+period,'年度財報與合規包通過',{eid:eid,period:period});buildCompliance();
+  await commitComplianceAction('annual_reviews',{id:row.id,entity_id:eid,period:period,status:'approved',reviewed_by:row.by,reviewed_at:row.time,data_environment:row.dataEnv},function(){ANNUAL_REVIEWS=ANNUAL_REVIEWS.filter(function(r){return !(r.eid===eid&&r.period===period&&inActiveDataEnvironment(r));});ANNUAL_REVIEWS.unshift(row);saveComplianceStore('annual_reviews',ANNUAL_REVIEWS);},'執行長年度內部覆核',gE(eid).s+' '+period,'年度資料內部覆核；非會計師簽證意見',{eid:eid,period:period});
 };
 
 // ══ 開立發票 ══
@@ -37910,6 +37934,8 @@ function createFinanceReportingRuntime(){
     postingDepartments:function(eid){return deptSelectRowsForPreferred('',eid==='all'?null:eid);},
     entities:function(){return ENTS;},departments:function(){return DEPTS;},users:function(){return USERS;},accounts:function(){return ACCTS;},
     ledger:function(){return LEDGER;},invoices:function(){return INVS;},requests:function(){return REQS;},
+    auditLedger:function(eid){return statementScopedLedger(eid).map(function(r){return Object.assign({},r,r.auditOriginal||{});});},
+    auditSources:function(eid){return {invoices:INVS.filter(function(r){return inActiveDataEnvironment(r)&&rowTenantId(r)===currentTenantId()&&inEntity(eid,r,'inv');}),expense_requests:REQS.filter(function(r){return inActiveDataEnvironment(r)&&rowTenantId(r)===currentTenantId()&&inEntity(eid,r,'req');})};},
     postedAccountingLines:function(r){var view=postedAccountingView(r);return view&&view.status==='ready'?view.lines:null;},
     postedAccountingRequired:function(r){return !!postedAccountingViewKey(r);},
     ensurePostedAccountingLines:async function(r,retry){var view=postedAccountingView(r);if(retry&&view&&view.status!=='loading')POSTED_ACCOUNTING_VIEWS.delete(r);return ensurePostedAccountingView(r);},
@@ -37940,7 +37966,9 @@ function createFinanceReportingRuntime(){
   });
 }
 if(window.FinanceReportingWorkspace){
-  window.FinanceReportingWorkspace.install(createFinanceReportingRuntime());
+  var financeReportingRuntime=createFinanceReportingRuntime();
+  window.FinanceReportingWorkspace.install(financeReportingRuntime);
+  if(window.FinanceAuditWorkspace)window.FinanceAuditWorkspace.install(financeReportingRuntime);
   var legacyBuildReportsForWorkspace=window.buildReports;
   window.buildReports=function(){var result=legacyBuildReportsForWorkspace.apply(this,arguments);window.FinanceReportingWorkspace.renderReports();return result;};
   var legacyBuildDashForWorkspace=window.buildDash;

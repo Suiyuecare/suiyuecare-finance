@@ -142,6 +142,8 @@ try{
   writeLedger([...prerequisites,...guard.UTILITY_MIGRATIONS,...guard.REPORT_MIGRATIONS,...guard.AMOUNT_SEARCH_MIGRATIONS]);
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/reporting integrity migration batch/);
 writeLedger([...prerequisites,...guard.UTILITY_MIGRATIONS,...guard.REPORT_MIGRATIONS,...guard.AMOUNT_SEARCH_MIGRATIONS,...guard.REPORTING_INTEGRITY_MIGRATIONS]);
+assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/audit readiness migration batch/);
+writeLedger([...prerequisites,...guard.UTILITY_MIGRATIONS,...guard.REPORT_MIGRATIONS,...guard.AMOUNT_SEARCH_MIGRATIONS,...guard.REPORTING_INTEGRITY_MIGRATIONS,...guard.AUDIT_READINESS_MIGRATIONS]);
   assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
   assert.throws(()=>renderApply('reapply'),/must be pending/);
 

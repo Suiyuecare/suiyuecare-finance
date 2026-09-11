@@ -128,6 +128,21 @@ function releaseSourceFiles() {
     'scripts/finance_amount_search_postflight.sql',
     'scripts/finance_amount_search_canary.sql',
   'scripts/finance_reporting_integrity_fingerprint.sql',
+  'assets/engines/audit-readiness-engine.js',
+  'assets/engines/audit-workspace.js',
+  'assets/styles/audit-workspace.css',
+  'docs/finance-cpa-audit-guide.md',
+  'docs/finance-audit-readiness-contract.md',
+  'scripts/check_audit_readiness_engine.cjs',
+  'scripts/check_finance_audit_readiness.cjs',
+  'scripts/check_audit_workspace_runtime.cjs',
+  'scripts/check_compliance_commit.cjs',
+  'scripts/check_audit_workspace_browser.cjs',
+  'scripts/test_audit_readiness_release_batch.mjs',
+  'scripts/finance_audit_readiness_fingerprint.sql',
+  'scripts/finance_audit_readiness_postflight.sql',
+  'scripts/finance_audit_readiness_canary.sql',
+  'scripts/fixtures/finance_audit_readiness_fixture.cjs',
   'scripts/finance_ar_reconciliation_postflight.sql',
   'scripts/finance_ar_reconciliation_canary.sql',
   'scripts/finance_tax_source_integrity_postflight.sql',
@@ -286,7 +301,7 @@ if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(builtIndex)) {
   fail('artifact contains a forbidden Supabase elevated key');
 }
 
-const requiredReportArtifacts=["assets/engines/document-search.js","assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
+const requiredReportArtifacts=["assets/engines/audit-readiness-engine.js","assets/engines/audit-workspace.js","assets/styles/audit-workspace.css","assets/engines/document-search.js","assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
 for(const item of requiredReportArtifacts){
   const built=path.join(OUTPUT,item),source=path.join(ROOT,item);
   if(!fs.existsSync(built)||!fs.readFileSync(built).equals(fs.readFileSync(source)))fail('report artifact is missing or differs from its exact source: '+item);
