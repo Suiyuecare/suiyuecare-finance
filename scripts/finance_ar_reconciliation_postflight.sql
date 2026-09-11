@@ -16,6 +16,7 @@ begin
   or p.prosrc not like '%private.finance_expense_optional_permission_allows(%' then raise exception 'AR reconciliation scope predicates missing';end if;
  select * into p from pg_proc where oid=to_regprocedure('private.finance_ar_reconciliation_v1(uuid,text,date,text,text,jsonb)');
  if p.prosrc not like '%''scope_unverified''%' or p.prosrc not like '%''unmappedDebitAmount''%' or p.prosrc not like '%''unmappedCreditAmount''%'
+  or p.prosrc not like '%sum(l.debit) filter%' or p.prosrc not like '%sum(l.credit) filter%' or p.prosrc not like '%(l.debit<>0 or l.credit<>0)%'
   or p.prosrc not like '%''needsReview'',v_count>0 or v_difference<>0%' then raise exception 'AR reconciliation gross difference/null semantics missing';end if;
  select * into p from pg_proc where oid=to_regprocedure('private.finance_receivables_payload_v1(date,text,text,text,boolean)');
  if p.oid is null or not p.prosecdef or p.proconfig is distinct from array['search_path=""']::text[]

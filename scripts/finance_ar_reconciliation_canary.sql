@@ -28,14 +28,14 @@ begin
  insert into public.ledger_entries(tenant_id,data_environment,entry_date,entity_id,department_code,debit,credit,account_code,account_name,reference_no,posting_key,source_type,source_id,source_no)
  select t,'test',d,'E6','J1101',dr,cr,ac,private.finance_tenant_account_name(t,ac),prefix||suffix,prefix||suffix||':'||ac,
   case when suffix='invoice' then 'invoice' else 'adjustment' end,prefix||suffix,prefix||suffix
- from (values('invoice','1123',100::numeric,0::numeric),('invoice','1112',0,100),('unmatched-debit','1123',70,0),('unmatched-debit','1112',0,70),('unmatched-credit','1123',0,70),('unmatched-credit','1112',70,0)) x(suffix,ac,dr,cr);
+ from (values('invoice','1123',100::numeric,0::numeric),('invoice','1112',0,100),('unmatched-debit','1123',70,0),('unmatched-debit','1112',0,70),('unmatched-credit','1123',0,70),('unmatched-credit','1112',70,0),('unmatched-same-row','1123',70,70)) x(suffix,ac,dr,cr);
  execute 'set local role authenticated';
  r:=public.finance_receivables_v1(d,'E6','J1101','test')->'reconciliation';
  if r->>'reconciliationVisible' is distinct from 'true' or (r->>'ledgerNet')::numeric<>(b->>'ledgerNet')::numeric+100
   or (r->>'mappedLedgerNet')::numeric<>(b->>'mappedLedgerNet')::numeric+100
-  or (r->>'unmappedDebitAmount')::numeric<>(b->>'unmappedDebitAmount')::numeric+70
-  or (r->>'unmappedCreditAmount')::numeric<>(b->>'unmappedCreditAmount')::numeric+70
-  or (r->>'unmappedEntryCount')::bigint<>(b->>'unmappedEntryCount')::bigint+2
+  or (r->>'unmappedDebitAmount')::numeric<>(b->>'unmappedDebitAmount')::numeric+140
+  or (r->>'unmappedCreditAmount')::numeric<>(b->>'unmappedCreditAmount')::numeric+140
+  or (r->>'unmappedEntryCount')::bigint<>(b->>'unmappedEntryCount')::bigint+3
   or r->>'needsReview' is distinct from 'true' then raise exception 'AR reconciliation lost signed unlinked journal evidence';end if;
  production_after:=public.finance_receivables_v1(d,'E6','J1101','production');
  if production_after is distinct from production_before then raise exception 'AR reconciliation test fixture crossed production scope';end if;

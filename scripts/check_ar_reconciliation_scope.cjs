@@ -33,6 +33,15 @@ let checks=0;function check(label,value){assert.ok(value,label);checks++;console
  await admin(db,'select 1');await db.exec('begin;'+migration+'\nrollback;');check('new migration rehearses and rolls back helpers',(await db.query("select to_regprocedure('private.finance_ar_reconciliation_v1(uuid,text,date,text,text,jsonb)') is null x")).rows[0].x);
  await db.exec('begin;'+migration+'\ncommit;');
  let r=(await readAr()).reconciliation;check('equal debit/credit differences remain visible without changing net',r.reconciliationVisible===true&&r.ledgerNet===100&&r.mappedLedgerNet===100&&r.unmappedDebitAmount===70&&r.unmappedCreditAmount===70&&r.unmappedLedgerNet===0&&r.unmappedEntryCount===2&&r.needsReview===true);
+ // Production has no constraint forbidding both sides on one ledger row. A
+ // net-zero row must not erase the gross evidence or its review warning.
+ for(const [debit,credit,label] of [[70,70,'same-row equal debit and credit retain both gross amounts and review warning'],[90,50,'same-row unequal debit and credit retain gross amounts rather than their residual'],[0,0,'same-row zero debit and credit do not create a false review warning']]){
+  await admin(db,'begin');
+  for(const [ac,dr,cr] of [['1123',debit,credit],['1112',credit,debit]])await db.query(`insert into public.ledger_entries(tenant_id,data_environment,entry_date,entity_id,department_code,debit,credit,account_code,posting_key,source_type,source_id) values($1,'test',$2,'FICT-CO','FICT-SAME-ROW',$3,$4,$5,$6,'adjustment','FICT-SAME-ROW')`,[tenant,today,dr,cr,ac,'FICT-SAME-ROW:'+ac]);
+  r=(await readAr('FICT-CO','FICT-SAME-ROW')).reconciliation;
+  check(label,r.reconciliationVisible===true&&r.ledgerNet===debit-credit&&r.mappedLedgerNet===0&&r.unmappedDebitAmount===debit&&r.unmappedCreditAmount===credit&&r.unmappedLedgerNet===debit-credit&&r.unmappedEntryCount===(debit||credit?1:0)&&r.needsReview===Boolean(debit||credit));
+  await admin(db,'rollback');
+ }
  await journal('FICT-OTHER-DEPT',50,{department:'OTHER'});await journal('FICT-OTHER-CO',60,{entity:'FICT-OTHER'});await journal('FICT-OTHER-ENV',80,{env:'production'});await journal('FICT-OTHER-TENANT',90,{tenant:other});await journal('FICT-FUTURE',100,{date:'2099-01-01'});await journal('FICT-VOID',110,{voided:true});
  r=(await readAr('FICT-CO','FICT-D')).reconciliation;check('company department tenant environment cutoff and void bounds preserved',r.unmappedDebitAmount===70&&r.unmappedCreditAmount===70&&r.ledgerNet===100&&r.unmappedEntryCount===2);
  r=(await readAr('FICT-OTHER')).reconciliation;check('selected second authorized company has independent totals',r.ledgerNet===60&&r.mappedLedgerNet===0&&r.unmappedDebitAmount===60);
