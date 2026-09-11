@@ -14826,7 +14826,9 @@ function statementScopedLedger(eid,departmentCode){
 }
 function statementCashEvents(eid,departmentCode){
   return requestCashEvents(eid,'all',false).map(function(event){
-    var req=REQS.find(function(r){return r.no===event.ref&&inActiveDataEnvironment(r)&&rowTenantId(r)===currentTenantId();})||{};
+    if(event.sourceId&&event.eid)return event;
+    var candidates=REQS.filter(function(r){return r.no===event.ref&&inActiveDataEnvironment(r)&&rowTenantId(r)===currentTenantId()&&inEntity(eid,r,'req');});
+    var req=candidates.length===1?candidates[0]:{};
     return Object.assign({},event,{eid:reqEntity(req),dc:req.dc||'',sourceId:req.id||''});
   }).filter(function(event){return !departmentCode||departmentCode==='all'||event.dc===departmentCode;});
 }
@@ -15680,6 +15682,18 @@ function isDuplicateRequestCashLedger(row){
   var r=requestByRef(row&&row.ref);
   return !!(r&&requestCashPostedAt(r)&&isCashAcct(row.ac));
 }
+function requestStatementCashEvent(r,stage,event){
+  var fp=r.formPayload||{},eventId=r.id?'expense:'+r.id+':'+stage:'',voucherNo='',sourceType='expense_request';
+  if(stage==='disbursement'&&r.type==='advance_request'){voucherNo=fp.advanceDisbursementVoucherId||'';sourceType='advance_disbursement';}
+  else voucherNo=(stage==='settlement'&&fp.advanceFinalVoucherId)||r.voucherId||r.voucher_id||'';
+  if(stage==='correction'){
+    var originals=(fp.correctionCashEvents||[]).filter(function(x){return x&&x.correctionId===event.correctionId&&normDate(x.date)===normDate(event.date)&&Number(x.amount)===Number(event.amount);});
+    var original=originals.length===1?originals[0]:{};
+    eventId=eventId&&event.correctionId&&original.bankTransactionId?eventId+':'+event.correctionId+':'+original.bankTransactionId:'';
+    event=Object.assign({},event,{bankTransactionId:original.bankTransactionId||''});
+  }
+  return Object.assign({},event,{eventId:eventId,eventType:stage,eid:reqEntity(r),dc:r.dc||'',sourceId:r.id||'',sourceTypes:[sourceType],voucherNo:voucherNo});
+}
 function requestCashEvents(eid,period,before){
   var events=[];
   REQS.forEach(function(r){
@@ -15689,19 +15703,19 @@ function requestCashEvents(eid,period,before){
     var baseDate=fromIsoDate(posted)||todaySlash();
     var amt=requestCashAmount(r);
     var isInvest=/^(15|16)/.test(String(r.dr||''));
-    events.push({date:baseDate,amount:-amt,kind:isInvest?'inv':'op',ref:r.no,desc:(r.tL||'申請')+' 現金撥付 — '+(r.app||'')});
+    events.push(requestStatementCashEvent(r,'disbursement',{date:baseDate,amount:-amt,kind:isInvest?'inv':'op',ref:r.no,desc:(r.tL||'申請')+' 現金撥付 — '+(r.app||'')}));
     var fp=r.formPayload||{};
-    if(typeof expenseCorrectionCashEvents==='function')events=events.concat(expenseCorrectionCashEvents(r,isInvest?'inv':'op'));
+    if(typeof expenseCorrectionCashEvents==='function')events=events.concat(expenseCorrectionCashEvents(r,isInvest?'inv':'op').map(function(event){return requestStatementCashEvent(r,'correction',event);}));
     if(r.type==='advance_request'&&fp.advanceSettlementConfirmed&&fp.advanceFinalSettledAt){
       var diff=num(fp.advanceSettlementDifference);
       if(diff){
-        events.push({
+        events.push(requestStatementCashEvent(r,'settlement',{
           date:fromIsoDate(fp.advanceFinalSettledAt)||todaySlash(),
           amount:-diff,
           kind:'op',
           ref:r.no,
           desc:diff>0?'預支申請多補匯款 — '+(r.app||''):'預支申請退回公司 — '+(r.app||'')
-        });
+        }));
       }
     }
   });
