@@ -155,3 +155,4 @@ supabase/.temp
 !scripts/check_ar_reconciliation_scope.cjs
 !scripts/check_ar_export_reconciliation_ui.cjs
 !scripts/check_department_statement_export.cjs
+!scripts/fixtures/finance_department_new_form_baseline_20260911.sql

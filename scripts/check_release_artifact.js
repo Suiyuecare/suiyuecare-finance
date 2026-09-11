@@ -134,6 +134,7 @@ function releaseSourceFiles() {
   'scripts/finance_tax_source_integrity_canary.sql',
   'scripts/test_reporting_integrity_release_batch.mjs',
   'scripts/check_tax_source_integrity.cjs',
+  'scripts/fixtures/finance_department_new_form_baseline_20260911.sql',
   'scripts/check_tax_source_runtime.cjs',
   'scripts/check_ar_reconciliation_scope.cjs',
   'scripts/check_ar_export_reconciliation_ui.cjs',
