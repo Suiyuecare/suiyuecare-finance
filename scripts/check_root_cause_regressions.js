@@ -128,14 +128,14 @@ check('代理簽核人不會沿用原簽核人的本機顯示資料',
 check('正式建單後的必要附加同步進入可持久化冪等 outbox',
   index.includes("EXPENSE_POST_COMMIT_OUTBOX_KEY_BASE='finance_expense_post_commit_outbox_v1'")
     && expenseSubmit.includes('ensureExpensePostCommitOutbox(committedRecord,newNotif)')
-    && expenseSubmit.includes("runExpensePostCommitOutbox({reason:'new_submission'})")
+    && expenseSubmit.includes("runExpensePostCommitOutbox({reason:'new_submission',identity:submissionIdentity})")
     && index.includes("dbUpsert('notifications',notifDbRow(entry.notification))")
     && index.includes("dbInsertOnce('notification_delivery_events',row)")
     && index.includes("persistAccountingLinesRemote(entry.record,{insertOnly:true})"));
 check('正式建單後直到 outbox 與成功畫面完成才解除重送鎖定',
   expenseSubmit.indexOf('ensureExpensePostCommitOutbox(committedRecord,newNotif)')<expenseSubmit.lastIndexOf('clearExpenseSubmissionPending()')
     && expenseSubmit.indexOf("openApprovalTab('mine')")<expenseSubmit.lastIndexOf('clearExpenseSubmissionPending()')
-    && index.includes('finalizeRecoveredExpenseSubmission(pending,readback.record,options)'));
+    && index.includes('finalizeRecoveredExpenseSubmission(pending,readback.record,Object.assign({},options,{identity:identity}))'));
 check('申請人部門主管必須恰好一位且在附件上傳前 fail closed',
   index.includes("if((key==='dept_manager'||actorKind==='dept_manager')&&candidates.length!==1)")
     && expenseSubmit.indexOf('prepareApprovalRouteForSubmit(')<expenseSubmit.indexOf('uploadPreparedAttachmentSet(no)'));
@@ -219,6 +219,7 @@ async function runBehaviorRegressions() {
   const insertCalls = {notification_delivery_events:0};
   const outboxContext = browserContext({
     DEFAULT_TENANT_ID:'tenant-default',
+    currentFinanceAuthUserId:()=> 'fixture-auth-a',financeWorkspaceIdentityBlocked:false,
     S:{user:{id:'applicant-1',n:'申請人',email:'applicant@example.com'},demoLogin:false},
     NOTIFS:[],
     currentTenantId:()=>'tenant-1',
@@ -249,6 +250,7 @@ async function runBehaviorRegressions() {
     recordOpsEvent:()=>({})
   });
   vm.runInContext(section('function isPostgresUniqueConflict', 'function accountingLineDbRow'), outboxContext);
+  vm.runInContext(section('function expenseSubmissionOperationIdentity', 'async function readExpenseSubmissionCommit'), outboxContext);
   vm.runInContext(section("var EXPENSE_POST_COMMIT_OUTBOX_KEY_BASE", 'async function finalizeRecoveredExpenseSubmission'), outboxContext);
   const record={id:'r-1',no:'20260827001',app:'申請人',applicantId:'applicant-1',type:'expense_reimbursement',tL:'費用申請',amt:100,files:[{name:'receipt.png',contents:'sensitive'}],passbookFiles:[{name:'bank.png'}],steps:[{r:'主管',a:''}],dataEnv:'production',formPayload:{submissionAttemptId:'attempt-1',accountingLines:[{id:'line_1',grossAmount:100}],bankAccount:'secret'}};
   check('behavior: committed request creates a durable post-commit outbox', outboxContext.ensureExpensePostCommitOutbox(record, null).ok && local.size===1 && session.size===1);
@@ -326,6 +328,7 @@ async function runBehaviorRegressions() {
   const pendingLocal=new Map(),pendingSession=new Map(),finalizeOrder=[];
   const recoveryContext=browserContext({
     DEFAULT_TENANT_ID:'tenant-default',
+    currentFinanceAuthUserId:()=> 'fixture-auth-a',financeWorkspaceIdentityBlocked:false,
     S:{user:{id:'applicant-1'},nrSubmissionConfirmationPending:null},
     currentTenantId:()=> 'tenant-1',
     activeDataEnvironment:()=> 'production',
@@ -343,6 +346,7 @@ async function runBehaviorRegressions() {
     alert:()=>{}
   });
   vm.runInContext(section("var EXPENSE_SUBMISSION_PENDING_KEY_BASE", 'var EXPENSE_POST_COMMIT_OUTBOX_KEY_BASE'), recoveryContext);
+  vm.runInContext(section('function expenseSubmissionOperationIdentity', 'async function readExpenseSubmissionCommit'), recoveryContext);
   vm.runInContext(section('async function finalizeRecoveredExpenseSubmission', 'async function reconcilePendingExpenseSubmission'), recoveryContext);
   const pendingSaved=recoveryContext.saveExpenseSubmissionPending(record,null);
   recoveryContext.S.nrSubmissionConfirmationPending=null;
