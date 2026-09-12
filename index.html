@@ -8345,44 +8345,48 @@ function clearApprovalFastBootstrapState(){
   approvalFastSummaryRpcPromise=null;approvalFastSummaryRpcIdentity='';
   APPROVAL_FAST_BOOTSTRAP={status:'idle',identity:'',verified:false,tasksVerified:false,hydrated:false,counts:null,summaryCounts:null,cachedCounts:null,updatedAt:'',readOnly:true,canAct:false,error:'',rpcMissing:false,summaryRpcMissing:false,lastRpcResult:null,lastRpcAt:0,lastSummaryResult:null,lastSummaryAt:0,summaryItems:[],summaryPage:null,summaryFingerprint:'',verifiedSummaryFingerprint:''};
   APPROVAL_SOURCE_COMPLETENESS={identity:'',expense_requests:false,bills:false,invoices:false,draft_requests:false,updatedAt:''};
+  if(APPROVAL_HISTORY_RUNTIME.controller){try{APPROVAL_HISTORY_RUNTIME.controller.abort();}catch(_){} }
   APPROVAL_HISTORY_RUNTIME={identity:'',status:'idle',items:[],total:0,allTotal:0,page:1,limit:50,query:'',error:'',updatedAt:'',promise:null,requestSeq:(APPROVAL_HISTORY_RUNTIME.requestSeq||0)+1};
   if(approvalHistorySearchTimer){clearTimeout(approvalHistorySearchTimer);approvalHistorySearchTimer=null;}
   APPROVAL_ROW_RUNTIME={identity:'',trustedFingerprint:'',trustedTasksVerified:false,trustedSummaryItems:[],trustedTasks:[],verified:{},pending:{},unavailable:{}};
   S.approvalRuntimeTasks=[];
   updateApprovalTodoBadge({resetTabs:true});
 }
+function approvalHistoryIdentity(){
+  if(!S.user||S.demoLogin||(typeof financeWorkspaceIdentityBlocked!=='undefined'&&financeWorkspaceIdentityBlocked))return '';
+  return [approvalFastBootstrapIdentity(),String(S.user.id||''),String(activeDataEnvironment())].join('|');
+}
 function approvalHistoryRuntimeForCurrentUser(){
-  var identity=approvalFastBootstrapIdentity();
-  if(!identity)return APPROVAL_HISTORY_RUNTIME;
-  if(APPROVAL_HISTORY_RUNTIME.identity&&APPROVAL_HISTORY_RUNTIME.identity!==identity){
+  var identity=approvalHistoryIdentity();
+  if(APPROVAL_HISTORY_RUNTIME.identity!==identity){
+    if(APPROVAL_HISTORY_RUNTIME.controller){try{APPROVAL_HISTORY_RUNTIME.controller.abort();}catch(_){} }
     APPROVAL_HISTORY_RUNTIME={identity:identity,status:'idle',items:[],total:0,allTotal:0,page:1,limit:50,query:'',error:'',updatedAt:'',promise:null,requestSeq:(APPROVAL_HISTORY_RUNTIME.requestSeq||0)+1};
-  }else if(!APPROVAL_HISTORY_RUNTIME.identity){
-    APPROVAL_HISTORY_RUNTIME.identity=identity;
   }
   return APPROVAL_HISTORY_RUNTIME;
 }
 function approvalHistoryPayloadIdentityMatches(payload,identity){
   var actor=payload&&payload.identity||{};
   return !!(identity
-    &&identity===approvalFastBootstrapIdentity()
+    &&identity===approvalHistoryIdentity()
+    &&String(actor.auth_user_id||'')===String((S.user&&(S.user.authUserId||S.user.auth_user_id))||'')
     &&String(actor.finance_user_id||'')===String((S.user&&S.user.id)||'')
     &&String(actor.tenant_id||'')===String(currentTenantId()||DEFAULT_TENANT_ID)
     &&String(actor.data_environment||'')===String(activeDataEnvironment()));
 }
 function approvalHistoryItemsFromPayload(payload){
-  var mapped=[];
+  var mapped=[],nextReqs=REQS,nextBills=BILLS,nextInvs=INVS;
   (Array.isArray(payload&&payload.items)?payload.items:[]).forEach(function(entry){
     var table=String(entry.record_type||''),sourceRows=Array.isArray(entry.source_rows)?entry.source_rows:[entry.source_row].filter(Boolean);
     var rows=[];
     if(table==='expense_requests'){
       rows=sourceRows.map(mapReq);
-      REQS=mergeRemoteRowsByKey(rows,REQS);
+      nextReqs=mergeRemoteRowsByKey(rows,nextReqs);
     }else if(table==='bills'){
       rows=sourceRows.map(mapBill);
-      BILLS=mergeRemoteRowsByKey(rows,BILLS);
+      nextBills=mergeRemoteRowsByKey(rows,nextBills);
     }else if(table==='invoices'){
       rows=sourceRows.map(mapInv);
-      INVS=mergeRemoteRowsByKey(rows,INVS);
+      nextInvs=mergeRemoteRowsByKey(rows,nextInvs);
     }
     var recordId=String(entry.record_id||''),raw=rows.find(function(row){return String(row&&row.id||'')===recordId;})||rows[0];
     if(!raw)return;
@@ -8398,6 +8402,7 @@ function approvalHistoryItemsFromPayload(payload){
       historyParticipantSteps:Array.isArray(entry.participant_steps)?entry.participant_steps:[]
     });
   });
+  REQS=nextReqs;BILLS=nextBills;INVS=nextInvs;
   return mapped;
 }
 function approvalHistoryStatusHtml(){
@@ -8406,65 +8411,92 @@ function approvalHistoryStatusHtml(){
     return '<div class="card" style="margin-bottom:10px;padding:11px 13px;color:#8b7358;font-size:11px">正在載入你曾經被指派或實際處理過的流程；既有紀錄仍可查看。</div>';
   }
   if(runtime.status==='error'){
-    return '<div class="card" style="margin-bottom:10px;padding:11px 13px;border-color:#fecaca;background:#fff1f2;color:#991b1b;font-size:11px">已簽核紀錄暫時無法更新：'
+    return '<div class="card" style="margin-bottom:10px;padding:11px 13px;border-color:#fecaca;background:#fff1f2;color:#991b1b;font-size:11px">簽核紀錄暫時無法更新：'
       +escAttr(runtime.error||'請稍後重試')
-      +' <button class="btn-g" style="margin-left:8px" onclick="loadApprovalHistoryPage({force:true})">重新載入</button></div>';
+      +' <button type="button" class="btn-g" style="margin-left:8px;min-height:44px!important" onclick="loadApprovalHistoryPage({force:true})">重新載入</button></div>';
   }
   return'';
 }
+function approvalHistoryValidatePage(payload,page,query){
+  function count(value){return typeof value==='number'&&Number.isSafeInteger(value)&&value>=0;}
+  var meta=payload&&payload.page,items=payload&&payload.items,offset=(page-1)*50;
+  if(!payload||!count(payload.total)||!count(payload.all_total)||payload.all_total<payload.total||!meta||meta.limit!==50||meta.offset!==offset
+    ||meta.has_more!==(offset+50<payload.total)||!Array.isArray(items)||items.length!==Math.min(50,Math.max(0,payload.total-offset))){
+    throw new Error('簽核紀錄回應不完整，尚未確認總筆數或分頁；請重新載入。');
+  }
+  var keys={};
+  items.forEach(function(entry){
+    var table=entry&&entry.record_type,key=entry&&entry.history_key,rows=entry&&entry.source_rows;
+    if(['expense_requests','bills','invoices'].indexOf(table)<0||typeof key!=='string'||!key||keys[key]||!Array.isArray(rows)||!rows.length
+      ||!rows.some(function(row){return row&&String(row.id)===String(entry.record_id);})
+      ||rows.some(function(row){return !row||String(row.tenant_id)!==String(currentTenantId()||DEFAULT_TENANT_ID)||row.data_environment!==activeDataEnvironment();})){
+      throw new Error('簽核紀錄來源或批次資料不完整，未套用部分回應；請重新載入。');
+    }
+    keys[key]=true;
+  });
+  return true;
+}
+function paintApprovalHistoryState(){
+  var runtime=approvalHistoryRuntimeForCurrentUser();
+  try{updateApprovalTodoBadge({tabCounts:{history:runtime.updatedAt?runtime.allTotal:'—'}});}catch(error){console.warn('history badge paint failed',error);}
+  if(S.page!=='approvals'||S.aT!=='h')return;
+  try{buildApprovals();}catch(error){
+    console.error('history view paint failed',error);
+    var slot=el('appr-list');if(slot)slot.innerHTML='<div class="card" role="alert" style="padding:14px">簽核紀錄畫面未能更新，請重新載入；資料尚未被當成空集合。<br><button type="button" class="btn-g" style="min-height:44px!important" onclick="loadApprovalHistoryPage({force:true})">重新載入簽核紀錄</button></div>';
+  }
+}
 function loadApprovalHistoryPage(options){
   options=options||{};
-  var client=getSb(),identity=approvalFastBootstrapIdentity(),runtime=approvalHistoryRuntimeForCurrentUser();
-  if(!client||!identity||S.demoLogin)return Promise.resolve({ok:false,skipped:true});
-  var page=Math.max(1,Number(options.page||S.apprPage||runtime.page||1));
+  var identity=approvalHistoryIdentity(),runtime=approvalHistoryRuntimeForCurrentUser();
+  if(!identity)return Promise.resolve({ok:false,skipped:true});
+  var page=Math.max(1,Math.floor(Number(options.page||S.apprPage||runtime.page||1))||1);
   var query=String(options.query!=null?options.query:(S.apprQuery||'')).trim();
-  var limit=50,signature=[identity,page,query,activeDataEnvironment()].join('|');
+  var limit=50,environment=activeDataEnvironment(),signature=JSON.stringify([identity,page,query]);
   if(runtime.promise&&runtime.requestSignature===signature&&!options.force)return runtime.promise;
-  if(!options.force&&runtime.status==='ready'&&runtime.identity===identity&&runtime.page===page&&runtime.query===query)return Promise.resolve({ok:true,reused:true,total:runtime.total,items:runtime.items});
+  if(!options.force&&runtime.status==='ready'&&runtime.page===page&&runtime.query===query)return Promise.resolve({ok:true,reused:true,total:runtime.total,items:runtime.items});
   var requestSeq=(runtime.requestSeq||0)+1;
-  runtime.requestSeq=requestSeq;
-  runtime.identity=identity;
-  runtime.status='loading';
-  runtime.error='';
-  runtime.page=page;
-  runtime.limit=limit;
-  runtime.query=query;
-  runtime.requestSignature=signature;
-  updateApprovalTodoBadge({tabCounts:{history:runtime.updatedAt?runtime.allTotal:'—'}});
-  if(S.page==='approvals'&&S.aT==='h')buildApprovals();
-  var promise=withOperationTimeout(client.rpc('finance_approval_participant_history_for_current_user',{
-    p_limit:limit,
-    p_offset:(page-1)*limit,
-    p_search:query||null,
-    p_data_environment:activeDataEnvironment()
-  }),'個人簽核歷史',12000).then(function(result){
-    if(identity!==approvalFastBootstrapIdentity()||runtime.requestSeq!==requestSeq)return{ok:false,stale:true};
+  if(runtime.controller){try{runtime.controller.abort();}catch(_){} }
+  var controller=typeof AbortController!=='undefined'?new AbortController():null;
+  runtime.requestSeq=requestSeq;runtime.controller=controller;
+  if(runtime.page!==page||runtime.query!==query)runtime.items=[];
+  runtime.identity=identity;runtime.status='loading';runtime.error='';runtime.page=page;runtime.limit=limit;runtime.query=query;runtime.requestSignature=signature;
+  function current(){return APPROVAL_HISTORY_RUNTIME===runtime&&identity===approvalHistoryIdentity()&&runtime.requestSeq===requestSeq;}
+  // Install the promise before rendering. Synchronous client/paint exceptions
+  // must not strand the runtime in loading before its timeout has even started.
+  var promise=Promise.resolve().then(function(){
+    if(!current())return null;
+    var client=getSb();if(!client||typeof client.rpc!=='function')throw new Error('簽核紀錄服務尚未連線，請重新載入。');
+    var operation=client.rpc('finance_approval_participant_history_for_current_user',{p_limit:limit,p_offset:(page-1)*limit,p_search:query||null,p_data_environment:environment});
+    if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
+    return withOperationTimeout(operation,'個人簽核歷史',12000);
+  }).then(function(result){
+    if(!current())return{ok:false,stale:true};
     if(result&&result.error)throw result.error;
-    var payload=result&&result.data&&typeof result.data==='object'?result.data:null;
-    if(!payload||payload.ok!==true||!approvalHistoryPayloadIdentityMatches(payload,identity))throw new Error('已簽核紀錄的登入身分不一致');
+    var payload=result&&result.data;
+    if(!payload||payload.ok!==true||!approvalHistoryPayloadIdentityMatches(payload,identity))throw new Error('簽核紀錄的登入身分不一致');
+    approvalHistoryValidatePage(payload,page,query);
+    if(payload.total>0&&(page-1)*limit>=payload.total)return loadApprovalHistoryPage({force:true,page:Math.ceil(payload.total/limit),query:query});
     runtime.items=approvalHistoryItemsFromPayload(payload);
-    runtime.total=Math.max(0,Number(payload.total)||0);
-    runtime.allTotal=Math.max(0,Number(payload.all_total)||runtime.total);
-    runtime.status='ready';
-    runtime.error='';
-    runtime.updatedAt=new Date().toISOString();
-    updateApprovalTodoBadge({tabCounts:{history:runtime.allTotal}});
-    if(S.page==='approvals'&&S.aT==='h')buildApprovals();
+    if(runtime.items.length!==payload.items.length)throw new Error('簽核紀錄來源未能完整顯示，請重新載入。');
+    runtime.total=payload.total;runtime.allTotal=payload.all_total;runtime.status='ready';runtime.error='';runtime.updatedAt=new Date().toISOString();
+    if(S.aT==='h')S.apprPage=page;
+    paintApprovalHistoryState();
     return{ok:true,total:runtime.total,items:runtime.items};
   }).catch(function(error){
-    if(identity!==approvalFastBootstrapIdentity()||runtime.requestSeq!==requestSeq)return{ok:false,stale:true,error:error};
-    runtime.status='error';
-    runtime.error=remoteReadIssueText(error);
-    updateApprovalTodoBadge({tabCounts:{history:runtime.updatedAt?runtime.allTotal:'—'}});
-    if(typeof recordRemoteReadIssue==='function')recordRemoteReadIssue('個人簽核歷史',error);
-    if(S.page==='approvals'&&S.aT==='h')buildApprovals();
+    if(!current())return{ok:false,stale:true,error:error};
+    if(controller){try{controller.abort();}catch(_){} }
+    runtime.status='error';runtime.error=remoteReadIssueText(error);
+    try{if(typeof recordRemoteReadIssue==='function')recordRemoteReadIssue('個人簽核歷史',error);}catch(_){}
+    paintApprovalHistoryState();
     return{ok:false,error:error};
   }).finally(function(){
-    if(runtime.requestSeq===requestSeq){runtime.promise=null;runtime.requestSignature='';}
+    if(current()){runtime.promise=null;runtime.requestSignature='';runtime.controller=null;}
   });
   runtime.promise=promise;
+  paintApprovalHistoryState();
   return promise;
 }
+window.loadApprovalHistoryPage=function(options){return loadApprovalHistoryPage(options);};
 function ensureApprovalHistoryCurrent(options){
   if(S.aT!=='h'||!S.user)return Promise.resolve({ok:false,skipped:true});
   var runtime=approvalHistoryRuntimeForCurrentUser(),query=String(S.apprQuery||'').trim(),page=Math.max(1,Number(S.apprPage)||1);
@@ -25052,10 +25084,10 @@ function renderApprList(data){
   var isHistory=S.aT==='h',historyRuntime=isHistory?approvalHistoryRuntimeForCurrentUser():null;
   var filtered=approvalApplySearchSort(data);
   var total=isHistory?Math.max(0,Number(historyRuntime.total)||0):filtered.length;
-  var pages=Math.max(1,Math.ceil(total/50)),page=Math.min(Math.max(1,S.apprPage||1),pages);
+  var pages=Math.max(1,Math.ceil(total/50)),page=isHistory?Math.max(1,historyRuntime.page||1):Math.min(Math.max(1,S.apprPage||1),pages);
   S.apprPage=page;
   var hint=el('appr-list-hint');if(hint)hint.textContent=isHistory
-    ?(historyRuntime.status==='loading'?'正在更新曾參與流程的紀錄':('共 '+total+' 筆曾參與流程 · 每頁最多 50 筆'))
+    ?(historyRuntime.status==='loading'?'正在更新曾參與流程的紀錄':historyRuntime.status==='error'?'簽核紀錄更新未完成，請重試':('共 '+total+' 筆曾參與流程 · 每頁最多 50 筆'))
     :('搜尋後 '+total+' 筆 · 每頁最多 50 筆');
   if(!filtered.length){
     if(isHistory&&historyRuntime.status==='loading'){
@@ -25064,7 +25096,7 @@ function renderApprList(data){
       return;
     }
     if(isHistory&&historyRuntime.status==='error'){
-      l.innerHTML='<div class="card" style="text-align:center;padding:34px;color:#991b1b;font-size:12px">紀錄暫時無法更新，既有資料不會被當成 0 筆。<br><button class="btn-g" style="margin-top:10px" onclick="loadApprovalHistoryPage({force:true})">重新載入</button></div>';
+      l.innerHTML='<div class="card" style="text-align:center;padding:34px;color:#991b1b;font-size:12px">紀錄暫時無法更新，既有資料不會被當成 0 筆。<br><button type="button" class="btn-g" style="margin-top:10px;min-height:44px!important" onclick="loadApprovalHistoryPage({force:true})">重新載入</button></div>';
       syncApprovalWaitTimer();
       return;
     }
