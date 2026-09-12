@@ -13,7 +13,7 @@
     "release:migration-lineage": "node scripts/check_migration_lineage_contract.js",
     "release:production-contract": "node scripts/check_finance_production_release_contract.js",
     "release:root-cause-regressions": "node scripts/check_root_cause_regressions.js && node scripts/check_submission_identity_directory_contract.js && node scripts/check_notification_staff_access_reconciliation_contract.js && node scripts/check_membership_org_expense_submission_contract.js && node scripts/check_submission_applicant_identity_contract.js && node scripts/check_submission_persona_routes.js && node scripts/test_expense_route_authority_v2.js && node scripts/check_incident_account_org_repair.js && node scripts/check_final_accountant_self_post_contract.js && node scripts/check_formal_cashier_self_disbursement_contract.js && node scripts/check_human_accounting_authority.js",
-    "release:preflight": "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness",
+    "release:preflight": "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability",
     "release:verify-artifact": "node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js",
     "release:build": "pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact",
     "test:persona-routes": "node scripts/check_submission_persona_routes.js",
@@ -45,7 +45,8 @@
     "test:bill-attachments-browser": "node scripts/check_bill_attachment_browser.cjs",
     "test:reporting-integrity": "node scripts/check_tax_source_integrity.cjs && node scripts/check_tax_source_runtime.cjs && node scripts/check_ar_reconciliation_scope.cjs && node scripts/check_ar_export_reconciliation_ui.cjs && node scripts/check_department_statement_export.cjs && node scripts/test_reporting_integrity_release_batch.mjs",
     "test:audit-readiness": "node scripts/check_audit_readiness_engine.cjs && node scripts/check_finance_audit_readiness.cjs && node scripts/check_audit_workspace_runtime.cjs && node scripts/check_compliance_commit.cjs && node scripts/test_audit_readiness_release_batch.mjs",
-    "test:audit-readiness-browser": "node scripts/check_audit_workspace_browser.cjs"
+    "test:audit-readiness-browser": "node scripts/check_audit_workspace_browser.cjs",
+    "test:employee-reliability": "node scripts/check_employee_payment_concerns.cjs && node scripts/check_employee_progress_contacts.cjs && node scripts/check_employee_form_ux.js && node scripts/check_employee_auth_notifications.cjs && node scripts/check_expense_submission_identity.cjs && node scripts/check_expense_posting_reliability.cjs && node scripts/check_expense_revision_reliability.cjs && node scripts/test_employee_reliability_release_batch.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8"
