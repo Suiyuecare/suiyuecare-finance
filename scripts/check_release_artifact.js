@@ -133,6 +133,19 @@ function releaseSourceFiles() {
   'assets/engines/employee-form-ux.js',
   'assets/styles/employee-form-ux.css',
   'assets/styles/employee-auth-notifications.css',
+  'assets/styles/approval-navigation.css',
+  'docs/finance-invoice-table-layout.md',
+  'docs/finance-approval-performance.md',
+  'scripts/check_approval_navigation_browser.cjs',
+  'scripts/check_invoice_table_layout_browser.cjs',
+  'scripts/check_startup_read_coordination.cjs',
+  'scripts/check_startup_read_coordination_browser.cjs',
+  'scripts/check_approval_history_loading.cjs',
+  'scripts/check_approval_history_page_first.cjs',
+  'scripts/check_approval_history_browser.cjs',
+  'scripts/finance_approval_history_canary.sql',
+  'scripts/finance_approval_history_postflight.sql',
+  'scripts/test_history_performance_release_batch.mjs',
   'docs/finance-employee-reliability.md',
   'scripts/check_employee_payment_concerns.cjs',
   'scripts/check_employee_progress_contacts.cjs',
@@ -325,7 +338,7 @@ if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(builtIndex)) {
   fail('artifact contains a forbidden Supabase elevated key');
 }
 
-const requiredReportArtifacts=["assets/engines/payment-concerns.js", "assets/styles/payment-concerns.css", "assets/engines/employee-form-ux.js", "assets/styles/employee-form-ux.css", "assets/styles/employee-auth-notifications.css","assets/engines/audit-readiness-engine.js","assets/engines/audit-workspace.js","assets/styles/audit-workspace.css","assets/engines/document-search.js","assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
+const requiredReportArtifacts=["assets/styles/approval-navigation.css", "assets/engines/payment-concerns.js", "assets/styles/payment-concerns.css", "assets/engines/employee-form-ux.js", "assets/styles/employee-form-ux.css", "assets/styles/employee-auth-notifications.css","assets/engines/audit-readiness-engine.js","assets/engines/audit-workspace.js","assets/styles/audit-workspace.css","assets/engines/document-search.js","assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
 for(const item of requiredReportArtifacts){
   const built=path.join(OUTPUT,item),source=path.join(ROOT,item);
   if(!fs.existsSync(built)||!fs.readFileSync(built).equals(fs.readFileSync(source)))fail('report artifact is missing or differs from its exact source: '+item);

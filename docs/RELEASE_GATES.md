@@ -187,8 +187,13 @@ they do not constitute a production migration or successful production rehearsal
 
 ## 2026-09-10 金額搜尋發布 gate
 
-目前 dispatch 僅允許 `database_amount_search_20260910=20260910083000` 或 `frontend_compat=none`。既有 reports 兩份版次也必須完整存在；未知 migration、錯誤批次、缺任一前置都拒絕。尚未套用時必須先封存候選，再完成 reports 全鏈查核、完整回滾演練，才可把唯一新 SQL＋精確 ledger＋全部 8 份舊新 postflight 在同交易提交。已 applied 重試與 frontend compatibility 都只驗證，不能再次執行 migration。
+該歷史候選只允許 `database_amount_search_20260910=20260910083000` 或 `frontend_compat=none`；此 phase 現在只供前置測試，不可 dispatch。既有 reports 兩份版次也必須完整存在；未知 migration、錯誤批次、缺任一前置都拒絕。尚未套用時必須先封存候選，再完成 reports 全鏈查核、完整回滾演練，才可把唯一新 SQL＋精確 ledger＋全部 8 份舊新 postflight 在同交易提交。已 applied 重試與 frontend compatibility 都只驗證，不能再次執行 migration。
 
 `pnpm test:amount-search` 是固定 preflight 的必要部分，涵蓋文件與應收搜尋、真正歷史 RPC、6 份 authenticated canary、8 個 pre-COMMIT postflight 的逐項失敗回滾、stale ledger、嚴格 JSON marker、全資料指紋與唯讀 recovery。新指紋完整承接 reports，並加入 `approval_step_actor_snapshots`、`invoice_revenue_rule_assignments`、`income_document_closure_cases`、`approval_admin_director_bottleneck_cases` 與 `private.approval_notification_assignment_state`；不能只比筆數。前台與資料庫檢查通過後，提升原封存 deployment，禁止重新 build 候選。
 
 來源／artifact manifest 必須包含 `document-search.js`、文件／AR／history／release 測試、瀏覽器腳本與 amount search postflight／canary／fingerprint。`document-search.js` 還需與 www 逐 byte 相同。瀏覽器腳本獨立執行，不把純 Node CI 結果當作桌機手機驗收。
+
+
+## 2026-09-13 approval history and startup performance
+
+Current dispatch accepts only `database_history_performance_20260913=20260912164807` or `frontend_compat=none`. Every prior migration, including employee reliability, is required. The exact history SQL must pass its pinned predecessor body/ACL checks, the full protected rollback rehearsal, all previous canaries plus the history canary, and every chained postflight before commit or promotion. Frontend-only promotion requires the history migration already applied. See [the scoped release contract](finance-approval-performance.md).
