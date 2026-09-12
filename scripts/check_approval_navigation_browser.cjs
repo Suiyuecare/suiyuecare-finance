@@ -32,6 +32,9 @@ async function scope(code){let v=JSON.parse(await b('eval','--base64',Buffer.fro
    assert.deepEqual(state.targets.map(t=>t.tab),['p','cashier','mine','drafts','h','rejected']);
    const description=await scope(`(function(){var d=el('approval-tab-description');return {width:d.clientWidth,scrollWidth:d.scrollWidth,height:d.clientHeight,scrollHeight:d.scrollHeight,whiteSpace:getComputedStyle(d).whiteSpace};})()`);
    assert.equal(description.whiteSpace,'normal');assert(description.scrollWidth<=description.width+1);assert(description.scrollHeight<=description.height+1);
+   const colors=await scope(`(function(){var s=getComputedStyle(document.querySelector('[data-approval-tab][aria-selected="true"]'));return [s.color,s.backgroundColor];})()`);
+   const luminance=color=>color.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+   const levels=colors.map(luminance).sort((a,b)=>b-a);assert((levels[0]+.05)/(levels[1]+.05)>=4.5,'Active tab text contrast');
   }
   await b('screenshot',path.join(out,(baseline?'before':'after')+'-'+width+'.png'));evidence.push(state);
  }

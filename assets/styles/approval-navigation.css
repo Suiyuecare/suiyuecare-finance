@@ -5,7 +5,7 @@
 #pg-approvals .approval-nav-label{display:block;margin:0 0 7px 8px;color:#79644e;font-size:12px;font-weight:700;letter-spacing:.08em}
 #pg-approvals .approval-nav-group>div{display:flex;gap:6px;background:#f7f3ed;border-radius:12px;padding:4px}
 #pg-approvals [data-approval-tab]{display:flex;align-items:center;justify-content:center;gap:5px;flex:1;min-width:0!important;min-height:44px!important;margin:0!important;padding:9px 8px!important;border:0!important;border-radius:9px!important;background:transparent;color:#63584c;font-size:14px;white-space:normal!important;line-height:1.35;touch-action:manipulation}
-#pg-approvals [data-approval-tab].on{background:#b76000!important;color:#fff!important;box-shadow:0 2px 5px #7c45001f}
+#pg-approvals [data-approval-tab].on{background:#a65600!important;color:#fff!important;box-shadow:0 2px 5px #7c45001f}
 #pg-approvals [data-approval-tab]>span{display:inline-flex;align-items:center;justify-content:center;min-width:20px;padding:1px 5px;border-radius:99px;background:#e9dfd2;color:#634528;font-size:11px;line-height:1.5}
 #pg-approvals [data-approval-tab].on>span{background:#ffffff30;color:inherit}
 #pg-approvals [data-approval-tab]:focus-visible{outline:3px solid #1167bb;outline-offset:2px}
