@@ -3152,6 +3152,8 @@ function financeSessionMatchesWorkspace(session){
 function setFinanceWorkspaceIdentityBlocked(blocked){
   var wasBlocked=financeWorkspaceIdentityBlocked;
   financeWorkspaceIdentityBlocked=!!blocked;
+  if(blocked&&window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();
+  if(blocked&&window.FinancePaymentConcerns)FinancePaymentConcerns.suspend();
   if(blocked&&typeof FINANCE_NOTIFICATION_STATE!=='undefined'){FINANCE_NOTIFICATION_STATE=null;if(typeof NOTIFS!=='undefined')NOTIFS=[];}
   var nodes=['main-wrap','sidebar'].map(function(id){return el(id);});
   if(typeof document!=='undefined'){
@@ -3520,7 +3522,7 @@ function financeAuthRecoveryNewRequestKeys(){
     'nrRevisionRid','nrRevisionExpected','nrRevisionOriginalFiles','nrRevisionOriginalPassbookFiles',
     'nrRevisionPendingUploads','nrRevisionConfirmationPending','nrSubmissionConfirmationPending',
     'nrFiles','nrPassbookFile','lazyImportReview','hrImportReview','purchaseImportReview',
-    'hrItem','hrPeriod','hrLaborPeriod','hrPrivacyMode','pettyMode'];
+    'hrItem','hrPeriod','hrLaborPeriod','hrPrivacyMode','pettyMode','nrPettyGeneralRows','nrPettyGeneralReceiptType'];
 }
 function financeAuthRecoveryDraftSnapshot(){
   var page=S.page||'dashboard';
@@ -17722,7 +17724,7 @@ window.pettyModeChanged=function(v){
   if(nextMode==='initial'){S.nrPettyGeneralRows=cloneSettingValue(S.lazyRows||[]);S.nrPettyGeneralReceiptType=S.nrRec;}
   S.lazyRows=nextMode==='initial'?[]:cloneSettingValue(S.nrPettyGeneralRows||[]);
   S.pettyMode=nextMode;S.nrRec=nextMode==='initial'?'form':(S.nrPettyGeneralReceiptType==='invoice'?'invoice':'receipt');
-  previous.pettyMode=nextMode;previous.fields['petty-mode']=nextMode;previous.lazyRows=S.lazyRows;
+  previous.pettyMode=nextMode;previous.fields['petty-mode']=nextMode;previous.lazyRows=S.lazyRows;previous.nrPettyGeneralRows=S.nrPettyGeneralRows;previous.nrPettyGeneralReceiptType=S.nrPettyGeneralReceiptType;
   renderNR();applyNRFormState(previous,{preserveManualValues:true});
   enhanceNewRequestSearchableSelects();
   if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.focusTarget('petty-mode');
@@ -17956,7 +17958,7 @@ async function serializeDraftFiles(recordNo){
 function collectNRFormState(){
   var fields={};
   draftInputIds().forEach(function(id){var e=el(id);if(e)fields[id]=e.value;});
-  return {fields:fields,lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'salary_50',hrPeriod:normalizeHrMonthStrict(fields['hr-period'])||S.hrPeriod||'',hrLaborPeriod:fields['hr-labor-period']||S.hrLaborPeriod||'',hrPrivacyMode:!!S.hrPrivacyMode,pettyMode:S.pettyMode||((el('petty-mode')||{}).value)||'general',travelFiles:S.travelFiles||{},travelPeople:S.travelPeople||[],travelRows:S.travelRows||[]};
+  return {fields:fields,nrPettyGeneralRows:S.nrPettyGeneralRows||[],nrPettyGeneralReceiptType:S.nrPettyGeneralReceiptType||'',lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'salary_50',hrPeriod:normalizeHrMonthStrict(fields['hr-period'])||S.hrPeriod||'',hrLaborPeriod:fields['hr-labor-period']||S.hrLaborPeriod||'',hrPrivacyMode:!!S.hrPrivacyMode,pettyMode:S.pettyMode||((el('petty-mode')||{}).value)||'general',travelFiles:S.travelFiles||{},travelPeople:S.travelPeople||[],travelRows:S.travelRows||[]};
 }
 function applyNRFormState(state,opts){
   state=state||{};
@@ -17966,6 +17968,8 @@ function applyNRFormState(state,opts){
   applicantSelectChanged(true);
   if(el('nr-pay-form'))S.nrPay=el('nr-pay-form').value||S.nrPay;
   if(el('nr-fixed-expense'))S.nrFixedExpense=el('nr-fixed-expense').value==='true';
+  if(Array.isArray(state.nrPettyGeneralRows))S.nrPettyGeneralRows=state.nrPettyGeneralRows;
+  if(Object.prototype.hasOwnProperty.call(state,'nrPettyGeneralReceiptType'))S.nrPettyGeneralReceiptType=state.nrPettyGeneralReceiptType;
   if(state.lazyRows){S.lazyRows=state.lazyRows;renderLazySheet();}
   if(state.refundRows){S.refundRows=state.refundRows;renderRefundSheet();}
   if(state.purchaseRows){S.purchaseRows=state.purchaseRows;renderPurchaseSheet();}
@@ -22422,6 +22426,7 @@ window.openDraft=function(id){
   var savedFiles=d.files||[];
   var restorableFiles=savedFiles.filter(function(f){return !!(f.url||f.path||f.storagePath);});
   var missingFiles=savedFiles.length-restorableFiles.length;
+  S.nrPettyGeneralRows=(d.state&&d.state.nrPettyGeneralRows)||[];S.nrPettyGeneralReceiptType=(d.state&&d.state.nrPettyGeneralReceiptType)||'';
   S.prev=S.page;S.page='newreq';S.nrDraftId=d.id;S.nrType=d.type;S.nrRec=d.rec;S.nrPay=d.pay;S.lazyMode=!!d.lazyMode;S.nrStep=Math.min(3,Math.max(1,num(d.step||3)));S.nrFiles=restorableFiles.map(function(f){return{name:f.name||f.n,type:f.type||f.mime,size:f.size,url:f.url||'',bucket:f.bucket,path:f.path||f.storagePath||'',storagePath:f.storagePath||f.path||'',uploadedAt:f.uploadedAt,kind:f.kind||'draft_file'};});S.nrDraftMissingFileCount=missingFiles;S.nrDraftFileNotice=missingFiles?('此草稿保留了 '+missingFiles+' 個附件檔名，但缺少 Supabase 保存路徑或檔案內容；正式送出前請重新上傳附件。'):'';S.lazyRows=(d.state&&d.state.lazyRows)||[];S.refundRows=(d.state&&d.state.refundRows)||[];S.purchaseRows=(d.state&&d.state.purchaseRows)||[];S.hrItem=(d.state&&d.state.hrItem)||S.hrItem;S.hrRows=(d.state&&d.state.hrRows)||[];S.hrPrivacyMode=!!(d.state&&d.state.hrPrivacyMode)||S.hrRows.some(function(r){return r&&r.__privacyMode;});S.pettyMode=(d.state&&d.state.pettyMode)||'general';S.travelFiles=(d.state&&d.state.travelFiles)||{};S.travelPeople=(d.state&&d.state.travelPeople)||[];S.travelRows=(d.state&&d.state.travelRows)||[];
   document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on');});
   el('pg-newreq').classList.add('on');el('page-title').textContent='編輯暫存表單';

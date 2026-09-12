@@ -82,5 +82,6 @@
   }catch(e){if(allowed(expected)&&body.isConnected){queueKey='';body.innerHTML='<p>'+esc(e.message||'疑義待辦讀取失敗')+'</p><button type="button" class="btn-g" data-refresh>重試</button>';body.querySelector('button').onclick=function(){loadQueue(true);};}}
   })();return queuePending;
  }
- global.FinancePaymentConcerns=Object.freeze({open:open,loadQueue:loadQueue});
+ function suspend(){close();queueKey='';var host=document.getElementById('payment-concern-queue');if(host)host.replaceChildren();}
+ global.FinancePaymentConcerns=Object.freeze({open:open,loadQueue:loadQueue,suspend:suspend});
 })(window);

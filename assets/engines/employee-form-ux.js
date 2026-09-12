@@ -60,7 +60,7 @@
     if (generation !== previewGeneration || !opener || !opener.isConnected || !opener.checkVisibility() || document.body.dataset.financeIdentityBlocked === 'true') return;
     previewOwner = opener;
     var d = document.createElement('dialog');
-    d.className = 'efux-preview'; d.setAttribute('aria-label', '本機附件檢查');
+    d.className = 'efux-preview'; d.setAttribute('data-finance-approval-dialog','local-file-preview'); d.setAttribute('aria-label', '本機附件檢查');
     var head = document.createElement('div'); head.className = 'efux-preview-head';
     var title = document.createElement('strong'); title.textContent = file.name || file.n || '附件';
     var close = document.createElement('button'); close.type = 'button'; close.textContent = '關閉檢查'; close.className = 'btn-g';
