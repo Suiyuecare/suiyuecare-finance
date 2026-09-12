@@ -217,8 +217,8 @@ const plain = value => JSON.parse(JSON.stringify(value));
   assert.equal(endpoint, 'finance_repair_current_identity_runtime_v1'); assert.deepEqual(plain(args), {});
   let called = 0;
   const assurance = install({
-    S: { user: profile(), demoLogin: false }, hasSupabase: () => true, ACCOUNT_RUNTIME_ASSURANCE_STATE: {},
-    ORG_ADMIN_RUNTIME: { available: true }, getSb: () => ({}), financeUserRuntimeReadiness: () => ({ ok: false, warnings: [] }),
+    S: { user: profile(), demoLogin: false }, hasSupabase: () => true, ACCOUNT_RUNTIME_ASSURANCE_STATE: {}, ACCOUNT_RUNTIME_ASSURANCE_SEQUENCE: 0,
+    ORG_ADMIN_RUNTIME: { available: true }, financeStartupReadIdentity: () => 'fixture-identity', getSb: () => ({}), financeUserRuntimeReadiness: () => ({ ok: false, warnings: [] }),
     repairCurrentFinanceIdentityRuntime: async () => { called++; return { ok: true }; },
     syncFrontOfficePermissionRuntime() { throw new Error('employee must not invoke management RPC'); },
     refreshApprovalOrgAdminRuntime: async () => {}, uniqueRemoteStrings: values => [...new Set(values)], remoteReadIssueText: e => e.message

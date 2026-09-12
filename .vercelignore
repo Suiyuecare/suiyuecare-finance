@@ -199,3 +199,18 @@ supabase/.temp
 !scripts/finance_employee_reliability_postflight.sql
 !scripts/finance_employee_reliability_fingerprint.sql
 !scripts/finance_employee_reliability_canary.sql
+
+# Approval history, startup coordination and native financial tables
+!assets/styles/approval-navigation.css
+!docs/finance-invoice-table-layout.md
+!docs/finance-approval-performance.md
+!scripts/check_approval_navigation_browser.cjs
+!scripts/check_invoice_table_layout_browser.cjs
+!scripts/check_startup_read_coordination.cjs
+!scripts/check_startup_read_coordination_browser.cjs
+!scripts/check_approval_history_loading.cjs
+!scripts/check_approval_history_page_first.cjs
+!scripts/check_approval_history_browser.cjs
+!scripts/finance_approval_history_canary.sql
+!scripts/finance_approval_history_postflight.sql
+!scripts/test_history_performance_release_batch.mjs

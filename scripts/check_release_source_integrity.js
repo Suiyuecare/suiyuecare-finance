@@ -59,6 +59,19 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'assets/styles/approval-navigation.css',
+  'docs/finance-invoice-table-layout.md',
+  'docs/finance-approval-performance.md',
+  'scripts/check_approval_navigation_browser.cjs',
+  'scripts/check_invoice_table_layout_browser.cjs',
+  'scripts/check_startup_read_coordination.cjs',
+  'scripts/check_startup_read_coordination_browser.cjs',
+  'scripts/check_approval_history_loading.cjs',
+  'scripts/check_approval_history_page_first.cjs',
+  'scripts/check_approval_history_browser.cjs',
+  'scripts/finance_approval_history_canary.sql',
+  'scripts/finance_approval_history_postflight.sql',
+  'scripts/test_history_performance_release_batch.mjs',
   'scripts/check_financial_statements.cjs',
   'scripts/check_financial_statement_runtime.cjs',
   'scripts/check_management_report_engine.cjs',
@@ -240,6 +253,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
 ]);
 
 const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
+  'test:history-performance': "node scripts/check_startup_read_coordination.cjs && node scripts/check_approval_history_loading.cjs && node scripts/check_approval_history_page_first.cjs && node scripts/test_history_performance_release_batch.mjs",
   'test:employee-reliability': "node scripts/check_employee_payment_concerns.cjs && node scripts/check_employee_progress_contacts.cjs && node scripts/check_employee_form_ux.js && node scripts/check_employee_auth_notifications.cjs && node scripts/check_expense_submission_identity.cjs && node scripts/check_expense_posting_reliability.cjs && node scripts/check_expense_revision_reliability.cjs && node scripts/test_employee_reliability_release_batch.mjs",
   'test:bill-attachments': 'node scripts/check_bill_approval_attachment_flow.cjs',
   'test:amount-search': "node scripts/check_document_amount_search.cjs && node scripts/check_reporting_workspace_amount_search.cjs && node scripts/check_history_amount_search.cjs && node scripts/test_amount_search_release_batch.mjs",
@@ -253,12 +267,25 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'release:migration-lineage': 'node scripts/check_migration_lineage_contract.js',
   'release:production-contract': 'node scripts/check_finance_production_release_contract.js',
   'release:root-cause-regressions': 'node scripts/check_root_cause_regressions.js && node scripts/check_submission_identity_directory_contract.js && node scripts/check_notification_staff_access_reconciliation_contract.js && node scripts/check_membership_org_expense_submission_contract.js && node scripts/check_submission_applicant_identity_contract.js && node scripts/check_submission_persona_routes.js && node scripts/test_expense_route_authority_v2.js && node scripts/check_incident_account_org_repair.js && node scripts/check_final_accountant_self_post_contract.js && node scripts/check_formal_cashier_self_disbursement_contract.js && node scripts/check_human_accounting_authority.js',
-  'release:preflight': 'pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability',
+  'release:preflight': 'pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance',
   'release:verify-artifact': 'node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js',
   'release:build': 'pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact'
 });
 
 const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
+  'assets/styles/approval-navigation.css',
+  'docs/finance-invoice-table-layout.md',
+  'docs/finance-approval-performance.md',
+  'scripts/check_approval_navigation_browser.cjs',
+  'scripts/check_invoice_table_layout_browser.cjs',
+  'scripts/check_startup_read_coordination.cjs',
+  'scripts/check_startup_read_coordination_browser.cjs',
+  'scripts/check_approval_history_loading.cjs',
+  'scripts/check_approval_history_page_first.cjs',
+  'scripts/check_approval_history_browser.cjs',
+  'scripts/finance_approval_history_canary.sql',
+  'scripts/finance_approval_history_postflight.sql',
+  'scripts/test_history_performance_release_batch.mjs',
   'scripts/check_financial_statements.cjs',
   'scripts/check_financial_statement_runtime.cjs',
   'scripts/check_management_report_engine.cjs',

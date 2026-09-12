@@ -64,6 +64,7 @@
 <link rel="stylesheet" href="assets/styles/workflow-simplification.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/employee-auth-notifications.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/employee-form-ux.css?v=__FINANCE_ASSET_VERSION__">
+<link rel="stylesheet" href="assets/styles/approval-navigation.css?v=__FINANCE_ASSET_VERSION__">
 <style>
 /* Include dialogs opened by already pending renders after an identity change. */
 body[data-finance-identity-blocked="true"] #main-wrap,
@@ -263,10 +264,6 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
       <div class="si-dot si-wait" id="sd3">3</div><span style="font-size:11px;color:#94a3b8" id="sl3">填寫送出</span>
     </div>
     <div id="nr-step-help"></div>
-	<details class="mobile-advanced-sheet-toggle" data-mobile-advanced-sheet="newreq">
-	  <summary>進階試算表模式</summary>
-	  <p>需要一次輸入多筆明細時再展開；手機預設以逐筆卡片填寫。</p>
-	</details>
 	<div class="g2" id="nr-main-grid"><div id="nr-content" data-mobile-entry-list="newreq"></div>
       <div id="nr-side-panel" style="display:flex;flex-direction:column;gap:10px">
         <div class="card"><div class="chd"><span class="cht">簽核流程預覽</span><span style="font-size:10px;background:var(--brxxl);color:var(--brtxt);padding:2px 7px;border-radius:99px;border:1px solid var(--brxl)">依申請人層級自動跳關</span></div><div style="padding:11px 13px"><div class="flow-wrap" id="nr-flow"></div></div></div>
@@ -319,26 +316,33 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
 
   <!-- 簽核管理 -->
   <div class="pg" id="pg-approvals">
-    <div style="margin-bottom:12px"><div class="ph">簽核管理</div><div class="ps" id="appr-sub">全集團待簽核 0 筆</div></div>
+    <div style="margin-bottom:12px"><div class="ph">簽核管理</div><div class="ps" id="appr-sub">正在確認你的待辦與申請紀錄</div></div>
     <div id="approval-manager-summary"></div>
     <div id="payment-concern-queue"></div>
     <div class="approval-shell" style="display:block">
       <div class="tb-bar approval-tabs-bar" style="margin-bottom:10px">
-        <div class="approval-tabs-scroll" role="tablist" aria-label="簽核清單分類">
-          <button class="tb on" role="tab" onclick="apprTab('p',this)">待簽核<span id="ac2" style="font-size:9px;background:var(--br);color:#fff;padding:1px 5px;border-radius:99px;margin-left:3px">—</span></button>
-          <button class="tb" role="tab" onclick="apprTab('cashier',this)">出納<span id="cashier-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">—</span></button>
-          <button class="tb" role="tab" onclick="apprTab('h',this)">已簽核<span id="history-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">—</span></button>
-          <button class="tb" role="tab" onclick="apprTab('mine',this)">我的申請<span id="my-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">—</span></button>
-          <button class="tb" role="tab" onclick="apprTab('drafts',this)">暫存表單<span id="draft-appr-cnt" style="font-size:9px;background:#e0d0b8;color:#5c3800;padding:1px 5px;border-radius:99px;margin-left:3px">—</span></button>
-          <button class="tb" role="tab" onclick="apprTab('rejected',this)">被駁回<span id="rejected-appr-cnt" style="font-size:9px;background:#c02020;color:#fff;padding:1px 5px;border-radius:99px;margin-left:3px">—</span></button>
+        <div class="approval-tabs-scroll" role="tablist" aria-label="簽核清單分類" onkeydown="approvalTabKeydown(event)">
+          <div class="approval-nav-group" role="presentation"><span class="approval-nav-label" aria-hidden="true">待辦</span><div role="presentation">
+            <button id="approval-tab-p" type="button" class="tb on" role="tab" data-approval-tab="p" aria-selected="true" aria-controls="appr-list" onclick="apprTab('p',this)">待我處理<span id="ac2">—</span></button>
+            <button id="approval-tab-cashier" type="button" class="tb" role="tab" data-approval-tab="cashier" aria-selected="false" tabindex="-1" aria-controls="appr-list" onclick="apprTab('cashier',this)">出納待辦<span id="cashier-appr-cnt">—</span></button>
+          </div></div>
+          <div class="approval-nav-group" role="presentation"><span class="approval-nav-label" aria-hidden="true">申請</span><div role="presentation">
+            <button id="approval-tab-mine" type="button" class="tb" role="tab" data-approval-tab="mine" aria-selected="false" tabindex="-1" aria-controls="appr-list" onclick="apprTab('mine',this)">我的申請<span id="my-appr-cnt">—</span></button>
+            <button id="approval-tab-drafts" type="button" class="tb" role="tab" data-approval-tab="drafts" aria-selected="false" tabindex="-1" aria-controls="appr-list" onclick="apprTab('drafts',this)">我的草稿<span id="draft-appr-cnt">—</span></button>
+          </div></div>
+          <div class="approval-nav-group" role="presentation"><span class="approval-nav-label" aria-hidden="true">查詢</span><div role="presentation">
+            <button id="approval-tab-h" type="button" class="tb" role="tab" data-approval-tab="h" aria-selected="false" tabindex="-1" aria-controls="appr-list" onclick="apprTab('h',this)">簽核紀錄<span id="history-appr-cnt">—</span></button>
+            <button id="approval-tab-rejected" type="button" class="tb" role="tab" data-approval-tab="rejected" aria-selected="false" tabindex="-1" aria-controls="appr-list" onclick="apprTab('rejected',this)">駁回紀錄<span id="rejected-appr-cnt">—</span></button>
+          </div></div>
         </div>
+        <p id="approval-tab-description" class="approval-tab-description">輪到你簽核、補件或確認的單據。出納付款與收款請看「出納待辦」。</p>
         <div class="appr-toolbar">
           <input type="search" id="appr-q" aria-label="搜尋簽核單據與金額" placeholder="搜尋單號、部門、申請人、目的、金額…" oninput="apprSearch(this.value)">
           <span id="appr-list-hint" style="font-size:11px;color:#94a3b8">每頁最多 50 筆</span>
         </div>
       </div>
       <div id="approval-bulk-slot"></div>
-	  <div id="appr-list" data-mobile-record-list="approvals"></div>
+	  <div id="appr-list" role="tabpanel" aria-labelledby="approval-tab-p" aria-describedby="approval-tab-description" data-mobile-record-list="approvals"></div>
     </div>
     <div class="modal-bg" id="m-appr" style="display:none" aria-hidden="true" onclick="if(event.target===this)closeAppr()">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="appr-dialog-title" tabindex="-1" style="width:min(960px,calc(100vw - 28px));max-height:88vh;display:flex;flex-direction:column" onclick="event.stopPropagation()">
@@ -1940,6 +1944,7 @@ var WORKFLOW_ADMIN_DEFINITIONS={};
 var WORKFLOW_ADMIN_RPC_AVAILABLE=null;
 var APPROVAL_RUNTIME_AVAILABLE=null;
 var APPROVAL_RUNTIME_DISABLED_REASON='';
+var ORG_ADMIN_READ_STATE={identity:'',sequence:0,promise:null,lastSuccessAt:0};
 var ORG_ADMIN_RUNTIME={departments:[],positions:[],employeeRoles:[],health:null,departmentHealth:null,departmentHealthError:'',frontOfficeHealth:null,frontOfficeHealthError:'',lastLoaded:'',available:null,error:''};
 var MEMBERSHIP_ORG_RUNTIME={loading:false,available:null,error:'',graph:null,lastLoaded:'',subscription:null};
 var MEMBERSHIP_ORG_DRAFT={version:null,snapshot:null,dirty:false,people:[],validation:null,impact:null,dragUnitId:'',batchUnitIds:[]};
@@ -2784,16 +2789,23 @@ function resetExcelSheetTable(table){
   if(!isExcelSheetTable(table))return;
   table.classList.remove('mobile-card-table');
   delete table.dataset.mobileEnhanced;
-  Array.from(table.querySelectorAll('td[data-label]')).forEach(function(td){td.removeAttribute('data-label');});
+  Array.from(table.tBodies||[]).forEach(function(body){Array.from(body.rows).forEach(function(row){Array.from(row.cells).forEach(function(cell){cell.removeAttribute('data-label');});});});
 }
 function resetMobileCardTable(table){
   if(!table)return;
   table.classList.remove('mobile-card-table');
   delete table.dataset.mobileEnhanced;
-  Array.from(table.querySelectorAll('td[data-label]')).forEach(function(td){td.removeAttribute('data-label');});
+  Array.from(table.tBodies||[]).forEach(function(body){Array.from(body.rows).forEach(function(row){Array.from(row.cells).forEach(function(cell){cell.removeAttribute('data-label');});});});
+}
+function isFinancialDetailTable(table){
+  return !!(table&&table.closest&&table.closest('.finance-detail-table,.invoice-review-table,.accounting-lines-table,#nr-content,#invoice-single-sheet,#invoice-batch-sheet,#bill-entry-sheet,#appr-inner,#pg-detail'));
 }
 function shouldEnhanceMobileTable(table){
   if(!table)return false;
+  if(isFinancialDetailTable(table)){
+    resetMobileCardTable(table);
+    return false;
+  }
   if(isExcelSheetTable(table)){
     resetExcelSheetTable(table);
     return false;
@@ -2822,23 +2834,41 @@ function shouldEnhanceMobileTable(table){
     resetMobileCardTable(table);
     return false;
   }
-  return !!table.querySelector('thead th');
+  return !!(table.tHead&&table.tHead.rows.length);
 }
 function enhanceMobileTables(root){
   root=root||document;
   Array.from(root.querySelectorAll('table')).forEach(function(table){
     resetExcelSheetTable(table);
     if(!shouldEnhanceMobileTable(table))return;
-    var labels=Array.from(table.querySelectorAll('thead th')).map(function(th){return (th.textContent||'').trim()||'欄位';});
-    Array.from(table.querySelectorAll('tbody tr')).forEach(function(tr){
-      Array.from(tr.children).forEach(function(td,i){
-        if(!td.getAttribute('data-label'))td.setAttribute('data-label',labels[i]||'欄位');
+    var labels=Array.from(table.tHead.rows[0].cells).map(function(th){return (th.textContent||'').trim()||'欄位';});
+    Array.from(table.tBodies).forEach(function(body){Array.from(body.rows).forEach(function(tr){
+      Array.from(tr.cells).forEach(function(td,i){
+        // Only label this table's own cells; a nested table has its own header.
+        td.setAttribute('data-label',labels[i]||'欄位');
       });
-    });
+    });});
     table.classList.add('mobile-card-table');
     table.dataset.mobileEnhanced='1';
   });
 }
+// Visible, scoped guidance for horizontal financial tables, including modals.
+window.refreshFinancialTableScrollHints=function(root){
+  root=root||document;
+  var selector='.finance-detail-scroll,.accounting-lines-scroll,#nr-content .sheet-full-scroll,#invoice-single-sheet .sheet-full-scroll,#invoice-batch-sheet .sheet-full-scroll,#bill-entry-sheet .sheet-full-scroll';
+  Array.from(root.querySelectorAll(selector)).forEach(function(scroller){
+    var hint=scroller.previousElementSibling;
+    if(!hint||!hint.classList.contains('finance-table-scroll-hint')){
+      hint=document.createElement('p');hint.className='finance-table-scroll-hint';
+      hint.textContent='左右滑動查看完整欄位（也可用鍵盤方向鍵）';
+      scroller.parentNode.insertBefore(hint,scroller);
+    }
+    hint.hidden=!(scroller.getClientRects().length&&scroller.scrollWidth>scroller.clientWidth+1);
+    if(!scroller.hasAttribute('tabindex'))scroller.tabIndex=0;
+  });
+};
+window.addEventListener('resize',function(){window.requestAnimationFrame(function(){window.refreshFinancialTableScrollHints();});});
+document.addEventListener('toggle',function(){window.refreshFinancialTableScrollHints();},true);
 var MOBILE_ENHANCE_TIMER=null;
 var MOBILE_ENHANCE_OBSERVER_STARTED=false;
 function scheduleMobileEnhance(root){
@@ -3025,6 +3055,7 @@ var approvalFastBootstrapRunIdentity='';
 var APPROVAL_BOOTSTRAP_COORDINATOR={identity:'',generation:0,phase:'idle',promise:null};
 var approvalBootstrapGeneration=0;
 var approvalFastFinalizationProbe=false;
+var ACCOUNT_RUNTIME_ASSURANCE_SEQUENCE=0;
 var ACCOUNT_RUNTIME_ASSURANCE_STATE={running:false,lastRun:'',lastUserId:'',ok:false,warnings:[]};
 var DATA_ENV_PRODUCTION='production';
 var DATA_ENV_TEST='test';
@@ -6335,6 +6366,18 @@ async function runRemoteJobsWithConcurrency(jobs,limit){
   if(firstError)throw firstError;
   return results;
 }
+async function runFinanceBootstrapReadJobs(jobs,accounting){
+  if(!accounting)return runRemoteJobsWithConcurrency(jobs,REMOTE_BOOTSTRAP_CONCURRENCY);
+  // Finance source pages and the potentially wide audit/bank tables retain one
+  // serial lane. A second lane is restricted to bounded identity/configuration
+  // reads; total concurrency stays at two. All results still settle before the
+  // existing completeness, identity and source-merge checks run.
+  var small=[0,5,7,8,16,18],results=new Array(jobs.length);
+  var lanes=[[],[]];
+  jobs.forEach(function(job,index){lanes[small.indexOf(index)>-1?0:1].push(async function(){results[index]=await job();});});
+  await runRemoteJobsWithConcurrency(lanes.map(function(lane){return function(){return runRemoteJobsWithConcurrency(lane,1);};}),2);
+  return results;
+}
 async function loadOptionalTable(client,table,orderCol,ascending,limit){
   var engine=financeDataEngine();
   if(engine&&typeof engine.loadOptionalTable==='function'){
@@ -6632,7 +6675,31 @@ async function readOrgAdminRuntimeRpc(client,name,args,fallback){
     return {data:typeof fallback==='function'?fallback():fallback,fallback:true,error:err,message:(err&&err.message)||String(err||'')};
   }
 }
-async function refreshApprovalOrgAdminRuntime(client,reason){
+function financeStartupReadIdentity(){
+  var u=S.user;
+  if(!u||financeWorkspaceIdentityBlocked)return '';
+  return JSON.stringify([currentFinanceAuthUserId(),u.id||'',normalizedRoleKey(u),currentTenantId(),activeDataEnvironment(),financeUsersDirectoryRevision,ROLE_PERMISSIONS,CURRENT_PERMISSION_SNAPSHOT]);
+}
+async function refreshApprovalOrgAdminRuntime(client,reason,options){
+  options=options||{};
+  var identity=financeStartupReadIdentity();
+  if(!identity)return {ok:false,stale:true};
+  var state=ORG_ADMIN_READ_STATE;
+  // Reuse only the automatic login/background diagnostic lane. Manual refresh
+  // and every post-repair read start a new generation, so old results cannot
+  // replace newer authority. This cache never authorizes a mutation.
+  var share=!options.force&&/^(login_runtime_assurance_before|load_remote_data_deferred)$/.test(String(reason||''));
+  if(share&&state.identity===identity){
+    if(state.promise)return state.promise;
+    if(state.lastSuccessAt&&Date.now()-state.lastSuccessAt<30000&&ORG_ADMIN_RUNTIME.available===true)return {ok:true,reused:true,runtime:ORG_ADMIN_RUNTIME};
+  }
+  state={identity:identity,sequence:state.sequence+1,promise:null,lastSuccessAt:0};
+  ORG_ADMIN_READ_STATE=state;
+  state.promise=performApprovalOrgAdminRuntimeRead(client,reason,state);
+  try{return await state.promise;}finally{state.promise=null;}
+}
+async function performApprovalOrgAdminRuntimeRead(client,reason,state){
+  function current(){return ORG_ADMIN_READ_STATE===state&&state.identity===financeStartupReadIdentity();}
   client=client||getSb();
   if(!client||S.demoLogin){
     ORG_ADMIN_RUNTIME.available=false;
@@ -6641,7 +6708,7 @@ async function refreshApprovalOrgAdminRuntime(client,reason){
     return {ok:false,skipped:true,reason:'no_supabase'};
   }
   try{
-    var res=await Promise.all([
+    var res=await withOperationTimeout(Promise.all([
       readOrgAdminRuntimeRpc(client,'finance_org_department_list',{p_include_inactive:false},fallbackOrgAdminDepartments),
       readOrgAdminRuntimeRpc(client,'finance_org_position_list',{p_include_inactive:false},fallbackOrgAdminPositions),
       readOrgAdminRuntimeRpc(client,'finance_org_employee_role_list',{p_finance_user_id:null,p_department_code:null,p_include_inactive:false},fallbackOrgAdminEmployeeRoles),
@@ -6649,10 +6716,12 @@ async function refreshApprovalOrgAdminRuntime(client,reason){
         var users=(USERS||[]).filter(function(u){return u&&u.active!==false;}).length;
         return {ok:true,department_count:(DEPTS||[]).length,position_count:Object.keys(RL||{}).length,active_user_count:users,primary_role_count:users,missing_primary_role_count:0,role_without_department_count:0,manager_without_role_count:0,source:'frontend_fallback'};
       })
-    ]);
+    ]),'登入組織資料',12000);
+    if(!current())return {ok:false,stale:true};
     var fallbackMessages=res.filter(function(r){return r&&r.fallback;}).map(function(r){return r.message;}).filter(Boolean);
     var frontHealth=null,frontHealthError='';
-    var frontRes=await client.rpc('finance_front_office_permission_runtime_health',{});
+    var frontRes=await withOperationTimeout(client.rpc('finance_front_office_permission_runtime_health',{}),'登入權限診斷',12000);
+    if(!current())return {ok:false,stale:true};
     if(frontRes&&frontRes.error){
       frontHealthError=(frontRes.error.message||String(frontRes.error)||'人員權限 runtime health 讀取失敗');
       if(!isRpcMissing(frontRes.error))console.warn('Front-office permission runtime health failed:',frontHealthError);
@@ -6672,7 +6741,9 @@ async function refreshApprovalOrgAdminRuntime(client,reason){
       available:true,
       error:''
     };
-    await verifyDepartmentRuntimeHealth((reason||'approval_org_admin')+'_department_health',{silentRender:true});
+    await verifyDepartmentRuntimeHealth((reason||'approval_org_admin')+'_department_health',{silentRender:true,isCurrent:current});
+    if(!current())return {ok:false,stale:true};
+    state.lastSuccessAt=fallbackMessages.length||frontHealthError||ORG_ADMIN_RUNTIME.departmentHealthError?0:Date.now();
     renderOrgAdminRuntimeStatus();
     if(typeof recordOpsEventDedup==='function'){
       recordOpsEventDedup('approval_org_admin_runtime_loaded','ok','組織 runtime 已讀取','後台已讀取 departments / positions / employee roles / health，供簽核設定頁確認。',{reason:reason||'',departments:ORG_ADMIN_RUNTIME.departments.length,positions:ORG_ADMIN_RUNTIME.positions.length,employeeRoles:ORG_ADMIN_RUNTIME.employeeRoles.length,dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
@@ -6682,6 +6753,8 @@ async function refreshApprovalOrgAdminRuntime(client,reason){
     }
     return {ok:true,runtime:ORG_ADMIN_RUNTIME};
   }catch(err){
+    if(!current())return {ok:false,stale:true};
+    state.lastSuccessAt=0;
     var missing=isRpcMissing(err);
     ORG_ADMIN_RUNTIME.available=missing?false:null;
     ORG_ADMIN_RUNTIME.error=(missing?'正式 DB 尚未安裝組織管理 RPC；':'組織 runtime 讀取失敗；')+((err&&err.message)||err||'未知錯誤');
@@ -6777,6 +6850,8 @@ async function syncApprovalWorkflowAdminDraftsFromSettings(reason){
 }
 async function verifyDepartmentRuntimeHealth(reason,opts){
   opts=opts||{};
+  var readIdentity=financeStartupReadIdentity();
+  function current(){return !!readIdentity&&readIdentity===financeStartupReadIdentity()&&(!opts.isCurrent||opts.isCurrent());}
   var client=getSb();
   if(!client||S.demoLogin){
     var offlineMessage='目前未連線正式資料庫，無法確認部門同步狀態。';
@@ -6785,7 +6860,8 @@ async function verifyDepartmentRuntimeHealth(reason,opts){
     if(!opts.silentRender)renderOrgAdminRuntimeStatus();
     return {ok:false,skipped:true,reason:'no_supabase',message:offlineMessage};
   }
-  var response=await client.rpc('finance_department_runtime_health',{});
+  var response=await withOperationTimeout(client.rpc('finance_department_runtime_health',{}),'部門同步診斷',12000);
+  if(!current())return {ok:false,stale:true};
   if(response.error){
     var missing=isRpcMissing(response.error);
     var detail=missing
@@ -6925,34 +7001,43 @@ async function runCurrentUserRuntimeAssurance(opts){
   opts=opts||{};
   if(!S.user)return {ok:false,skipped:true,reason:'no_user'};
   if(!hasSupabase()||S.demoLogin)return {ok:true,skipped:true,reason:'local_or_demo'};
-  if(ACCOUNT_RUNTIME_ASSURANCE_STATE.running&&!opts.force)return ACCOUNT_RUNTIME_ASSURANCE_STATE;
-  ACCOUNT_RUNTIME_ASSURANCE_STATE={running:true,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:false,warnings:[]};
+  var assuranceIdentity=financeStartupReadIdentity();
+  function current(){return !!assuranceIdentity&&assuranceIdentity===financeStartupReadIdentity()&&ACCOUNT_RUNTIME_ASSURANCE_STATE.generation===generation;}
+  if(ACCOUNT_RUNTIME_ASSURANCE_STATE.running&&ACCOUNT_RUNTIME_ASSURANCE_STATE.identity===assuranceIdentity&&!opts.force)return ACCOUNT_RUNTIME_ASSURANCE_STATE;
+  var generation=++ACCOUNT_RUNTIME_ASSURANCE_SEQUENCE;
+  ACCOUNT_RUNTIME_ASSURANCE_STATE={generation:generation,identity:assuranceIdentity,running:true,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:false,warnings:[]};
   var warnings=[];
   try{
     var client=getSb();
-    if(ORG_ADMIN_RUNTIME.available!==true)await refreshApprovalOrgAdminRuntime(client,'login_runtime_assurance_before');
+    await refreshApprovalOrgAdminRuntime(client,'login_runtime_assurance_before',{force:!!opts.force});
+    if(!current())return {ok:false,stale:true};
     var before=financeUserRuntimeReadiness(S.user);
     if(!before.ok||opts.force){
       var sync=await repairCurrentFinanceIdentityRuntime();
+      if(!current())return {ok:false,stale:true};
       if(!sync||sync.ok===false)warnings.push(sync&&sync.requiresManagementReview?'本人登入資料已檢查；任職或權限仍需人資、行政主任確認。請聯絡管理者檢查目前任職、直屬主管及啟用狀態。':(sync&&sync.message||'本人登入資料暫時無法同步，請稍後重新檢查。'));
+      await refreshApprovalOrgAdminRuntime(client,'login_runtime_assurance_after',{force:true});
+      if(!current())return {ok:false,stale:true};
     }
-    await refreshApprovalOrgAdminRuntime(client,'login_runtime_assurance_after');
     var after=financeUserRuntimeReadiness(S.user);
     warnings=uniqueRemoteStrings(warnings.concat(after.warnings));
-    ACCOUNT_RUNTIME_ASSURANCE_STATE={running:false,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:warnings.length===0,warnings:warnings};
+    ACCOUNT_RUNTIME_ASSURANCE_STATE={generation:generation,identity:assuranceIdentity,running:false,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:warnings.length===0,warnings:warnings};
     if(typeof recordOpsEvent==='function'){
       recordOpsEvent(warnings.length?'account_runtime_assurance_warning':'account_runtime_assurance_ok',warnings.length?'warn':'ok',warnings.length?'登入帳號 runtime 仍需確認':'登入帳號 runtime 已確認',warnings.join('；')||'Finance user、Auth、部門與簽核 runtime 已完成登入後確認。',{financeUserId:S.user.id,email:S.user.email||'',warningCount:warnings.length,dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
     }
     if(opts.alert)alert(warnings.length?('帳號簽核資料仍需確認：\n\n'+warnings.join('\n')):'帳號簽核資料已同步完成。');
     return ACCOUNT_RUNTIME_ASSURANCE_STATE;
   }catch(err){
+    if(!current())return {ok:false,stale:true};
     warnings.push(remoteReadIssueText(err));
-    ACCOUNT_RUNTIME_ASSURANCE_STATE={running:false,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:false,warnings:uniqueRemoteStrings(warnings)};
+    ACCOUNT_RUNTIME_ASSURANCE_STATE={generation:generation,identity:assuranceIdentity,running:false,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:false,warnings:uniqueRemoteStrings(warnings)};
     if(typeof recordOpsEvent==='function'){
       recordOpsEvent('account_runtime_assurance_failed','warn','登入帳號 runtime 自動修復失敗',warnings.join('；'),{financeUserId:S.user.id,email:S.user.email||'',error:String((err&&err.message)||err||''),dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
     }
     if(opts.alert)alert('帳號簽核資料同步失敗：\n\n'+warnings.join('\n'));
     return ACCOUNT_RUNTIME_ASSURANCE_STATE;
+  }finally{
+    if(ACCOUNT_RUNTIME_ASSURANCE_STATE.generation===generation)ACCOUNT_RUNTIME_ASSURANCE_STATE.running=false;
   }
 }
 window.runCurrentUserRuntimeAssurance=runCurrentUserRuntimeAssurance;
@@ -8260,44 +8345,48 @@ function clearApprovalFastBootstrapState(){
   approvalFastSummaryRpcPromise=null;approvalFastSummaryRpcIdentity='';
   APPROVAL_FAST_BOOTSTRAP={status:'idle',identity:'',verified:false,tasksVerified:false,hydrated:false,counts:null,summaryCounts:null,cachedCounts:null,updatedAt:'',readOnly:true,canAct:false,error:'',rpcMissing:false,summaryRpcMissing:false,lastRpcResult:null,lastRpcAt:0,lastSummaryResult:null,lastSummaryAt:0,summaryItems:[],summaryPage:null,summaryFingerprint:'',verifiedSummaryFingerprint:''};
   APPROVAL_SOURCE_COMPLETENESS={identity:'',expense_requests:false,bills:false,invoices:false,draft_requests:false,updatedAt:''};
+  if(APPROVAL_HISTORY_RUNTIME.controller){try{APPROVAL_HISTORY_RUNTIME.controller.abort();}catch(_){} }
   APPROVAL_HISTORY_RUNTIME={identity:'',status:'idle',items:[],total:0,allTotal:0,page:1,limit:50,query:'',error:'',updatedAt:'',promise:null,requestSeq:(APPROVAL_HISTORY_RUNTIME.requestSeq||0)+1};
   if(approvalHistorySearchTimer){clearTimeout(approvalHistorySearchTimer);approvalHistorySearchTimer=null;}
   APPROVAL_ROW_RUNTIME={identity:'',trustedFingerprint:'',trustedTasksVerified:false,trustedSummaryItems:[],trustedTasks:[],verified:{},pending:{},unavailable:{}};
   S.approvalRuntimeTasks=[];
   updateApprovalTodoBadge({resetTabs:true});
 }
+function approvalHistoryIdentity(){
+  if(!S.user||S.demoLogin||(typeof financeWorkspaceIdentityBlocked!=='undefined'&&financeWorkspaceIdentityBlocked))return '';
+  return [approvalFastBootstrapIdentity(),String(S.user.id||''),String(activeDataEnvironment())].join('|');
+}
 function approvalHistoryRuntimeForCurrentUser(){
-  var identity=approvalFastBootstrapIdentity();
-  if(!identity)return APPROVAL_HISTORY_RUNTIME;
-  if(APPROVAL_HISTORY_RUNTIME.identity&&APPROVAL_HISTORY_RUNTIME.identity!==identity){
+  var identity=approvalHistoryIdentity();
+  if(APPROVAL_HISTORY_RUNTIME.identity!==identity){
+    if(APPROVAL_HISTORY_RUNTIME.controller){try{APPROVAL_HISTORY_RUNTIME.controller.abort();}catch(_){} }
     APPROVAL_HISTORY_RUNTIME={identity:identity,status:'idle',items:[],total:0,allTotal:0,page:1,limit:50,query:'',error:'',updatedAt:'',promise:null,requestSeq:(APPROVAL_HISTORY_RUNTIME.requestSeq||0)+1};
-  }else if(!APPROVAL_HISTORY_RUNTIME.identity){
-    APPROVAL_HISTORY_RUNTIME.identity=identity;
   }
   return APPROVAL_HISTORY_RUNTIME;
 }
 function approvalHistoryPayloadIdentityMatches(payload,identity){
   var actor=payload&&payload.identity||{};
   return !!(identity
-    &&identity===approvalFastBootstrapIdentity()
+    &&identity===approvalHistoryIdentity()
+    &&String(actor.auth_user_id||'')===String((S.user&&(S.user.authUserId||S.user.auth_user_id))||'')
     &&String(actor.finance_user_id||'')===String((S.user&&S.user.id)||'')
     &&String(actor.tenant_id||'')===String(currentTenantId()||DEFAULT_TENANT_ID)
     &&String(actor.data_environment||'')===String(activeDataEnvironment()));
 }
 function approvalHistoryItemsFromPayload(payload){
-  var mapped=[];
+  var mapped=[],nextReqs=REQS,nextBills=BILLS,nextInvs=INVS;
   (Array.isArray(payload&&payload.items)?payload.items:[]).forEach(function(entry){
     var table=String(entry.record_type||''),sourceRows=Array.isArray(entry.source_rows)?entry.source_rows:[entry.source_row].filter(Boolean);
     var rows=[];
     if(table==='expense_requests'){
       rows=sourceRows.map(mapReq);
-      REQS=mergeRemoteRowsByKey(rows,REQS);
+      nextReqs=mergeRemoteRowsByKey(rows,nextReqs);
     }else if(table==='bills'){
       rows=sourceRows.map(mapBill);
-      BILLS=mergeRemoteRowsByKey(rows,BILLS);
+      nextBills=mergeRemoteRowsByKey(rows,nextBills);
     }else if(table==='invoices'){
       rows=sourceRows.map(mapInv);
-      INVS=mergeRemoteRowsByKey(rows,INVS);
+      nextInvs=mergeRemoteRowsByKey(rows,nextInvs);
     }
     var recordId=String(entry.record_id||''),raw=rows.find(function(row){return String(row&&row.id||'')===recordId;})||rows[0];
     if(!raw)return;
@@ -8313,6 +8402,7 @@ function approvalHistoryItemsFromPayload(payload){
       historyParticipantSteps:Array.isArray(entry.participant_steps)?entry.participant_steps:[]
     });
   });
+  REQS=nextReqs;BILLS=nextBills;INVS=nextInvs;
   return mapped;
 }
 function approvalHistoryStatusHtml(){
@@ -8321,65 +8411,92 @@ function approvalHistoryStatusHtml(){
     return '<div class="card" style="margin-bottom:10px;padding:11px 13px;color:#8b7358;font-size:11px">正在載入你曾經被指派或實際處理過的流程；既有紀錄仍可查看。</div>';
   }
   if(runtime.status==='error'){
-    return '<div class="card" style="margin-bottom:10px;padding:11px 13px;border-color:#fecaca;background:#fff1f2;color:#991b1b;font-size:11px">已簽核紀錄暫時無法更新：'
+    return '<div class="card" style="margin-bottom:10px;padding:11px 13px;border-color:#fecaca;background:#fff1f2;color:#991b1b;font-size:11px">簽核紀錄暫時無法更新：'
       +escAttr(runtime.error||'請稍後重試')
-      +' <button class="btn-g" style="margin-left:8px" onclick="loadApprovalHistoryPage({force:true})">重新載入</button></div>';
+      +' <button type="button" class="btn-g" style="margin-left:8px;min-height:44px!important" onclick="loadApprovalHistoryPage({force:true})">重新載入</button></div>';
   }
   return'';
 }
+function approvalHistoryValidatePage(payload,page,query){
+  function count(value){return typeof value==='number'&&Number.isSafeInteger(value)&&value>=0;}
+  var meta=payload&&payload.page,items=payload&&payload.items,offset=(page-1)*50;
+  if(!payload||!count(payload.total)||!count(payload.all_total)||payload.all_total<payload.total||!meta||meta.limit!==50||meta.offset!==offset
+    ||meta.has_more!==(offset+50<payload.total)||!Array.isArray(items)||items.length!==Math.min(50,Math.max(0,payload.total-offset))){
+    throw new Error('簽核紀錄回應不完整，尚未確認總筆數或分頁；請重新載入。');
+  }
+  var keys={};
+  items.forEach(function(entry){
+    var table=entry&&entry.record_type,key=entry&&entry.history_key,rows=entry&&entry.source_rows;
+    if(['expense_requests','bills','invoices'].indexOf(table)<0||typeof key!=='string'||!key||keys[key]||!Array.isArray(rows)||!rows.length
+      ||!rows.some(function(row){return row&&String(row.id)===String(entry.record_id);})
+      ||rows.some(function(row){return !row||String(row.tenant_id)!==String(currentTenantId()||DEFAULT_TENANT_ID)||row.data_environment!==activeDataEnvironment();})){
+      throw new Error('簽核紀錄來源或批次資料不完整，未套用部分回應；請重新載入。');
+    }
+    keys[key]=true;
+  });
+  return true;
+}
+function paintApprovalHistoryState(){
+  var runtime=approvalHistoryRuntimeForCurrentUser();
+  try{updateApprovalTodoBadge({tabCounts:{history:runtime.updatedAt?runtime.allTotal:'—'}});}catch(error){console.warn('history badge paint failed',error);}
+  if(S.page!=='approvals'||S.aT!=='h')return;
+  try{buildApprovals();}catch(error){
+    console.error('history view paint failed',error);
+    var slot=el('appr-list');if(slot)slot.innerHTML='<div class="card" role="alert" style="padding:14px">簽核紀錄畫面未能更新，請重新載入；資料尚未被當成空集合。<br><button type="button" class="btn-g" style="min-height:44px!important" onclick="loadApprovalHistoryPage({force:true})">重新載入簽核紀錄</button></div>';
+  }
+}
 function loadApprovalHistoryPage(options){
   options=options||{};
-  var client=getSb(),identity=approvalFastBootstrapIdentity(),runtime=approvalHistoryRuntimeForCurrentUser();
-  if(!client||!identity||S.demoLogin)return Promise.resolve({ok:false,skipped:true});
-  var page=Math.max(1,Number(options.page||S.apprPage||runtime.page||1));
+  var identity=approvalHistoryIdentity(),runtime=approvalHistoryRuntimeForCurrentUser();
+  if(!identity)return Promise.resolve({ok:false,skipped:true});
+  var page=Math.max(1,Math.floor(Number(options.page||S.apprPage||runtime.page||1))||1);
   var query=String(options.query!=null?options.query:(S.apprQuery||'')).trim();
-  var limit=50,signature=[identity,page,query,activeDataEnvironment()].join('|');
+  var limit=50,environment=activeDataEnvironment(),signature=JSON.stringify([identity,page,query]);
   if(runtime.promise&&runtime.requestSignature===signature&&!options.force)return runtime.promise;
-  if(!options.force&&runtime.status==='ready'&&runtime.identity===identity&&runtime.page===page&&runtime.query===query)return Promise.resolve({ok:true,reused:true,total:runtime.total,items:runtime.items});
+  if(!options.force&&runtime.status==='ready'&&runtime.page===page&&runtime.query===query)return Promise.resolve({ok:true,reused:true,total:runtime.total,items:runtime.items});
   var requestSeq=(runtime.requestSeq||0)+1;
-  runtime.requestSeq=requestSeq;
-  runtime.identity=identity;
-  runtime.status='loading';
-  runtime.error='';
-  runtime.page=page;
-  runtime.limit=limit;
-  runtime.query=query;
-  runtime.requestSignature=signature;
-  updateApprovalTodoBadge({tabCounts:{history:runtime.updatedAt?runtime.allTotal:'—'}});
-  if(S.page==='approvals'&&S.aT==='h')buildApprovals();
-  var promise=withOperationTimeout(client.rpc('finance_approval_participant_history_for_current_user',{
-    p_limit:limit,
-    p_offset:(page-1)*limit,
-    p_search:query||null,
-    p_data_environment:activeDataEnvironment()
-  }),'個人簽核歷史',12000).then(function(result){
-    if(identity!==approvalFastBootstrapIdentity()||runtime.requestSeq!==requestSeq)return{ok:false,stale:true};
+  if(runtime.controller){try{runtime.controller.abort();}catch(_){} }
+  var controller=typeof AbortController!=='undefined'?new AbortController():null;
+  runtime.requestSeq=requestSeq;runtime.controller=controller;
+  if(runtime.page!==page||runtime.query!==query)runtime.items=[];
+  runtime.identity=identity;runtime.status='loading';runtime.error='';runtime.page=page;runtime.limit=limit;runtime.query=query;runtime.requestSignature=signature;
+  function current(){return APPROVAL_HISTORY_RUNTIME===runtime&&identity===approvalHistoryIdentity()&&runtime.requestSeq===requestSeq;}
+  // Install the promise before rendering. Synchronous client/paint exceptions
+  // must not strand the runtime in loading before its timeout has even started.
+  var promise=Promise.resolve().then(function(){
+    if(!current())return null;
+    var client=getSb();if(!client||typeof client.rpc!=='function')throw new Error('簽核紀錄服務尚未連線，請重新載入。');
+    var operation=client.rpc('finance_approval_participant_history_for_current_user',{p_limit:limit,p_offset:(page-1)*limit,p_search:query||null,p_data_environment:environment});
+    if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
+    return withOperationTimeout(operation,'個人簽核歷史',12000);
+  }).then(function(result){
+    if(!current())return{ok:false,stale:true};
     if(result&&result.error)throw result.error;
-    var payload=result&&result.data&&typeof result.data==='object'?result.data:null;
-    if(!payload||payload.ok!==true||!approvalHistoryPayloadIdentityMatches(payload,identity))throw new Error('已簽核紀錄的登入身分不一致');
+    var payload=result&&result.data;
+    if(!payload||payload.ok!==true||!approvalHistoryPayloadIdentityMatches(payload,identity))throw new Error('簽核紀錄的登入身分不一致');
+    approvalHistoryValidatePage(payload,page,query);
+    if(payload.total>0&&(page-1)*limit>=payload.total)return loadApprovalHistoryPage({force:true,page:Math.ceil(payload.total/limit),query:query});
     runtime.items=approvalHistoryItemsFromPayload(payload);
-    runtime.total=Math.max(0,Number(payload.total)||0);
-    runtime.allTotal=Math.max(0,Number(payload.all_total)||runtime.total);
-    runtime.status='ready';
-    runtime.error='';
-    runtime.updatedAt=new Date().toISOString();
-    updateApprovalTodoBadge({tabCounts:{history:runtime.allTotal}});
-    if(S.page==='approvals'&&S.aT==='h')buildApprovals();
+    if(runtime.items.length!==payload.items.length)throw new Error('簽核紀錄來源未能完整顯示，請重新載入。');
+    runtime.total=payload.total;runtime.allTotal=payload.all_total;runtime.status='ready';runtime.error='';runtime.updatedAt=new Date().toISOString();
+    if(S.aT==='h')S.apprPage=page;
+    paintApprovalHistoryState();
     return{ok:true,total:runtime.total,items:runtime.items};
   }).catch(function(error){
-    if(identity!==approvalFastBootstrapIdentity()||runtime.requestSeq!==requestSeq)return{ok:false,stale:true,error:error};
-    runtime.status='error';
-    runtime.error=remoteReadIssueText(error);
-    updateApprovalTodoBadge({tabCounts:{history:runtime.updatedAt?runtime.allTotal:'—'}});
-    if(typeof recordRemoteReadIssue==='function')recordRemoteReadIssue('個人簽核歷史',error);
-    if(S.page==='approvals'&&S.aT==='h')buildApprovals();
+    if(!current())return{ok:false,stale:true,error:error};
+    if(controller){try{controller.abort();}catch(_){} }
+    runtime.status='error';runtime.error=remoteReadIssueText(error);
+    try{if(typeof recordRemoteReadIssue==='function')recordRemoteReadIssue('個人簽核歷史',error);}catch(_){}
+    paintApprovalHistoryState();
     return{ok:false,error:error};
   }).finally(function(){
-    if(runtime.requestSeq===requestSeq){runtime.promise=null;runtime.requestSignature='';}
+    if(current()){runtime.promise=null;runtime.requestSignature='';runtime.controller=null;}
   });
   runtime.promise=promise;
+  paintApprovalHistoryState();
   return promise;
 }
+window.loadApprovalHistoryPage=function(options){return loadApprovalHistoryPage(options);};
 function ensureApprovalHistoryCurrent(options){
   if(S.aT!=='h'||!S.user)return Promise.resolve({ok:false,skipped:true});
   var runtime=approvalHistoryRuntimeForCurrentUser(),query=String(S.apprQuery||'').trim(),page=Math.max(1,Number(S.apprPage)||1);
@@ -8417,7 +8534,7 @@ async function performRemoteDataLoad(){
     function(){return loadAccountingData?applyRemoteLimit(client.from('vouchers').select('*').order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.vouchers):Promise.resolve({data:[],error:null});},
     function(){return applyRemoteLimit(client.from('bills').select('*',{count:'exact'}).order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.bills);},
     function(){return loadStatementSourcePages(client,'invoices');},
-    function(){return loadFinanceNotifications({client:client});},
+    function(){return loadFinanceNotifications({client:client,reuseFresh:true});},
     function(){return loadAccountingData?loadStatementSourcePages(client,'ledger_entries'):Promise.resolve({data:[],error:null});},
     function(){return client.from('system_settings').select('*').eq('tenant_id',currentTenantId()).in('key',SYSTEM_SETTINGS_RUNTIME_KEYS);},
     function(){return applyRemoteLimit(client.from('draft_requests').select('*',{count:'exact'}).order('updated_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.optional);},
@@ -8435,11 +8552,6 @@ async function performRemoteDataLoad(){
 	    function(){return loadOptionalTable(client,'bank_transactions','transaction_date',false);},
 	    function(){return loadOptionalTable(client,'bank_reconciliation_matches','matched_at',false);}
 	  ];
-  // Accounting roles read several wide financial tables. Run those broad,
-  // non-critical reads one at a time after the personal approval lane has
-  // finished, so two large PostgREST responses cannot push each other over
-  // the managed database statement timeout.
-  var bootstrapConcurrency=loadAccountingData?1:REMOTE_BOOTSTRAP_CONCURRENCY;
   var priorityAwareJobs=jobs.map(function(job){
     return async function(){
       var fastIdentity=approvalFastBootstrapIdentity();
@@ -8451,7 +8563,7 @@ async function performRemoteDataLoad(){
       return job();
     };
   });
-  var res=await runRemoteJobsWithConcurrency(priorityAwareJobs,bootstrapConcurrency);
+  var res=await runFinanceBootstrapReadJobs(priorityAwareJobs,loadAccountingData);
   if(activeApprovalIdentity!==approvalFastBootstrapIdentity())return false;
   setApprovalSourceCompleteness('expense_requests',approvalRemoteSourceResultComplete(res[1],REMOTE_BOOTSTRAP_LIMITS.requests),activeApprovalIdentity);
   setApprovalSourceCompleteness('bills',approvalRemoteSourceResultComplete(res[3],REMOTE_BOOTSTRAP_LIMITS.bills),activeApprovalIdentity);
@@ -12910,7 +13022,7 @@ function billGroupDetailHtml(b){
   var key=safeStorageSegment(billGroupKey(b).replace(':','_'),'bill');
   return '<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6">'
     +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;margin-bottom:7px"><div><div style="font-size:12px;font-weight:650;color:#334155">整批繳費單明細</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">這批只需要簽核一次；會計請在同一關上傳一份整批繳費單總和檔案。</div></div><div style="font-size:11px;color:#a08060;font-weight:650">共 '+rows.length+' 張 · '+fmt(billGroupTotal(b))+'</div></div>'
-    +'<div style="overflow-x:auto"><table class="invoice-review-table" style="min-width:760px"><thead><tr><th style="width:70px">序號</th><th>繳費人</th><th>項目</th><th>期間</th><th style="width:150px;text-align:right">應收金額</th></tr></thead><tbody>'
+    +'<div class="finance-detail-scroll" tabindex="0" role="region" aria-label="繳費單明細，可左右捲動"><table class="invoice-review-table finance-detail-table" style="min-width:760px"><thead><tr><th style="width:70px">序號</th><th>繳費人</th><th>項目</th><th>期間</th><th style="width:150px;text-align:right">應收金額</th></tr></thead><tbody>'
     +rows.map(function(x,idx){
       var rid='bill-detail-'+key+'-'+idx;
       return '<tr id="'+rid+'"><td><span class="badge b-blue">#'+(idx+1)+'</span></td><td>'+escAttr(x.payer||'—')+'</td><td>'+escAttr(x.item||'—')+'</td><td>'+escAttr(x.period||'—')+'</td><td style="text-align:right;font-weight:750;color:#3b2410">'+fmt(x.amt||0)+'</td></tr>';
@@ -12942,25 +13054,6 @@ function invoiceRowRate(row){
 function invoiceLineEditInput(id,value,label,type){
   type=type||'text';
   return '<input id="'+id+'" type="'+type+'" value="'+escAttr(value==null?'':value)+'" aria-label="'+escAttr(label)+'" title="'+escAttr(label)+'" style="width:100%;font-size:12px;padding:7px 8px;border:1px solid #e8d2b3;border-radius:7px;background:#fff;font-family:var(--font-sans);font-weight:650">';
-}
-function invoiceApprovalLineEditableDetail(row,idx){
-  var q=invoiceLineQuantity(row),total=Math.round(invoiceNumberValue(row.total));
-  var detailRows=[
-    {label:'買受人',value:row.buyer||'—'},
-    {label:'開立方式',value:invoiceIdentifierType(row.identifierType)},
-    {label:'統編/載具號碼',value:row.taxId||row.taxid||row.tax_id||'—'},
-    {label:'收入類別 / 科目',value:invoiceIncomeCategorySummaryHtml(row),html:true},
-    {label:'品項說明',value:invoiceLineEditInput('inv-line-desc-'+idx,row.desc||'','品項說明'),html:true},
-    {label:'數量',value:invoiceLineEditInput('inv-line-qty-'+idx,q,'數量','number'),html:true},
-    {label:'含稅金額',value:invoiceLineEditInput('inv-line-total-'+idx,total,'含稅金額','number'),html:true},
-    {label:'營業稅',value:fmt(row.tax||0)},
-    {label:'狀態',value:receiptStatusLabel(row)},
-    {label:'資料來源',value:row.batchId?'整批發票':'單張發票'}
-  ];
-  return '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;background:#fffaf2;border:1px solid #efd7b8;border-radius:8px">'
-    +detailRows.map(function(d){return'<div style="min-width:0"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+d.label+'</div><div style="font-size:12px;color:#334155;word-break:break-word">'+(d.html?d.value:escAttr(d.value))+'</div></div>';}).join('')
-    +'<div style="grid-column:1/-1;font-size:10px;color:#8b7358;line-height:1.5">此區只有執行長、行政部門主任或會計可修訂；按下核准後才會寫回發票明細與收入科目。</div>'
-    +'</div>';
 }
 function applyInvoiceApprovalLineEdits(row,idx){
   if(!row||!canEditInvoiceAccountingDetails(row))return false;
@@ -13009,21 +13102,19 @@ function invoiceReviewDetailHtml(i,opts){
   var editable=!!opts.editable&&canEditInvoiceAccountingDetails(i);
   var actionIds={};
   if(editable)invoiceBatchActionRows(i).forEach(function(row){actionIds[row.id]=true;});
-  var groupKey=safeStorageSegment(invoiceGroupKey(i).replace(':','_'),'invoice');
-  return '<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6">'
-    +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;margin-bottom:7px"><div><div style="font-size:12px;font-weight:650;color:#334155">'+title+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">'+(editable?'可修訂品項、數量與含稅金額；收入科目由上方欄位套用，按核准後寫回。':'主管先核對每張發票總額；點選任一列可展開買受人、統編/載具、品項與稅額細項。')+'</div></div><div style="font-size:11px;color:#a08060;font-weight:650">共 '+rows.length+' 張</div></div>'
-    +'<div style="overflow-x:auto"><table class="invoice-review-table" style="min-width:720px"><thead><tr><th style="width:110px">發票序號</th><th style="width:150px">發票日期</th><th>發票號碼</th><th style="width:180px;text-align:right">發票含稅總金額</th></tr></thead><tbody>'
+  return '<section class="finance-invoice-review" aria-label="'+escAttr(title)+'">'
+    +'<div class="finance-table-heading"><strong>'+escAttr(title)+'</strong><span>共 '+rows.length+' 張</span></div>'
+    +'<p class="finance-table-note">'+(editable?'可修訂品項、數量與含稅金額；收入科目由上方欄位套用，按核准後寫回。':'依列核對發票日期、買受人、品項與稅額。')+' 欄位較多時，可在表格內左右捲動。</p>'
+    +'<div class="finance-detail-scroll" tabindex="0" role="region" aria-label="'+escAttr(title)+'，可左右捲動"><table class="invoice-review-table finance-detail-table finance-invoice-lines"><thead><tr><th scope="col">#</th><th scope="col">發票日期</th><th scope="col">發票號碼</th><th scope="col">買受人</th><th scope="col">品項說明</th><th scope="col">數量</th><th scope="col">未稅金額</th><th scope="col">營業稅</th><th scope="col">含稅金額</th><th scope="col">收入類別 / 科目</th><th scope="col">開立方式</th><th scope="col">統編/載具號碼</th><th scope="col">狀態</th><th scope="col">資料來源</th></tr></thead><tbody>'
     +rows.map(function(x,idx){
-      var rid='inv-detail-'+groupKey+'-'+idx;
-      var taxId=x.taxId||x.taxid||x.tax_id||'';
       var rowEditable=editable&&!!actionIds[x.id];
-      var detail=rowEditable?invoiceApprovalLineEditableDetail(x,idx):('<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;background:#fffaf2;border:1px solid #efd7b8;border-radius:8px">'
-        +[['買受人',x.buyer||'—'],['開立方式',invoiceIdentifierType(x.identifierType)],['統編/載具號碼',taxId||'—'],['收入類別 / 科目',invoiceIncomeCategoryText(x)],['品項說明',x.desc||'—'],['數量',invoiceLineQuantity(x)],['未稅金額',fmt(x.amt||0)],['營業稅',fmt(x.tax||0)],['狀態',receiptStatusLabel(x)],['資料來源',x.batchId?'整批發票':'單張發票']].map(function(d){return'<div style="min-width:0"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+d[0]+'</div><div style="font-size:12px;color:#334155;word-break:break-word">'+escAttr(d[1])+'</div></div>';}).join('')
-        +'</div>');
-      return '<tr onclick="toggleInvoiceDetailRow(\''+rid+'\')" style="cursor:pointer"><td><span class="badge b-blue">#'+(idx+1)+'</span></td><td>'+escAttr(normDate(x.date||'')||'—')+'</td><td style="font-family:var(--font-sans);color:var(--brtxt);font-weight:650">'+escAttr(x.no||'—')+'<div style="font-family:inherit;font-size:10px;color:#94a3b8;margin-top:2px">點開看細項</div></td><td style="text-align:right;font-weight:750;color:#3b2410">'+fmt(x.total||0)+'</td></tr>'
-        +'<tr id="'+rid+'" style="display:none"><td colspan="4" style="padding:8px 12px;background:#fff">'+detail+'</td></tr>';
-    }).join('')
-    +'</tbody></table></div></div>';
+      return '<tr data-invoice-id="'+escAttr(x.id)+'"><td>'+(idx+1)+'</td><td>'+escAttr(normDate(x.date||'')||'—')+'</td><td>'+escAttr(x.no||'—')+'</td><td>'+escAttr(x.buyer||'—')+'</td>'
+        +'<td>'+(rowEditable?invoiceLineEditInput('inv-line-desc-'+idx,x.desc||'','品項說明'):escAttr(x.desc||'—'))+'</td>'
+        +'<td>'+(rowEditable?invoiceLineEditInput('inv-line-qty-'+idx,invoiceLineQuantity(x),'數量','number'):escAttr(invoiceLineQuantity(x)))+'</td>'
+        +'<td class="finance-amount">'+fmt(x.amt||0)+'</td><td class="finance-amount">'+fmt(x.tax||0)+'</td>'
+        +'<td class="finance-amount">'+(rowEditable?invoiceLineEditInput('inv-line-total-'+idx,Math.round(invoiceNumberValue(x.total)),'含稅金額','number'):fmt(x.total||0))+'</td>'
+        +'<td>'+invoiceIncomeCategorySummaryHtml(x)+'</td><td>'+escAttr(invoiceIdentifierType(x.identifierType))+'</td><td>'+escAttr(x.taxId||x.taxid||x.tax_id||'—')+'</td><td>'+escAttr(receiptStatusLabel(x))+'</td><td>'+(x.batchId?'整批發票':'單張發票')+'</td></tr>';
+    }).join('')+'</tbody></table></div></section>';
 }
 function invoiceBatchDetailHtml(i){
   var rows=invoiceGroupRows(i);
@@ -16464,13 +16555,6 @@ function postedVoucherEntriesHtml(r,prefix,view){
     +'<div class="accounting-lines-scroll"><table class="accounting-lines-table"><thead><tr><th>科目</th><th>名稱</th><th>部門</th><th>借方</th><th>貸方</th></tr></thead><tbody>'
     +voucher.entries.map(function(entry){return '<tr><td>'+escAttr(entry.ac)+'</td><td>'+escAttr(entry.an)+'</td><td>'+escAttr(entry.dept)+'</td><td>'+fmt(entry.t==='dr'?entry.amt:0)+'</td><td>'+fmt(entry.t==='cr'?entry.amt:0)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
 }
-function postedAccountingMobileLinesHtml(r,lines){
-  return '<div class="posted-accounting-mobile-lines">'+lines.map(function(line){
-    return '<section class="posted-accounting-mobile-line"><strong>'+escAttr(line.description)+'</strong><div class="posted-accounting-mobile-subject">'+escAttr(line.debitAccount)+' '+escAttr(line.debitAccountName)+'</div>'
-      +'<dl><div><dt>含稅</dt><dd>'+fmt(line.grossAmount)+'</dd></div><div><dt>未稅／費用</dt><dd>'+fmt(line.netAmount)+'</dd></div><div><dt>進項稅額</dt><dd>'+fmt(line.taxAmount)+'</dd></div></dl>'
-      +'<div class="posted-accounting-mobile-credit">'+(r.type==='petty_cash_request'&&!pettyIsInitial(r)?'貸方 1111 零用金核銷；補足另貸 1112':'貸方 '+escAttr(line.creditAccount)+' '+escAttr(line.creditAccountName))+'</div></section>';
-  }).join('')+'</div>';
-}
 function buildAccountingLines(r){
   if(!r)return [];
   var posted=postedAccountingView(r);
@@ -16627,7 +16711,7 @@ function accountingLinesHtml(r,editable,title){
       +'<td>'+(posted&&r.type==='petty_cash_request'&&!pettyIsInitial(r)?'<span class="acct-cr">1111</span><div style="font-size:10px;color:#64748b">零用金核銷；補足另貸 1112</div>':(subjectEditable?'<select id="'+prefix+'-cr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.creditAccount,'credit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-cr">'+escAttr(line.creditAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.creditAccountName)+'（系統鎖定）</div>'))+'</td>'
       +'</tr>';
   }).join('');
-  return'<div class="card" data-accounting-request="'+escAttr(r.id)+'" data-accounting-prefix="'+escAttr(prefix)+'"'+(posted?' data-posted-accounting-key="'+escAttr(posted.key)+'"':'')+' oninput="scheduleAccountingReviewDraft(this)" onchange="captureAccountingReviewDraftForElement(this)" style="margin-top:10px"><div class="chd"><span class="cht">'+escAttr(title||'明細列會計科目')+'</span><span style="font-size:10px;color:#94a3b8">'+(editAllowed?'可覆核編輯':'僅供檢視')+'</span></div><div style="padding:11px">'+head+(typeof accountingReviewDraftHtml==='function'?accountingReviewDraftHtml(r,prefix):'')+(posted?postedAccountingMobileLinesHtml(r,lines):'')+'<div class="accounting-lines-scroll'+(posted?' posted-accounting-desktop-table':'')+'"><table class="accounting-lines-table"><thead><tr><th>#</th><th>明細</th><th style="text-align:right">未稅/費用</th><th style="text-align:right">進項稅額</th><th style="text-align:right">含稅</th><th>借方科目</th><th>貸方科目</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+(posted?'<details style="margin-top:12px"><summary>完整正式傳票分錄</summary>'+postedVoucherEntriesHtml(r,prefix+'-voucher',posted).replace('data-accounting-request=','data-posted-voucher-request=')+'</details>':'')+'</div></div>';
+  return'<div class="card" data-accounting-request="'+escAttr(r.id)+'" data-accounting-prefix="'+escAttr(prefix)+'"'+(posted?' data-posted-accounting-key="'+escAttr(posted.key)+'"':'')+' oninput="scheduleAccountingReviewDraft(this)" onchange="captureAccountingReviewDraftForElement(this)" style="margin-top:10px"><div class="chd"><span class="cht">'+escAttr(title||'明細列會計科目')+'</span><span style="font-size:10px;color:#94a3b8">'+(editAllowed?'可覆核編輯':'僅供檢視')+'</span></div><div style="padding:11px">'+head+(typeof accountingReviewDraftHtml==='function'?accountingReviewDraftHtml(r,prefix):'')+'<div class="accounting-lines-scroll" tabindex="0" role="region" aria-label="會計明細，可左右捲動"><table class="accounting-lines-table"><thead><tr><th>#</th><th>明細</th><th style="text-align:right">未稅/費用</th><th style="text-align:right">進項稅額</th><th style="text-align:right">含稅</th><th>借方科目</th><th>貸方科目</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+(posted?'<details style="margin-top:12px"><summary>完整正式傳票分錄</summary>'+postedVoucherEntriesHtml(r,prefix+'-voucher',posted).replace('data-accounting-request=','data-posted-voucher-request=')+'</details>':'')+'</div></div>';
 }
 function expenseInvoiceReviewGroups(r){
   var fp=(r&&r.formPayload)||{};
@@ -16675,6 +16759,8 @@ window.toggleExpenseInvoiceDetailRow=function(id){
   var row=el(id);
   if(!row)return;
   row.style.display=(row.style.display==='none'||!row.style.display)?'table-row':'none';
+  document.querySelectorAll('[aria-controls]').forEach(function(button){if(button.getAttribute('aria-controls')===id)button.setAttribute('aria-expanded',row.style.display!=='none'?'true':'false');});
+  window.refreshFinancialTableScrollHints();
 };
 function expenseInvoiceReviewHtml(r){
   var groups=expenseInvoiceReviewGroups(r);
@@ -16683,14 +16769,14 @@ function expenseInvoiceReviewHtml(r){
   var total=groups.reduce(function(s,g){return s+num(g.total);},0);
   var rows=groups.map(function(g,idx){
     var rid='expense-invoice-detail-'+key+'-'+idx;
-    var detail='<div style="padding:10px;background:#fffaf2;border:1px solid #efd7b8;border-radius:8px">'
-      +'<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px">'
-      +[['來源檔案',g.file||'—'],['買方統編',g.buyerTaxId||'—'],['賣方統編',g.sellerTaxId||'—'],['明細筆數',g.items.length+' 筆']].map(function(d){return'<div style="min-width:0"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+d[0]+'</div><div style="font-size:12px;color:#334155;word-break:break-word">'+escAttr(d[1])+'</div></div>';}).join('')
-      +'</div><div style="overflow:auto"><table style="min-width:760px"><thead><tr><th>#</th><th>品項明細</th><th>數量</th><th>單價</th><th style="text-align:right">未稅</th><th style="text-align:right">營業稅</th><th style="text-align:right">含稅</th></tr></thead><tbody>'
+    var detail='<div class="finance-invoice-items">'
+      +'<dl class="finance-invoice-source">'
+      +[['來源檔案',g.file||'—'],['買方統編',g.buyerTaxId||'—'],['賣方統編',g.sellerTaxId||'—'],['明細筆數',g.items.length+' 筆']].map(function(d){return'<div><dt>'+d[0]+'</dt><dd>'+escAttr(d[1])+'</dd></div>';}).join('')
+      +'</dl><div class="finance-detail-scroll" tabindex="0" role="region" aria-label="發票品項，可左右捲動"><table class="finance-detail-table finance-invoice-items-table"><thead><tr><th>#</th><th>品項明細</th><th>數量</th><th>單價</th><th style="text-align:right">未稅</th><th style="text-align:right">營業稅</th><th style="text-align:right">含稅</th></tr></thead><tbody>'
       +g.items.map(function(item,i){return'<tr><td style="text-align:center;color:#94a3b8">'+(i+1)+'</td><td><div style="font-weight:750;color:#334155">'+escAttr(item.item)+'</div></td><td>'+escAttr(item.qty||'—')+' '+escAttr(item.unitName||'')+'</td><td>'+fmt(item.unitPrice||0)+'</td><td style="text-align:right">'+fmt(item.net||0)+'</td><td style="text-align:right">'+fmt(item.tax||0)+'</td><td style="text-align:right;font-weight:800">'+fmt(item.total||0)+'</td></tr>';}).join('')
       +'</tbody></table></div></div>';
     return '<tr onclick="toggleExpenseInvoiceDetailRow(\''+rid+'\')" style="cursor:pointer">'
-      +'<td><span class="badge b-blue">#'+(idx+1)+'</span></td>'
+      +'<td><button type="button" class="finance-invoice-expand" aria-controls="'+rid+'" aria-expanded="false" onclick="event.stopPropagation();toggleExpenseInvoiceDetailRow(\''+rid+'\')">#'+(idx+1)+' 明細</button></td>'
       +'<td>'+escAttr(g.date||'—')+'</td>'
       +'<td><div style="font-family:var(--font-sans);font-weight:800;color:#334155">'+escAttr(g.no||'—')+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">'+(g.file?'來源：'+escAttr(g.file):'點開看細項')+'</div></td>'
       +'<td style="text-align:right;font-weight:900;color:#3b2410">'+fmt(g.total||0)+'</td>'
@@ -16699,7 +16785,7 @@ function expenseInvoiceReviewHtml(r){
   return'<div class="card" style="margin-top:10px;border-color:#f0c982;background:#fff">'
     +'<div class="chd"><span class="cht">發票核對表</span><span style="font-size:11px;color:#a08060">共 '+groups.length+' 張 · '+fmt(total)+'</span></div>'
     +'<div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">主管先核對每張發票的日期、號碼與含稅總金額；點選任一列可展開品項、稅額、來源檔案與統編資訊。</div>'
-    +'<div style="overflow-x:auto"><table class="invoice-review-table" style="min-width:760px"><thead><tr><th style="width:110px">發票序號</th><th style="width:140px">發票日期</th><th>發票號碼 / 來源</th><th style="width:190px;text-align:right">發票含稅總金額</th></tr></thead><tbody>'+rows+'</tbody></table></div></div></div>';
+    +'<div class="finance-detail-scroll" tabindex="0" role="region" aria-label="發票核對明細，可左右捲動"><table class="invoice-review-table finance-detail-table" style="min-width:760px"><thead><tr><th style="width:110px">發票序號</th><th style="width:140px">發票日期</th><th>發票號碼 / 來源</th><th style="width:190px;text-align:right">發票含稅總金額</th></tr></thead><tbody>'+rows+'</tbody></table></div></div></div>';
 }
 function collectAccountingLinesFromDom(r){
   var prefix=arguments.length>1&&arguments[1]?arguments[1]:'acct-line';
@@ -24103,6 +24189,7 @@ function approvalDataLoadWarningHtml(){
     +'</div></div>';
 }
 function buildApprovals(){
+  setApprovalTabVisual(S.aT||'p');
   var correctionQueue=el('accounting-correction-queue');
   if(!correctionQueue&&el('appr-list')){correctionQueue=document.createElement('div');correctionQueue.id='accounting-correction-queue';el('appr-list').before(correctionQueue);}
   if(correctionQueue)correctionQueue.innerHTML=canReviseAccountingDetails()||currentRoleKey()==='cashier'?'<button type="button" class="btn-g" onclick="openExpenseAccountingCorrections()">金額更正與差額待辦</button>':'';
@@ -24193,11 +24280,26 @@ window.debugApprovalLinks=function(){
   return rows;
 };
 function setApprovalTabVisual(t){
-  var order=['p','cashier','h','mine','drafts','rejected'];
-  document.querySelectorAll('#pg-approvals .tb').forEach(function(b,i){
-    b.classList.toggle('on',order[i]===t);
+  var descriptions={p:'輪到你簽核、補件或確認的單據。出納付款與收款請看「出納待辦」。',cashier:'輪到你處理的付款、收款與出納作業。',mine:'你已送出的申請，可查看目前進度與待處理人。',drafts:'尚未送出的表單，可繼續填寫或刪除。',h:'查詢你已簽核或曾受指派的流程；每筆分別標示「本人已處理」或「曾列入流程」。',rejected:'你送出的單據被駁回，或由你駁回的紀錄。輪到你補件的原單會列在「待我處理」。'};
+  var selected=Object.prototype.hasOwnProperty.call(descriptions,t)?t:'p';
+  document.querySelectorAll('#pg-approvals [data-approval-tab]').forEach(function(button){
+    var active=button.dataset.approvalTab===selected;
+    button.classList.toggle('on',active);
+    if(button.getAttribute('aria-selected')!==String(active))button.setAttribute('aria-selected',String(active));
+    if(button.tabIndex!==(active?0:-1))button.tabIndex=active?0:-1;
   });
+  var description=el('approval-tab-description');if(description&&description.textContent!==descriptions[selected])description.textContent=descriptions[selected];
+  var list=el('appr-list'),label='approval-tab-'+selected;
+  if(list&&list.getAttribute('aria-labelledby')!==label)list.setAttribute('aria-labelledby',label);
 }
+window.approvalTabKeydown=function(event){
+  if(!event||['ArrowLeft','ArrowRight','Home','End'].indexOf(event.key)<0)return;
+  var current=event.target.closest('[data-approval-tab]');if(!current)return;
+  var buttons=Array.from(document.querySelectorAll('#pg-approvals [data-approval-tab]')).filter(function(button){return !button.hidden&&!button.disabled;});
+  var index=buttons.indexOf(current);if(index<0)return;
+  var next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;
+  event.preventDefault();buttons[next].focus();buttons[next].click();
+};
 function openApprovalTab(t){
   S.aT=t||'p';
   S.apprPage=1;
@@ -24216,8 +24318,7 @@ window.apprTab=function(t,btn){
   S.apprPage=1;
   S.apprSelected={};
   approvalClearBulkExpectedSteps();
-  document.querySelectorAll('#pg-approvals .tb').forEach(function(b){b.classList.remove('on');});
-  if(btn)btn.classList.add('on');else setApprovalTabVisual(t);
+  setApprovalTabVisual(t);
   closeAppr();
   buildApprovals();
   if(t==='h')ensureApprovalHistoryCurrent({page:1}).catch(function(error){console.warn('approval history tab failed',error);});
@@ -24911,7 +25012,7 @@ function approvalTableHeaderHtml(){
     +approvalHeaderCell('amount','金額')
     +approvalHeaderCell('applyDate','申請日期')
     +(S.aT==='h'?approvalHeaderCell('actionDate','簽核日期'):approvalHeaderCell('payDate','預計匯款日'))
-    +(approvalWaitColumnVisible()?approvalHeaderCell('waitTime','你讓下一關等了'):'')
+    +(approvalWaitColumnVisible()?approvalHeaderCell('waitTime','待處理時間'):'')
     +'</tr></thead>';
 }
 function approvalPagerHtml(total,page,pages){
@@ -24983,10 +25084,10 @@ function renderApprList(data){
   var isHistory=S.aT==='h',historyRuntime=isHistory?approvalHistoryRuntimeForCurrentUser():null;
   var filtered=approvalApplySearchSort(data);
   var total=isHistory?Math.max(0,Number(historyRuntime.total)||0):filtered.length;
-  var pages=Math.max(1,Math.ceil(total/50)),page=Math.min(Math.max(1,S.apprPage||1),pages);
+  var pages=Math.max(1,Math.ceil(total/50)),page=isHistory?Math.max(1,historyRuntime.page||1):Math.min(Math.max(1,S.apprPage||1),pages);
   S.apprPage=page;
   var hint=el('appr-list-hint');if(hint)hint.textContent=isHistory
-    ?(historyRuntime.status==='loading'?'正在更新曾參與流程的紀錄':('共 '+total+' 筆曾參與流程 · 每頁最多 50 筆'))
+    ?(historyRuntime.status==='loading'?'正在更新曾參與流程的紀錄':historyRuntime.status==='error'?'簽核紀錄更新未完成，請重試':('共 '+total+' 筆曾參與流程 · 每頁最多 50 筆'))
     :('搜尋後 '+total+' 筆 · 每頁最多 50 筆');
   if(!filtered.length){
     if(isHistory&&historyRuntime.status==='loading'){
@@ -24995,7 +25096,7 @@ function renderApprList(data){
       return;
     }
     if(isHistory&&historyRuntime.status==='error'){
-      l.innerHTML='<div class="card" style="text-align:center;padding:34px;color:#991b1b;font-size:12px">紀錄暫時無法更新，既有資料不會被當成 0 筆。<br><button class="btn-g" style="margin-top:10px" onclick="loadApprovalHistoryPage({force:true})">重新載入</button></div>';
+      l.innerHTML='<div class="card" style="text-align:center;padding:34px;color:#991b1b;font-size:12px">紀錄暫時無法更新，既有資料不會被當成 0 筆。<br><button type="button" class="btn-g" style="margin-top:10px;min-height:44px!important" onclick="loadApprovalHistoryPage({force:true})">重新載入</button></div>';
       syncApprovalWaitTimer();
       return;
     }
@@ -35005,6 +35106,7 @@ async function loadFinanceNotifications(options){
   var state=financeNotificationState();
   if(S.demoLogin||!state.identity||!currentFinanceAuthUserId())return {data:[],error:null,skipped:true};
   if(state.promise)return state.promise;
+  if(options.reuseFresh&&state.status==='ready'&&state.lastSuccessAt&&Date.now()-new Date(state.lastSuccessAt).getTime()<30000)return {data:state.rows,error:null,count:state.count,reused:true};
   var client=options.client||null;
   state.status='loading';state.error=null;
   refreshFinanceNotificationViews();

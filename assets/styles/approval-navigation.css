@@ -1,0 +1,26 @@
+/* Task groups keep every destination visible without changing workflow filters. */
+#pg-approvals .approval-tabs-bar{display:block!important;padding:16px!important;overflow:visible!important}
+#pg-approvals .approval-tabs-scroll{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px!important;width:100%!important;max-width:100%!important;padding:0!important;overflow:visible!important;touch-action:auto!important;cursor:auto!important;scroll-snap-type:none!important}
+#pg-approvals .approval-nav-group{min-width:0}
+#pg-approvals .approval-nav-label{display:block;margin:0 0 7px 8px;color:#79644e;font-size:12px;font-weight:700;letter-spacing:.08em}
+#pg-approvals .approval-nav-group>div{display:flex;gap:6px;background:#f7f3ed;border-radius:12px;padding:4px}
+#pg-approvals [data-approval-tab]{display:flex;align-items:center;justify-content:center;gap:5px;flex:1;min-width:0!important;min-height:44px!important;margin:0!important;padding:9px 8px!important;border:0!important;border-radius:9px!important;background:transparent;color:#63584c;font-size:14px;white-space:normal!important;line-height:1.35;touch-action:manipulation}
+#pg-approvals [data-approval-tab].on{background:#a65600!important;color:#fff!important;box-shadow:0 2px 5px #7c45001f}
+#pg-approvals [data-approval-tab]>span{display:inline-flex;align-items:center;justify-content:center;min-width:20px;padding:1px 5px;border-radius:99px;background:#e9dfd2;color:#634528;font-size:11px;line-height:1.5}
+#pg-approvals [data-approval-tab].on>span{background:#ffffff30;color:inherit}
+#pg-approvals [data-approval-tab]:focus-visible{outline:3px solid #1167bb;outline-offset:2px}
+#pg-approvals .approval-tab-description{margin:13px 0 12px;color:#685a4b;font-size:13px;line-height:1.65;white-space:normal!important;min-width:0;width:100%;overflow-wrap:anywhere}
+#pg-approvals .approval-tabs-bar .appr-toolbar{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;width:100%!important;margin:0!important;padding-top:12px;border-top:1px solid #eee2d5}
+#pg-approvals .approval-tabs-bar .appr-toolbar input{flex:1;min-width:180px!important;width:auto!important;max-width:620px!important;min-height:44px!important;font-size:14px}
+#pg-approvals .approval-tabs-bar #appr-list-hint{display:block!important;white-space:normal}
+@media(max-width:1000px){
+  #pg-approvals .approval-tabs-scroll{grid-template-columns:1fr;gap:8px!important}
+  #pg-approvals .approval-nav-group{display:grid;grid-template-columns:36px minmax(0,1fr);gap:8px;align-items:center}
+  #pg-approvals .approval-nav-label{margin:0;font-size:12px}
+}
+@media(max-width:760px){
+  #pg-approvals .approval-tabs-bar{padding:12px!important}
+  #pg-approvals .approval-tabs-bar .appr-toolbar{gap:7px}
+  #pg-approvals .approval-tabs-bar .appr-toolbar input{flex-basis:100%;max-width:100%!important;font-size:16px}
+  #pg-approvals .approval-tab-description{font-size:12px}
+}
