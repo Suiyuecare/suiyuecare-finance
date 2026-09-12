@@ -1,0 +1,21 @@
+'use strict';
+const fs=require('fs'),assert=require('node:assert/strict');
+const source=fs.readFileSync('index.html','utf8');
+function extract(name){const a=source.indexOf('function '+name+'(');assert(a>=0);let n=0;for(let i=source.indexOf('{',a);i<source.length;i++){if(source[i]==='{')n++;else if(source[i]==='}'&&!--n)return source.slice(a,i+1);}throw Error(name);}
+const state={aT:'mine'},users={owner:{n:'本人'},manager:{n:'現任主管'}};
+const esc=s=>String(s||'').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const progress=new Function('S','activeStep','flowIsTerminal','userById','stepBelongsToUser','stepTitle','escAttr',extract('employeeRequestProgressHtml')+';return employeeRequestProgressHtml;')(state,r=>r.step,r=>!!r.done,id=>users[id],s=>s.uid==='owner',s=>s.r,esc);
+const status={cls:'b-blue',label:'待簽核'};
+assert.match(progress({kind:'req',raw:{step:{uid:'manager',n:'上一位簽核人',r:'部門主管'}}},status),/待處理：現任主管/);
+assert.doesNotMatch(progress({kind:'req',raw:{step:{uid:'missing',n:'上一位簽核人',r:'部門主管'}}},status),/上一位簽核人|已由/);
+assert.match(progress({kind:'req',raw:{step:{uid:'owner',rk:'applicant_revision',r:'補件'}}},status),/請依退回原因補件/);
+assert.match(progress({kind:'req',raw:{step:{uid:'owner',rk:'applicant_confirm',r:'確認收款'}}},status),/請確認收款或回報疑義/);
+assert.doesNotMatch(progress({kind:'req',raw:{done:true,step:{uid:'owner',r:'確認'}}},status),/待處理/);
+assert.equal(progress({kind:'inv',raw:{}},status),'');state.aT='pending';assert.equal(progress({kind:'req',raw:{}},status),'');
+const contact=new Function('escAttr',extract('orgContactInfoHtml')+';return orgContactInfoHtml;')(esc);
+assert.match(contact({contactEmail:'work@example.invalid',email:'login@example.invalid'},false),/聯絡信箱：work@example.invalid/);
+assert.doesNotMatch(contact({contactEmail:'work@example.invalid',email:'login@example.invalid'},false),/login@example.invalid/);
+assert.match(contact({contactEmail:'work@example.invalid',email:'login@example.invalid'},true),/登入信箱：login@example.invalid/);
+assert.match(contact({email:'login@example.invalid'},false),/聯絡信箱：尚未設定/);
+assert.doesNotMatch(contact({contactEmail:'<img src=x>'},false),/<img/);
+console.log('PASS 12 actual employee progress/contact rendering checks');

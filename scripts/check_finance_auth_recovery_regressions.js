@@ -12,7 +12,7 @@ function fn(name) {
   const next = rest.slice(1).search(/^(?:(?:async )?function |window\.|var )/m);
   return next < 0 ? rest : rest.slice(0, next + 1);
 }
-function install(ctx, names) { vm.createContext(ctx); names.forEach(name => vm.runInContext(fn(name), ctx)); return ctx; }
+function install(ctx, names) { if(!ctx.window)ctx.window={}; vm.createContext(ctx); names.forEach(name => vm.runInContext(fn(name), ctx)); return ctx; }
 const user = (id = 'auth-a', email = 'new@suiyuecare.com') => ({
   id, email: 'old@suiyuecare.com', email_confirmed_at: '2026-08-01',
   app_metadata: { provider: 'google' },
@@ -106,7 +106,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
     const edited = { item: '人工明細', netAmount: 4500, taxAmount: 111, grossAmount: 4611, debitCode: '6221', creditCode: '1112', manualAccounting: true };
     const ctx = install({
       S: { page: 'newreq', user: profile(), nrStep: 3, nrType, nrRec: 'receipt', nrPay: 'bank', lazyMode: nrType === 'expense_reimbursement',
-        lazyRows: [edited], hrRows: [{ ...edited, employee: 'fixture' }], purchaseRows: [{ ...edited, qty: 2 }],
+        nrPettyGeneralRows:[edited],nrPettyGeneralReceiptType:'invoice',lazyRows: [edited], hrRows: [{ ...edited, employee: 'fixture' }], purchaseRows: [{ ...edited, qty: 2 }],
         refundRows: [{ ...edited }], travelRows: [{ ...edited, amount: 4611, amountEdited: true }], travelPeople: ['employee-a'],
         hrItem: 'insurance', hrPeriod: '2026-09', hrLaborPeriod: '2026-07/08', hrPrivacyMode: true,
         nrFiles: [new Blob(['private attachment'])], travelFiles: { train: [new Blob(['ticket'])] }, nrDraftId: 'draft-a' },
@@ -137,6 +137,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
     draft.newRequest.user = { authUserId: 'auth-b' };
     assert.equal(await ctx.restoreFinanceAuthRecoveryDraft(), true);
     assert.equal(ctx.S.nrType, nrType); assert.equal(ctx.S.nrStep, 3); assert.equal(ctx.S.nrDraftId, 'draft-a');
+    assert.deepEqual(plain(ctx.S.nrPettyGeneralRows),[edited],'petty mode draft survives reauthentication');assert.equal(ctx.S.nrPettyGeneralReceiptType,'invoice');
     assert.equal(ctx.S.user.authUserId, 'auth-a', 'recovery cannot replace identity via arbitrary saved state keys');
     for (const key of ['lazyRows', 'hrRows', 'purchaseRows', 'travelRows', 'refundRows', 'travelPeople']) assert.deepEqual(plain(ctx.S[key]), rowArrays[key], `${nrType} ${key} preserved`);
     assert.equal(fields[0].value, '人工用途'); assert.equal(fields[1].value, '4611');

@@ -66,6 +66,8 @@ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','no
 fs.appendFileSync(ledger,guard.REPORTING_INTEGRITY_MIGRATIONS.join('\n')+'\n');
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/audit readiness migration batch/);
 fs.appendFileSync(ledger,guard.AUDIT_READINESS_MIGRATIONS.join('\n')+'\n');
+assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/employee reliability migration batch/);
+fs.appendFileSync(ledger,guard.EMPLOYEE_RELIABILITY_MIGRATIONS.join('\n')+'\n');
 assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
 fs.unlinkSync(finalFile);assert.throws(()=>guard.readAuditBatch(migrationDir,versions),/missing/);
 await db.close();fs.rmSync(dir,{recursive:true});

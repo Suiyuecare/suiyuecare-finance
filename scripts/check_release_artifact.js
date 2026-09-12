@@ -128,6 +128,27 @@ function releaseSourceFiles() {
     'scripts/finance_amount_search_postflight.sql',
     'scripts/finance_amount_search_canary.sql',
   'scripts/finance_reporting_integrity_fingerprint.sql',
+  'assets/engines/payment-concerns.js',
+  'assets/styles/payment-concerns.css',
+  'assets/engines/employee-form-ux.js',
+  'assets/styles/employee-form-ux.css',
+  'assets/styles/employee-auth-notifications.css',
+  'docs/finance-employee-reliability.md',
+  'scripts/check_employee_payment_concerns.cjs',
+  'scripts/check_employee_progress_contacts.cjs',
+  'scripts/check_employee_form_ux.js',
+  'scripts/check_employee_form_ux_browser.cjs',
+  'scripts/check_employee_auth_notifications.cjs',
+  'scripts/check_expense_submission_identity.cjs',
+  'scripts/check_expense_posting_reliability.cjs',
+  'scripts/check_expense_revision_reliability.cjs',
+  'scripts/fixtures/finance_expense_revision_runtime_20260912.sql',
+  'scripts/fixtures/finance_expense_revision_operations_20260912.sql',
+  'scripts/fixtures/finance_employee_payment_concerns_fixture.cjs',
+  'scripts/test_employee_reliability_release_batch.mjs',
+  'scripts/finance_employee_reliability_postflight.sql',
+  'scripts/finance_employee_reliability_fingerprint.sql',
+  'scripts/finance_employee_reliability_canary.sql',
   'assets/engines/audit-readiness-engine.js',
   'assets/engines/audit-workspace.js',
   'assets/styles/audit-workspace.css',
@@ -235,6 +256,9 @@ function releaseSourceFiles() {
     'scripts/check_attachment_download_browser.cjs',
     'scripts/check_finance_auth_recovery_regressions.js',
     'scripts/check_finance_auth_recovery_browser.cjs',
+    'scripts/check_employee_auth_notifications_browser.cjs',
+    'scripts/check_employee_progress_concerns_browser.cjs',
+    'scripts/check_expense_posting_browser.cjs',
     'scripts/check_finance_approval_runtime_browser.cjs',
     'scripts/test_current_identity_runtime_sql.mjs',
     'scripts/check_finance_org_regressions.js',
@@ -301,7 +325,7 @@ if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(builtIndex)) {
   fail('artifact contains a forbidden Supabase elevated key');
 }
 
-const requiredReportArtifacts=["assets/engines/audit-readiness-engine.js","assets/engines/audit-workspace.js","assets/styles/audit-workspace.css","assets/engines/document-search.js","assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
+const requiredReportArtifacts=["assets/engines/payment-concerns.js", "assets/styles/payment-concerns.css", "assets/engines/employee-form-ux.js", "assets/styles/employee-form-ux.css", "assets/styles/employee-auth-notifications.css","assets/engines/audit-readiness-engine.js","assets/engines/audit-workspace.js","assets/styles/audit-workspace.css","assets/engines/document-search.js","assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
 for(const item of requiredReportArtifacts){
   const built=path.join(OUTPUT,item),source=path.join(ROOT,item);
   if(!fs.existsSync(built)||!fs.readFileSync(built).equals(fs.readFileSync(source)))fail('report artifact is missing or differs from its exact source: '+item);

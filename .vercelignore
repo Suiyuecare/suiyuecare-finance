@@ -56,6 +56,9 @@ supabase/.temp
 !scripts/fixtures/**
 !scripts/check_finance_auth_recovery_regressions.js
 !scripts/check_finance_auth_recovery_browser.cjs
+!scripts/check_employee_auth_notifications_browser.cjs
+!scripts/check_employee_progress_concerns_browser.cjs
+!scripts/check_expense_posting_browser.cjs
 !scripts/check_finance_approval_runtime_browser.cjs
 !scripts/test_current_identity_runtime_sql.mjs
 !scripts/check_finance_org_regressions.js
@@ -173,3 +176,26 @@ supabase/.temp
 !scripts/finance_audit_readiness_postflight.sql
 !scripts/finance_audit_readiness_canary.sql
 !scripts/fixtures/finance_audit_readiness_fixture.cjs
+
+# Employee reliability sources and rollback-only release checks
+!assets/engines/payment-concerns.js
+!assets/styles/payment-concerns.css
+!assets/engines/employee-form-ux.js
+!assets/styles/employee-form-ux.css
+!assets/styles/employee-auth-notifications.css
+!docs/finance-employee-reliability.md
+!scripts/check_employee_payment_concerns.cjs
+!scripts/check_employee_progress_contacts.cjs
+!scripts/check_employee_form_ux.js
+!scripts/check_employee_form_ux_browser.cjs
+!scripts/check_employee_auth_notifications.cjs
+!scripts/check_expense_submission_identity.cjs
+!scripts/check_expense_posting_reliability.cjs
+!scripts/check_expense_revision_reliability.cjs
+!scripts/fixtures/finance_expense_revision_runtime_20260912.sql
+!scripts/fixtures/finance_expense_revision_operations_20260912.sql
+!scripts/fixtures/finance_employee_payment_concerns_fixture.cjs
+!scripts/test_employee_reliability_release_batch.mjs
+!scripts/finance_employee_reliability_postflight.sql
+!scripts/finance_employee_reliability_fingerprint.sql
+!scripts/finance_employee_reliability_canary.sql
