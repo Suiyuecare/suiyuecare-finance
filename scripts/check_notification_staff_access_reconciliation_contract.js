@@ -129,7 +129,7 @@ check('notifications add a restrictive tenant and production-lane policy without
 
 check('frontend notification reads, inserts, and bulk updates carry tenant/environment scope',
   /tenantStampedRemoteTable[\s\S]*?'notifications'/.test(index)
-  && /from\('notifications'\)\.select\('\*'\)\.eq\('tenant_id',currentTenantId\(\)\)\.eq\('data_environment',activeDataEnvironment\(\)\)/.test(index)
+  && /from\('notifications'\)\.select\('\*',\{count:'exact'\}\)\.eq\('tenant_id',currentTenantId\(\)\)\.eq\('data_environment',activeDataEnvironment\(\)\)/.test(index)
   && /table==='notifications'\)updateQuery=updateQuery\.eq\('tenant_id',currentTenantId\(\)\)\.eq\('data_environment',activeDataEnvironment\(\)\)/.test(index)
   && /from\('notifications'\)\.update\(\{read:true\}\)\.eq\('tenant_id',currentTenantId\(\)\)\.eq\('data_environment',activeDataEnvironment\(\)\)/.test(index));
 
