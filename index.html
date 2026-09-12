@@ -12384,6 +12384,7 @@ function canActStep(r,s){
   return financeRuntimeAccess('act_approval_step',table,r,{step:s}).ok;
 }
 function canActRequest(r){
+  if(r&&typeof loadExpenseRevisionPending==='function'){var revisionPending=loadExpenseRevisionPending();if(revisionPending&&revisionPending.recordId===r.id)return false;}
   if(r&&typeof loadExpensePostingPending==='function'&&loadExpensePostingPending(r.id))return false;
   if(r&&r.formPayload&&r.formPayload.accountingCorrection&&['pending_review','pending_cash'].indexOf(r.formPayload.accountingCorrection.status)>-1)return false;
   if(typeof approvalRecordReconcilePending==='function'&&approvalRecordReconcilePending('expense',r))return false;
@@ -18233,9 +18234,15 @@ window.nrFilePickerKeydown=function(event){
 function renderNRFList(){
   var fl=el('nr-flist');if(!fl)return;
   var engine=window.FinanceEmployeeFormUX;
-  if(engine)engine.renderFiles(fl,S.nrFiles||[],{onRemove:window.nrRemoveFile});
+  if(engine)engine.renderFiles(fl,S.nrFiles||[],{onRemove:S.nrRevisionConfirmationPending?null:window.nrRemoveFile});
   else fl.textContent=(S.nrFiles||[]).map(function(file){return file.name||file.n;}).join('、')||'尚未選擇附件';
   if(S.nrDraftFileNotice){var notice=document.createElement('p');notice.className='efux-file-note';notice.textContent=S.nrDraftFileNotice;fl.prepend(notice);}
+  if(S.nrRevisionConfirmationPending){
+    var recovery=document.createElement('div');recovery.innerHTML=expenseRevisionRecoveryHtml();fl.prepend(recovery);
+    var locked=document.createElement('p');locked.className='efux-file-note';locked.textContent='結果尚待確認。補件內容與附件已保留，確認原結果前不能新增、移除或更換附件。';recovery.append(locked);
+  }else if(isExpenseApplicantRevisionMode()){
+    var revisionNote=document.createElement('p');revisionNote.className='efux-file-note';revisionNote.textContent='原附件屬於簽核紀錄，不能刪除；本次附件會追加到原單。';fl.prepend(revisionNote);
+  }
   renderEmployeeFileIssues();
   var dz=el('nr-dz');if(dz)dz.classList.toggle('filled',S.nrFiles.length>0);
 }
@@ -21725,15 +21732,18 @@ async function submitExpenseRequestWithAmbiguousRecovery(record,label){
   return{ok:false,unknown:true,uncertain:true,error:pendingError};
 }
 async function callExpenseApplicantRevisionRpcOnce(args){
-  try{return await getSb().rpc('finance_expense_resubmit_applicant_revision',args);}
+  try{return await withOperationTimeout(getSb().rpc('finance_expense_resubmit_applicant_revision',args),'確認補件交易',45000);}
   catch(error){return{data:null,error:error};}
 }
 async function readExpenseApplicantRevisionRow(recordId){
-  var response=await getSb().from('expense_requests').select('*')
+  var identity=expensePostingIdentity();
+  if(!expenseTransactionIdentityCurrent(identity))return null;
+  var response=await withOperationTimeout(getSb().from('expense_requests').select('*')
     .eq('tenant_id',currentTenantId())
     .eq('data_environment',activeDataEnvironment())
     .eq('id',recordId)
-    .limit(1);
+    .limit(1),'讀取原補件結果',12000);
+  if(!expenseTransactionIdentityCurrent(identity))return null;
   if(response.error)throw response.error;
   var raw=response.data&&response.data[0];
   if(!raw)return null;
@@ -21805,7 +21815,109 @@ function expenseApplicantRevisionReadbackCommitted(row,action,expected,comment,f
   if(step.a!=='approved'||(activeStep(row)&&activeStep(row).rk==='applicant_revision')||!expenseApplicantRevisionPatchMatches(row,formPatch))return false;
   return expenseRevisionContainsFilePaths(step.files||[],stepFiles||[]);
 }
+function expenseRevisionPendingStorageKey(){return 'finance_expense_revision_pending_v1:'+expensePostingIdentity();}
+function loadExpenseRevisionPending(){
+  var pending=S.nrRevisionConfirmationPending;
+  if(!pending||pending.identity!==expensePostingIdentity())try{pending=JSON.parse(sessionGetItem(expenseRevisionPendingStorageKey())||'null');}catch(_){pending=null;}
+  if(!pending||pending.identity!==expensePostingIdentity()||!pending.rpcArgs||pending.rpcArgs.p_request_id!==pending.recordId||pending.rpcArgs.p_idempotency_key!==pending.key||['resubmit','cancel'].indexOf(pending.action)<0||pending.rpcArgs.p_action!==pending.action)return null;
+  S.nrRevisionConfirmationPending=pending;return pending;
+}
+function saveExpenseRevisionPending(pending){
+  if(!pending||pending.identity!==expensePostingIdentity())return false;
+  S.nrRevisionConfirmationPending=pending;
+  try{return sessionSetItem(expenseRevisionPendingStorageKey(),JSON.stringify(pending));}catch(_){return false;}
+}
+function clearExpenseRevisionPending(pending){
+  if(!pending||pending.identity!==expensePostingIdentity())return;
+  if(S.nrRevisionConfirmationPending&&S.nrRevisionConfirmationPending.key!==pending.key)return;
+  S.nrRevisionConfirmationPending=null;
+  try{sessionRemoveItem(expenseRevisionPendingStorageKey());}catch(_){}
+}
+function expenseRevisionRecoveryHtml(r){
+  var pending=loadExpenseRevisionPending();if(!pending||(r&&pending.recordId!==r.id))return '';
+  return '<div class="card" style="padding:12px;margin-bottom:10px;flex:1;min-width:0"><strong>'+escAttr(pending.recordNo||pending.recordId)+' · 原補件結果待確認</strong><div style="font-size:12px;line-height:1.6;margin:6px 0">已保留原補件內容、附件及交易識別碼。請確認原動作結果，確認前不能另外取消或重新送出。</div><button type="button" class="btn-p" style="min-height:44px!important" onclick="reconcilePendingExpenseRevision()">確認原補件結果</button></div>';
+}
+function expenseRevisionReplyMatches(response,pending){
+  var payload=response&&!response.error&&normalizeSettingValue(response.data||{});
+  return !!(payload&&payload.ok===true&&String(payload.id||'')===String(pending.recordId)&&payload.action===pending.action&&typeof payload.idempotent_replay==='boolean');
+}
+function protectExpenseRevisionCommittedUploads(pending){
+  if(pending.action!=='resubmit'||S.nrRevisionRid!==pending.recordId)return;
+  var args=pending.rpcArgs||{},patch=args.p_form_patch||{};
+  var committed=expenseRevisionFilePaths([].concat(args.p_step_files||[],patch.files||[],(patch.form_payload||{}).passbookFiles||[]));
+  S.nrRevisionPendingUploads=normalizeFiles(S.nrRevisionPendingUploads||[]).filter(function(file){return !committed[attachmentStoragePath(file)];});
+  (S.nrFiles||[]).forEach(function(file){
+    var meta=file&&file.__revisionUploadedMeta;
+    if(meta&&committed[attachmentStoragePath(meta)]){file.__revisionOriginal=true;delete file.__revisionUploadedMeta;}
+  });
+  var passbook=S.nrPassbookFile&&S.nrPassbookFile.__revisionUploadedMeta;
+  if(passbook&&committed[attachmentStoragePath(passbook)]){
+    var existing=expenseRevisionFilePaths(S.nrRevisionOriginalPassbookFiles||[]);
+    if(!existing[attachmentStoragePath(passbook)])S.nrRevisionOriginalPassbookFiles=(S.nrRevisionOriginalPassbookFiles||[]).concat([cloneSettingValue(passbook)]);
+    S.nrPassbookFile=null;
+  }
+}
+async function runExpenseRevisionPending(pending){
+  var wasUnknown=pending.uncertain===true,lastError=null;
+  for(var attempt=0;attempt<2;attempt++){
+    if(!expenseTransactionIdentityCurrent(pending.identity))return{ok:false,unknown:true,identityChanged:true};
+    pending.uncertain=true;
+    if(!saveExpenseRevisionPending(pending)&&!wasUnknown){
+      clearExpenseRevisionPending(pending);
+      return{ok:false,error:new Error('無法保存本次補件識別碼，尚未送出交易。補件內容與附件仍保留，請釋出分頁儲存空間後再試。')};
+    }
+    var response=await callExpenseApplicantRevisionRpcOnce(cloneSettingValue(pending.rpcArgs));
+    if(!expenseTransactionIdentityCurrent(pending.identity))return{ok:false,unknown:true,identityChanged:true};
+    if(expenseRevisionReplyMatches(response,pending)){
+      protectExpenseRevisionCommittedUploads(pending);
+      var reloaded=false;
+      try{reloaded=await withOperationTimeout(reloadRequestsByIds([pending.recordId]),'讀取已保存補件',12000);}catch(_){}
+      if(!expenseTransactionIdentityCurrent(pending.identity))return{ok:false,unknown:true,identityChanged:true};
+      clearIncomeActionContext(pending.actionContext);clearExpenseRevisionPending(pending);
+      return{ok:true,payload:response.data,refreshRequired:!reloaded};
+    }
+    lastError=response&&response.error||new Error('補件回應沒有包含可確認的原單號與成功狀態');
+    var ambiguous=!(response&&response.error)||expenseApplicantRevisionRpcErrorIsAmbiguous(lastError);
+    if(!ambiguous&&!wasUnknown){clearExpenseRevisionPending(pending);return{ok:false,error:lastError};}
+    wasUnknown=true;
+    if(!ambiguous)break;
+  }
+  var args=pending.rpcArgs,readback=null;
+  try{readback=await readExpenseApplicantRevisionRow(pending.recordId);}catch(_){}
+  if(!expenseTransactionIdentityCurrent(pending.identity))return{ok:false,unknown:true,identityChanged:true};
+  if(expenseApplicantRevisionReadbackCommitted(readback,pending.action,pending.expected,args.p_comment,args.p_form_patch,args.p_step_files)){
+    protectExpenseRevisionCommittedUploads(pending);
+    clearIncomeActionContext(pending.actionContext);clearExpenseRevisionPending(pending);
+    return{ok:true,payload:{ok:true,id:pending.recordId,no:pending.recordNo,action:pending.action,readback_confirmed:true},refreshRequired:false,readbackConfirmed:true};
+  }
+  var error=new Error('補件處理結果尚待確認。原識別碼、內容與附件已保留；請按「確認原補件結果」重試同一筆交易，確認前不要另行取消或送出。');
+  error.code='APPLICANT_REVISION_RESULT_UNKNOWN';error.reason='applicant_revision_result_unknown';error.cause=lastError;
+  return{ok:false,unknown:true,uncertain:true,error:error};
+}
+window.reconcilePendingExpenseRevision=async function(){
+  if(!expenseTransactionIdentityCurrent(expensePostingIdentity()))return false;
+  var pending=loadExpenseRevisionPending();if(!pending){alert('目前沒有待確認的原補件交易。');return false;}
+  var key='expense-revision:'+pending.recordId;if(POSTING_IN_FLIGHT[key]){alert('正在確認原補件結果，請勿重複點擊。');return false;}
+  if(S.demoLogin||!hasSupabase()){alert('尚未連上正式交易服務，原補件內容仍保留。');return false;}
+  POSTING_IN_FLIGHT[key]=true;
+  try{
+    var result=await runExpenseRevisionPending(pending);
+    if(result.identityChanged)return false;
+    if(!result.ok){renderNRFList();alert(friendlyErrorMessage(result.error,{action:'確認原補件結果'}));return false;}
+    // Recovered uploads may already be referenced by a committed revision.
+    // Never delete them or re-upload them during an outcome check.
+    if(S.nrRevisionRid===pending.recordId){clearExpenseApplicantRevisionMode();clearNRDirtyBaseline();}
+    completeActionFeedback(pending.action==='cancel'?'申請已結束':'補件已重新送出','已確認原交易，未重複送出或清除原始紀錄。');
+    try{buildAll();if(!result.refreshRequired&&REQS.some(function(row){return row.id===pending.recordId;}))openDetail(pending.recordId);else openApprovalTab('mine');}catch(_){}
+    alert('申請單 '+pending.recordNo+(pending.action==='cancel'?' 已確認結束。':' 已確認完成補件並重新送出。')+(result.refreshRequired?'\n交易已保存，但最新畫面尚未讀回，請稍後重新整理確認。':''));return true;
+  }catch(error){
+    if(expenseTransactionIdentityCurrent(pending.identity))alert('原補件結果仍待確認，原內容與附件繼續保留。'+friendlyErrorMessage(error,{action:'確認原補件結果'}));return false;
+  }finally{delete POSTING_IN_FLIGHT[key];}
+};
+
 async function expenseApplicantRevisionRpc(record,action,comment,formPatch,stepFiles,expectedOverride){
+  if(!expenseTransactionIdentityCurrent(expensePostingIdentity()))return{ok:false,unknown:true,identityChanged:true};
+  if(loadExpenseRevisionPending())return{ok:false,unknown:true,error:new Error('原補件結果尚待確認，請按「確認原補件結果」，不能改做其他動作。')};
   if(S.demoLogin||!hasSupabase())return{ok:false,error:new Error('正式補件交易功能未連線，系統已停止寫入。')};
   var guard=expenseApplicantRevisionGuard(record,expectedOverride);if(!guard.ok)return{ok:false,error:new Error(guard.error)};
   var expected=guard.expected;
@@ -21822,42 +21934,16 @@ async function expenseApplicantRevisionRpc(record,action,comment,formPatch,stepF
     p_step_files:normalizeFiles(stepFiles||[]),
     p_data_environment:activeDataEnvironment()
   };
-  var response=await callExpenseApplicantRevisionRpcOnce(rpcArgs);
-  if(response.error){
-    if(isRpcMissing(response.error))return{ok:false,error:new Error('申請人補件交易功能尚未上線，系統已停止寫入，請通知管理員完成資料庫更新。')};
-    if(!expenseApplicantRevisionRpcErrorIsAmbiguous(response.error))return{ok:false,error:response.error};
-    await new Promise(function(resolve){setTimeout(resolve,350);});
-    var retryResponse=await callExpenseApplicantRevisionRpcOnce(rpcArgs);
-    if(!retryResponse.error){
-      var retryPayload=normalizeSettingValue(retryResponse.data||{});
-      if(retryPayload.ok){response=retryResponse;}
-      else retryResponse={data:retryResponse.data,error:new Error('補件交易重試沒有回傳成功狀態')};
-    }
-    if(retryResponse.error){
-      var readback=null,readbackError=null;
-      try{readback=await readExpenseApplicantRevisionRow(record.id);}catch(error){readbackError=error;}
-      if(expenseApplicantRevisionReadbackCommitted(readback,action,expected,comment,formPatch||{},stepFiles||[])){
-        clearIncomeActionContext(actionContext);
-        S.nrRevisionConfirmationPending=null;
-        return{ok:true,payload:{ok:true,action:action,id:record.id,no:record.no,readback_confirmed:true},refreshRequired:false,readbackConfirmed:true};
-      }
-      var pendingMessage='補件處理結果尚待確認，請勿離開目前畫面。系統已使用同一識別碼重試並讀回正式單據，但目前仍無法安全判定是否完成；系統不會清理附件或清除補件內容。';
-      S.nrRevisionConfirmationPending={recordId:record.id,recordNo:record.no,action:action,key:actionContext.key,expected:cloneSettingValue(expected),rpcArgs:cloneSettingValue(rpcArgs),startedAt:new Date().toISOString()};
-      try{recordOpsEvent('expense_applicant_revision_result_unknown','warn','補件處理結果尚待確認',pendingMessage,{recordId:record.id,recordNo:record.no,action:action,idempotencyKey:actionContext.key,retryable:true,readbackError:readbackError?formatStorageUploadError(readbackError):'',dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});}catch(_){ }
-      var pendingError=new Error(pendingMessage);pendingError.code='APPLICANT_REVISION_RESULT_UNKNOWN';pendingError.reason='applicant_revision_result_unknown';
-      return{ok:false,unknown:true,uncertain:true,error:pendingError};
-    }
-  }
-  var payload=normalizeSettingValue(response.data||{});
-  if(!payload.ok)return{ok:false,error:new Error('補件交易沒有回傳成功狀態，請重新整理確認。')};
-  clearIncomeActionContext(actionContext);
-  S.nrRevisionConfirmationPending=null;
-  var reloaded=await reloadRequestsByIds([record.id]);
-  if(!reloaded)try{await loadRemoteData();}catch(_){return{ok:true,payload:payload,refreshRequired:true};}
-  return{ok:true,payload:payload,refreshRequired:!reloaded};
+  var pending={identity:expensePostingIdentity(),recordId:record.id,recordNo:record.no,action:action,key:actionContext.key,expected:cloneSettingValue(expected),rpcArgs:cloneSettingValue(rpcArgs),actionContext:actionContext,uncertain:false,startedAt:new Date().toISOString()};
+  var lockKey='expense-revision:'+record.id;
+  POSTING_IN_FLIGHT[lockKey]=true;
+  try{return await runExpenseRevisionPending(pending);}finally{delete POSTING_IN_FLIGHT[lockKey];}
 }
+
 async function submitExpenseApplicantRevisionFromForm(ctx){
-  if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，請勿重複送出或離開目前畫面。系統保留原識別碼、補件內容與附件。');return false;}
+  var identity=expensePostingIdentity();
+  if(!expenseTransactionIdentityCurrent(identity))return false;
+  if(loadExpenseRevisionPending())return await window.reconcilePendingExpenseRevision();
   var record=expenseApplicantRevisionCurrentRecord();
   var guard=expenseApplicantRevisionGuard(record);
   if(!guard.ok){alert(guard.error);return false;}
@@ -21866,10 +21952,11 @@ async function submitExpenseApplicantRevisionFromForm(ctx){
     department:record.dc+' '+((gD(record.dc)||{}).n||''),amount:ctx.amount,isFixedExpense:ctx.isFixedExpense,desc:ctx.description,
     payee:ctx.payment.payee||'依原流程後續填寫',bankText:ctx.payment.summary||'依原流程後續填寫',fileCount:(S.nrFiles||[]).length,passbookCount:S.nrRevisionOriginalPassbookFiles.length+(S.nrPassbookFile?1:0),nextStep:'依原簽核流程重新解析'
   });
-  if(!confirmed)return false;
+  if(!expenseTransactionIdentityCurrent(identity)||!confirmed)return false;
   showActionFeedback('正在重新送出補件','系統正在追加新附件並保存原申請單，請不要重複點擊。');
   var delta;
   try{delta=await uploadExpenseRevisionDelta(record);}catch(uploadErr){failActionFeedback('補件附件上傳失敗',friendlyErrorMessage(uploadErr,{action:'上傳補件附件'}));alert('補件附件上傳失敗：'+friendlyErrorMessage(uploadErr,{action:'上傳補件附件'}));return false;}
+  if(!expenseTransactionIdentityCurrent(identity))return false;
   var formPayload={
     requestPurpose:ctx.purpose,requestNote:ctx.note,
     receiptType:S.nrRec||'',paymentType:S.nrPay||'bank',isFixedExpense:ctx.isFixedExpense,is_fixed_expense:ctx.isFixedExpense,
@@ -21884,11 +21971,12 @@ async function submitExpenseApplicantRevisionFromForm(ctx){
     request_date:ctx.requestDate,files:delta.requestFiles.map(function(file){return cloneSettingValue(file);}),petty_mode:S.pettyMode||null,form_payload:formPayload
   };
   var result=await expenseApplicantRevisionRpc(record,'resubmit',ctx.comment||'申請人已完成補件並重新送出',patch,delta.stepFiles);
+  if(result.identityChanged)return false;
   if(!result.ok){
     if(result.unknown||result.uncertain){
-      failActionFeedback('結果尚待確認，請勿離開','系統保留補件內容與附件，不會執行清理。');
+      failActionFeedback('原補件結果待確認','請按「確認原補件結果」。系統保留原內容與附件，不會執行清理。');
       renderNRFList();
-      alert('結果尚待確認，請勿離開目前畫面。\n\n'+friendlyErrorMessage(result.error,{action:'確認補件送出結果'})+'\n\n請保持網路連線；不要重新整理、返回或關閉頁面。');
+      alert(friendlyErrorMessage(result.error,{action:'確認補件送出結果'}));
       return false;
     }
     failActionFeedback('補件重新送出失敗',friendlyErrorMessage(result.error,{action:'重新送出補件'}));alert('補件重新送出失敗：'+friendlyErrorMessage(result.error,{action:'重新送出補件'})+'\n\n系統保留目前畫面內容，請依提示確認後再試。');return false;
@@ -21903,7 +21991,8 @@ async function submitExpenseApplicantRevisionFromForm(ctx){
   return true;
 }
 window.cancelExpenseApplicantRevision=async function(rid){
-  if(S.nrRevisionConfirmationPending){alert('前一次補件處理結果尚待確認，現在不能改做其他動作。請勿離開目前畫面。');return;}
+  if(!expenseTransactionIdentityCurrent(expensePostingIdentity()))return;
+  if(loadExpenseRevisionPending()){alert('前一次補件結果尚待確認，不能另外取消；請按「確認原補件結果」。');return;}
   var record=REQS.find(function(row){return row.id===rid;});
   var expected=S.nrRevisionRid===rid?(S.nrRevisionExpected||expenseApplicantRevisionExpectedSnapshot(record)):expenseApplicantRevisionExpectedSnapshot(record);
   var guard=expenseApplicantRevisionGuard(record,expected);if(!guard.ok){alert(guard.error);return;}
@@ -21911,8 +22000,9 @@ window.cancelExpenseApplicantRevision=async function(rid){
   if(!reason||!reason.trim()){alert('不通過並結束本單必須填寫原因。');return;}
   if(!confirm('確定不再補件並結束申請單 '+record.no+'？系統會保留完整紀錄。'))return;
   var result=await expenseApplicantRevisionRpc(record,'cancel',reason.trim(),{},[],expected);
+  if(result.identityChanged)return;
   if(!result.ok){
-    if(result.unknown||result.uncertain){renderNRFList();alert('結果尚待確認，請勿離開目前畫面。\n\n'+friendlyErrorMessage(result.error,{action:'確認結束補件結果'})+'\n\n系統不會清理附件或清除補件內容。');return;}
+    if(result.unknown||result.uncertain){renderNRFList();try{buildAll();openDetail(rid);}catch(_){}alert('請按「確認原補件結果」。\n\n'+friendlyErrorMessage(result.error,{action:'確認結束補件結果'})+'\n\n系統不會清理附件或清除補件內容。');return;}
     alert('結束本單失敗：'+friendlyErrorMessage(result.error,{action:'結束補件申請'}));return;
   }
   var cleanupWarning='';
@@ -21951,6 +22041,7 @@ function nrTravelValidationTarget(kind,field){
   return box.id;
 }
 window.submitNR=async function(){
+  if(loadExpenseRevisionPending()){await window.reconcilePendingExpenseRevision();return;}
   if(S.nrSubmissionConfirmationPending||loadExpenseSubmissionPending()){
     if(!await guardSubmissionIdentityDirectory('確認上一筆費用申請'))return;
     var pendingResolution=await reconcilePendingExpenseSubmission({notify:true,allowRetry:true});
@@ -22606,6 +22697,7 @@ function ensureRevisionLockedOption(select,value,label){
 }
 window.openReturnedRequestEditor=function(rid,opts){
   opts=opts||{};
+  var pendingRevision=loadExpenseRevisionPending();if(pendingRevision){if(!opts.restored)alert('原補件結果尚待確認，請先確認原交易。');openDetail(pendingRevision.recordId);return;}
   var r=REQS.find(function(row){return row.id===rid;});
   var step=r&&activeStep(r);
   if(!r||!step||step.rk!=='applicant_revision'||!requestIsMine(r)||!canActRequest(r)){
@@ -23339,6 +23431,7 @@ window.openDetail=function(rid){
   }
   // FIX 1：會計確認後自動生成傳票
   if(r.status==='pending_voucher'&&canActRequest(r))acts.push('<div style="min-width:260px;max-width:460px;flex:1">'+advanceFinalAmtField+approvalActionFields('detail-appr-c','detail-appr-files','detail-appr-add-user',{excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\',\'detail-appr\',\'detail-advance-final\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn);
+  var revisionRecovery=expenseRevisionRecoveryHtml(r);if(revisionRecovery)acts=[revisionRecovery];
   var postingRecovery=expensePostingRecoveryHtml(r);if(postingRecovery)acts=[postingRecovery];
   if(r.voucherId)acts.push('<button class="btn-g" onclick="showVoucherById(\''+r.voucherId+'\')">查看傳票 '+r.voucherId+'</button>');
   if(canWithdrawRequest(r)&&(!curStep||curStep.rk!=='applicant_revision'))acts.push('<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button>');
@@ -23557,6 +23650,9 @@ var EXPENSE_POSTING_PENDING={};
 function expensePostingIdentity(){
   return [currentTenantId(),activeDataEnvironment(),S.user&&S.user.id||'',S.user&&(S.user.authUserId||S.user.auth_user_id)||''].join('|');
 }
+function expenseTransactionIdentityCurrent(identity){
+  return !(typeof financeWorkspaceIdentityBlocked!=='undefined'&&financeWorkspaceIdentityBlocked)&&identity===expensePostingIdentity();
+}
 function expensePostingStorageKey(rid){return 'finance_expense_posting_pending_v1:'+expensePostingIdentity()+':'+rid;}
 function loadExpensePostingPending(rid){
   var key=expensePostingStorageKey(rid),entry=EXPENSE_POSTING_PENDING[key];
@@ -23568,7 +23664,7 @@ function saveExpensePostingPending(entry){
   if(!entry||entry.identity!==expensePostingIdentity())return false;
   var key=expensePostingStorageKey(entry.args.p_request_id);
   EXPENSE_POSTING_PENDING[key]=entry;
-  return sessionSetItem(key,JSON.stringify(entry));
+  try{return sessionSetItem(key,JSON.stringify(entry));}catch(_){return false;}
 }
 function clearExpensePostingPending(entry){
   if(!entry||entry.identity!==expensePostingIdentity())return;
@@ -23577,7 +23673,7 @@ function clearExpensePostingPending(entry){
 }
 function expensePostingRecoveryHtml(r){
   var entry=r&&loadExpensePostingPending(r.id);if(!entry||S.demoLogin)return '';
-  return '<div class="card" style="padding:12px;flex:1;min-width:0"><strong>原入帳結果待確認</strong><div style="font-size:12px;line-height:1.6;margin:6px 0">已保留原傳票編號與送出內容。確認時只重試同一筆交易，資料庫仍會檢查權限及防止重複入帳；確認前請勿更改金額或另建單。</div><button type="button" class="btn-p" style="min-height:44px" onclick="doConfirmVoucher('+financeInlineJsString(r.id)+')">確認原入帳結果</button></div>';
+  return '<div class="card" style="padding:12px;flex:1;min-width:0"><strong>原入帳結果待確認</strong><div style="font-size:12px;line-height:1.6;margin:6px 0">已保留原傳票編號與送出內容。確認時只重試同一筆交易，資料庫仍會檢查權限及防止重複入帳；確認前請勿更改金額或另建單。</div><button type="button" class="btn-p" style="min-height:44px!important" onclick="doConfirmVoucher('+financeInlineJsString(r.id)+')">確認原入帳結果</button></div>';
 }
 function expensePostingResultValid(result,args){
   var data=result&&result.data;
@@ -23588,10 +23684,14 @@ function expensePostingResultValid(result,args){
 async function runExpensePostingTransaction(entry){
   var client=getSb(),ambiguous=entry.uncertain===true,lastError=null;
   for(var attempt=0;attempt<2;attempt++){
-    if(entry.identity!==expensePostingIdentity())return {ok:false,unknown:true,identityChanged:true};
+    if(!expenseTransactionIdentityCurrent(entry.identity))return {ok:false,unknown:true,identityChanged:true};
     // Mark uncertainty before dispatch: browser termination may occur after DB
     // commit but before this promise resolves. The database validates any replay.
-    entry.uncertain=true;saveExpensePostingPending(entry);
+    entry.uncertain=true;
+    if(!saveExpensePostingPending(entry)&&!ambiguous){
+      clearExpensePostingPending(entry);
+      return {ok:false,error:new Error('無法保存本次入帳識別碼，尚未送出任何入帳交易。請釋出分頁儲存空間或重新開啟瀏覽器後再試。')};
+    }
     var result;
     try{
       var response=await withOperationTimeout(client.rpc('finalize_expense_request',cloneSettingValue(entry.args)),attempt?'確認傳票入帳結果':'傳票入帳',45000);
@@ -23601,15 +23701,15 @@ async function runExpensePostingTransaction(entry){
         var malformed=new Error('傳票交易回應不完整，尚不能確認完成。');malformed.code='FINANCE_POSTING_RESPONSE_UNKNOWN';throw malformed;
       }
     }catch(error){
-      if(entry.identity!==expensePostingIdentity())return {ok:false,unknown:true,identityChanged:true};
+      if(!expenseTransactionIdentityCurrent(entry.identity))return {ok:false,unknown:true,identityChanged:true};
       lastError=error;
-      var isAmbiguous=expenseApplicantRevisionRpcErrorIsAmbiguous(error)||error.code==='FINANCE_POSTING_RESPONSE_UNKNOWN';
+      var isAmbiguous=!error||expenseApplicantRevisionRpcErrorIsAmbiguous(error)||error.code==='FINANCE_POSTING_RESPONSE_UNKNOWN';
       if(!isAmbiguous&&!ambiguous){clearExpensePostingPending(entry);return {ok:false,error:error};}
       ambiguous=true;
       if(!isAmbiguous)break;
       continue;
     }
-    if(entry.identity!==expensePostingIdentity())return {ok:false,unknown:true,identityChanged:true};
+    if(!expenseTransactionIdentityCurrent(entry.identity))return {ok:false,unknown:true,identityChanged:true};
     entry.receipt=cloneSettingValue(result.data);saveExpensePostingPending(entry);
     return {ok:true,data:result.data,retried:attempt>0};
   }
@@ -23617,7 +23717,11 @@ async function runExpensePostingTransaction(entry){
 }
 async function finishExpensePostingTransaction(original,args){
   var entry=loadExpensePostingPending(original.id)||{identity:expensePostingIdentity(),args:cloneSettingValue(args),uncertain:false,createdAt:new Date().toISOString()};
-  saveExpensePostingPending(entry);
+  if(!saveExpensePostingPending(entry)&&!entry.uncertain){
+    clearExpensePostingPending(entry);
+    alert('無法保存本次入帳識別碼，尚未送出任何入帳交易。人工修改仍保留，請釋出分頁儲存空間或重新開啟瀏覽器後再試。');
+    return false;
+  }
   var outcome=await runExpensePostingTransaction(entry);
   if(outcome.identityChanged)return false;
   if(!outcome.ok){
@@ -23637,7 +23741,7 @@ async function finishExpensePostingTransaction(original,args){
     var saved=REQS.find(function(row){return row.id===original.id;});
     reloaded=!!(reloaded&&saved&&saved.status==='completed'&&saved.voucherId===outcome.data.voucher_id&&requestPostingLocked(saved));
   }catch(_){reloaded=false;}
-  if(entry.identity!==expensePostingIdentity())return false;
+  if(!expenseTransactionIdentityCurrent(entry.identity))return false;
   if(reloaded)clearExpensePostingPending(entry);
   approvalSetReconcilePending('expense',[original.id],!reloaded);
   invalidateDashboardFinancialCache();
@@ -23646,11 +23750,12 @@ async function finishExpensePostingTransaction(original,args){
   try{
     var notice={id:'n_posting_'+outcome.data.voucher_id,type:'system',title:'傳票 '+outcome.data.voucher_id+' 已自動生成',body:original.no+' 已完成入帳',time:'剛才',read:false,reqId:original.id,recordType:'expense_requests',dataEnv:activeDataEnvironment(),tenantId:currentTenantId()};
     var noticeResult=await withOperationTimeout(dbInsertOnce('notifications',notifDbRow(notice)),'入帳完成通知',8000);
+    if(!expenseTransactionIdentityCurrent(entry.identity))return false;
     if(!noticeResult||noticeResult.ok!==true)throw(noticeResult&&noticeResult.error||new Error('通知未保存'));
     if(!(NOTIFS||[]).some(function(row){return row.id===notice.id;}))NOTIFS.unshift(notice);
     if(!noticeResult.duplicate)deliverExternalNotification(notice,{eventType:'approval'});
   }catch(_){notificationWarning='\n入帳完成通知暫時未能保存，原單與傳票已完成，請勿重新入帳。';}
-  if(entry.identity!==expensePostingIdentity())return false;
+  if(!expenseTransactionIdentityCurrent(entry.identity))return false;
   try{buildAll();if(reloaded)openDetail(original.id);}catch(_){reloaded=false;}
   alert('傳票 '+outcome.data.voucher_id+' 已完成入帳'+(outcome.data.idempotent?'（已確認先前交易，未重複建立分錄）':'')+'。'+(!reloaded?'\n最新畫面暫時無法讀回；正式交易已完成，請重新整理查看，勿重複建單。':'')+notificationWarning);
   return true;
@@ -23661,6 +23766,7 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
   prefix=prefix||'appr';advancePrefix=advancePrefix||'advance-final';
   var original=REQS.find(function(x){return x.id===rid;});if(!original)return;
   var postingIdentity=expensePostingIdentity();
+  if(!expenseTransactionIdentityCurrent(postingIdentity))return false;
   var pendingPosting=loadExpensePostingPending(rid);
   if(!pendingPosting&&!canActRequest(original)){alert('目前不是您的入帳步驟');return;}
   if(!pendingPosting&&(requestPostingLocked(original)||requestLedgerRowsExist(original))){alert('此申請單已完成或已鎖定入帳，不能重複切傳票。');return;}
@@ -23677,7 +23783,7 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
   var pettyReady=pettyReadyForFinalAccounting(r);
   if(!pettyReady.ok){alert(pettyReady.msg);return;}
   var p=await approvalActionPayload(prefix+'-c',prefix+'-files',prefix+'-add-user');
-  if(postingIdentity!==expensePostingIdentity())return false;
+  if(!expenseTransactionIdentityCurrent(postingIdentity))return false;
   if(!approvalActionPreflight(p,{noteId:prefix+'-c'}))return;
   if(hasVisibleAccountingInputs('appr-acct-line'))collectAccountingLinesFromDom(r,'appr-acct-line');
   else if(hasVisibleAccountingInputs('detail-acct-line'))collectAccountingLinesFromDom(r,'detail-acct-line');
@@ -23717,8 +23823,9 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
   POSTING_IN_FLIGHT[lockKey]=true;
   try{
     p=await uploadApprovalFiles(p,'expense_requests',r.no,'approval_step');
-    if(postingIdentity!==expensePostingIdentity())return false;
+    if(!expenseTransactionIdentityCurrent(postingIdentity))return false;
   }catch(uploadErr){
+    if(!expenseTransactionIdentityCurrent(postingIdentity))return false;
     console.error(uploadErr);
     delete POSTING_IN_FLIGHT[lockKey];
     alert('入帳附件上傳失敗，這張單尚未完成入帳。請確認網路後重新整理再試；若仍失敗，請將單號交給系統管理員。');
@@ -23851,8 +23958,9 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
   }
   try{
     vid=await withOperationTimeout(nextVoucherNo('V',todayIso()),'取得正式傳票編號',30000);
-    if(postingIdentity!==expensePostingIdentity())return false;
+    if(!expenseTransactionIdentityCurrent(postingIdentity))return false;
   }catch(serialErr){
+    if(!expenseTransactionIdentityCurrent(postingIdentity))return false;
     console.error(serialErr);
     delete POSTING_IN_FLIGHT[lockKey];
     alert('取得正式傳票編號失敗，這張單尚未入帳，人工修改仍保留為本分頁草稿。請確認連線後重試。');
@@ -23926,7 +24034,7 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
   delete POSTING_IN_FLIGHT[lockKey];
   buildAll();openDetail(rid);
   }catch(error){
-    if(postingIdentity!==expensePostingIdentity())return false;
+    if(!expenseTransactionIdentityCurrent(postingIdentity))return false;
     console.error(error);
     alert('入帳處理未能完成確認：'+friendlyErrorMessage(error,{action:'確認傳票'})+'\n目前修改仍保留，請確認原單狀態後再試。');
     return false;
@@ -24000,6 +24108,9 @@ function buildApprovals(){
   if(correctionQueue)correctionQueue.innerHTML=canReviseAccountingDetails()||currentRoleKey()==='cashier'?'<button type="button" class="btn-g" onclick="openExpenseAccountingCorrections()">金額更正與差額待辦</button>':'';
   if(!S.user)return;
   loadDrafts();
+  var revisionRecovery=el('expense-revision-recovery');
+  if(!revisionRecovery&&el('appr-list')){revisionRecovery=document.createElement('div');revisionRecovery.id='expense-revision-recovery';el('appr-list').before(revisionRecovery);}
+  if(revisionRecovery)revisionRecovery.innerHTML=expenseRevisionRecoveryHtml();
 	  if(approvalFastShouldHoldSkeleton()){
 	    renderApprovalImmediateSkeleton('build_approvals');
 	    return;
@@ -25206,8 +25317,9 @@ async function reloadRequestsByIds(ids){
   ids=Array.from(new Set((ids||[]).filter(Boolean)));
   if(!ids.length||S.demoLogin||!hasSupabase())return true;
   var identity=expensePostingIdentity();
+  if(!expenseTransactionIdentityCurrent(identity))return false;
   var loaded=await loadRowsByIdsForApprovalFallback(getSb(),'expense_requests',ids);
-  if(identity!==expensePostingIdentity()||!loaded)return false;
+  if(!expenseTransactionIdentityCurrent(identity)||!loaded)return false;
   var tenantId=currentTenantId(),environment=activeDataEnvironment();
   var mapped=(loaded||[]).filter(function(row){
     return String(row&&row.tenant_id||'')===String(tenantId||'')&&String(row&&row.data_environment||'production')===String(environment||'production');
@@ -25589,10 +25701,11 @@ function markFinanceMutationResultUnknown(actionContext,rpcName,rpcArgs,meta,ret
 async function financeMutationRpcWithAmbiguousRetry(rpcName,rpcArgs,expectedCount,readback,actionContext,meta,rpcCall){
   var identity=expensePostingIdentity();
   function identityChanged(){
-    if(identity===expensePostingIdentity())return null;
+    if(expenseTransactionIdentityCurrent(identity))return null;
     var error=new Error('登入身分或資料環境已變更，已停止舊交易的重試與畫面更新。請以原登入身分確認原單結果。');error.code='FINANCE_MUTATION_IDENTITY_CHANGED';
     return {unknown:true,uncertain:true,identityChanged:true,error:error};
   }
+  var blocked=identityChanged();if(blocked)return blocked;
   var response=await callFinanceMutationRpcOnce(rpcName,rpcArgs,rpcCall);
   var changed=identityChanged();if(changed)return changed;
   if(financeMutationPayloadMatches(response,expectedCount))return{response:response};
@@ -26430,6 +26543,7 @@ function showApprD(r){
   if(!actH&&canWithdrawRequest(r))actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-top:6px">單子尚未進入出納放款關卡，因此申請人可以抽單取消。</div></div>';
   if(requestCashPostedAt(r))actH+=paymentConcernButtonHtml(r);
   actH=approvalActionSectionHtml(actH);
+  var revisionRecovery=expenseRevisionRecoveryHtml(r);if(revisionRecovery)actH=revisionRecovery;
   var postingRecovery=expensePostingRecoveryHtml(r);if(postingRecovery)actH=postingRecovery;
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:var(--font-sans);font-size:10px;color:#c0a080">'+r.no+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+r.app+' · '+e.s+'</div></div></div>'

@@ -34,7 +34,7 @@ async function runCases(f){
   Object.assign(c,{
    setTimeout:(fn,ms)=>setTimeout(fn,ms>=5000?Math.min(ms,opts.timeoutMs||2500):ms),clearTimeout,
    getSb:()=>client,hasSupabase:()=>true,currentTenantId:()=>c.tenant||tenant,activeDataEnvironment:()=>c.env||'test',
-   sessionGetItem:k=>store.get(k)||null,sessionSetItem:(k,v)=>{store.set(k,v);return true;},sessionRemoveItem:k=>store.delete(k),
+   sessionGetItem:k=>store.get(k)||null,sessionSetItem:(k,v)=>{if(opts.storageFails)return false;store.set(k,v);return true;},sessionRemoveItem:k=>store.delete(k),
    cloneSettingValue:clone,num:v=>Number(v)||0,normalizeSettingValue:v=>v,normalizeFiles:clone,financeInlineJsString:v=>JSON.stringify(String(v)).replace(/"/g,'&quot;'),
    alert:v=>c.alerts.push(String(v)),friendlyErrorMessage:e=>e&&e.message||String(e),setTopSyncStatus:()=>{},
    requestPostingLocked:r=>!!(r.ledgerPostedAt||r.postingLockedAt),requestLedgerRowsExist:()=>false,
@@ -49,7 +49,7 @@ async function runCases(f){
    invalidateDashboardFinancialCache:()=>{},buildAll:()=>{if(opts.buildFails)throw Error('UI rendering failed');},openDetail:()=>{},
    persistAccountingLinesRemote:async()=>{c.upserts++;throw Error('postcommit client source overwrite forbidden');},
    reloadRequestsByIds:async()=>{c.reloaded++;if(opts.readFails)throw Error('read network failure');const saved=await state(row.id);c.REQS=[map(saved)];return true;},
-   notifDbRow:n=>n,dbInsertOnce:async()=>{c.notices++;if(opts.noticeFails)throw Error('notification network failed');return{ok:true};},deliverExternalNotification:()=>{c.external++;},
+   notifDbRow:n=>n,dbInsertOnce:async()=>{c.notices++;if(opts.noticeIdentityChange)c.S.user={id:'other',authUserId:'other'};if(opts.noticeFails)throw Error('notification network failed');return{ok:true};},deliverExternalNotification:()=>{c.external++;},
    saveLocalAppStateSoon:()=>{throw Error('formal workflow cannot fall back locally');},callAccountingRpc:()=>{throw Error('formal handler must use recovery transaction');}
   });
   const funcs=['supabaseAuthErrorInfo','withOperationTimeout','expenseApplicantRevisionRpcErrorIsAmbiguous','canActRequest','flowStatusValue','flowIsTerminal','autoAdvanceDuplicateDeptManagerSteps','activeStep','activeStepIndex','requestApprovalStepCompleted','approvedStepCount','requestWorkflowStepCount','syncRequestStatus','markRequestCashPosted','appendStepAction','approveActiveStep'];
@@ -97,6 +97,18 @@ async function runCases(f){
  {
   const {r,c}=await fresh('identity-switch',{transport:async({c,commit})=>{await commit();c.S.user={id:'other',authUserId:'other'};throw Error('Failed to fetch');}});
   await c.window.doConfirmVoucher(r.id);await completed(r,c);check('Account switch stops retry and does not notify or apply the prior user UI',c.calls.length===1&&c.notices===0&&c.reloaded===0&&c.alerts.length===0);
+ }
+ {
+  const {r,c}=await fresh('storage-quota',{storageFails:true});await c.window.doConfirmVoucher(r.id);await pristine(r);check('Storage quota failure before dispatch leaves no finalizer RPC, unknown context or in-flight lock',c.calls.length===0&&!c.loadExpensePostingPending(r.id)&&!c.POSTING_IN_FLIGHT['request-ledger:'+r.id]&&c.alerts.some(x=>x.includes('尚未送出任何入帳交易')));
+ }
+ {
+  const {r,c}=await fresh('notice-identity',{noticeIdentityChange:true});await c.window.doConfirmVoucher(r.id);await completed(r,c);check('Late notification acknowledgement cannot insert old actor notice into a new actor cache',c.NOTIFS.length===0&&c.external===0&&c.alerts.length===0);
+ }
+ {
+  const {r,c}=await fresh('auth-lock-after-commit',{transport:async({c,commit})=>{const out=await commit();c.financeWorkspaceIdentityBlocked=true;return out;}});await c.window.doConfirmVoucher(r.id);await completed(r,c);check('Auth lock with unchanged identity stops old result UI/notification while preserving recoverable pending storage',c.alerts.length===0&&c.NOTIFS.length===0&&c.reloaded===0&&c.loadExpensePostingPending(r.id));
+ }
+ {
+  const {r,c}=await fresh('read-auth-lock');let release;c.loadRowsByIdsForApprovalFallback=()=>new Promise(resolve=>release=resolve);c.mapReq=()=>{throw Error('blocked identity must not map source');};vm.runInContext(source('reloadRequestsByIds'),c);const before=JSON.stringify(c.REQS),work=c.reloadRequestsByIds([r.id]);c.financeWorkspaceIdentityBlocked=true;const rows=[{...r,status:'completed'}];rows.approvalLoadComplete=true;release(rows);assert.equal(await work,false);check('Auth lock with unchanged user prevents late expense readback cache merge',JSON.stringify(c.REQS)===before);
  }
  for(const [label,options]of [['notification failure',{noticeFails:true}],['readback failure',{readFails:true}],['UI failure',{buildFails:true}]]){
   const {r,c}=await fresh(label.replace(/ /g,'-'),options);await c.window.doConfirmVoucher(r.id);await completed(r,c);check(label+' cannot invalidate acknowledged atomic posting or retain the button lock',c.calls.length===1&&c.alerts.some(x=>x.includes('已完成入帳'))&&!c.alerts.some(x=>x.includes('尚未入帳')));
