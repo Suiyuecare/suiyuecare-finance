@@ -24202,7 +24202,7 @@ window.debugApprovalLinks=function(){
   return rows;
 };
 function setApprovalTabVisual(t){
-  var descriptions={p:'輪到你簽核、補件或確認的單據。出納付款與收款請看「出納待辦」。',cashier:'輪到你處理的付款、收款與出納作業。',mine:'你已送出的申請，可查看目前進度與待處理人。',drafts:'尚未送出的表單，可繼續填寫或刪除。',h:'查詢你已簽核或曾受指派的流程；每筆分別標示「本人已處理」或「曾列入流程」。',rejected:'你送出或曾處理的駁回紀錄；輪到你補件的原單會列在「待我處理」。'};
+  var descriptions={p:'輪到你簽核、補件或確認的單據。出納付款與收款請看「出納待辦」。',cashier:'輪到你處理的付款、收款與出納作業。',mine:'你已送出的申請，可查看目前進度與待處理人。',drafts:'尚未送出的表單，可繼續填寫或刪除。',h:'查詢你已簽核或曾受指派的流程；每筆分別標示「本人已處理」或「曾列入流程」。',rejected:'你送出的單據被駁回，或由你駁回的紀錄。輪到你補件的原單會列在「待我處理」。'};
   var selected=Object.prototype.hasOwnProperty.call(descriptions,t)?t:'p';
   document.querySelectorAll('#pg-approvals [data-approval-tab]').forEach(function(button){
     var active=button.dataset.approvalTab===selected;
