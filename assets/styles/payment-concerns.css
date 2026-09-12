@@ -1,0 +1,15 @@
+.payment-concern-dialog{box-sizing:border-box;width:min(700px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:24px;border:1px solid #e9cfac;border-radius:16px;background:#fffcf7;color:#3b2410;overflow:auto}
+.payment-concern-dialog::backdrop{background:rgba(40,29,19,.55)}
+.payment-concern-dialog header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.payment-concern-dialog h2{font-size:20px;margin:0}
+.payment-concern-dialog p{line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.payment-concern-dialog textarea{box-sizing:border-box;width:100%;font:inherit;font-size:16px;margin:8px 0}
+.payment-concern-dialog button,.payment-concern-queue button{min-height:44px!important;white-space:normal}
+.payment-concern-dialog label{display:block}.payment-concern-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.payment-concern-history{padding-left:24px}.payment-concern-history li{margin:12px 0}.payment-concern-history time{display:block;font-size:12px;color:#756351}
+.payment-concern-queue{border:1px solid #e9cfac;border-radius:12px;padding:14px;margin:12px 0;background:#fffaf2}.payment-concern-queue summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700}
+.payment-concern-queue [data-queue-body]{display:flex;gap:8px;flex-wrap:wrap}.payment-concern-queue p{width:100%}
+.employee-progress{display:grid;gap:5px;margin-top:7px;font-size:12px;line-height:1.5;white-space:normal}.employee-progress small{font-size:12px;overflow-wrap:anywhere}.org-person-contact{font-size:12px;overflow-wrap:anywhere;line-height:1.6}
+@media(max-width:600px){.payment-concern-dialog{padding:16px}.payment-concern-actions button{flex:1}.employee-progress{text-align:left}.org-person-contact{font-size:14px}}
+.payment-concern-dialog{margin:auto;inset:0}
+@media(max-width:768px){#pg-approvals .approval-table td.appr-col-formNo .employee-progress{grid-column:1 / -1;width:100%;justify-self:stretch!important;text-align:left!important}}
