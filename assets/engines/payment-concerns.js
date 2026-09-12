@@ -24,13 +24,15 @@
   var node=document.createElement('dialog');dialog=node;node.className='payment-concern-dialog';node.setAttribute('data-finance-approval-dialog','payment-concern');node.setAttribute('aria-labelledby','payment-concern-title');
   node.innerHTML='<header><h2 id="payment-concern-title">收款疑義與回覆</h2><button type="button" data-close class="btn-g">關閉</button></header><p>回報不會重複付款，也不會替你確認收到款項。出納或會計可在「簽核管理 → 收款疑義」查核回覆。</p><p data-feedback role="status" aria-live="polite">正在讀取…</p><div data-body></div>';
   document.body.appendChild(node);node.querySelector('[data-close]').onclick=close;node.addEventListener('cancel',function(e){e.preventDefault();close();});node.showModal();
+  var readVersion=0,mutationVersion=0;
   var key=expected+'|'+id,body=node.querySelector('[data-body]'),feedback=node.querySelector('[data-feedback]');
   async function load(){
    if(!allowed(expected)||!node.isConnected)return;
-   var text=body.querySelector('textarea'),draft=text&&text.value;
+   var readId=++readVersion,mutationId=mutationVersion,text,draft,focused,selection;
    try{
     var data=await rpc('finance_payment_concern_read_v1',{p_request_id:id,p_data_environment:rt().activeDataEnvironment()},expected);
-    if(!node.isConnected||!allowed(expected))return;
+    if(!node.isConnected||!allowed(expected)||readId!==readVersion||mutationId!==mutationVersion)return;
+    text=body.querySelector('textarea');draft=text&&text.value;focused=text&&document.activeElement===text;selection=text?[text.selectionStart,text.selectionEnd]:null;
     var row=data.rows[0],op=operations.get(key),actions=[];
     if(op)actions=[op.args.p_action];
     else if(!row&&data.canReport||row&&row.canReport)actions=['report'];
@@ -39,14 +41,14 @@
      +(actions.length?'<label for="payment-concern-message">說明（必填，最多 2000 字）</label><textarea id="payment-concern-message" maxlength="2000" rows="4" placeholder="例如：尚未收到款項，或實收金額與申請不同"></textarea><div class="payment-concern-actions">'+actions.map(function(a){return '<button type="button" class="btn-p" data-action="'+a+'">'+esc(op?'重試確認原回報結果':actionLabels[a])+'</button>';}).join('')+'</div>':'')
      +'<button type="button" class="btn-g" data-reload>重新讀取回覆</button>';
     feedback.textContent=op?'上一筆結果尚待確認，重試會使用同一筆回報。':'';
-    text=body.querySelector('textarea');if(text){text.value=op?op.args.p_message:draft||'';text.disabled=!!op;}
+    text=body.querySelector('textarea');if(text){text.value=op?op.args.p_message:draft||'';text.disabled=!!op;if(focused&&!text.disabled){text.focus();text.setSelectionRange(selection[0],selection[1]);}}
     body.querySelector('[data-reload]').onclick=load;
     body.querySelectorAll('[data-action]').forEach(function(button){button.onclick=async function(){
      if(!allowed(expected)||button.disabled)return;
      var pending=operations.get(key);
      if(!pending){var message=text.value.trim();if(!message){feedback.textContent='請填寫疑義或查核說明。';text.setAttribute('aria-invalid','true');text.focus();return;}
       pending={args:{p_request_id:id,p_action:button.dataset.action,p_message:message,p_expected_version:row?row.version:0,p_operation_id:crypto.randomUUID(),p_data_environment:rt().activeDataEnvironment()}};operations.set(key,pending);}
-     if(pending.busy)return;pending.busy=true;text.disabled=true;body.querySelectorAll('button').forEach(function(b){b.disabled=true;});feedback.textContent='正在確認保存結果…';
+     if(pending.busy)return;pending.busy=true;mutationVersion++;readVersion++;text.disabled=true;body.querySelectorAll('button').forEach(function(b){b.disabled=true;});feedback.textContent='正在確認保存結果…';
      try{
       var readyTimer,ready;try{ready=await Promise.race([rt().ensureSupabaseWriteReady('收款疑義'),new Promise(function(_,reject){readyTimer=setTimeout(function(){reject(Object.assign(Error('登入驗證逾時，這次尚未送出回報。請重試。'),{code:'42501'}));},15000);})]);}finally{clearTimeout(readyTimer);}if(!ready.ok)throw Object.assign(Error('登入尚未就緒，請重新驗證後重試。'),{code:'42501'});
       await rpc('finance_payment_concern_action_v1',pending.args,expected);operations.delete(key);
@@ -59,7 +61,7 @@
       if(operations.has(key))button.textContent='重試確認原回報結果';
      }finally{pending.busy=false;}
     };});
-   }catch(e){if(node.isConnected&&allowed(expected)){feedback.textContent=e.message||'讀取失敗';if(!body.querySelector('[data-reload],[data-retry]'))body.insertAdjacentHTML('beforeend','<button type="button" class="btn-g" data-retry>重新讀取</button>');var retry=body.querySelector('[data-retry]');if(retry)retry.onclick=load;}}
+   }catch(e){if(node.isConnected&&allowed(expected)&&readId===readVersion&&mutationId===mutationVersion){feedback.textContent=e.message||'讀取失敗';if(!body.querySelector('[data-reload],[data-retry]'))body.insertAdjacentHTML('beforeend','<button type="button" class="btn-g" data-retry>重新讀取</button>');var retry=body.querySelector('[data-retry]');if(retry)retry.onclick=load;}}
   }
   await load();
  }
