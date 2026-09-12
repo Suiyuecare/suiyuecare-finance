@@ -1,0 +1,16 @@
+/* Recovery stays above all application dialogs; native modality contains focus. */
+#finance-auth-recovery{display:none;position:fixed;inset:0;margin:auto;padding:0;border:1px solid #efd7b8;border-radius:18px;width:min(520px,calc(100% - 32px));max-height:calc(100dvh - 32px);max-width:calc(100% - 32px);overflow:auto;background:#fff;color:#3b2410;box-shadow:0 24px 70px #37210a47}
+#finance-auth-recovery::backdrop{background:#251b147a;backdrop-filter:blur(3px)}
+.finance-auth-recovery-card{padding:24px;min-width:0;width:100%;box-sizing:border-box}
+.finance-auth-recovery-icon{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:#fff2df;color:#b45309;font-size:25px;font-weight:900;margin-bottom:14px}
+#finance-auth-recovery h2{font-size:20px;line-height:1.4;margin:0 0 8px}
+#finance-auth-recovery-message{font-size:14px;line-height:1.75;color:#6b594b;overflow-wrap:anywhere}
+.finance-auth-recovery-note{font-size:12px;line-height:1.6;color:#765b43;background:#fff8ed;border-radius:10px;padding:10px 12px;margin:14px 0 0}
+.finance-auth-recovery-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-top:20px}
+#finance-auth-recovery button,.finance-notification-status button{min-height:44px!important;min-width:44px!important;white-space:normal}
+#finance-auth-recovery :focus-visible{outline:3px solid #976415;outline-offset:3px}
+.finance-notification-status{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;padding:12px;background:#f6f7f4;border:1px solid #e1e6da;border-radius:10px;margin-bottom:10px;font-size:12px;line-height:1.65;color:#51605a;overflow-wrap:anywhere}
+.finance-notification-status>span:first-child{flex:1 1 180px;min-width:0}
+.finance-notification-status.is-error{background:#fff8ed;border-color:#e8c999;color:#795223}
+.finance-notification-loading{font-size:11px;color:#64748b}
+@media(max-width:600px){.finance-auth-recovery-card{padding:20px}.finance-auth-recovery-actions .btn-p{flex:1 1 180px}.finance-notification-status button{flex-shrink:0}#pg-notif #notif-sub{max-width:220px;overflow-wrap:anywhere}}

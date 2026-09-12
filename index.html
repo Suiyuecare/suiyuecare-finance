@@ -61,6 +61,7 @@
 <link rel="stylesheet" href="assets/styles/finance-core.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/mobile-operations.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/workflow-simplification.css?v=__FINANCE_ASSET_VERSION__">
+<link rel="stylesheet" href="assets/styles/employee-auth-notifications.css?v=__FINANCE_ASSET_VERSION__">
 <style>
 /* Include dialogs opened by already pending renders after an identity change. */
 body[data-finance-identity-blocked="true"] #main-wrap,
@@ -990,7 +991,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
   </div>
 
   <!-- 通知 -->
-	<div class="pg" id="pg-notif"><div style="display:flex;justify-content:space-between;margin-bottom:12px"><div><div class="ph">通知中心</div><div class="ps" id="notif-sub">0 則未讀</div></div><button class="btn-g" data-mobile-touch-target="notification" onclick="markAllRead()">全部標為已讀</button></div><div class="card"><div class="tb-bar" style="padding:0 4px"><button class="tb on" data-mobile-touch-target="notification" onclick="notifTab('all',this)">全部</button><button class="tb" data-mobile-touch-target="notification" onclick="notifTab('unread',this)">未讀</button><button class="tb" data-mobile-touch-target="notification" onclick="notifTab('approval',this)">簽核</button><button class="tb" data-mobile-touch-target="notification" onclick="notifTab('system',this)">系統</button></div><div id="notif-list" data-mobile-touch-target="notification"></div></div></div>
+	<div class="pg" id="pg-notif"><div style="display:flex;justify-content:space-between;margin-bottom:12px"><div><div class="ph">通知中心</div><div class="ps" id="notif-sub">通知尚未載入</div></div><button class="btn-g" id="notif-mark-all" data-mobile-touch-target="notification" onclick="markAllRead()">全部標為已讀</button></div><div id="notif-load-status" aria-live="polite"></div><div class="card"><div class="tb-bar" style="padding:0 4px"><button class="tb on" data-mobile-touch-target="notification" onclick="notifTab('all',this)">全部</button><button class="tb" data-mobile-touch-target="notification" onclick="notifTab('unread',this)">未讀</button><button class="tb" data-mobile-touch-target="notification" onclick="notifTab('approval',this)">簽核</button><button class="tb" data-mobile-touch-target="notification" onclick="notifTab('system',this)">系統</button></div><div id="notif-list" data-mobile-touch-target="notification"></div></div></div>
 
   <!-- 人員管理（執行長 / 行政部門主任 / 人資可編輯）-->
   <div class="pg" id="pg-users">
@@ -1895,6 +1896,8 @@ var INVS=[];
 var BILLS=[];
 var INVOICE_LIFECYCLE_EVENTS=[];
 var NOTIFS=[];
+var FINANCE_NOTIFICATION_STATE=null;
+var FINANCE_NOTIFICATION_TIMEOUT_MS=12000;
 var LEDGER=[];
 var PERIOD_CLOSES=[];
 var AUDIT_LOGS=[];
@@ -3147,6 +3150,7 @@ function financeSessionMatchesWorkspace(session){
 function setFinanceWorkspaceIdentityBlocked(blocked){
   var wasBlocked=financeWorkspaceIdentityBlocked;
   financeWorkspaceIdentityBlocked=!!blocked;
+  if(blocked&&typeof FINANCE_NOTIFICATION_STATE!=='undefined'){FINANCE_NOTIFICATION_STATE=null;if(typeof NOTIFS!=='undefined')NOTIFS=[];}
   var nodes=['main-wrap','sidebar'].map(function(id){return el(id);});
   if(typeof document!=='undefined'){
     if(document.body){
@@ -3707,68 +3711,115 @@ async function restoreFinanceAuthRecoveryDraft(){
     return financeAuthRecoveryFailed(draft);
   }
 }
+var financeAuthRecoveryReturnFocus=null;
+var financeReauthenticationAttempt=null;
+var FINANCE_REAUTH_TIMEOUT_MS=12000;
+function financeReauthenticationIdentity(){
+  var u=S.user||{};
+  return JSON.stringify([currentFinanceAuthUserId(),u.id||'',u.email||'',currentTenantId(),activeDataEnvironment()]);
+}
 function hideFinanceAuthRecovery(){
-  if(financeWorkspaceIdentityBlocked)return;
+  if(financeWorkspaceIdentityBlocked||financeReauthenticationAttempt)return;
   var modal=el('finance-auth-recovery');
-  if(modal)modal.style.display='none';
+  if(modal){if(modal.open)modal.close();modal.style.display='none';}
+  var previous=financeAuthRecoveryReturnFocus;financeAuthRecoveryReturnFocus=null;
+  if(previous&&previous.isConnected&&!previous.closest('[inert]'))previous.focus();
 }
 function showFinanceAuthRecovery(result,actionLabel){
   result=result||{};
+  if(financeReauthenticationAttempt&&(financeReauthenticationAttempt.identity!==financeReauthenticationIdentity()||financeReauthenticationAttempt.epoch!==financeAuthIdentityEpoch))financeReauthenticationAttempt=null;
   var modal=el('finance-auth-recovery');
   if(!modal){
-    modal=document.createElement('div');
+    // Native modal focus containment also makes the background inert without
+    // modifying (or accidentally restoring) the separate identity lock.
+    modal=document.createElement('dialog');
     modal.id='finance-auth-recovery';
-    modal.style.cssText='position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(37,27,20,.48);backdrop-filter:blur(3px)';
+    modal.setAttribute('aria-labelledby','finance-auth-recovery-title');
+    modal.setAttribute('aria-describedby','finance-auth-recovery-message');
+    modal.setAttribute('role','alertdialog');
+    modal.addEventListener('cancel',function(event){event.preventDefault();hideFinanceAuthRecovery();});
+    modal.addEventListener('keydown',function(event){
+      if(event.key!=='Tab')return;
+      var stops=Array.from(modal.querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')).filter(function(node){return node.getClientRects().length;});
+      var first=stops[0],last=stops[stops.length-1],active=document.activeElement;
+      if(!first){event.preventDefault();el('finance-auth-recovery-title').focus();}
+      else if(event.shiftKey&&(active===first||!stops.includes(active))){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&(active===last||!stops.includes(active))){event.preventDefault();first.focus();}
+    });
     document.body.appendChild(modal);
   }
-  var needsLogin=['missing_auth_session','auth_session_expired','auth_email_mismatch','auth_identity_mismatch'].indexOf(result.reason)>-1;
-  var title=['auth_email_mismatch','auth_identity_mismatch'].indexOf(result.reason)>-1?'Google 帳號或工作區不一致':(needsLogin?'登入工作階段已失效':'登入驗證暫時無法回應');
+  if(!modal.open)financeAuthRecoveryReturnFocus=document.activeElement;
+  var needsLogin=['missing_auth_session','auth_session_expired','auth_email_mismatch','auth_identity_mismatch','auth_verification_unavailable'].indexOf(result.reason)>-1;
+  var busy=!!financeReauthenticationAttempt;
+  var title=busy?'正在開啟 Google 登入':['auth_email_mismatch','auth_identity_mismatch'].indexOf(result.reason)>-1?'Google 帳號或工作區不一致':result.reason==='auth_verification_unavailable'?'登入驗證暫時無法回應':(needsLogin?'登入工作階段已失效':'登入驗證暫時無法回應');
   var message=result.message||(needsLogin?'尚未送出的內容仍保留，重新驗證後即可繼續。':'請確認網路後再試一次，系統不會清除目前填寫內容。');
-  modal.innerHTML='<div role="alertdialog" aria-modal="true" aria-labelledby="finance-auth-recovery-title" style="width:min(520px,100%);background:#fff;border:1px solid #efd7b8;border-radius:18px;box-shadow:0 24px 70px rgba(55,33,10,.28);padding:24px">'
-    +'<div style="width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:#fff2df;color:#b45309;font-size:25px;font-weight:900;margin-bottom:14px">!</div>'
-    +'<div id="finance-auth-recovery-title" style="font-size:20px;font-weight:900;color:#3b2410;margin-bottom:8px">'+escAttr(title)+'</div>'
-    +'<div style="font-size:14px;line-height:1.75;color:#6b594b">'+escAttr(message)+'</div>'
-    +'<div style="font-size:12px;line-height:1.6;color:#927a66;background:#fff8ed;border-radius:10px;padding:10px 12px;margin-top:14px">'+escAttr((actionLabel||'這個動作')+'尚未送出；請勿重複建立資料。')+'</div>'
-    +'<div style="display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-top:20px">'
-    +(financeWorkspaceIdentityBlocked?'':'<button type="button" class="btn-g" onclick="hideFinanceAuthRecovery()">關閉</button>')
-    +(needsLogin?'<button type="button" class="btn-p" onclick="startFinanceReauthentication()">重新驗證 Google 登入</button>':'')
+  modal.innerHTML='<div class="finance-auth-recovery-card">'
+    +'<div class="finance-auth-recovery-icon" aria-hidden="true">!</div>'
+    +'<h2 id="finance-auth-recovery-title" tabindex="-1">'+escAttr(title)+'</h2>'
+    +'<div id="finance-auth-recovery-message" role="status">'+escAttr(message)+'</div>'
+    +'<p class="finance-auth-recovery-note">'+escAttr((actionLabel||'這個動作')+'尚未送出；請勿重複建立資料。')+'</p>'
+    +'<div class="finance-auth-recovery-actions">'
+    +(financeWorkspaceIdentityBlocked?'':'<button type="button" class="btn-g" '+(busy?'disabled ':'')+'onclick="hideFinanceAuthRecovery()">關閉</button>')
+    +(needsLogin?'<button type="button" class="btn-p" data-finance-auth-retry '+(busy?'disabled ':'')+'onclick="startFinanceReauthentication()">'+(busy?'正在開啟…':'重新驗證 Google 登入')+'</button>':'')
     +'</div></div>';
   modal.style.display='flex';
+  if(!modal.open)modal.showModal();
+  var focusTarget=modal.querySelector('[data-finance-auth-retry]:not(:disabled)')||el('finance-auth-recovery-title');
+  if(focusTarget)focusTarget.focus();
+}
+function financeReauthenticationDestination(response){
+  if(!response||response.error||!response.data||!response.data.url)throw new Error('OAUTH_START_FAILED');
+  var destination=new URL(response.data.url),configured=new URL(SUPABASE_URL);
+  if(destination.origin!==configured.origin||destination.pathname!=='/auth/v1/authorize'||destination.username||destination.password)throw new Error('OAUTH_DESTINATION_INVALID');
+  return destination.href;
+}
+async function startFinanceReauthentication(){
+  if(financeReauthenticationAttempt)return false;
+  if(!ensureOfficialHostBeforeOAuth())return false;
+  if(isOAuthBlockedUserAgent()){alert(oauthWebviewMessage());return false;}
+  var attempt={identity:financeReauthenticationIdentity(),epoch:financeAuthIdentityEpoch};
+  financeReauthenticationAttempt=attempt;
+  var failure=null,navigated=false;
+  try{
+    if(!saveFinanceAuthRecoveryDraft())throw new Error('RECOVERY_STORAGE_UNAVAILABLE');
+    var client=getSb();
+    if(!client||!client.auth)throw new Error('OAUTH_START_FAILED');
+    var email=String(S.user&&S.user.email||'').trim().toLowerCase();
+    safeSetItem(FINANCE_PORTAL_EMAIL_KEY,email);
+    safeSetItem(FINANCE_PORTAL_EMAIL_AT_KEY,String(Date.now()));
+    safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1');
+    safeSetItem(FINANCE_PORTAL_OAUTH_MODE_KEY,'select_account');
+    showFinanceAuthRecovery({reason:'auth_verification_unavailable',message:'已保留尚未送出的內容，正在開啟 Google 登入。若連線逾時，您可以留在這裡重試。'},'重新驗證');
+    setTopSyncStatus('正在重新驗證 Google 登入');
+    // Do not let a timed-out SDK request redirect later on its own.
+    var response=await withOperationTimeout(Promise.resolve().then(function(){
+      return client.auth.signInWithOAuth({provider:'google',options:{
+        redirectTo:oauthRedirectUrl(),skipBrowserRedirect:true,
+        queryParams:{access_type:'offline',login_hint:email,prompt:'select_account'}
+      }});
+    }),'重新驗證 Google 登入',FINANCE_REAUTH_TIMEOUT_MS);
+    if(financeReauthenticationAttempt!==attempt||attempt.identity!==financeReauthenticationIdentity()||attempt.epoch!==financeAuthIdentityEpoch)return false;
+    var destination=financeReauthenticationDestination(response);
+    window.location.assign(destination);navigated=true;
+    return true;
+  }catch(error){failure=error;return false;}
+  finally{
+    if(financeReauthenticationAttempt===attempt){
+      financeReauthenticationAttempt=null;
+      if(!navigated&&attempt.identity===financeReauthenticationIdentity()){
+        var message=failure&&failure.message==='RECOVERY_STORAGE_UNAVAILABLE'
+          ?'瀏覽器目前無法安全暫存尚未送出的內容，因此系統沒有離開本頁。請先複製重要資料或允許網站使用暫存空間後再重新驗證。'
+          :failure&&failure.code==='CLIENT_TIMEOUT'
+          ?'Google 登入連線逾時，尚未離開本頁。已填內容仍保留，請確認網路後按下方按鈕重試。'
+          :'Google 登入目前無法啟動。已填內容仍保留，請確認網路後按下方按鈕重試。';
+        setTopSyncStatus('Google 登入尚未完成，請重試');
+        showFinanceAuthRecovery({reason:'auth_verification_unavailable',message:message},'重新驗證');
+      }
+    }
+  }
 }
 window.hideFinanceAuthRecovery=hideFinanceAuthRecovery;
-window.startFinanceReauthentication=async function(){
-  if(!ensureOfficialHostBeforeOAuth())return;
-  if(isOAuthBlockedUserAgent()){
-    alert(oauthWebviewMessage());
-    return;
-  }
-  if(!saveFinanceAuthRecoveryDraft()){
-    showFinanceAuthRecovery({reason:'auth_verification_unavailable',message:'瀏覽器目前無法安全暫存尚未送出的內容，因此系統沒有離開本頁。請先複製重要資料或允許網站使用暫存空間後再重新驗證。'},'重新驗證');
-    return;
-  }
-  var client=getSb();
-  if(!client||!client.auth){
-    showFinanceAuthRecovery({reason:'auth_verification_unavailable',message:'目前無法啟動 Google 登入。請確認網路後再試一次；已填內容仍保留在這個分頁。'},'重新驗證');
-    return;
-  }
-  var email=String(S.user&&S.user.email||'').trim().toLowerCase();
-  safeSetItem(FINANCE_PORTAL_EMAIL_KEY,email);
-  safeSetItem(FINANCE_PORTAL_EMAIL_AT_KEY,String(Date.now()));
-  safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1');
-  safeSetItem(FINANCE_PORTAL_OAUTH_MODE_KEY,'select_account');
-  hideFinanceAuthRecovery();
-  setTopSyncStatus('正在重新驗證 Google 登入');
-  var response=await client.auth.signInWithOAuth({
-    provider:'google',
-    options:{
-      redirectTo:oauthRedirectUrl(),
-      queryParams:{access_type:'offline',login_hint:email,prompt:'select_account'}
-    }
-  });
-  if(response&&response.error){
-    showFinanceAuthRecovery({reason:'auth_verification_unavailable',message:'Google 登入目前無法啟動。請確認網路後再試一次；已填內容仍保留在這個分頁。'},'重新驗證');
-  }
-};
+window.startFinanceReauthentication=startFinanceReauthentication;
 async function ensureSupabaseStorageReady(){
   if(!hasSupabase()||S.demoLogin)return {ok:false,reason:'demo_or_unconfigured'};
   return ensureSupabaseWriteReady('附件上傳');
@@ -8362,7 +8413,7 @@ async function performRemoteDataLoad(){
     function(){return loadAccountingData?applyRemoteLimit(client.from('vouchers').select('*').order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.vouchers):Promise.resolve({data:[],error:null});},
     function(){return applyRemoteLimit(client.from('bills').select('*',{count:'exact'}).order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.bills);},
     function(){return loadStatementSourcePages(client,'invoices');},
-    function(){return applyRemoteLimit(client.from('notifications').select('*').eq('tenant_id',currentTenantId()).eq('data_environment',activeDataEnvironment()).order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.notifications);},
+    function(){return loadFinanceNotifications({client:client});},
     function(){return loadAccountingData?loadStatementSourcePages(client,'ledger_entries'):Promise.resolve({data:[],error:null});},
     function(){return client.from('system_settings').select('*').eq('tenant_id',currentTenantId()).in('key',SYSTEM_SETTINGS_RUNTIME_KEYS);},
     function(){return applyRemoteLimit(client.from('draft_requests').select('*',{count:'exact'}).order('updated_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.optional);},
@@ -8444,7 +8495,8 @@ async function performRemoteDataLoad(){
   VOUCHERS=rowsAt(2,'傳票',VOUCHERS).map(mapVoucher).filter(inActiveDataEnvironment);
   BILLS=approvalFallback.bills.map(mapBill).filter(inActiveDataEnvironment);
 	  INVS=approvalFallback.invoices.map(mapInv).filter(inActiveDataEnvironment);
-	  NOTIFS=rowsAt(5,'通知',NOTIFS).map(mapNotif).filter(inActiveDataEnvironment);
+	  // Notifications maintain their own successful-read state, independent of lastSyncAt.
+	  if(res[5]&&res[5].error){recordRemoteReadIssue('通知',res[5].error);remoteWarnings.push('通知更新失敗，可在通知中心重試');}
 	  LEDGER=rowsAt(6,'分類帳',LEDGER).map(mapLedger).filter(inActiveDataEnvironment);
 	  invalidateDashboardFinancialCache();
   var settingRows=rowsAt(7,'系統設定',[]);
@@ -14214,6 +14266,7 @@ function clearFinanceLoginState(){
   clearApprovalFastBootstrapState();
   resetFinanceUsersDirectoryReadiness();
   S.user=null;
+  FINANCE_NOTIFICATION_STATE=null;NOTIFS=[];
   S.demoLogin=false;
   S.portalLogin=false;
   safeRemoveItem(FINANCE_PORTAL_EMAIL_KEY);
@@ -17352,13 +17405,13 @@ function buildDash(){
   var financeView=isFinance(),executive=el('dash-executive'),employeeGuide=el('dash-employee-guide'),work=el('dash-work-wrap');
   if(executive)executive.style.display=financeView?'block':'none';
   var headTitle=document.querySelector('#pg-dashboard .ph');if(headTitle)headTitle.textContent=financeView?'經營決策儀表板':'我的工作台';
-  var pendingReqs=REQS.filter(function(r){return canActRequest(r);}),pendingInvs=INVS.filter(function(i){return canActInvoice(i);}),pendingReceipts=INVS.filter(function(i){return canActReceipt(i);}),pm=pendingReqs.concat(pendingInvs).concat(pendingReceipts),unread=NOTIFS.filter(function(n){return!n.read;}).length;
+  var pendingReqs=REQS.filter(function(r){return canActRequest(r);}),pendingInvs=INVS.filter(function(i){return canActInvoice(i);}),pendingReceipts=INVS.filter(function(i){return canActReceipt(i);}),pm=pendingReqs.concat(pendingInvs).concat(pendingReceipts),notificationView=financeNotificationView(),unread=notificationView.unread;
   updateApprovalTodoBadge();
-  if(el('notif-cnt'))el('notif-cnt').textContent=(lastSyncAt||S.demoLogin)?unread:'—';if(el('n-badge'))el('n-badge').style.display=unread?'block':'none';
+  renderFinanceNotificationBadge(notificationView);
   updateRecvSidebarBadge();updateModuleTodoBadge();
-  var scope=dashboardScope(),entityObj=scope.eid==='all'?null:gE(scope.eid),allReqs=financeView?(scope.eid==='all'?REQS:REQS.filter(function(r){return reqEntity(r)===scope.eid;})):REQS.filter(function(r){return r.app===S.user.n;});
+  var scope=dashboardScope(),entityObj=scope.eid==='all'?null:gE(scope.eid),allReqs=financeView?(scope.eid==='all'?REQS:REQS.filter(function(r){return reqEntity(r)===scope.eid;})):REQS.filter(requestIsMine);
   var sub=el('dash-sub');if(sub)sub.textContent=financeView?('歲悅長照集團 · '+(entityObj?entityObj.full:'全體法人')+' · '+scope.label):'只顯示自己的申請、暫存與通知';
-  if(employeeGuide){var mineReqs=REQS.filter(function(r){return r.app===S.user.n;}),pendingMine=mineReqs.filter(function(r){return isReqOpen(r);});employeeGuide.style.display=financeView?'none':'block';employeeGuide.innerHTML=financeView?'':employeeDashboardGuideHtml(mineReqs,pendingMine,DRAFTS.length);}
+  if(employeeGuide){var mineReqs=REQS.filter(requestIsMine),pendingMine=mineReqs.filter(function(r){return isReqOpen(r);});employeeGuide.style.display=financeView?'none':'block';employeeGuide.innerHTML=financeView?'':employeeDashboardGuideHtml(mineReqs,pendingMine,DRAFTS.length);}
   if(financeView){
     dashboardSyncControls(scope);
     ensureRemoteDashboardAggregate(scope);
@@ -17366,10 +17419,11 @@ function buildDash(){
     dashboardRenderFreshness(bundle);dashboardRenderVerdict(bundle);dashboardRenderKpis(bundle);dashboardRenderTrend(bundle);dashboardRenderDepartments(bundle);dashboardSyncOrganization();dashboardRenderReceivables(bundle);dashboardRenderRisks(bundle,pm);dashboardRenderReconciliation(bundle);
   }
   if(work)work.open=!financeView;
-  if(el('dash-work-summary'))el('dash-work-summary').textContent=pm.length+' 筆待處理 · '+unread+' 則未讀 · '+allReqs.length+' 筆申請';
+  if(el('dash-work-summary'))el('dash-work-summary').textContent=pm.length+' 筆待處理 · '+notificationView.summary+' · '+allReqs.length+' 筆申請';
   var tb=el('dash-tbl');if(tb){tb.innerHTML=allReqs.slice(0,6).map(function(r){return requestListRowHtml(r,'openRequestModal');}).join('');if(!allReqs.length)tb.innerHTML='<tr><td colspan="7"><div class="employee-empty-state"><strong>'+(financeView?'目前沒有申請記錄':'你還沒有送出任何申請')+'</strong><span>'+(financeView?'切換公司可查看其他資料。':'第一次使用可以先從「新增申請」開始，暫存不會送給主管。')+'</span>'+(!financeView?'<button class="btn-p" onclick="nav(\'newreq\',null)">建立第一張申請</button>':'')+'</div></td></tr>';}
-  if(el('dash-notif'))el('dash-notif').innerHTML=NOTIFS.filter(function(n){return!n.read;}).slice(0,3).map(function(n){return '<div class="dash-notif-row"'+notificationClickAttributes(n)+'><span></span><div><strong>'+escAttr(n.title)+'</strong><small>'+escAttr(n.time)+'</small></div></div>';}).join('')||'<div class="dash-empty">目前沒有未讀通知。</div>';
+  if(el('dash-notif'))el('dash-notif').innerHTML=financeNotificationStatusHtml(notificationView)+(notificationView.rows.filter(function(n){return!n.read;}).slice(0,3).map(function(n){return '<div class="dash-notif-row"'+notificationClickAttributes(n)+'><span></span><div><strong>'+escAttr(n.title)+'</strong><small>'+escAttr(n.time)+'</small></div></div>';}).join('')||(notificationView.verified?'<div class="dash-empty">目前沒有未讀通知'+(notificationView.partial?'（僅已載入範圍）':'')+'。</div>':''));
   scheduleMobileEnhance(el('pg-dashboard'));
+  if(!S.demoLogin&&hasSupabase()&&financeNotificationState().status==='idle')loadFinanceNotifications();
 }
 window.setDashPeriodMode=function(mode){ensureDashboardState();S.dashPeriodMode=mode==='range'?'range':'month';if(S.dashPeriodMode==='range'){S.dashMonthFrom=S.dashMonthFrom||S.dashMonth;S.dashMonthTo=S.dashMonthTo||S.dashMonth;}buildDash();};
 window.setDashMonth=function(value){if(dashValidMonth(value))S.dashMonth=value;buildDash();};
@@ -34511,17 +34565,119 @@ window.setLegacyPermissionBoardAll=async function(enabled){
 };
 
 // ══ 通知 ══
-function buildNotifs(){renderNotifs();}
+function financeNotificationIdentity(){
+  var user=S.user;
+  if(!user||financeWorkspaceIdentityBlocked)return '';
+  return JSON.stringify([currentFinanceAuthUserId(),user.id||'',user.email||'',normalizedRoleKey(user),currentTenantId(),activeDataEnvironment(),ROLE_PERMISSIONS]);
+}
+function financeNotificationState(){
+  var identity=financeNotificationIdentity();
+  if(!FINANCE_NOTIFICATION_STATE||FINANCE_NOTIFICATION_STATE.identity!==identity){
+    FINANCE_NOTIFICATION_STATE={identity:identity,status:'idle',lastSuccessAt:'',rows:[],count:null,partial:false,error:null,promise:null};
+    if(!S.demoLogin)NOTIFS=[];
+  }
+  return FINANCE_NOTIFICATION_STATE;
+}
+function financeNotificationView(){
+  var state=financeNotificationState(),demo=!!S.demoLogin&&!financeWorkspaceIdentityBlocked;
+  var verified=demo||!!state.lastSuccessAt,rows=demo?NOTIFS:verified?state.rows:[];
+  var unread=verified?rows.filter(function(n){return !n.read;}).length:null;
+  var summary=unread===null?(state.status==='loading'?'通知讀取中':state.status==='error'?'通知待重試':'通知尚未載入'):(unread+' 則未讀'+(state.partial?'（已載入範圍）':'')+(state.status==='error'?'（上次資料）':''));
+  return {status:demo?'ready':state.status,verified:verified,rows:rows,unread:unread,summary:summary,lastSuccessAt:state.lastSuccessAt,partial:state.partial,count:state.count,demo:demo};
+}
+function financeNotificationStatusHtml(view){
+  var text=view.status==='loading'?'正在更新通知…':view.status==='error'?'通知更新失敗，未讀數尚未重新核對。':!view.verified?'通知尚未載入，不能確認是否有新通知。':'';
+  if(view.lastSuccessAt)text+=(text?' ':'')+'上次成功更新：'+new Date(view.lastSuccessAt).toLocaleString('zh-TW',{hour12:false});
+  if(view.partial)text+=(text?' ':'')+'目前顯示最近 '+view.rows.length+' 則，共 '+view.count+' 則；未讀數僅計算已載入範圍。';
+  if(!text)return '';
+  return '<div class="finance-notification-status '+(view.status==='error'?'is-error':'')+'" role="status"><span>'+escAttr(text)+'</span>'
+    +(view.status==='loading'?'<span class="finance-notification-loading">更新中</span>':!view.demo?'<button type="button" class="btn-g" data-finance-notification-retry onclick="retryFinanceNotifications()">'+(view.status==='error'?'重試載入通知':'更新通知')+'</button>':'')+'</div>';
+}
+function renderFinanceNotificationBadge(view){
+  var count=el('notif-cnt'),badge=el('n-badge');
+  if(count){count.textContent=view.unread===null?'—':view.unread+(view.partial?'+':'');count.title=view.summary;count.setAttribute('aria-label',view.summary);}
+  if(badge)badge.style.display=view.unread>0?'block':'none';
+}
+function refreshFinanceNotificationViews(){
+  renderNotifs();
+  if(S.page==='dashboard')buildDash();
+}
+async function loadFinanceNotifications(options){
+  options=options||{};
+  var state=financeNotificationState();
+  if(S.demoLogin||!state.identity||!currentFinanceAuthUserId())return {data:[],error:null,skipped:true};
+  if(state.promise)return state.promise;
+  var client=options.client||null;
+  state.status='loading';state.error=null;
+  refreshFinanceNotificationViews();
+  var current=function(){return FINANCE_NOTIFICATION_STATE===state&&state.identity===financeNotificationIdentity();};
+  var controller=typeof AbortController!=='undefined'?new AbortController():null;
+  state.promise=Promise.resolve().then(async function(){
+    try{
+      if(!client)client=getSb();
+      if(!client)throw new Error('NOTIFICATION_CLIENT_UNAVAILABLE');
+      var query=applyRemoteLimit(client.from('notifications').select('*',{count:'exact'}).eq('tenant_id',currentTenantId()).eq('data_environment',activeDataEnvironment()).order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.notifications);
+      if(controller&&query&&typeof query.abortSignal==='function')query=query.abortSignal(controller.signal);
+      var result=await withOperationTimeout(Promise.resolve(query),'通知讀取',FINANCE_NOTIFICATION_TIMEOUT_MS);
+      if(!current())return {data:[],error:null,stale:true};
+      if(!result||result.error)throw result&&result.error||new Error('NOTIFICATION_READ_FAILED');
+      // A successful empty response is different from a failed/malformed read.
+      if(!Array.isArray(result.data)||!Number.isInteger(result.count)||result.count<result.data.length)throw new Error('NOTIFICATION_COUNT_UNVERIFIED');
+      state.rows=result.data.map(mapNotif).filter(inActiveDataEnvironment);
+      state.count=result.count;state.partial=result.count>result.data.length;
+      state.lastSuccessAt=new Date().toISOString();state.status='ready';state.error=null;
+      NOTIFS=state.rows;
+      return result;
+    }catch(error){
+      if(error&&error.code==='CLIENT_TIMEOUT'&&controller)try{controller.abort();}catch(_){ }
+      if(!current())return {data:[],error:null,stale:true};
+      state.error=error;state.status='error';
+      var code=String(error&&(error.code||error.status)||'');
+      if(['401','403','42501','PGRST301','PGRST302','PGRST303','FINANCE_AUTH_IDENTITY_CHANGED'].indexOf(code)>-1){
+        state.rows=[];state.lastSuccessAt='';state.count=null;state.partial=false;NOTIFS=[];
+      }
+      return {data:null,error:error};
+    }finally{
+      if(current()){state.promise=null;refreshFinanceNotificationViews();}
+    }
+  });
+  return state.promise;
+}
+window.retryFinanceNotifications=function(){return loadFinanceNotifications();};
+function buildNotifs(){
+  renderNotifs();
+  if(!S.demoLogin&&financeNotificationState().status==='idle')loadFinanceNotifications();
+}
 window.notifTab=function(t,btn){S.nT=t;document.querySelectorAll('#pg-notif .tb').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');renderNotifs();};
 function notificationClickAttributes(n){return ' role="button" tabindex="0" data-notification-id="'+escAttr(n.id)+'" onclick="openFinanceNotification(this.dataset.notificationId)" onkeydown="if(event.key===&quot;Enter&quot;||event.key===&quot; &quot;){event.preventDefault();openFinanceNotification(this.dataset.notificationId)}"';}
 window.renderNotifs=function renderNotifs(){
-  var data=S.nT==='unread'?NOTIFS.filter(function(n){return!n.read;}):S.nT==='approval'?NOTIFS.filter(function(n){return n.type==='approval'||n.type==='receipt';}):S.nT==='system'?NOTIFS.filter(function(n){return n.type==='system';}):NOTIFS;
-  var unread=NOTIFS.filter(function(n){return!n.read;}).length,verified=!!(lastSyncAt||S.demoLogin);
-  el('notif-sub').textContent=verified?(unread+' 則未讀'):'通知讀取中';el('notif-cnt').textContent=verified?unread:'—';el('n-badge').style.display=verified&&unread?'block':'none';
-  el('notif-list').innerHTML=verified?(data.map(function(n){return '<div class="notif-row'+(n.read?'':' unread')+'"'+notificationClickAttributes(n)+'><div style="width:6px;height:6px;border-radius:50%;background:'+(n.read?'#d0c0a8':'var(--br)')+';margin-top:4px;flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;font-weight:'+(n.read?'400':'500')+';color:#334155">'+escAttr(n.title)+'</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+escAttr(n.body)+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px">'+escAttr(n.time)+'</div></div><span class="badge '+(n.type==='approval'||n.type==='receipt'?'b-wait':'b-blue')+'">'+(n.type==='receipt'?'收款':n.type==='approval'?'簽核':'系統')+'</span></div>';}).join('')||'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">沒有通知</div>'):'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px">正在讀取通知…</div>';
+  var view=financeNotificationView(),rows=view.rows;
+  var data=S.nT==='unread'?rows.filter(function(n){return!n.read;}):S.nT==='approval'?rows.filter(function(n){return n.type==='approval'||n.type==='receipt';}):S.nT==='system'?rows.filter(function(n){return n.type==='system';}):rows;
+  el('notif-sub').textContent=view.summary;
+  renderFinanceNotificationBadge(view);
+  if(el('notif-load-status'))el('notif-load-status').innerHTML=financeNotificationStatusHtml(view);
+  if(el('notif-mark-all'))el('notif-mark-all').disabled=!view.verified||view.status!=='ready';
+  el('notif-list').setAttribute('aria-busy',view.status==='loading'?'true':'false');
+  el('notif-list').innerHTML=data.map(function(n){return '<div class="notif-row'+(n.read?'':' unread')+'"'+notificationClickAttributes(n)+'><div style="width:6px;height:6px;border-radius:50%;background:'+(n.read?'#d0c0a8':'var(--br)')+';margin-top:4px;flex-shrink:0"></div><div style="flex:1"><div style="font-size:12px;font-weight:'+(n.read?'400':'500')+';color:#334155">'+escAttr(n.title)+'</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+escAttr(n.body)+'</div><div style="font-size:10px;color:#94a3b8;margin-top:1px">'+escAttr(n.time)+'</div></div><span class="badge '+(n.type==='approval'||n.type==='receipt'?'b-wait':'b-blue')+'">'+(n.type==='receipt'?'收款':n.type==='approval'?'簽核':'系統')+'</span></div>';}).join('')||(view.verified?'<div style="text-align:center;padding:28px;color:#64748b;font-size:12px">'+(S.nT==='unread'?'沒有未讀通知':'沒有通知')+(view.partial?'（僅已載入範圍）':'')+'</div>':'');
 }
-window.markNotifRead=async function(id){var n=NOTIFS.find(function(x){return x.id===id;});if(!n)return;var saved=await dbUpdate('notifications',id,{read:true});if(saved===false||(saved&&(saved.ok===false||saved.error)))throw new Error('通知已讀狀態未保存，請稍後重試。');n.read=true;renderNotifs();buildDash();};
-window.markAllRead=async function(){var client=getSb();if(!client)return;var result=await client.from('notifications').update({read:true}).eq('tenant_id',currentTenantId()).eq('data_environment',activeDataEnvironment()).eq('read',false);if(result.error){alert('通知已讀狀態未保存：'+result.error.message);return;}NOTIFS.forEach(function(n){n.read=true;});renderNotifs();buildDash();};
+window.markNotifRead=async function(id){
+  var state=financeNotificationState(),identity=state.identity,n=NOTIFS.find(function(x){return x.id===id;});
+  if(!n||!identity)return;
+  var saved=await dbUpdate('notifications',id,{read:true});
+  if(saved===false||(saved&&(saved.ok===false||saved.error)))throw new Error('通知已讀狀態未保存，請稍後重試。');
+  if(FINANCE_NOTIFICATION_STATE!==state||identity!==financeNotificationIdentity())return;
+  n.read=true;refreshFinanceNotificationViews();
+};
+window.markAllRead=async function(){
+  var state=financeNotificationState(),view=financeNotificationView(),identity=state.identity,client=getSb();
+  if(!client||!identity||!view.verified||view.status!=='ready')return false;
+  var result=await client.from('notifications').update({read:true}).eq('tenant_id',currentTenantId()).eq('data_environment',activeDataEnvironment()).eq('read',false);
+  if(FINANCE_NOTIFICATION_STATE!==state||identity!==financeNotificationIdentity())return false;
+  if(result.error){alert('通知已讀狀態未保存，請稍後重試。');return false;}
+  // Re-read the authoritative result; a concurrent notification arriving after
+  // the update must not be optimistically marked read by this old response.
+  await loadFinanceNotifications();return true;
+};
 
 // ══ 人員管理（執行長 / 行政部門主任 / 人資可編輯）══
 window.buildUsers=function buildUsers(){renderUsers();}
