@@ -15,7 +15,7 @@ assert.deepEqual(guard.PRODUCTION_CATALOG, {
   productionDomain: 'finance.suiyuecare.com'
 });
 assert.deepEqual(guard.SUPPORTED_GATE_PHASES, [
-  [], ['20260826070814'], ['20260826155840'], ['20260827052447'], ['20260902054834'], guard.AUDIT_MIGRATIONS, guard.CASE_MIGRATIONS, guard.UTILITY_MIGRATIONS, guard.REPORT_MIGRATIONS, guard.AMOUNT_SEARCH_MIGRATIONS, guard.REPORTING_INTEGRITY_MIGRATIONS, guard.AUDIT_READINESS_MIGRATIONS, guard.EMPLOYEE_RELIABILITY_MIGRATIONS
+  [], ['20260826070814'], ['20260826155840'], ['20260827052447'], ['20260902054834'], guard.AUDIT_MIGRATIONS, guard.CASE_MIGRATIONS, guard.UTILITY_MIGRATIONS, guard.REPORT_MIGRATIONS, guard.AMOUNT_SEARCH_MIGRATIONS, guard.REPORTING_INTEGRITY_MIGRATIONS, guard.AUDIT_READINESS_MIGRATIONS, guard.EMPLOYEE_RELIABILITY_MIGRATIONS, guard.HISTORY_PERFORMANCE_MIGRATIONS
 ]);
 assert.deepEqual(guard.MIGRATION_CHAIN, ['20260826070814', '20260826155840', '20260827052447']);
 assert.equal(guard.MIGRATION_PORTAL_LINK_REPAIR, '20260828015718');
@@ -29,7 +29,7 @@ assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
   '20260826070814', '20260826155840', '20260827052447', '20260828015718',
   '20260831042040', '20260831043517', '20260901024020', '20260901073241',
-  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS
+  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS
 ]);
 assert.deepEqual(guard.RELEASE_PHASES, {
   frontend_compat: 'none',
@@ -42,7 +42,8 @@ assert.deepEqual(guard.RELEASE_PHASES, {
   database_amount_search_20260910: '20260910083000',
   database_reporting_integrity_20260911: '20260911135457,20260911135514',
   database_audit_readiness_20260911: '20260911151054',
-  database_employee_reliability_20260912: '20260912145849'
+  database_employee_reliability_20260912: '20260912145849',
+  database_history_performance_20260913: '20260912164807'
 });
 assert.deepEqual(guard.migrationVersions('none'), []);
 assert.throws(() => guard.migrationVersions('20260826070814,20260826070814'), /unique/);
@@ -83,7 +84,8 @@ assert.throws(()=>guard.validateTarget(exactEnvironment,'a'.repeat(40),guard.REL
 assert.throws(()=>guard.validateTarget(exactEnvironment,'a'.repeat(40),guard.RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,guard.AMOUNT_SEARCH_MIGRATIONS.join(','),catalog.supabaseProjectRef),/legacy database phases are archived/);
 assert.throws(()=>guard.validateTarget(exactEnvironment,'a'.repeat(40),guard.RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,guard.REPORTING_INTEGRITY_MIGRATIONS.join(','),catalog.supabaseProjectRef),/legacy database phases are archived/);
 assert.throws(()=>guard.validateTarget(exactEnvironment,'a'.repeat(40),guard.RELEASE_PHASE_DATABASE_AUDIT_READINESS,guard.AUDIT_READINESS_MIGRATIONS.join(','),catalog.supabaseProjectRef),/legacy database phases are archived/);
-guard.validateTarget(exactEnvironment,'a'.repeat(40),guard.RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,guard.EMPLOYEE_RELIABILITY_MIGRATIONS.join(','),catalog.supabaseProjectRef);
+assert.throws(()=>guard.validateTarget(exactEnvironment,'a'.repeat(40),guard.RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,guard.EMPLOYEE_RELIABILITY_MIGRATIONS.join(','),catalog.supabaseProjectRef),/legacy database phases are archived/);
+guard.validateTarget(exactEnvironment,'a'.repeat(40),guard.RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,guard.HISTORY_PERFORMANCE_MIGRATIONS.join(','),catalog.supabaseProjectRef);
 assert.throws(() => guard.validateTarget(exactEnvironment, 'a'.repeat(40), 'frontend_compat', '20260827052447', catalog.supabaseProjectRef), /must use/);
 assert.throws(() => guard.validateTarget(exactEnvironment, 'a'.repeat(40), 'database_v3', 'none', catalog.supabaseProjectRef), /must use/);
 assert.throws(() => guard.validateTarget({ ...exactEnvironment, VERCEL_ORG_ID: 'team_other' }, 'a'.repeat(40), 'frontend_compat', 'none', catalog.supabaseProjectRef), /organization/);
@@ -96,7 +98,7 @@ for(const name of ['finance_org_integrity_postflight.sql','finance_approval_audi
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/finance-production-release.yml'), 'utf8');
 assert.deepEqual(guard.REPORT_POSTFLIGHT_FILES,['finance_production_db_postflight.sql','finance_audit_20260907_postflight.sql','finance_finalize_accounting_lines_postflight.sql','finance_utility_tax_postflight.sql','finance_production_human_accounting_canary.sql','finance_canonical_receivables_postflight.sql','finance_reporting_profiles_postflight.sql'],'Reports must retain every inherited/new postflight in its transaction');
 for(const name of guard.REPORT_POSTFLIGHT_FILES){assert.ok(workflow.includes('cp scripts/'+name+' "$BUNDLE/release-tools/scripts/"'),'Every reports transaction check must be sealed: '+name);for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert.ok(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'scripts/"+name+"'"),'Reports postflight must be source-pinned: '+name);}
-assert.deepEqual([...workflow.matchAll(/^          - (frontend_compat|database_\S+)$/gm)].map(match=>match[1]), ['frontend_compat','database_employee_reliability_20260912'], 'Only current frontend and exact employee reliability phase may be dispatched; archived phases remain queryable only');
+assert.deepEqual([...workflow.matchAll(/^          - (frontend_compat|database_\S+)$/gm)].map(match=>match[1]), ['frontend_compat','database_history_performance_20260913'], 'Only current frontend and exact history performance phase may be dispatched; archived phases remain queryable only');
 const releaseGuide = fs.readFileSync(path.join(root, 'docs/FINANCE_PRODUCTION_RELEASE.md'), 'utf8');
 const required = [
   'actions: read',
@@ -150,7 +152,7 @@ const required = [
   'PHASE_STATE="$(node "$GUARD" classify-ledger',
   'if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then',
   'elif test "$PHASE_STATE" = "pending" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then',
-  'elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912"; }; then',
+  'elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912" || test "$RELEASE_PHASE" = "database_history_performance_20260913"; }; then',
   '--allow-production-alias true',
   'for ATTEMPT in 1 2 3',
   'promote "$DEPLOYMENT_URL" --yes',
@@ -219,7 +221,7 @@ assert.match(promoteJob, /download-artifact[\s\S]+validate-target[\s\S]+supabase
 assert.doesNotMatch(promoteJob, /vercel@59\.3\.0 (?:build|deploy)|prepare-apply/, 'retryable promote job must not rebuild, redeploy or reapply DB migrations');
 const compatAt = databaseJob.indexOf('if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then');
 const pendingAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "pending" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then');
-const appliedAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912"; }; then');
+const appliedAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912" || test "$RELEASE_PHASE" = "database_history_performance_20260913"; }; then');
 const auditPendingAt=databaseJob.indexOf('elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_audit_20260907"; then');
 assert.ok(auditPendingAt>compatAt&&auditPendingAt<pendingAt);
 assert.ok(databaseJob.indexOf('prepare-audit-rehearsal')>auditPendingAt);
@@ -245,6 +247,25 @@ assert.ok(readinessPendingAt>compatAt&&readinessPendingAt<integrityPendingAt);
 const readinessBranch=databaseJob.slice(readinessPendingAt,integrityPendingAt);
 const employeePendingAt=databaseJob.indexOf('elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_employee_reliability_20260912"; then');
 assert.ok(employeePendingAt>compatAt&&employeePendingAt<readinessPendingAt);
+const historyPendingAt=databaseJob.indexOf('elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_history_performance_20260913"; then');
+assert.ok(historyPendingAt>compatAt&&historyPendingAt<employeePendingAt);
+const historyBranch=databaseJob.slice(historyPendingAt,employeePendingAt);
+assert.match(historyBranch,/history-performance-prerequisites[\s\S]+--release-phase database_employee_reliability_20260912 --migration-versions 20260912145849[\s\S]+prepare-history-performance-rehearsal[\s\S]+finance_employee_reliability_fingerprint\.sql[\s\S]+finance_employee_reliability_canary\.sql[\s\S]+finance_approval_history_canary\.sql[\s\S]+history-performance-rehearsal\.json[\s\S]+prepare-history-performance-apply[\s\S]+--ledger[\s\S]+history-performance-apply\.json/);
+assert.doesNotMatch(promoteJob,/prepare-history-performance-(?:apply|rehearsal)/);
+assert.equal((workflow.match(/verify-reports-canary --domain approval_history/g)||[]).length,2);
+for(const name of [...guard.HISTORY_PERFORMANCE_POSTFLIGHT_FILES,'finance_approval_history_canary.sql']){
+ assert.ok(candidateJob.includes('cp scripts/'+name+' "$BUNDLE/release-tools/scripts/"'));
+ for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert.ok(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'scripts/"+name+"'"));
+}
+// Execute the real shell conditions as a latest-phase contract: none of the
+// inherited post-apply or promotion checks may be silently skipped.
+const {spawnSync}=require('node:child_process');
+for(const job of [databaseJob,promoteJob])for(const line of job.split('\n').filter(l=>l.trimStart().startsWith('if test "$RELEASE_PHASE"')&&l.includes('frontend_compat'))){
+ const condition=line.trim().replace(/; then$/,'');
+ const evaluated=spawnSync('sh',['-c',condition+'; then exit 0; else exit 1; fi'],{env:{...process.env,RELEASE_PHASE:guard.RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE},encoding:'utf8'});
+ assert.equal(evaluated.status,0,'History phase must retain gate: '+line+' '+evaluated.stderr);
+}
+
 const employeeBranch=databaseJob.slice(employeePendingAt,readinessPendingAt);
 assert.match(employeeBranch,/employee-reliability-prerequisites[\s\S]+--release-phase database_audit_readiness_20260911 --migration-versions 20260911151054[\s\S]+prepare-employee-reliability-rehearsal[\s\S]+finance_employee_reliability_fingerprint\.sql[\s\S]+finance_employee_reliability_canary\.sql[\s\S]+finance_audit_readiness_canary\.sql[\s\S]+employee-reliability-rehearsal\.json[\s\S]+prepare-employee-reliability-apply[\s\S]+--ledger[\s\S]+employee-reliability-apply\.json/);
 assert.doesNotMatch(promoteJob,/prepare-employee-reliability-(?:apply|rehearsal)/);
@@ -283,8 +304,8 @@ for(const domain of ['receivables','profiles']){
   assert.ok(databaseJob.indexOf('verify-reports-canary --domain '+domain)>databaseJob.indexOf('verify-ledger --mode post'),'New standalone canary cannot run before the batch is installed');
 }
 for(const file of ['finance_reports_20260910_fingerprint.sql','finance_canonical_receivables_canary.sql','finance_reporting_profiles_canary.sql','finance_canonical_receivables_postflight.sql','finance_reporting_profiles_postflight.sql'])assert.ok(candidateJob.includes(file),'Reports gate is sealed: '+file);
-assert.doesNotMatch(databaseJob.slice(compatAt,employeePendingAt),/prepare-.*(?:apply|rehearsal)/,'Frontend compatibility never generates mutation SQL');
-assert.doesNotMatch(databaseJob.slice(appliedAt),/prepare-(?:employee-reliability|audit-readiness|reporting-integrity|amount-search|reports|utility|cases|audit)-apply|prepare-apply/,'Applied recovery never reapplies a migration');
+assert.doesNotMatch(databaseJob.slice(compatAt,historyPendingAt),/prepare-.*(?:apply|rehearsal)/,'Frontend compatibility never generates mutation SQL');
+assert.doesNotMatch(databaseJob.slice(appliedAt),/prepare-(?:history-performance|employee-reliability|audit-readiness|reporting-integrity|amount-search|reports|utility|cases|audit)-apply|prepare-apply/,'Applied recovery never reapplies a migration');
 assert.doesNotMatch(promoteJob,/prepare-utility-(?:apply|rehearsal)/);
 assert.match(databaseJob,/finance_utility_tax_canary\.sql[\s\S]+verify-utility-canary/);
 assert.match(promoteJob,/finance_utility_tax_canary\.sql[\s\S]+verify-utility-canary[\s\S]+promote "\$DEPLOYMENT_URL" --yes/);
@@ -428,10 +449,12 @@ assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none
 fs.appendFileSync(ledger,guard.AUDIT_READINESS_MIGRATIONS.join('\n')+'\n');
 assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/employee reliability migration batch/);
 fs.appendFileSync(ledger,guard.EMPLOYEE_RELIABILITY_MIGRATIONS.join('\n')+'\n');
+assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/history performance migration batch/);
+fs.appendFileSync(ledger,guard.HISTORY_PERFORMANCE_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), 'compat');
   guard.verifyLedger('pre', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
   guard.verifyLedger('post', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
-  fs.appendFileSync(ledger, '20260912145850\n');
+  fs.appendFileSync(ledger, '20260912164808\n');
   assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /unreviewed post-baseline migration/);
   const duplicateDir = path.join(temp, 'duplicate'); fs.mkdirSync(duplicateDir);
   fs.writeFileSync(path.join(duplicateDir, '20260826070814_a.sql'), 'begin;\ncommit;\n');
@@ -481,8 +504,9 @@ fs.appendFileSync(ledger,guard.EMPLOYEE_RELIABILITY_MIGRATIONS.join('\n')+'\n');
   fs.writeFileSync(path.join(temp,'finance_tax_source_integrity_postflight.sql'), '\\set ON_ERROR_STOP on\nselect 10;\n');
   fs.writeFileSync(path.join(temp,'finance_audit_readiness_postflight.sql'), '\\set ON_ERROR_STOP on\nselect 11;\n');
   fs.writeFileSync(path.join(temp,'finance_employee_reliability_postflight.sql'), '\\set ON_ERROR_STOP on\nselect 12;\n');
+  fs.writeFileSync(path.join(temp,'finance_approval_history_postflight.sql'), '\\set ON_ERROR_STOP on\nselect 13;\n');
   guard.preparePhaseQuery(phasePostflightSource, compatGateOutput, 'frontend_compat', 'none');
-  assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 10;[\s\S]+select 11;[\s\S]+select 12;/,'Current frontend cannot omit employee reliability postflight');
+  assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 10;[\s\S]+select 11;[\s\S]+select 12;[\s\S]+select 13;/,'Current frontend cannot omit history performance postflight');
   assert.match(fs.readFileSync(compatGateOutput, 'utf8'), /'20260827052447'/);
   assert.match(fs.readFileSync(compatGateOutput, 'utf8'), /select 2;[\s\S]+select 3;[\s\S]+select 4;/, 'Frontend compatibility requires audit, finalize and utility postflights');
   assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 6;[\s\S]+select 8;[\s\S]+select 9;[\s\S]+select 10;/,'Frontend cannot omit amount search contract');
