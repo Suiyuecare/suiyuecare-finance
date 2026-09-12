@@ -1944,6 +1944,7 @@ var WORKFLOW_ADMIN_DEFINITIONS={};
 var WORKFLOW_ADMIN_RPC_AVAILABLE=null;
 var APPROVAL_RUNTIME_AVAILABLE=null;
 var APPROVAL_RUNTIME_DISABLED_REASON='';
+var ORG_ADMIN_READ_STATE={identity:'',sequence:0,promise:null,lastSuccessAt:0};
 var ORG_ADMIN_RUNTIME={departments:[],positions:[],employeeRoles:[],health:null,departmentHealth:null,departmentHealthError:'',frontOfficeHealth:null,frontOfficeHealthError:'',lastLoaded:'',available:null,error:''};
 var MEMBERSHIP_ORG_RUNTIME={loading:false,available:null,error:'',graph:null,lastLoaded:'',subscription:null};
 var MEMBERSHIP_ORG_DRAFT={version:null,snapshot:null,dirty:false,people:[],validation:null,impact:null,dragUnitId:'',batchUnitIds:[]};
@@ -3054,6 +3055,7 @@ var approvalFastBootstrapRunIdentity='';
 var APPROVAL_BOOTSTRAP_COORDINATOR={identity:'',generation:0,phase:'idle',promise:null};
 var approvalBootstrapGeneration=0;
 var approvalFastFinalizationProbe=false;
+var ACCOUNT_RUNTIME_ASSURANCE_SEQUENCE=0;
 var ACCOUNT_RUNTIME_ASSURANCE_STATE={running:false,lastRun:'',lastUserId:'',ok:false,warnings:[]};
 var DATA_ENV_PRODUCTION='production';
 var DATA_ENV_TEST='test';
@@ -6364,6 +6366,18 @@ async function runRemoteJobsWithConcurrency(jobs,limit){
   if(firstError)throw firstError;
   return results;
 }
+async function runFinanceBootstrapReadJobs(jobs,accounting){
+  if(!accounting)return runRemoteJobsWithConcurrency(jobs,REMOTE_BOOTSTRAP_CONCURRENCY);
+  // Finance source pages and the potentially wide audit/bank tables retain one
+  // serial lane. A second lane is restricted to bounded identity/configuration
+  // reads; total concurrency stays at two. All results still settle before the
+  // existing completeness, identity and source-merge checks run.
+  var small=[0,5,7,8,16,18],results=new Array(jobs.length);
+  var lanes=[[],[]];
+  jobs.forEach(function(job,index){lanes[small.indexOf(index)>-1?0:1].push(async function(){results[index]=await job();});});
+  await runRemoteJobsWithConcurrency(lanes.map(function(lane){return function(){return runRemoteJobsWithConcurrency(lane,1);};}),2);
+  return results;
+}
 async function loadOptionalTable(client,table,orderCol,ascending,limit){
   var engine=financeDataEngine();
   if(engine&&typeof engine.loadOptionalTable==='function'){
@@ -6661,7 +6675,31 @@ async function readOrgAdminRuntimeRpc(client,name,args,fallback){
     return {data:typeof fallback==='function'?fallback():fallback,fallback:true,error:err,message:(err&&err.message)||String(err||'')};
   }
 }
-async function refreshApprovalOrgAdminRuntime(client,reason){
+function financeStartupReadIdentity(){
+  var u=S.user;
+  if(!u||financeWorkspaceIdentityBlocked)return '';
+  return JSON.stringify([currentFinanceAuthUserId(),u.id||'',normalizedRoleKey(u),currentTenantId(),activeDataEnvironment(),financeUsersDirectoryRevision,ROLE_PERMISSIONS,CURRENT_PERMISSION_SNAPSHOT]);
+}
+async function refreshApprovalOrgAdminRuntime(client,reason,options){
+  options=options||{};
+  var identity=financeStartupReadIdentity();
+  if(!identity)return {ok:false,stale:true};
+  var state=ORG_ADMIN_READ_STATE;
+  // Reuse only the automatic login/background diagnostic lane. Manual refresh
+  // and every post-repair read start a new generation, so old results cannot
+  // replace newer authority. This cache never authorizes a mutation.
+  var share=!options.force&&/^(login_runtime_assurance_before|load_remote_data_deferred)$/.test(String(reason||''));
+  if(share&&state.identity===identity){
+    if(state.promise)return state.promise;
+    if(state.lastSuccessAt&&Date.now()-state.lastSuccessAt<30000&&ORG_ADMIN_RUNTIME.available===true)return {ok:true,reused:true,runtime:ORG_ADMIN_RUNTIME};
+  }
+  state={identity:identity,sequence:state.sequence+1,promise:null,lastSuccessAt:0};
+  ORG_ADMIN_READ_STATE=state;
+  state.promise=performApprovalOrgAdminRuntimeRead(client,reason,state);
+  try{return await state.promise;}finally{state.promise=null;}
+}
+async function performApprovalOrgAdminRuntimeRead(client,reason,state){
+  function current(){return ORG_ADMIN_READ_STATE===state&&state.identity===financeStartupReadIdentity();}
   client=client||getSb();
   if(!client||S.demoLogin){
     ORG_ADMIN_RUNTIME.available=false;
@@ -6670,7 +6708,7 @@ async function refreshApprovalOrgAdminRuntime(client,reason){
     return {ok:false,skipped:true,reason:'no_supabase'};
   }
   try{
-    var res=await Promise.all([
+    var res=await withOperationTimeout(Promise.all([
       readOrgAdminRuntimeRpc(client,'finance_org_department_list',{p_include_inactive:false},fallbackOrgAdminDepartments),
       readOrgAdminRuntimeRpc(client,'finance_org_position_list',{p_include_inactive:false},fallbackOrgAdminPositions),
       readOrgAdminRuntimeRpc(client,'finance_org_employee_role_list',{p_finance_user_id:null,p_department_code:null,p_include_inactive:false},fallbackOrgAdminEmployeeRoles),
@@ -6678,10 +6716,12 @@ async function refreshApprovalOrgAdminRuntime(client,reason){
         var users=(USERS||[]).filter(function(u){return u&&u.active!==false;}).length;
         return {ok:true,department_count:(DEPTS||[]).length,position_count:Object.keys(RL||{}).length,active_user_count:users,primary_role_count:users,missing_primary_role_count:0,role_without_department_count:0,manager_without_role_count:0,source:'frontend_fallback'};
       })
-    ]);
+    ]),'登入組織資料',12000);
+    if(!current())return {ok:false,stale:true};
     var fallbackMessages=res.filter(function(r){return r&&r.fallback;}).map(function(r){return r.message;}).filter(Boolean);
     var frontHealth=null,frontHealthError='';
-    var frontRes=await client.rpc('finance_front_office_permission_runtime_health',{});
+    var frontRes=await withOperationTimeout(client.rpc('finance_front_office_permission_runtime_health',{}),'登入權限診斷',12000);
+    if(!current())return {ok:false,stale:true};
     if(frontRes&&frontRes.error){
       frontHealthError=(frontRes.error.message||String(frontRes.error)||'人員權限 runtime health 讀取失敗');
       if(!isRpcMissing(frontRes.error))console.warn('Front-office permission runtime health failed:',frontHealthError);
@@ -6701,7 +6741,9 @@ async function refreshApprovalOrgAdminRuntime(client,reason){
       available:true,
       error:''
     };
-    await verifyDepartmentRuntimeHealth((reason||'approval_org_admin')+'_department_health',{silentRender:true});
+    await verifyDepartmentRuntimeHealth((reason||'approval_org_admin')+'_department_health',{silentRender:true,isCurrent:current});
+    if(!current())return {ok:false,stale:true};
+    state.lastSuccessAt=fallbackMessages.length||frontHealthError||ORG_ADMIN_RUNTIME.departmentHealthError?0:Date.now();
     renderOrgAdminRuntimeStatus();
     if(typeof recordOpsEventDedup==='function'){
       recordOpsEventDedup('approval_org_admin_runtime_loaded','ok','組織 runtime 已讀取','後台已讀取 departments / positions / employee roles / health，供簽核設定頁確認。',{reason:reason||'',departments:ORG_ADMIN_RUNTIME.departments.length,positions:ORG_ADMIN_RUNTIME.positions.length,employeeRoles:ORG_ADMIN_RUNTIME.employeeRoles.length,dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
@@ -6711,6 +6753,8 @@ async function refreshApprovalOrgAdminRuntime(client,reason){
     }
     return {ok:true,runtime:ORG_ADMIN_RUNTIME};
   }catch(err){
+    if(!current())return {ok:false,stale:true};
+    state.lastSuccessAt=0;
     var missing=isRpcMissing(err);
     ORG_ADMIN_RUNTIME.available=missing?false:null;
     ORG_ADMIN_RUNTIME.error=(missing?'正式 DB 尚未安裝組織管理 RPC；':'組織 runtime 讀取失敗；')+((err&&err.message)||err||'未知錯誤');
@@ -6806,6 +6850,8 @@ async function syncApprovalWorkflowAdminDraftsFromSettings(reason){
 }
 async function verifyDepartmentRuntimeHealth(reason,opts){
   opts=opts||{};
+  var readIdentity=financeStartupReadIdentity();
+  function current(){return !!readIdentity&&readIdentity===financeStartupReadIdentity()&&(!opts.isCurrent||opts.isCurrent());}
   var client=getSb();
   if(!client||S.demoLogin){
     var offlineMessage='目前未連線正式資料庫，無法確認部門同步狀態。';
@@ -6814,7 +6860,8 @@ async function verifyDepartmentRuntimeHealth(reason,opts){
     if(!opts.silentRender)renderOrgAdminRuntimeStatus();
     return {ok:false,skipped:true,reason:'no_supabase',message:offlineMessage};
   }
-  var response=await client.rpc('finance_department_runtime_health',{});
+  var response=await withOperationTimeout(client.rpc('finance_department_runtime_health',{}),'部門同步診斷',12000);
+  if(!current())return {ok:false,stale:true};
   if(response.error){
     var missing=isRpcMissing(response.error);
     var detail=missing
@@ -6954,34 +7001,43 @@ async function runCurrentUserRuntimeAssurance(opts){
   opts=opts||{};
   if(!S.user)return {ok:false,skipped:true,reason:'no_user'};
   if(!hasSupabase()||S.demoLogin)return {ok:true,skipped:true,reason:'local_or_demo'};
-  if(ACCOUNT_RUNTIME_ASSURANCE_STATE.running&&!opts.force)return ACCOUNT_RUNTIME_ASSURANCE_STATE;
-  ACCOUNT_RUNTIME_ASSURANCE_STATE={running:true,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:false,warnings:[]};
+  var assuranceIdentity=financeStartupReadIdentity();
+  function current(){return !!assuranceIdentity&&assuranceIdentity===financeStartupReadIdentity()&&ACCOUNT_RUNTIME_ASSURANCE_STATE.generation===generation;}
+  if(ACCOUNT_RUNTIME_ASSURANCE_STATE.running&&ACCOUNT_RUNTIME_ASSURANCE_STATE.identity===assuranceIdentity&&!opts.force)return ACCOUNT_RUNTIME_ASSURANCE_STATE;
+  var generation=++ACCOUNT_RUNTIME_ASSURANCE_SEQUENCE;
+  ACCOUNT_RUNTIME_ASSURANCE_STATE={generation:generation,identity:assuranceIdentity,running:true,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:false,warnings:[]};
   var warnings=[];
   try{
     var client=getSb();
-    if(ORG_ADMIN_RUNTIME.available!==true)await refreshApprovalOrgAdminRuntime(client,'login_runtime_assurance_before');
+    await refreshApprovalOrgAdminRuntime(client,'login_runtime_assurance_before',{force:!!opts.force});
+    if(!current())return {ok:false,stale:true};
     var before=financeUserRuntimeReadiness(S.user);
     if(!before.ok||opts.force){
       var sync=await repairCurrentFinanceIdentityRuntime();
+      if(!current())return {ok:false,stale:true};
       if(!sync||sync.ok===false)warnings.push(sync&&sync.requiresManagementReview?'本人登入資料已檢查；任職或權限仍需人資、行政主任確認。請聯絡管理者檢查目前任職、直屬主管及啟用狀態。':(sync&&sync.message||'本人登入資料暫時無法同步，請稍後重新檢查。'));
+      await refreshApprovalOrgAdminRuntime(client,'login_runtime_assurance_after',{force:true});
+      if(!current())return {ok:false,stale:true};
     }
-    await refreshApprovalOrgAdminRuntime(client,'login_runtime_assurance_after');
     var after=financeUserRuntimeReadiness(S.user);
     warnings=uniqueRemoteStrings(warnings.concat(after.warnings));
-    ACCOUNT_RUNTIME_ASSURANCE_STATE={running:false,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:warnings.length===0,warnings:warnings};
+    ACCOUNT_RUNTIME_ASSURANCE_STATE={generation:generation,identity:assuranceIdentity,running:false,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:warnings.length===0,warnings:warnings};
     if(typeof recordOpsEvent==='function'){
       recordOpsEvent(warnings.length?'account_runtime_assurance_warning':'account_runtime_assurance_ok',warnings.length?'warn':'ok',warnings.length?'登入帳號 runtime 仍需確認':'登入帳號 runtime 已確認',warnings.join('；')||'Finance user、Auth、部門與簽核 runtime 已完成登入後確認。',{financeUserId:S.user.id,email:S.user.email||'',warningCount:warnings.length,dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
     }
     if(opts.alert)alert(warnings.length?('帳號簽核資料仍需確認：\n\n'+warnings.join('\n')):'帳號簽核資料已同步完成。');
     return ACCOUNT_RUNTIME_ASSURANCE_STATE;
   }catch(err){
+    if(!current())return {ok:false,stale:true};
     warnings.push(remoteReadIssueText(err));
-    ACCOUNT_RUNTIME_ASSURANCE_STATE={running:false,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:false,warnings:uniqueRemoteStrings(warnings)};
+    ACCOUNT_RUNTIME_ASSURANCE_STATE={generation:generation,identity:assuranceIdentity,running:false,lastRun:new Date().toISOString(),lastUserId:S.user.id,ok:false,warnings:uniqueRemoteStrings(warnings)};
     if(typeof recordOpsEvent==='function'){
       recordOpsEvent('account_runtime_assurance_failed','warn','登入帳號 runtime 自動修復失敗',warnings.join('；'),{financeUserId:S.user.id,email:S.user.email||'',error:String((err&&err.message)||err||''),dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
     }
     if(opts.alert)alert('帳號簽核資料同步失敗：\n\n'+warnings.join('\n'));
     return ACCOUNT_RUNTIME_ASSURANCE_STATE;
+  }finally{
+    if(ACCOUNT_RUNTIME_ASSURANCE_STATE.generation===generation)ACCOUNT_RUNTIME_ASSURANCE_STATE.running=false;
   }
 }
 window.runCurrentUserRuntimeAssurance=runCurrentUserRuntimeAssurance;
@@ -8446,7 +8502,7 @@ async function performRemoteDataLoad(){
     function(){return loadAccountingData?applyRemoteLimit(client.from('vouchers').select('*').order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.vouchers):Promise.resolve({data:[],error:null});},
     function(){return applyRemoteLimit(client.from('bills').select('*',{count:'exact'}).order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.bills);},
     function(){return loadStatementSourcePages(client,'invoices');},
-    function(){return loadFinanceNotifications({client:client});},
+    function(){return loadFinanceNotifications({client:client,reuseFresh:true});},
     function(){return loadAccountingData?loadStatementSourcePages(client,'ledger_entries'):Promise.resolve({data:[],error:null});},
     function(){return client.from('system_settings').select('*').eq('tenant_id',currentTenantId()).in('key',SYSTEM_SETTINGS_RUNTIME_KEYS);},
     function(){return applyRemoteLimit(client.from('draft_requests').select('*',{count:'exact'}).order('updated_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.optional);},
@@ -8464,11 +8520,6 @@ async function performRemoteDataLoad(){
 	    function(){return loadOptionalTable(client,'bank_transactions','transaction_date',false);},
 	    function(){return loadOptionalTable(client,'bank_reconciliation_matches','matched_at',false);}
 	  ];
-  // Accounting roles read several wide financial tables. Run those broad,
-  // non-critical reads one at a time after the personal approval lane has
-  // finished, so two large PostgREST responses cannot push each other over
-  // the managed database statement timeout.
-  var bootstrapConcurrency=loadAccountingData?1:REMOTE_BOOTSTRAP_CONCURRENCY;
   var priorityAwareJobs=jobs.map(function(job){
     return async function(){
       var fastIdentity=approvalFastBootstrapIdentity();
@@ -8480,7 +8531,7 @@ async function performRemoteDataLoad(){
       return job();
     };
   });
-  var res=await runRemoteJobsWithConcurrency(priorityAwareJobs,bootstrapConcurrency);
+  var res=await runFinanceBootstrapReadJobs(priorityAwareJobs,loadAccountingData);
   if(activeApprovalIdentity!==approvalFastBootstrapIdentity())return false;
   setApprovalSourceCompleteness('expense_requests',approvalRemoteSourceResultComplete(res[1],REMOTE_BOOTSTRAP_LIMITS.requests),activeApprovalIdentity);
   setApprovalSourceCompleteness('bills',approvalRemoteSourceResultComplete(res[3],REMOTE_BOOTSTRAP_LIMITS.bills),activeApprovalIdentity);
@@ -35023,6 +35074,7 @@ async function loadFinanceNotifications(options){
   var state=financeNotificationState();
   if(S.demoLogin||!state.identity||!currentFinanceAuthUserId())return {data:[],error:null,skipped:true};
   if(state.promise)return state.promise;
+  if(options.reuseFresh&&state.status==='ready'&&state.lastSuccessAt&&Date.now()-new Date(state.lastSuccessAt).getTime()<30000)return {data:state.rows,error:null,count:state.count,reused:true};
   var client=options.client||null;
   state.status='loading';state.error=null;
   refreshFinanceNotificationViews();

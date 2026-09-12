@@ -68,9 +68,12 @@
  async function loadQueue(force){
   var host=document.getElementById('payment-concern-queue'),expected=identity();if(!host)return;
   if(!allowed(expected)){host.replaceChildren();queueKey='';return;}
+  if(!force&&rt().S.page!=='approvals')return {ok:false,skipped:true};
   if(!force&&queueKey===expected)return queuePending;
+  var wasOpen=queueKey===expected&&host.querySelector('details')&&host.querySelector('details').open;
   queueKey=expected;
   host.innerHTML='<details class="payment-concern-queue"><summary>收款疑義</summary><div data-queue-body role="status">正在確認待辦…</div></details>';
+  host.querySelector('details').open=!!wasOpen;
   var body=host.querySelector('[data-queue-body]');
   queuePending=(async function(){try{
    var data=await rpc('finance_payment_concern_read_v1',{p_request_id:null,p_data_environment:rt().activeDataEnvironment()},expected);
@@ -79,7 +82,7 @@
    body.querySelectorAll('[data-concern-id]').forEach(function(b){b.onclick=function(){open(b.dataset.concernId);};});
    body.querySelector('[data-refresh]').onclick=function(){loadQueue(true);};
    if(data.rows.length)host.querySelector('details').open=true;
-  }catch(e){if(allowed(expected)&&body.isConnected){queueKey='';body.innerHTML='<p>'+esc(e.message||'疑義待辦讀取失敗')+'</p><button type="button" class="btn-g" data-refresh>重試</button>';body.querySelector('button').onclick=function(){loadQueue(true);};}}
+  }catch(e){if(allowed(expected)&&body.isConnected){host.querySelector('details').open=true;host.querySelector('summary').textContent='收款疑義 · 待重試';body.innerHTML='<p>'+esc(e.message||'疑義待辦讀取失敗')+'</p><button type="button" class="btn-g" data-refresh>重試</button>';body.querySelector('button').onclick=function(){loadQueue(true);};}}
   })();return queuePending;
  }
  function suspend(){close();queueKey='';var host=document.getElementById('payment-concern-queue');if(host)host.replaceChildren();}
