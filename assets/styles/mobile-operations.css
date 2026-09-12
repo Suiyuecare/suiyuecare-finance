@@ -53,13 +53,5 @@
 
   #pg-invoices .mobile-income-mode,#pg-invoices [data-mobile-single-first="invoice"]{display:none!important}
   #pg-invoices .invoice-unified-entry{display:block!important;width:100%!important;min-width:0!important}
-  #pg-invoices #invoice-batch-sheet :is(.sheet-full-scroll,.invoice-sheet-scroll){overflow:visible!important;max-width:100%!important}
-  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table{display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;table-layout:auto!important;border:0!important}
-  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table thead{display:none!important}
-  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table tbody{display:grid!important;grid-template-columns:1fr!important;gap:12px!important;width:100%!important}
-  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card]{display:block!important;width:100%!important;padding:10px 14px!important;border:1px solid var(--mobile-line)!important;border-radius:22px!important;background:#fff!important}
-  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card] td{display:grid!important;grid-template-columns:minmax(88px,34%) minmax(0,1fr)!important;align-items:center!important;gap:10px!important;width:100%!important;min-height:44px!important;padding:8px 0!important;border:0!important;border-bottom:1px solid #f1e4d4!important;text-align:left!important;white-space:normal!important}
-  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card] td:last-child{border-bottom:0!important}
-  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table td::before{content:attr(data-mobile-card-label)!important;display:block!important;color:var(--mobile-muted)!important;font-size:11px!important;font-weight:800!important}
-  #pg-invoices #invoice-batch-sheet table.excel-sheet-table.mobile-native-card-table td :is(input,select,textarea,.combo-select){width:100%!important;min-width:0!important;min-height:44px!important;font-size:16px!important}
+
 }

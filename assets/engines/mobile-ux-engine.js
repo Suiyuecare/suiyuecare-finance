@@ -218,7 +218,7 @@
 
   function setCellLabels(table){
     if(!table)return;
-    var labels=Array.prototype.map.call(table.querySelectorAll('thead th'),function(th){
+    var labels=Array.prototype.map.call(table.tHead&&table.tHead.rows[0]?table.tHead.rows[0].cells:[],function(th){
       var copy=th.cloneNode(true);
       Array.prototype.forEach.call(copy.querySelectorAll('.sort-mark,.finance-visually-hidden'),function(node){node.remove();});
       return String(copy.textContent||'').replace(/[↕↑↓]/g,'').replace(/\s+/g,' ').trim();
@@ -226,7 +226,7 @@
     Array.prototype.forEach.call(table.tBodies||[],function(body){
       Array.prototype.forEach.call(body.rows||[],function(row){
         Array.prototype.forEach.call(row.cells||[],function(cell,index){
-          if(!cell.dataset.mobileCardLabel)cell.dataset.mobileCardLabel=labels[index]||'';
+          cell.dataset.mobileCardLabel=labels[index]||'';
           if(cell.style&&cell.style.display==='none')cell.setAttribute('data-mobile-field-hidden','true');
           else cell.removeAttribute('data-mobile-field-hidden');
         });
@@ -260,10 +260,10 @@
     if(!table)return;
     setCellLabels(table);
     table.classList.add('mobile-native-card-table');
-    Array.prototype.forEach.call(table.querySelectorAll('tbody tr'),function(row){
+    Array.prototype.forEach.call(table.tBodies||[],function(body){Array.prototype.forEach.call(body.rows,function(row){
       row.setAttribute(attribute,kind);
       if(attribute==='data-mobile-record-card')installKeyboardActivation(row);
-    });
+    });});
   }
   function enhanceWorkLists(){
     var expenses=document.querySelector('#pg-expenses .expense-list-table');
@@ -271,18 +271,8 @@
     Array.prototype.forEach.call(document.querySelectorAll('#appr-list .approval-table'),function(table){
       markRows(table,'approvals','data-mobile-record-card');
     });
-    Array.prototype.forEach.call(document.querySelectorAll('#invoice-single-sheet table'),function(table){
-      markRows(table,'invoice','data-mobile-entry-card');
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('#invoice-batch-sheet table'),function(table){
-      markRows(table,'invoice','data-mobile-entry-card');
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('#bill-entry-sheet table'),function(table){
-      markRows(table,'bill','data-mobile-entry-card');
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('#nr-content .excel-sheet-table'),function(table){
-      markRows(table,'newreq','data-mobile-entry-card');
-    });
+    // Invoice and request entry sheets retain their native horizontal table.
+    // Never attach the legacy row-card class or synthetic field labels here.
     Array.prototype.forEach.call(document.querySelectorAll('#notif-list .notif-row'),function(row){
       row.setAttribute('data-mobile-touch-target','notification');
       installKeyboardActivation(row);
@@ -346,13 +336,6 @@
 	  brand.classList.add('mobile-login-brand');
 	  right.insertBefore(brand,right.firstChild);
 	}
-  function syncNewRequestView(){
-    var control=document.querySelector('[data-mobile-advanced-sheet="newreq"]');
-    var content=document.getElementById('nr-content');
-    if(!control||!content)return;
-	control.hidden=!content.querySelector('.excel-sheet-table');
-    content.classList.toggle('mobile-advanced-open',control.open);
-  }
   function syncInvoiceModeUi(){
     var mode='batch';
     var single=document.getElementById('mobile-invoice-single');
@@ -722,7 +705,6 @@
     updatePrimaryNavigation();
 	installLoginBrand();
     installLoginHelp();
-    syncNewRequestView();
     reconcileInvoiceViewport();
     reconcileShareholderWizard();
     enhanceWorkLists();
@@ -738,6 +720,7 @@
     enhanceOrgMobile();
     enhanceHealthMobile();
     enhanceSettingsMobile();
+    if(typeof window.refreshFinancialTableScrollHints==='function')window.refreshFinancialTableScrollHints();
   }
   function queueEnhance(){
     if(observerQueued)return;
@@ -752,8 +735,6 @@
     });
     var content=document.querySelector('.content');
     if(content)new MutationObserver(queueEnhance).observe(content,{subtree:true,attributes:true,attributeFilter:['class']});
-    var advanced=document.querySelector('[data-mobile-advanced-sheet="newreq"]');
-    if(advanced)advanced.addEventListener('toggle',syncNewRequestView);
     var complianceTabs=document.querySelector('[data-mobile-compliance-tabs]');
     if(complianceTabs&&!complianceTabs.dataset.mobileKeysBound){
       complianceTabs.dataset.mobileKeysBound='1';

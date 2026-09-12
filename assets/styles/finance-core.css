@@ -3941,84 +3941,7 @@ input:focus,select:focus,textarea:focus{
   .mobile-native-card-table td :is(input,select,textarea,.combo-select){width:100%!important;min-width:0!important;font-size:16px!important}
 
   /* These selectors intentionally outrank the legacy spreadsheet locks. */
-  #pg-newreq #nr-content:not(.mobile-advanced-open) :is(.sheet-full-scroll,.lazy-sheet-scroll,.hr-sheet-scroll),
-  #pg-invoices #invoice-single-sheet :is(.sheet-full-scroll,.invoice-sheet-scroll),
-  #pg-bills #bill-entry-sheet .sheet-full-scroll{
-    overflow:visible!important;
-    max-width:100%!important;
-  }
-  #pg-newreq #nr-content:not(.mobile-advanced-open) table.excel-sheet-table.mobile-native-card-table,
-  #pg-invoices #invoice-single-sheet table.excel-sheet-table.mobile-native-card-table,
-  #pg-bills #bill-entry-sheet table.excel-sheet-table.mobile-native-card-table{
-    display:block!important;
-    width:100%!important;
-    min-width:0!important;
-    max-width:100%!important;
-    table-layout:auto!important;
-    border:0!important;
-  }
-  #pg-newreq #nr-content:not(.mobile-advanced-open) table.excel-sheet-table.mobile-native-card-table thead,
-  #pg-invoices #invoice-single-sheet table.excel-sheet-table.mobile-native-card-table thead,
-  #pg-bills #bill-entry-sheet table.excel-sheet-table.mobile-native-card-table thead{display:none!important}
-  #pg-newreq #nr-content:not(.mobile-advanced-open) table.excel-sheet-table.mobile-native-card-table tbody,
-  #pg-invoices #invoice-single-sheet table.excel-sheet-table.mobile-native-card-table tbody,
-  #pg-bills #bill-entry-sheet table.excel-sheet-table.mobile-native-card-table tbody{
-    display:grid!important;
-    grid-template-columns:1fr!important;
-    gap:12px!important;
-    width:100%!important;
-  }
-  #pg-newreq #nr-content:not(.mobile-advanced-open) table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card],
-  #pg-invoices #invoice-single-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card],
-  #pg-bills #bill-entry-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card]{
-    display:block!important;
-    width:100%!important;
-    margin:0!important;
-    padding:10px 14px!important;
-    border:1px solid var(--mobile-line)!important;
-    border-radius:22px!important;
-    background:#fff!important;
-    box-shadow:0 8px 22px rgba(92,51,17,.05)!important;
-  }
-  #pg-newreq #nr-content:not(.mobile-advanced-open) table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card] td,
-  #pg-invoices #invoice-single-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card] td,
-  #pg-bills #bill-entry-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card] td{
-    display:grid!important;
-    grid-template-columns:minmax(88px,34%) minmax(0,1fr)!important;
-    align-items:center!important;
-    gap:10px!important;
-    width:100%!important;
-    min-height:44px!important;
-    padding:8px 0!important;
-    border:0!important;
-    border-bottom:1px solid #f1e4d4!important;
-    text-align:left!important;
-    white-space:normal!important;
-  }
-  #pg-newreq #nr-content:not(.mobile-advanced-open) table.excel-sheet-table.mobile-native-card-table td::before,
-  #pg-invoices #invoice-single-sheet table.excel-sheet-table.mobile-native-card-table td::before,
-  #pg-bills #bill-entry-sheet table.excel-sheet-table.mobile-native-card-table td::before{
-    content:attr(data-mobile-card-label)!important;
-    display:block!important;
-  }
-  #pg-newreq #nr-content:not(.mobile-advanced-open) table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card] td[data-mobile-field-hidden="true"],
-  #pg-invoices #invoice-single-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card] td[data-mobile-field-hidden="true"],
-  #pg-bills #bill-entry-sheet table.excel-sheet-table.mobile-native-card-table tr[data-mobile-entry-card] td[data-mobile-field-hidden="true"]{display:none!important}
-  #pg-newreq #nr-content:not(.mobile-advanced-open) table.excel-sheet-table.mobile-native-card-table td :is(input,select,textarea,.combo-select),
-  #pg-invoices #invoice-single-sheet table.excel-sheet-table.mobile-native-card-table td :is(input,select,textarea,.combo-select),
-  #pg-bills #bill-entry-sheet table.excel-sheet-table.mobile-native-card-table td :is(input,select,textarea,.combo-select){
-    width:100%!important;
-    min-width:0!important;
-    min-height:44px!important;
-    font-size:16px!important;
-  }
-  #nr-content.mobile-advanced-open .mobile-native-card-table{min-width:760px!important;display:table!important}
-  #nr-content.mobile-advanced-open .mobile-native-card-table thead{display:table-header-group!important}
-  #nr-content.mobile-advanced-open .mobile-native-card-table tbody{display:table-row-group!important}
-  #nr-content.mobile-advanced-open .mobile-native-card-table tr{display:table-row!important;padding:0!important;border-radius:0!important}
-  #nr-content.mobile-advanced-open .mobile-native-card-table td{display:table-cell!important;width:auto!important;padding:6px 8px!important;border:1px solid #e8dcc8!important}
-  #nr-content.mobile-advanced-open .mobile-native-card-table td::before{display:none!important}
-  #nr-content.mobile-advanced-open .sheet-full-scroll{overflow-x:auto!important}
+
 
   #pg-expenses .expense-query-primary{display:block!important}
   #pg-expenses .expense-query-search{margin-top:10px!important}
@@ -4480,19 +4403,6 @@ input:focus,select:focus,textarea:focus{
 #login-switch-account{min-height:44px;min-width:44px;padding:10px 14px;}
 @media(max-width:760px){.file-chip>button{min-height:44px!important;min-width:44px!important;padding:8px!important;}}
 
-.posted-accounting-mobile-lines{display:none}
-@media(max-width:600px){
- .accounting-lines-scroll.posted-accounting-desktop-table{display:none!important}
- .posted-accounting-mobile-lines{display:grid;gap:12px}
- .posted-accounting-mobile-line{padding:12px;border:1px solid #ead8c2;border-radius:10px;background:#fff;overflow-wrap:anywhere}
- .posted-accounting-mobile-subject{margin:8px 0;color:#246130;font-weight:700}
- .posted-accounting-mobile-line dl{display:grid;gap:6px;margin:10px 0}
- .posted-accounting-mobile-line dl>div{display:flex;justify-content:space-between;gap:12px}
- .posted-accounting-mobile-line dt{color:#64748b}
- .posted-accounting-mobile-line dd{margin:0;font-weight:650}
-.posted-accounting-mobile-credit{font-size:12px;color:#64748b;line-height:1.6}
-}
-
 /* Department workspace: browse one unit, then open only the setting being edited. */
 #settings-panel-departments{min-width:0}
 #membership-org-tree .org-workspace{
@@ -4640,3 +4550,44 @@ input:focus,select:focus,textarea:focus{
   #membership-org-tree .org-detail-facts dt{font-size:12px}
   #membership-org-tree .org-breadcrumb{font-size:12px}
 }
+
+/* Financial details have one table layout at every width. Only this region
+   scrolls; data labels and alternate row cards never replace actual headers. */
+:is(.content,#m-appr) .finance-detail-scroll,:is(.content,#m-appr) .accounting-lines-scroll{min-width:0!important;max-width:100%!important;overflow-x:auto!important;overscroll-behavior-x:contain;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+:is(.content,#m-appr) .finance-detail-scroll:focus-visible,:is(.content,#m-appr) .accounting-lines-scroll:focus-visible{outline:2px solid var(--br);outline-offset:2px}
+:is(.content,#m-appr) table.finance-detail-table{display:table!important;width:100%!important;min-width:760px!important;max-width:none!important;border-collapse:collapse!important;table-layout:fixed!important}
+:is(.content,#m-appr) table.finance-detail-table>thead{display:table-header-group!important}
+:is(.content,#m-appr) table.finance-detail-table>tbody{display:table-row-group!important}
+:is(.content,#m-appr) table.finance-detail-table>thead>tr,:is(.content,#m-appr) table.finance-detail-table>tbody>tr{display:table-row!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important;background:#fff!important}
+:is(.content,#m-appr) table.finance-detail-table>tbody>tr[style*="display:none"],:is(.content,#m-appr) table.finance-detail-table>tbody>tr[style*="display: none"]{display:none!important}
+:is(.content,#m-appr) table.finance-detail-table>thead>tr>th,:is(.content,#m-appr) table.finance-detail-table>tbody>tr>td{display:table-cell!important;padding:9px 10px!important;vertical-align:middle!important;border-bottom:1px solid #e8dcc8!important;white-space:normal!important;overflow-wrap:anywhere!important;writing-mode:horizontal-tb!important}
+:is(.content,#m-appr) table.finance-detail-table>thead>tr>th{white-space:nowrap!important;font-size:12px!important;color:#735b41!important;background:#fff8ef!important}
+:is(.content,#m-appr) table.finance-detail-table>tbody>tr>td::before,:is(.content,#m-appr) table.finance-detail-table>tbody>tr>td::after{content:none!important;display:none!important}
+:is(.content,#m-appr) table.finance-detail-table .finance-amount{text-align:right!important;font-variant-numeric:tabular-nums;white-space:nowrap!important}
+:is(.content,#m-appr) table.finance-invoice-lines{min-width:1850px!important;table-layout:auto!important}
+:is(.content,#m-appr) table.finance-invoice-lines input{min-width:100px!important;min-height:44px!important;font-size:14px!important}
+:is(.content,#m-appr) table.finance-invoice-lines input[id^="inv-line-desc-"]{min-width:220px!important}
+:is(.content,#m-appr) .accounting-lines-table :is(input,select,.combo-input){min-height:44px!important}
+.finance-invoice-review{min-width:0;padding:12px 0}
+.finance-table-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:#334155}
+.finance-table-heading>span,.finance-table-note{font-size:12px;color:#8b7358;line-height:1.6}
+.finance-table-note{margin:6px 0 10px}
+.finance-invoice-items{padding:4px 0 12px;min-width:0}
+.finance-invoice-source{display:flex;flex-wrap:wrap;gap:8px 24px;margin:4px 0 12px}
+.finance-invoice-source>div{display:flex;gap:8px;min-width:0}
+.finance-invoice-source dt{color:#8b7358;font-size:12px;white-space:nowrap}
+.finance-invoice-source dd{margin:0;font-size:12px;overflow-wrap:anywhere}
+.finance-invoice-expand{display:inline-flex;align-items:center;justify-content:center;min-width:68px;min-height:44px;border:1px solid #d7e3f4;border-radius:6px;background:#eff6ff;color:#315c94;cursor:pointer;font:inherit;font-size:12px}
+.finance-invoice-expand:focus-visible{outline:2px solid #315c94;outline-offset:2px}
+@media(max-width:760px){
+  #pg-newreq #nr-content :is(.sheet-full-scroll,.lazy-sheet-scroll,.hr-sheet-scroll),#pg-invoices :is(#invoice-single-sheet,#invoice-batch-sheet) :is(.sheet-full-scroll,.invoice-sheet-scroll),#pg-bills #bill-entry-sheet .sheet-full-scroll{overflow-x:auto!important;overflow-y:auto!important;max-width:100%!important}
+}
+
+#m-appr #appr-inner{min-width:0;max-width:100%}
+@media(max-width:760px){
+ #pg-newreq #nr-content table.excel-sheet-table :is(input:not(.combo-native-select),select:not(.combo-native-select),button,.combo-input),#pg-invoices :is(#invoice-single-sheet,#invoice-batch-sheet) table.excel-sheet-table :is(input:not(.combo-native-select),select:not(.combo-native-select),button,.combo-input){min-height:44px!important}
+ #pg-newreq #nr-content table.excel-sheet-table button,#pg-invoices :is(#invoice-single-sheet,#invoice-batch-sheet) table.excel-sheet-table button{min-width:44px!important}
+}
+
+.finance-table-scroll-hint{margin:6px 0;font-size:12px;color:#8b7358;line-height:1.5}
+.finance-table-scroll-hint[hidden]{display:none!important}
