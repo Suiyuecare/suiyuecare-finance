@@ -37,6 +37,7 @@
 <script src="assets/engines/diagnostic-outbox-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/data-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/form-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/employee-form-ux.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/approval-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/attachment-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/permission-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -62,6 +63,7 @@
 <link rel="stylesheet" href="assets/styles/mobile-operations.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/workflow-simplification.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/employee-auth-notifications.css?v=__FINANCE_ASSET_VERSION__">
+<link rel="stylesheet" href="assets/styles/employee-form-ux.css?v=__FINANCE_ASSET_VERSION__">
 <style>
 /* Include dialogs opened by already pending renders after an identity change. */
 body[data-finance-identity-blocked="true"] #main-wrap,
@@ -17017,7 +17019,7 @@ function newRequestStepHelpHtml(){
     ?'採購申請先填想買的品項、數量與商品連結即可。總務會在後面補匯款資料與實際憑據。'
     :t==='travel_request'
       ?'請先選同行人員與差旅天數，再依住宿、交通、停車、其他費用上傳附件；膳什費會依規則計算。'
-      :'依序完成 2-1 上傳附件、2-2 明細表、2-3 支出與匯款資訊。表單最下方可暫存，確認無誤再送出給主管。';
+      :'依序完成附件、費用明細、支出與匯款資訊。可分段展開填寫，完成後暫存或送出給主管。';
   return '<div class="employee-step-help"><div class="step-no">3</div><div><div class="step-title">填寫「'+typeName+'」資料</div><div class="step-copy">'+copy+'</div><div class="step-next">送出前系統會跳確認頁，送出後請到「簽核管理 → 我的申請」追蹤。</div></div></div>';
 }
 
@@ -17495,7 +17497,7 @@ function renderLazyExpensePage(){
   var def=LAZY_DEFAULTS[S.nrType]||LAZY_DEFAULTS.expense_reimbursement;
   if(!S.nrRec)S.nrRec=def.rec;
   if(!S.nrPay)S.nrPay=def.pay;
-  S.nrStep=2;
+  S.nrStep=3;
   var typeLabel=requestTypeLabel(S.nrType||'expense_reimbursement');
   var dOpts='<option value="">請選擇目前有效任職課／組</option>'+applicantDeptSelectRows('',currentUserEntityId()).map(function(d){return'<option value="'+d.c+'">'+'　'.repeat(d.lv-1)+d.c+' '+d.n+'</option>';}).join('');
   var entOpts=entityOptionsHtml('official',currentUserEntityId(),false);
@@ -17508,7 +17510,7 @@ function renderLazyExpensePage(){
     :'';
   var advanceTemplateHtml='';
   c.innerHTML=
-    '<div class="card" style="margin-bottom:10px;padding:12px;border-left:4px solid var(--br)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="ph" style="font-size:17px">'+(isExpenseApplicantRevisionMode()?'補件修正原申請':'申請內容')+'</div><div class="ps">'+(isExpenseApplicantRevisionMode()?'保留原單號與簽核歷史；請依退回原因修正後重新送出。':'步驟 1 選擇類型　→　步驟 2 上傳附件、整理 Excel、填寫申請與匯款資訊　→　送出後直接進簽核')+'</div></div><button class="btn-g" onclick="newReqBack()">'+(isExpenseApplicantRevisionMode()?'返回申請單':'切回申請類型')+'</button></div></div>'
+    '<div class="card" style="margin-bottom:10px;padding:12px;border-left:4px solid var(--br)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="ph" style="font-size:17px">'+(isExpenseApplicantRevisionMode()?'補件修正原申請':'申請內容')+'</div><div class="ps">'+(isExpenseApplicantRevisionMode()?'保留原單號與簽核歷史；請依退回原因修正後重新送出。':'已選擇申請類型與情境；目前是步驟 3：填寫資料、核對並送出')+'</div></div><button class="btn-g" onclick="newReqBack()">'+(isExpenseApplicantRevisionMode()?'返回申請單':'切回申請類型')+'</button></div></div>'
     +'<div style="display:flex;flex-direction:column;gap:10px">'
       +'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span></div><div style="padding:12px"><div class="fr2">'
         +(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():receiptUploadPanelHtml({ocr:true,kind:'receipt'}))
@@ -17536,6 +17538,7 @@ function renderLazyExpensePage(){
   syncLazyBankFeeRow(true);
   enhanceNewRequestSearchableSelects();
   var stepHelp=el('nr-step-help');if(stepHelp)stepHelp.innerHTML=newRequestStepHelpHtml();
+  mountEmployeeFormUX();
   setTimeout(function(){enhanceNewRequestSearchableSelects();updateNRRouteHealth();},0);
 }
 function nrTypeCardHtml(t){
@@ -17544,7 +17547,7 @@ function nrTypeCardHtml(t){
     +'<div class="type-copy"><div class="type-title">'+t.n+'</div><div class="type-desc">'+t.d+'</div><div class="type-employee-note">'+requestTypeEmployeeNote(t.id)+'</div></div>'
     +'</button>';
 }
-function buildNR(){clearExpenseApplicantRevisionMode();S.nrStep=1;S.nrType=null;S.nrRec=null;S.nrPay=null;S.nrFiles=[];S.nrPassbookFile=null;S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;S.lazyRows=[];S.refundRows=[];S.purchaseRows=[];S.hrRows=[];S.hrPeriod='';S.hrLaborPeriod='';S.hrPrivacyMode=false;S.pettyMode='general';S.nrFixedExpense=false;S.lazyBusy=false;S.lazyMode=false;S.nrDraftId='';renderNR();markNRClean();}
+function buildNR(){S.nrPettyGeneralRows=[];S.nrPettyGeneralReceiptType='';S.nrFileIssues=[];if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();clearExpenseApplicantRevisionMode();S.nrStep=1;S.nrType=null;S.nrRec=null;S.nrPay=null;S.nrFiles=[];S.nrPassbookFile=null;S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;S.lazyRows=[];S.refundRows=[];S.purchaseRows=[];S.hrRows=[];S.hrPeriod='';S.hrLaborPeriod='';S.hrPrivacyMode=false;S.pettyMode='general';S.nrFixedExpense=false;S.lazyBusy=false;S.lazyMode=false;S.nrDraftId='';renderNR();markNRClean();}
 function renderNR(){
   var c=el('nr-content');if(!c)return;
   if(S.nrStep>3)S.nrStep=3;
@@ -17621,6 +17624,7 @@ function renderNR(){
   }
   var stepHelp=el('nr-step-help');if(stepHelp)stepHelp.innerHTML=newRequestStepHelpHtml();
   applyExpenseFormFieldCustomizations();
+  mountEmployeeFormUX();
   updNRUI();updNRAcct();renderFlow();updateBankTypeUI();
   applicantSelectChanged(true);
   applyExpenseFormFieldCustomizations();
@@ -17690,10 +17694,11 @@ function applyCurrentUserDefaults(){
   applicantSelectChanged(true);
 }
 window.nrT=function(t){
+  S.nrPettyGeneralRows=[];S.nrPettyGeneralReceiptType='';S.nrFileIssues=[];
   S.nrType=t;S.nrRec=null;S.nrPay=null;S.nrPassbookFile=null;S.lazyRows=[];S.refundRows=[];S.purchaseRows=[];S.hrRows=[];S.hrPeriod=t==='hr_expense_request'?todayMonth():'';S.hrLaborPeriod='';S.hrPrivacyMode=t==='hr_expense_request';S.hrItem='salary_50';S.travelFiles={};S.travelPeople=[];S.travelRows=[];S.pettyMode='general';S.lazyBusy=false;
   if(isLazyRequestType(t)){
     var def=LAZY_DEFAULTS[t]||LAZY_DEFAULTS.expense_reimbursement;
-    S.nrRec=def.rec;S.nrPay=def.pay;S.lazyMode=true;S.nrStep=2;
+    S.nrRec=def.rec;S.nrPay=def.pay;S.lazyMode=true;S.nrStep=3;
   }else if(t==='travel_request'){
     S.nrRec='receipt';S.nrPay='bank';S.lazyMode=false;S.nrStep=3;
   }else if(t==='purchase_request'){
@@ -17708,12 +17713,19 @@ window.nrT=function(t){
   renderNR();
 };
 window.pettyModeChanged=function(v){
-  S.pettyMode=v==='initial'?'initial':'general';
-  if(S.nrType==='petty_cash_request'){
-    S.nrRec=S.nrRec==='invoice'?'invoice':'receipt';
-    if(S.pettyMode==='initial')S.lazyRows=[];
-    renderNR();
-  }
+  if(S.nrType!=='petty_cash_request')return;
+  var previous=collectNRFormState(),oldMode=S.pettyMode||'general';
+  var nextMode=v==='initial'?'initial':'general';
+  if(oldMode===nextMode)return;
+  // Initial funding carries no expense rows. Keep the reimbursement draft only
+  // in form UI state, so switching back never loses the employee's entered rows.
+  if(nextMode==='initial'){S.nrPettyGeneralRows=cloneSettingValue(S.lazyRows||[]);S.nrPettyGeneralReceiptType=S.nrRec;}
+  S.lazyRows=nextMode==='initial'?[]:cloneSettingValue(S.nrPettyGeneralRows||[]);
+  S.pettyMode=nextMode;S.nrRec=nextMode==='initial'?'form':(S.nrPettyGeneralReceiptType==='invoice'?'invoice':'receipt');
+  previous.pettyMode=nextMode;previous.fields['petty-mode']=nextMode;previous.lazyRows=S.lazyRows;
+  renderNR();applyNRFormState(previous,{preserveManualValues:true});
+  enhanceNewRequestSearchableSelects();
+  if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.focusTarget('petty-mode');
 };
 window.nrR=function(r){S.nrRec=r;if(!S.nrPay)S.nrPay='bank';S.nrStep=3;renderNR();};
 window.nrHrItem=function(id){
@@ -18108,8 +18120,8 @@ window.nrSaveDraftFromButton=async function(btn){
   }
   return ok;
 };
-window.nrFileChange=function(inp){if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，現在不能再變更附件。請勿離開目前畫面。');if(inp)inp.value='';return;}S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;Array.from(inp.files).forEach(function(f){S.nrFiles.push(f);});renderNRFList();inp.value='';};
-window.nrFileDrop=function(e){if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，現在不能再變更附件。請勿離開目前畫面。');return;}S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;el('nr-dz').classList.remove('drag');Array.from(e.dataTransfer.files).forEach(function(f){S.nrFiles.push(f);});renderNRFList();};
+window.nrFileChange=function(inp){if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，現在不能再變更附件。請勿離開目前畫面。');if(inp)inp.value='';return;}S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;employeeAcceptedFiles(inp.files).forEach(function(f){S.nrFiles.push(f);});renderNRFList();inp.value='';};
+window.nrFileDrop=function(e){if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，現在不能再變更附件。請勿離開目前畫面。');return;}S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;el('nr-dz').classList.remove('drag');employeeAcceptedFiles(e.dataTransfer.files).forEach(function(f){S.nrFiles.push(f);});renderNRFList();};
 function lazyApprovalFlowHtml(title){
   var rows=S.nrType==='advance_request'?[
     ['1','申請人送件','填寫預支資料，上傳已填寫的預支申請書與存摺封面，送出後開始流程。'],
@@ -18162,7 +18174,7 @@ function nrSubmitActionsHtml(includeTravelStep){
       +'<div class="nr-submit-buttons"><button type="button" class="btn-s" onclick="newReqBack()">返回申請單</button><button type="button" class="btn-p" onclick="submitNR()">補件完成並重新送出</button></div></div>'
       +'</div>';
   }
-  var msg=includeTravelStep?'確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊、2-4 差旅申請資料都填寫完成後，再暫存或送出簽核。':'確認 2-1 附件、2-2 明細表、2-3 申請與匯款資訊都填寫完成後，再暫存或送出簽核。';
+  var msg=S.nrType==='purchase_request'?'確認採購品項、數量、商品連結與申請原因後，再暫存或送出簽核。':includeTravelStep?'確認差旅行程、費用明細、憑據與匯款資訊後，再暫存或送出簽核。':'確認附件、費用明細、申請與匯款資訊後，再暫存或送出簽核。';
   return'<div class="nr-submit-actions">'
     +'<div class="nr-submit-main"><div><div class="nr-submit-eyebrow">送出前檢查</div><div class="nr-submit-copy">'+msg+' 暫存只會存在你的帳號，不會送主管。</div></div><div id="nr-route-health" class="nr-route-health"></div></div>'
     +'<div class="nr-submit-panel">'
@@ -18190,16 +18202,43 @@ window.applicantSelectChanged=function(keepValue){
       setTimeout(function(){if(inp)inp.focus();},0);
     }
   };
+function mountEmployeeFormUX(){
+  var engine=window.FinanceEmployeeFormUX,root=el('nr-content');
+  if(!engine||!root)return;
+  if(S.nrType&&(S.lazyMode||S.nrStep===3))engine.mountSections(root,[S.user&&S.user.id,S.nrDraftId||'',S.nrType].join('|'));
+  renderNRFList();
+  renderEmployeePassbookFile();
+}
+function employeeAcceptedFiles(files){
+  var engine=window.FinanceEmployeeFormUX;
+  var result=engine?engine.selectFiles(files,function(file){assertAttachmentUploadable(file,file);}):{accepted:[],rejected:[]};
+  if(!engine)Array.from(files||[]).forEach(function(file){try{assertAttachmentUploadable(file,file);result.accepted.push(file);}catch(error){result.rejected.push({name:file.name||'附件',message:error.message});}});
+  S.nrFileIssues=result.rejected;
+  renderEmployeeFileIssues();
+  return result.accepted;
+}
+function renderEmployeeFileIssues(){
+  var anchor=el('nr-flist')||el('nr-content');if(!anchor)return;
+  var box=el('nr-file-issues');
+  if(!box){box=document.createElement('div');box.id='nr-file-issues';box.className='efux-file-issues';anchor.before(box);}
+  if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.fileIssues(box,S.nrFileIssues||[]);
+}
+window.nrFilePickerKeydown=function(event){
+  if(event.key==='Enter'||event.key===' '){event.preventDefault();el('nr-file').click();}
+};
 function renderNRFList(){
   var fl=el('nr-flist');if(!fl)return;
-  var notice=S.nrDraftFileNotice?'<div style="font-size:10px;color:#8a5a10;background:#fff7e6;border:1px solid #f0d9a8;border-radius:7px;padding:6px;margin-bottom:5px">'+S.nrDraftFileNotice+'</div>':'';
-  if(S.nrRevisionConfirmationPending)notice+='<div style="font-size:11px;font-weight:700;color:#991b1b;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:8px;margin-bottom:6px">結果尚待確認，請勿離開。系統保留補件內容與附件，暫時不允許新增、移除或更換附件。</div>';
-  if(isExpenseApplicantRevisionMode())notice+='<div style="font-size:10px;color:#0f766e;background:#ecfdf5;border:1px solid #b7ead1;border-radius:7px;padding:6px;margin-bottom:5px">原附件為簽核紀錄的一部分，不能刪除；這次選擇的附件會追加到原單。</div>';
-  else if(S.nrFiles.some(function(f){return f.path||f.storagePath;}))notice+='<div style="font-size:10px;color:#0f766e;background:#ecfdf5;border:1px solid #b7ead1;border-radius:7px;padding:6px;margin-bottom:5px">此草稿的附件已從 Supabase 保存路徑恢復，可直接送出；若要替換請重新上傳。</div>';
-  if(!S.nrFiles.length){fl.innerHTML=notice+'<div style="font-size:11px;color:#94a3b8;padding:2px 0">尚未上傳任何憑據</div>';return;}
-  fl.innerHTML=notice+S.nrFiles.map(function(f,i){var nm=f.name||f.n||'附件',ext=fileExt(nm).toUpperCase(),original=!!(isExpenseApplicantRevisionMode()&&f.__revisionOriginal);return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+escAttr(ext)+'</span><span style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(nm)+'</span>'+(original?'<span style="font-size:9px;color:#0f766e">原附件保留</span>':'<button onclick="nrRemoveFile('+i+')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0;line-height:1">×</button>')+'</div>';}).join('');
-  var dz=el('nr-dz');
-  if(dz)dz.classList.toggle('filled',S.nrFiles.length>0);
+  var engine=window.FinanceEmployeeFormUX;
+  if(engine)engine.renderFiles(fl,S.nrFiles||[],{onRemove:window.nrRemoveFile});
+  else fl.textContent=(S.nrFiles||[]).map(function(file){return file.name||file.n;}).join('、')||'尚未選擇附件';
+  if(S.nrDraftFileNotice){var notice=document.createElement('p');notice.className='efux-file-note';notice.textContent=S.nrDraftFileNotice;fl.prepend(notice);}
+  renderEmployeeFileIssues();
+  var dz=el('nr-dz');if(dz)dz.classList.toggle('filled',S.nrFiles.length>0);
+}
+function renderEmployeePassbookFile(){
+  var anchor=el('nr-passbook-file'),engine=window.FinanceEmployeeFormUX;if(!anchor||!engine)return;
+  var box=el('nr-passbook-file-list');if(!box){box=document.createElement('div');box.id='nr-passbook-file-list';anchor.parentElement.after(box);}
+  engine.renderFiles(box,S.nrPassbookFile?[S.nrPassbookFile]:[],{});
 }
 window.nrRemoveFile=async function(i){
   if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，現在不能移除附件，也不會執行遠端清理。請勿離開目前畫面。');return;}
@@ -18209,7 +18248,9 @@ window.nrRemoveFile=async function(i){
     try{await cleanupUploadedSupabaseAttachments([[file.__revisionUploadedMeta]],'移除申請人補件新附件');forgetExpenseApplicantRevisionPendingUpload(file.__revisionUploadedMeta);}
     catch(err){alert('新附件尚未能安全移除，請稍後再試。');return;}
   }
-  S.nrFiles.splice(i,1);renderNRFList();
+  S.nrFiles.splice(i,1);
+  Object.keys(S.travelFiles||{}).forEach(function(key){S.travelFiles[key]=S.travelFiles[key].filter(function(item){return item!==file;});updateTravelFileCard(key);syncTravelFileMetadataOnly(key);});
+  renderNRFList();
 };
 function lazyProgressHtml(){
   return'<div id="lazy-progress-wrap" style="display:none;margin:8px 0 10px"><div style="display:flex;justify-content:space-between;font-size:10px;color:#8b7358;margin-bottom:4px"><span>解析進度</span><strong id="lazy-progress-text">0%</strong></div><div style="height:8px;background:var(--warm);border-radius:99px;overflow:hidden;border:1px solid #efd7b8"><div id="lazy-progress-bar" style="height:100%;width:0%;background:var(--br);border-radius:99px;transition:width .2s,background .2s"></div></div></div>';
@@ -19631,13 +19672,14 @@ function applyPassbookInfo(data){
 window.passbookFileChange=async function(inp){
   if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，現在不能更換存摺附件，也不會執行遠端清理。請勿離開目前畫面。');if(inp)inp.value='';return;}
   var file=inp&&inp.files&&inp.files[0];if(!file)return;
+  if(!employeeAcceptedFiles([file]).length){if(inp)inp.value='';return;}
   var previous=S.nrPassbookFile;
   if(isExpenseApplicantRevisionMode()&&previous&&previous.__revisionUploadedMeta){
     try{await cleanupUploadedSupabaseAttachments([[previous.__revisionUploadedMeta]],'更換申請人補件存摺附件');forgetExpenseApplicantRevisionPendingUpload(previous.__revisionUploadedMeta);}
     catch(err){setPassbookStatus('舊的補件存摺附件尚未能安全移除，請稍後再試。','#8a1010');if(inp)inp.value='';return;}
   }
   file.kind='passbook';
-  S.nrPassbookFile=file;
+  S.nrPassbookFile=file;renderEmployeePassbookFile();
   if(!productModuleEnabled('ai-import')){
     setPassbookStatus('已保留存摺封面；AI／OCR 匯入模組目前停用，請手動填寫收款人、銀行、分行與帳號。','#8b7358');
     if(inp)inp.value='';
@@ -19973,7 +20015,10 @@ function preserveTravelViewportAround(key,fn){
 function updateTravelFileCard(key){
   var names=travelFileNames(key),summary=travelFileSummary(key);
   var status=el('tr-'+key+'-files');
-  if(status)status.textContent=names||'尚未上傳';
+  if(status){
+    if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.renderFiles(status,(S.travelFiles||{})[key]||[],{onRemove:function(index){var file=((S.travelFiles||{})[key]||[])[index];var nrIndex=(S.nrFiles||[]).indexOf(file);if(nrIndex>-1)nrRemoveFile(nrIndex);}});
+    else status.textContent=names||'尚未上傳';
+  }
   var input=el('tr-'+key+'-file');
   var card=input&&input.closest?input.closest('.travel-file-card'):null;
   var control=card?card.querySelector('.travel-file-control'):(input&&input.closest?input.closest('.travel-file-control'):null);
@@ -20028,7 +20073,7 @@ window.travelFileKeydown=function(evt,key){
 window.travelFileChange=function(key,inp){
   if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，現在不能再變更差旅附件。請勿離開目前畫面。');if(inp)inp.value='';return;}
   if(!S.travelFiles)S.travelFiles={};
-  var files=Array.from(inp.files||[]);
+  var files=employeeAcceptedFiles(inp.files||[]);
   if(!files.length){inp.value='';return;}
   rememberTravelUploadScroll();
   preserveTravelViewportAround(key,function(){
@@ -21827,6 +21872,28 @@ window.cancelExpenseApplicantRevision=async function(rid){
   buildAll();openApprovalTab('mine');
   alert('申請單 '+record.no+' 已不通過並結束，系統保留完整處理紀錄。'+(result.refreshRequired?'\n最新畫面讀取稍慢，請稍後重新整理確認。':'')+cleanupWarning);
 };
+function nrDetailValidationTarget(kind,message){
+  var rowMatch=/第 (\d+) 列/.exec(message),index=rowMatch?Number(rowMatch[1])-1:0;
+  var container=el(kind==='purchase'?'purchase-sheet':kind==='refund'?'refund-sheet':'hr-sheet');if(!container)return '';
+  var labels=kind==='purchase'?{itemName:purchaseDetailLabel('item','商品項目'),qty:purchaseDetailLabel('qty','數量'),link:purchaseDetailLabel('link','商品連結'),note:purchaseDetailLabel('note','備註')}:kind==='refund'?{originalReferenceType:'原單類型',originalReferenceNo:'原單號 / 收款編號'}:{};
+  if(kind==='refund')refundDetailColumns().forEach(function(key){labels[refundDetailProp(key)]=refundDetailLabel(key,key);});
+  var prop=Object.keys(labels).find(function(key){return message.indexOf(labels[key])>-1;});
+  var nodes=Array.from(container.querySelectorAll('input,select,textarea'));
+  var target=nodes.find(function(node){
+    if(kind==='hr')return node.dataset.hrRow===String(index)&&message.indexOf(node.dataset.hrCol||'__missing__')>-1;
+    var handler=node.getAttribute('onchange')||node.getAttribute('oninput')||'';
+    return handler.indexOf(kind+'Edit('+index+',')>-1&&(!prop||handler.indexOf("'"+prop+"'")>-1);
+  });
+  if(target){if(!target.id)target.id='nr-invalid-'+kind+'-'+index+'-'+nodes.indexOf(target);return target.id;}
+  return container.id;
+}
+function nrTravelValidationTarget(kind,field){
+  var index=(S.travelRows||[]).findIndex(function(row){return row.kind===kind;}),box=el('travel-sheet');
+  if(!box)return 'nr-content';
+  var target=Array.from(box.querySelectorAll('input')).find(function(node){return (node.getAttribute('oninput')||'').indexOf("travelEditRow("+index+",'"+field+"'")>-1;});
+  if(target){if(!target.id)target.id='nr-invalid-travel-'+index+'-'+field;return target.id;}
+  return box.id;
+}
 window.submitNR=async function(){
   if(S.nrSubmissionConfirmationPending||loadExpenseSubmissionPending()){
     if(!await guardSubmissionIdentityDirectory('確認上一筆費用申請'))return;
@@ -21865,6 +21932,9 @@ window.submitNR=async function(){
   }
   if(!await guardSubmissionIdentityDirectory('費用申請'))return;
   if(!S.nrType||!S.nrRec||!S.nrPay){alert('請先完成申請類型、憑證類型與付款方式');return;}
+  if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.clearIssues(el('nr-content'));
+  var formIssues=[];
+  function issue(message,target){formIssues.push({message:message,target:target||'nr-content'});}
   finalizeLazyAccountingDrafts();
   var amt=parseFloat((el('nr-amt')||{}).value||'0');
   var purpose=(el('nr-desc-purpose')||{}).value||'';
@@ -21876,30 +21946,31 @@ window.submitNR=async function(){
   var hrInfo=null;
   if(S.nrType==='travel_request'){
     travelInfo=collectTravelInfo();
-    if(travelInfo.requiredMissing.length){alert('請完整填寫差旅申請必填欄位：同行人員、出差天數、差旅類型、出差事由、預期成果、出發/返回時間、出發地、目的地');return;}
-    if(travelInfo.configuredMissing&&travelInfo.configuredMissing.length){alert('請依表單欄位設定補齊差旅明細：\n'+travelInfo.configuredMissing.slice(0,12).join('\n'));return;}
-    if(travelInfo.overLimit&&travelInfo.overLimit.length){alert('差旅費用不可超過管理辦法上限，請先修正：\n'+travelInfo.overLimit.map(function(r){return r.label+' '+fmt(r.amount)+' / 上限 '+fmt(r.limit);}).join('\n'));return;}
-    if(travelInfo.missingEvidence&&travelInfo.missingEvidence.length){alert('除膳什費外，填寫申請金額的差旅項目都需要上傳憑據：\n'+travelInfo.missingEvidence.map(function(r){return r.label;}).join('、'));return;}
+    travelInfo.requiredMissing.forEach(function(key){var fields={reason:['出差事由','tr-reason'],outcome:['預期成果','tr-outcome'],start:['出發時間','tr-start'],end:['返回時間','tr-end'],from:['出發地','tr-from'],to:['目的地','tr-to'],people:['同行人員','tr-people-search'],days:['出差天數','tr-days-manual']};var field=fields[key]||[key,'travel-fields'];issue('請填寫'+field[0],field[1]);});
+    (travelInfo.configuredMissing||[]).forEach(function(message){var row=(S.travelRows||[]).find(function(row){return message.indexOf(row.label||travelKindLabel(row.kind))===0;});issue(message,row?nrTravelValidationTarget(row.kind,'note'):'travel-sheet');});
+    (travelInfo.overLimit||[]).forEach(function(row){issue(row.label+' '+fmt(row.amount)+' 超過上限 '+fmt(row.limit),nrTravelValidationTarget(row.kind,'amount'));});
+    (travelInfo.missingEvidence||[]).forEach(function(row){issue(row.label+'需上傳憑據','tr-'+row.kind+'-file');});
     desc=(note?note+'\n\n':'')+travelInfo.summary;
   }
   if(S.nrType==='refund_request'){
     refundInfo=collectRefundInfo();
-    if(refundInfo.missing.length){alert('請完整填寫退費明細：\n'+refundInfo.missing.slice(0,8).join('\n'));return;}
-    if(S.nrRec==='void_invoice'&&!S.nrFiles.length){alert('「發票要作廢」需上傳當初那份發票的電子檔案');return;}
+    refundInfo.missing.forEach(function(message){issue(message,nrDetailValidationTarget('refund',message)||'refund-sheet');});
+    if(S.nrRec==='void_invoice'&&!S.nrFiles.length)issue('「發票要作廢」需上傳當初那份發票的電子檔案','nr-dz');
     amt=refundInfo.total;
     if(el('nr-amt'))el('nr-amt').value=Math.round(amt);
     desc=(note?note+'\n\n':'')+refundInfo.summary;
   }
   if(S.nrType==='purchase_request'){
     purchaseInfo=collectPurchaseInfo();
-    if(purchaseInfo.missing.length){alert('請完整填寫採購申請：\n'+purchaseInfo.missing.slice(0,8).join('\n'));return;}
+    purchaseInfo.missing.forEach(function(message){issue(message,nrDetailValidationTarget('purchase',message)||'purchase-sheet');});
     amt=purchaseInfo.total;
     if(el('nr-amt'))el('nr-amt').value=Math.round(amt);
     desc=(note?note+'\n\n':'')+purchaseInfo.summary+'\n\n申請階段為採購需求預估；實際支出需待總務購買後依憑據填寫。';
   }
   if(S.nrType==='hr_expense_request'){
     hrInfo=collectHrExpenseInfo();
-    if(hrInfo.missing.length){renderHrExpenseSheet();alert('請完整填寫人事費用申請：\n'+hrInfo.missing.slice(0,8).join('\n'));return;}
+    if(hrInfo.missing.length)renderHrExpenseSheet();
+    hrInfo.missing.forEach(function(message){issue(message,nrDetailValidationTarget('hr',message)||'hr-sheet');});
     S.nrRec=hrInfo.item.rec;
     amt=hrInfo.total;
     if(el('nr-amt'))el('nr-amt').value=Math.round(amt);
@@ -21918,7 +21989,7 @@ window.submitNR=async function(){
       S.nrRec='receipt';
     }
   }
-  if(S.nrType==='advance_request'&&!S.nrFiles.length){alert('預支申請需先在 2-1 上傳已填寫的預支申請書。');return;}
+  if(S.nrType==='advance_request'&&!S.nrFiles.length)issue('請上傳已填寫的預支申請書','nr-dz');
   var appUser=currentNewReqApplicantUser();
   var initialIdentityError=expenseSubmissionIdentityError(appUser,appUser&&appUser.n);
   if(initialIdentityError){alert('送出前帳號檢查失敗：'+initialIdentityError+'\n\n系統尚未上傳附件，也沒有建立申請單。請重新登入後再試。');return;}
@@ -21937,16 +22008,27 @@ window.submitNR=async function(){
     {key:'amount',value:S.nrType==='purchase_request'?'採購需求階段':(amt?String(amt):''),label:formFieldLabel('expense_request','amount','總金額')},
     {key:'attachments',value:(S.nrFiles||[]).length?String(S.nrFiles.length):'',label:formFieldLabel('expense_request','attachments','附件')}
   ]);
-  if(expenseMissing.length){alert('請填寫必要欄位：\n'+expenseMissing.join('\n'));return;}
-  if(!appName){alert('請填寫申請人姓名');return;}
-  if(!amt&&S.nrType!=='purchase_request'){alert('請填寫申請金額');return;}
-  if(desc.length<5){alert(S.nrType==='travel_request'?'請填寫差旅申請資料':S.nrType==='refund_request'?'請填寫退費申請資料':S.nrType==='purchase_request'?'請填寫採購申請資料':S.nrType==='welfare_request'?'請填寫福利申請資料':S.nrType==='hr_expense_request'?'請填寫人事費用申請資料':'請填寫目的或申請說明（至少5字）');return;}
-  if(num(S.nrDraftMissingFileCount)>0){alert('這份暫存表單有 '+S.nrDraftMissingFileCount+' 個附件無法恢復檔案內容。為了讓主管能下載檢核，請先重新上傳附件後再送出簽核。');return;}
-  if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.payee){alert('請填寫收款人');return;}
-  if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.bankName){alert('請填寫銀行');return;}
-  if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.bankBranch){alert('請填寫分行');return;}
-  if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.bankNo){alert('請填寫帳號');return;}
-  if(S.nrType!=='purchase_request'&&!pay.expectedPayDate){alert('請選擇預計匯款日');return;}
+  var fieldTargets={entity:'nr-ent',applicant:'nr-app',department:'nr-dept',date:'nr-date',purpose:el('nr-desc-purpose')?'nr-desc-purpose':'nr-desc',note:'nr-desc',amount:'nr-amt',attachments:'nr-dz'};
+  expenseMissing.forEach(function(label){var key=Object.keys(fieldTargets).find(function(key){return formFieldLabel('expense_request',key,{entity:'支出法人',applicant:'申請人',department:'組別 / 部門',date:'表單填寫日期',purpose:'申請原因',note:'備註內容',amount:'總金額',attachments:'附件'}[key])===label;});issue('請填寫'+label,fieldTargets[key]);});
+  if(!appName)issue('請填寫申請人姓名','nr-app');
+  if(!amt&&S.nrType!=='purchase_request'&&!expenseMissing.some(function(label){return label===formFieldLabel('expense_request','amount','總金額');}))issue('請填寫申請金額','nr-amt');
+  if(desc.length<5&&purpose+note)issue('請填寫目的或申請說明（至少5字）',el('nr-desc-purpose')?'nr-desc-purpose':'nr-desc');
+  else if(desc.length<5&&!expenseMissing.some(function(label){return label===formFieldLabel('expense_request','purpose','申請原因');}))issue('請填寫目的或申請說明（至少5字）',el('nr-desc-purpose')?'nr-desc-purpose':'nr-desc');
+  if(num(S.nrDraftMissingFileCount)>0)issue('這份暫存表單有 '+S.nrDraftMissingFileCount+' 個附件無法恢復，請重新上傳','nr-dz');
+  if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.payee)issue('請填寫收款人','nr-payee');
+  if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.bankName)issue('請填寫銀行','nr-bank-name');
+  if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.bankBranch)issue('請填寫分行','nr-bank-branch');
+  if(S.nrType!=='hr_expense_request'&&S.nrType!=='purchase_request'&&!pay.bankNo)issue('請填寫帳號','nr-bank-no');
+  if(S.nrType!=='purchase_request'&&!pay.expectedPayDate)issue('請選擇預計匯款日','nr-paydate');
+  if(!isExpenseApplicantRevisionMode()){
+    var fieldEntityCheck=normalizeRequestEntityDept((el('nr-ent')||{}).value||'',(el('nr-dept')||{}).value||'');
+    if(!fieldEntityCheck.ok)issue(fieldEntityCheck.message||'請重新選擇目前可用的部門','nr-dept');
+  }
+  if(formIssues.length){
+    if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.showIssues(el('nr-content'),formIssues);
+    else alert('請確認以下項目：\n'+formIssues.map(function(row){return row.message;}).join('\n'));
+    return;
+  }
   var tObj=NR_TYPES.find(function(t){return t.id===S.nrType;});
   var tL=tObj?tObj.n:S.nrType;
   if(isExpenseApplicantRevisionMode()){
