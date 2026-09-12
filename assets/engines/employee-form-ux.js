@@ -46,6 +46,11 @@
       || type === 'image/webp' && start.slice(0,4) === 'RIFF' && start.slice(8,12) === 'WEBP';
     return safe ? blob : null;
   }
+  function nodeVisible(node) {
+    if(!node || !node.isConnected)return false;
+    if(typeof node.checkVisibility==='function')return node.checkVisibility();
+    return !!node.getClientRects().length && global.getComputedStyle(node).visibility!=='hidden';
+  }
   function closePreview() {
     previewGeneration++;
     if (previewDialog) { previewDialog.close(); previewDialog.remove(); previewDialog = null; }
@@ -57,7 +62,7 @@
     closePreview();
     var generation = previewGeneration;
     var blob = await safePreviewBlob(file);
-    if (generation !== previewGeneration || !opener || !opener.isConnected || !opener.checkVisibility() || document.body.dataset.financeIdentityBlocked === 'true') return;
+    if (generation !== previewGeneration || !opener || !opener.isConnected || !nodeVisible(opener) || document.body.dataset.financeIdentityBlocked === 'true') return;
     previewOwner = opener;
     var d = document.createElement('dialog');
     d.className = 'efux-preview'; d.setAttribute('data-finance-approval-dialog','local-file-preview'); d.setAttribute('aria-label', '本機附件檢查');
@@ -113,7 +118,7 @@
     var ancestor = target.parentElement;
     while (ancestor) { if (ancestor.tagName === 'DETAILS') { ancestor.open = true; if(ancestor.dataset.efuxKey)sectionState[ancestor.dataset.efuxKey]=true; } ancestor = ancestor.parentElement; }
     if (target.matches('.combo-native-select')) target = target._combo?.querySelector('.combo-input') || target;
-    if (target.type === 'file' && !target.checkVisibility()) target = target.closest('[role=button]') || target.closest('.travel-file-control') || target.parentElement;
+    if (target.type === 'file' && !nodeVisible(target)) target = target.closest('[role=button]') || target.closest('.travel-file-control') || target.parentElement;
     if (!target.matches('input,select,textarea,button,a,[tabindex]')) target.setAttribute('tabindex','-1');
     target.focus({preventScroll:true}); target.scrollIntoView({block:'center',behavior:'smooth'});
   }

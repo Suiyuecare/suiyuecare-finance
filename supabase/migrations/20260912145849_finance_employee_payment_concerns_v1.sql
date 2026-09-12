@@ -112,5 +112,8 @@ end $$;
 revoke all on function private.finance_payment_concern_handler_v1(public.expense_requests,public.finance_users) from public,anon,authenticated,service_role;
 revoke all on function public.finance_payment_concern_read_v1(text,text),public.finance_payment_concern_action_v1(text,text,text,integer,uuid,text) from public,anon,service_role;
 grant execute on function public.finance_payment_concern_read_v1(text,text),public.finance_payment_concern_action_v1(text,text,text,integer,uuid,text) to authenticated;
+alter function private.finance_payment_concern_handler_v1(public.expense_requests,public.finance_users) owner to postgres;
+alter function public.finance_payment_concern_read_v1(text,text) owner to postgres;
+alter function public.finance_payment_concern_action_v1(text,text,text,integer,uuid,text) owner to postgres;
 -- Applied only on commit; rollback rehearsal does not expose candidate RPCs.
 notify pgrst, 'reload schema';
