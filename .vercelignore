@@ -214,3 +214,8 @@ supabase/.temp
 !scripts/finance_approval_history_canary.sql
 !scripts/finance_approval_history_postflight.sql
 !scripts/test_history_performance_release_batch.mjs
+
+!scripts/check_dashboard_financial_sources.cjs
+!scripts/check_dashboard_aggregate_loading.cjs
+!scripts/check_reporting_profile_readiness.cjs
+!scripts/check_dashboard_readiness_browser.cjs

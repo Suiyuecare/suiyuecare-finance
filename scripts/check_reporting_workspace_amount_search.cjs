@@ -5,7 +5,7 @@ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),asse
 const root=path.resolve(__dirname,'..'),workspaceSource=fs.readFileSync(path.join(root,'assets/engines/reporting-workspace.js'),'utf8'),searchSource=fs.readFileSync(path.join(root,'assets/engines/document-search.js'),'utf8');
 const clone=value=>JSON.parse(JSON.stringify(value));
 async function fixture(items,withHelper=true){
-  const box={innerHTML:''},events={},calls=[],context={console,Intl,Map,Set,document:{getElementById:id=>id==='finance-receivable-workspace'?box:null,addEventListener:(name,handler)=>{events[name]=handler;}}};context.window=context;
+  const box={innerHTML:''},events={},calls=[],context={console,Intl,Map,Set,AbortController,setTimeout,clearTimeout,document:{getElementById:id=>id==='finance-receivable-workspace'?box:null,addEventListener:(name,handler)=>{events[name]=handler;}}};context.window=context;
   if(withHelper)vm.runInNewContext(searchSource,context);
   vm.runInNewContext(workspaceSource,context);
   const runtime={tenant:()=> 'fictional-tenant',environment:()=> 'test',user:()=>({id:'fictional-accountant',authUserId:'fictional-auth'}),role:()=> 'accountant',today:()=> '2026-09-10',state:()=>({page:'recv',recvEntity:'A'}),entities:()=>[{id:'A',full:'測試公司'}],departments:()=>[{c:'CARE',eid:'A',n:'照護部門'}],ledger:()=>[],rpc:async(name,args)=>{calls.push({name,args});assert.equal(name,'finance_receivables_v1');assert.equal(args.p_entity_id,'A');return{data:{complete:true,items,summary:{},reconciliation:{bankVisible:false}}};}};
