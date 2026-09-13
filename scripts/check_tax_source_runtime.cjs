@@ -3,7 +3,7 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict'),engine=require('../assets/engines/tax-report-engine.js');
 const source=fs.readFileSync(path.join(__dirname,'../assets/engines/reporting-workspace.js'),'utf8');
 const marker='  global.FinanceReportingWorkspace=api;';assert.equal(source.split(marker).length,2);
-const context={console,Map,Set,Intl,FormData:class {constructor(form){this.values=form.values||{};}forEach(fn){Object.entries(this.values).forEach(([k,v])=>fn(v,k));}},document:{getElementById:id=>elements[id]||null,addEventListener(){}},FinanceTaxReportEngine:engine};context.window=context;
+const context={console,Map,Set,Intl,AbortController,setTimeout,clearTimeout,FormData:class {constructor(form){this.values=form.values||{};}forEach(fn){Object.entries(this.values).forEach(([k,v])=>fn(v,k));}},document:{getElementById:id=>elements[id]||null,addEventListener(){}},FinanceTaxReportEngine:engine};context.window=context;
 // Expose private functions only in this in-memory test copy. No production hook.
 vm.runInNewContext(source.replace(marker,"  global.__taxAdapterTest={taxScope,taxDocuments,taxWorkpaper,profileCopy,submitProfileForm,taxRawSources,taxCanonical,ensureTaxData,taxReadState,requireTaxData,openTaxDocument,onAction};\n"+marker),context);
 const clone=x=>JSON.parse(JSON.stringify(x)),elements={'rpt-ent':{value:'A'},'rpt-month':{value:'2026-08'},'finance-report-dialog':{dataset:{entity:'A',revision:'0'},open:false,showModal(){this.open=true;},close(){this.open=false;}}};
