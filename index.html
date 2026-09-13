@@ -8826,10 +8826,10 @@ async function performRemoteDataLoad(){
     publishedSources[index]=true;
     if(table)setApprovalSourceCompleteness(table,approvalRemoteSourceResultComplete(result,REMOTE_BOOTSTRAP_LIMITS[index===1?'requests':table]),activeApprovalIdentity);
     if(result.statementState)commitStatementSourceResult(result);
-    if(index===1||index===4)invalidateDashboardFinancialCache();
+    if(index===1||index===4)invalidateDashboardFinancialModel();
     // A completed source can be displayed immediately. Formal action guards
     // still require their own verified identity, workflow and exact source rows.
-    if(S.page===page&&typeof buildAll==='function')buildAll({pageOnly:true});
+    if((S.page===page||((index===1||index===4)&&['dashboard','reports'].indexOf(S.page)>-1))&&typeof buildAll==='function')buildAll({pageOnly:true});
     return result;
   }
   var jobs=[
@@ -17479,8 +17479,14 @@ function clearDashboardRemoteReads(){
   DASH_REMOTE_ERRORS={};
   DASH_FINANCIAL_CACHE={key:'',value:null};
 }
-function invalidateDashboardFinancialCache(){
+function invalidateDashboardFinancialModel(){
+  // Completing a same-identity read changes local inputs, not the independent
+  // server aggregate. Mutations still invalidate both through the full helper.
   S.dashDataVersion=num(S.dashDataVersion)+1;
+  DASH_FINANCIAL_CACHE={key:'',value:null};
+}
+function invalidateDashboardFinancialCache(){
+  invalidateDashboardFinancialModel();
   clearDashboardRemoteReads();
   DASH_REMOTE_IDENTITY=dashboardRemoteIdentity();
 }

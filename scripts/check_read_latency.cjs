@@ -6,6 +6,15 @@ const source=fs.readFileSync(require('node:path').join(__dirname,'../index.html'
 function extract(name){const m=new RegExp('^(?:async )?function '+name+'\\(','m').exec(source);assert(m,name);return source.slice(m.index,source.indexOf('\n}',m.index)+2);}
 const pause=ms=>new Promise(r=>setTimeout(r,ms));let passed=0;function check(s){passed++;console.log('PASS '+s);}
 (async()=>{
+ {
+  const old={scope:'authorized-current-aggregate'},pending={read:'current'},c={S:{dashDataVersion:1},num:v=>Number(v)||0,DASH_FINANCIAL_CACHE:{key:'old',value:{}},DASH_REMOTE_AGGREGATES:{current:old},DASH_REMOTE_PENDING:{current:pending},cancelled:0,dashboardRemoteIdentity:()=> 'current',clearDashboardRemoteReads(){c.cancelled++;c.DASH_REMOTE_AGGREGATES={};c.DASH_REMOTE_PENDING={};}};
+  vm.createContext(c);vm.runInContext(extract('invalidateDashboardFinancialModel')+'\n'+extract('invalidateDashboardFinancialCache'),c);
+  c.invalidateDashboardFinancialModel();assert.equal(c.S.dashDataVersion,2);assert.equal(c.DASH_FINANCIAL_CACHE.value,null);assert.equal(c.DASH_REMOTE_AGGREGATES.current,old);assert.equal(c.DASH_REMOTE_PENDING.current,pending);assert.equal(c.cancelled,0);
+  c.invalidateDashboardFinancialCache();assert.equal(c.cancelled,1);assert.equal(Object.keys(c.DASH_REMOTE_AGGREGATES).length,0);check('read completion preserves independent server aggregate; a mutation still invalidates both');
+ }
+ for(const page of ['dashboard','reports']){
+  let resolve;const pending=new Promise(r=>resolve=r),c=fixture({transport:q=>q.table==='vouchers'?pending:null});c.S.page=page;c.viewPaints=[];c.buildAll=opts=>c.viewPaints.push({page:c.S.page,options:opts});const broad=c.performRemoteDataLoad();for(let i=0;!c.viewPaints.length&&i<100;i++)await pause(1);assert(c.viewPaints.some(p=>p.page===page&&p.options.pageOnly));assert(c.modelInvalidations>0);assert.equal(c.lastSyncAt,'');resolve({data:[],count:0});await broad;check(page+' receives completed source state without waiting for unrelated vouchers');
+ }
  for(const [table,key,page] of [['vouchers','VOUCHERS','vouchers'],['expense_requests','REQS','expenses'],['bills','BILLS','bills'],['invoices','INVS','invoices']]){
   let finish;const tail=new Promise(r=>finish=r),c=fixture({transport:q=>q.table===table?Promise.resolve({data:[{id:'visible',data_environment:'production'}],count:1}):q.table==='bank_transactions'?tail:null});c.S.page=page;
   const broad=c.performRemoteDataLoad();for(let i=0;c[key].length===0&&i<100;i++)await pause(1);
