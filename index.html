@@ -6410,7 +6410,7 @@ function loadDashboardFinancialSources(force){
     applySystemSettings(results[1].data);
     var ledger=results[0].data.map(mapLedger).filter(inActiveDataEnvironment);
     LEDGER=ledger;commitStatementSourceResult(results[0]);
-    invalidateDashboardFinancialCache();state.status='ready';state.result={ok:true,identity:identity,generation:state.generation,ledger:results[0],settings:results[1]};
+    invalidateDashboardFinancialModel();state.status='ready';state.result={ok:true,identity:identity,generation:state.generation,ledger:results[0],settings:results[1]};
     paintDashboardFinancialSources();return state.result;
   }).catch(function(error){
     if(!current())return {ok:false,stale:true,error:error};
@@ -8997,7 +8997,10 @@ function scheduleDeferredFinanceRuntimeRefresh(authUserId){
     try{await refreshApprovalOrgAdminRuntime(client,'load_remote_data_deferred');}catch(err){console.warn('Deferred approval admin refresh failed',err&&err.message?err.message:err);}
   },0);
 }
-async function loadRemoteData(){
+async function loadRemoteData(options){
+  // Explicit resyncs and post-mutation reloads invalidate before reading. Cold
+  // bootstrap joins the independent aggregate already started by the dashboard.
+  if(!options||!options.preserveDashboardAggregate)invalidateDashboardFinancialCache();
   if(remoteLoadPromise)return remoteLoadPromise;
   remoteLoadPromise=performRemoteDataLoad();
   try{
@@ -9070,7 +9073,7 @@ function approvalFastThenRemoteBootstrap(reason,options){
   var generation=++approvalBootstrapGeneration;
   var state={identity:identity,generation:generation,phase:'fast',promise:null};
   var runFast=typeof options.runFast==='function'?options.runFast:function(fastReason,fastOptions){return loadApprovalFastBootstrap(fastReason,fastOptions);};
-  var runRemote=typeof options.runRemote==='function'?options.runRemote:function(){return loadRemoteData();};
+  var runRemote=typeof options.runRemote==='function'?options.runRemote:function(){return loadRemoteData({preserveDashboardAggregate:true});};
   var runRecovery=typeof options.runRecovery==='function'?options.runRecovery:function(recoveryReason,recoveryOptions){return loadApprovalFastBootstrap(recoveryReason,recoveryOptions);};
   function current(){
     return APPROVAL_BOOTSTRAP_COORDINATOR===state
@@ -17529,7 +17532,7 @@ function dashboardScope(){
   return{mode:S.dashPeriodMode,from:from,to:to,start:from+'-01',end:dashPeriodEnd(to),months:months,label:from===to?dashMonthText(from):(dashMonthText(from)+'至'+dashMonthText(to)),eid:S.dashEntity||'all',prevFrom:prevFrom,prevTo:prevTo,prevStart:prevFrom+'-01',prevEnd:dashPeriodEnd(prevTo),prevLabel:prevFrom===prevTo?dashMonthText(prevFrom):(dashMonthText(prevFrom)+'至'+dashMonthText(prevTo))};
 }
 function dashboardTrendStart(scope){return scope.mode==='month'?dashShiftMonth(scope.to,-5)+'-01':scope.start;}
-function dashboardRemoteKey(scope){return[dashboardRemoteIdentity(),activeDataEnvironment(),scope.eid,scope.start,scope.end,scope.prevStart,scope.prevEnd,dashboardTrendStart(scope),S.dashDataVersion||0].join('|');}
+function dashboardRemoteKey(scope){return[dashboardRemoteIdentity(),activeDataEnvironment(),scope.eid,scope.start,scope.end,scope.prevStart,scope.prevEnd,dashboardTrendStart(scope)].join('|');}
 function dashboardMetricFromRemote(row,key,label,eid,dc){
   row=row||{};
   var current=dashMetricSeed(key,label,eid,dc),previous=dashMetricSeed(key,label,eid,dc);
@@ -17540,7 +17543,7 @@ function dashboardMetricFromRemote(row,key,label,eid,dc){
 function validateDashboardAggregate(payload,scope){
   function object(value){return !!value&&typeof value==='object'&&!Array.isArray(value);}
   function number(value,count){return (typeof value==='number'||typeof value==='string'&&/^-?\d+(?:\.\d+)?$/.test(value))&&Number.isFinite(Number(value))&&(!count||Number.isSafeInteger(Number(value))&&Number(value)>=0);}
-  function fail(){throw new Error('儀表板回傳資料不完整或查詢範圍不符，請重新讀取。');}
+  function fail(){var error=new Error('儀表板回傳資料不完整或查詢範圍不符，請重新讀取。');error.code='DASHBOARD_INVALID_RESPONSE';throw error;}
   if(!object(payload)||payload.version!==3||payload.environment!==activeDataEnvironment()||payload.entityId!==scope.eid||!object(payload.period))fail();
   var expected={start:scope.start,end:scope.end,previousStart:scope.prevStart,previousEnd:scope.prevEnd,trendStart:dashboardTrendStart(scope)};
   Object.keys(expected).forEach(function(key){if(payload.period[key]!==expected[key])fail();});
@@ -17591,7 +17594,7 @@ function ensureRemoteDashboardAggregate(scope,options){
     var active=current();entry.settled=true;clearTimeout(entry.timer);
     if(DASH_REMOTE_PENDING[key]===entry)delete DASH_REMOTE_PENDING[key];
     if(active&&!cancelled){
-      if(error)DASH_REMOTE_ERRORS[key]=error.message||String(error);
+      if(error)DASH_REMOTE_ERRORS[key]=(error.code?'['+String(error.code)+'] ':'')+(error.message||String(error));
       else{DASH_REMOTE_AGGREGATES[key]=data;delete DASH_REMOTE_ERRORS[key];}
       DASH_FINANCIAL_CACHE={key:'',value:null};
     }
@@ -17898,23 +17901,34 @@ function dashboardRenderRisks(bundle,pm){
   el('dash-risk-list').innerHTML=shown.length?shown.map(function(r){return'<div class="dash-action-row '+r.level+'"><span class="dash-risk-mark"></span><div><strong>'+escAttr(r.title)+'</strong><span>'+escAttr(r.detail)+'</span><small>負責：'+escAttr(r.owner)+'</small></div><button class="btn-g" onclick="'+dashRiskAction(r.action)+'">'+escAttr(dashRiskActionLabel(r.action))+'</button></div>';}).join(''):'<div class="dash-empty dash-empty-state"><strong>目前沒有急迫風險</strong><span>系統與財務檢查均未發現需要立即處理的事項。</span></div>';
   el('dash-risk-more').innerHTML=risks.length>shown.length?'<span>另有 '+(risks.length-shown.length)+' 項提醒</span><button type="button" class="dash-text-action" onclick="nav(\'health\',null)">查看完整健檢</button>':'';
 }
+function dashboardReadFailureMessage(error){
+  var message=String(error||'');
+  if(/57014|CLIENT_TIMEOUT|timeout|timed out|逾時/i.test(message))return '應收與單據勾稽查詢逾時，請重試未完成資料。';
+  if(/PGRST30[123]|\b401\b|JWT|session|登入|連線尚未就緒/i.test(message))return '登入連線尚未就緒，請先檢查並同步本人登入資料。';
+  if(/42501|\b403\b|permission|forbidden|權限/i.test(message))return '目前帳號無法讀取應收勾稽，請檢查本人帳號權限。';
+  if(/DASHBOARD_INVALID_RESPONSE|回傳資料不完整|未回傳資料/i.test(message))return '應收勾稽回應不完整或範圍不符，請重新讀取。';
+  if(/network|failed to fetch|load failed|offline|連線中斷/i.test(message))return '讀取應收勾稽時連線中斷，請確認網路後重試。';
+  return '應收與單據勾稽暫時無法完成，請重試未完成資料。';
+}
 function dashboardRenderFreshness(bundle){
-  var scope=bundle.scope||dashboardScope(),key=dashboardRemoteKey(scope),fresh=el('dash-data-freshness'),executive=el('dash-executive'),pending=!!DASH_REMOTE_PENDING[key]&&!DASH_REMOTE_AGGREGATES[key],failed=DASH_REMOTE_ERRORS[key]||'',stamp=bundle.generatedAt||bundle.latestLedgerAt||'';
+  var scope=bundle.scope||dashboardScope(),key=dashboardRemoteKey(scope),fresh=el('dash-data-freshness'),executive=el('dash-executive'),remotePending=!!DASH_REMOTE_PENDING[key],pending=remotePending,failed=DASH_REMOTE_ERRORS[key]||'',stamp=bundle.generatedAt||bundle.latestLedgerAt||'';
   var financial=bundle.financialState||{},financialFailed=!!financial.failed;
   if(bundle.financialReady===false&&!financialFailed)pending=true;
-  var text=bundle.financialReady===false?bundle.financialMessage:bundle.officialSource==='remote_full'?'正式資料更新 '+(stamp?String(stamp).slice(0,16).replace('T',' '):'完成'):failed?'完整資料讀取失敗':pending?'正在核對完整資料':'正在載入正式資料';
+  var text=failed?dashboardReadFailureMessage(failed):bundle.financialReady===false?bundle.financialMessage:pending?'正在核對完整資料':bundle.officialSource==='remote_full'?'正式資料更新 '+(stamp?String(stamp).slice(0,16).replace('T',' '):'完成'):'正在載入正式資料';
   if(fresh){fresh.textContent=text;fresh.className=failed||financialFailed?'warn':pending?'loading':bundle.officialSource==='remote_full'?'ok':'loading';}
   if(executive){executive.classList.toggle('dash-loading',pending);executive.setAttribute('aria-busy',pending?'true':'false');}
   var box=el('dash-load-status');if(!box)return;
-  var complete=bundle.financialReady===true&&bundle.officialSource==='remote_full';
+  var complete=bundle.financialReady===true&&bundle.officialSource==='remote_full'&&!failed&&!remotePending;
   box.hidden=complete||!hasSupabase()||S.demoLogin;if(box.hidden){box.innerHTML='';return;}
   var records=financial.records||[],loaded=records.filter(function(r){return r.loaded;}).length,profileErrors=records.filter(function(r){return r.error;}).length;
   var ledgerText=financial.ledgerComplete?'已讀取 '+num(financial.rowCount)+' 筆':financial.ledgerStatus==='error'?'讀取失敗':financial.total!=null?'讀取中 '+num(financial.rowCount)+'／'+num(financial.total)+' 筆':'等待完整資料';
   var profileText=profileErrors?'有 '+profileErrors+' 間讀取失敗':loaded===records.length&&records.length?'已讀取 '+loaded+' 間':'已讀取 '+loaded+'／'+records.length+' 間';
-  var arText=bundle.officialSource==='remote_full'?'已完成':failed?'讀取失敗':'讀取中';
+  var arText=failed?'讀取失敗':remotePending?'讀取中':bundle.officialSource==='remote_full'?'已完成':'讀取中';
+  var detail=failed?dashboardReadFailureMessage(failed):'已核對的項目會先顯示，未完成的金額保留待確認。';
+  if(bundle.officialSource==='remote_full'&&(failed||remotePending))detail+=' 目前保留上次核對結果'+(stamp?'（'+String(stamp).slice(0,16).replace('T',' ')+'）':'')+'。';
   box.classList.toggle('has-error',!!failed||financialFailed);
   var retrying=DASH_RETRY_PROMISE&&DASH_RETRY_IDENTITY===dashboardRemoteIdentity();
-  box.innerHTML='<div class="dash-load-copy"><strong>'+(failed||financialFailed?'部分財務資料讀取失敗':'正在載入財務資料')+'</strong><span>已核對的項目會先顯示，未完成的金額保留待確認。</span></div><ul><li><span>正式分類帳</span><b>'+escAttr(ledgerText)+'</b></li><li><span>公司報表設定</span><b>'+escAttr(profileText)+'</b></li><li><span>應收與單據勾稽</span><b>'+escAttr(arText)+'</b></li></ul><button type="button" class="btn-g" onclick="retryDashboardFinancialData()" '+(retrying?'disabled':'')+'>'+(retrying?'正在重試…':'重試未完成資料')+'</button>';
+  box.innerHTML='<div class="dash-load-copy"><strong>'+(failed||financialFailed?'部分財務資料讀取失敗':'正在載入財務資料')+'</strong><span>'+escAttr(detail)+'</span></div><ul><li><span>正式分類帳</span><b>'+escAttr(ledgerText)+'</b></li><li><span>公司報表設定</span><b>'+escAttr(profileText)+'</b></li><li><span>應收與單據勾稽</span><b>'+escAttr(arText)+'</b></li></ul><button type="button" class="btn-g" onclick="retryDashboardFinancialData()" '+(retrying?'disabled':'')+'>'+(retrying?'正在重試…':'重試未完成資料')+'</button>';
 }
 var DASH_RETRY_PROMISE=null;
 var DASH_RETRY_IDENTITY='';
@@ -17928,7 +17942,8 @@ window.retryDashboardFinancialData=function(){
     if(!state.ledgerComplete&&typeof window.loadDashboardFinancialSources==='function')jobs.push(window.loadDashboardFinancialSources(true));
     var ids=state.records.filter(function(r){return !r.loaded;}).map(function(r){return r.id;});
     if(ids.length&&workspace&&typeof workspace.retryProfiles==='function')jobs.push(workspace.retryProfiles(ids));
-    if(!DASH_REMOTE_AGGREGATES[dashboardRemoteKey(scope)])jobs.push(ensureRemoteDashboardAggregate(scope,{force:true}));
+    var remoteKey=dashboardRemoteKey(scope);
+    if(DASH_REMOTE_ERRORS[remoteKey]||!DASH_REMOTE_AGGREGATES[remoteKey])jobs.push(ensureRemoteDashboardAggregate(scope,{force:!!DASH_REMOTE_ERRORS[remoteKey]}));
     await Promise.allSettled(jobs);
     return identity===dashboardRemoteIdentity();
   }).finally(function(){
@@ -26288,6 +26303,7 @@ async function readbackApprovalStepMutation(kind,ids,expectedSteps){
 }
 async function refreshApprovalAfterCommittedAction(reason,affectedSource,affectedIds){
   var identity=approvalFastBootstrapIdentity();
+  invalidateDashboardFinancialCache();
   affectedSource=String(affectedSource||'');
   affectedIds=typeof uniqueRemoteStrings==='function'?uniqueRemoteStrings(affectedIds||[]):Array.from(new Set((affectedIds||[]).map(String).filter(Boolean)));
   if(affectedSource&&affectedIds.length&&typeof approvalRowsMarkPending==='function')approvalRowsMarkPending(affectedSource,affectedIds,'committed_refresh');

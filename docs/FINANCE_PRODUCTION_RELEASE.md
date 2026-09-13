@@ -24,14 +24,14 @@ Environment `finance-production` 必須設定：
 
 Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權該 team/project 的 pull、build、candidate deploy、inspect/API/curl 與 promote；資料庫帳號只授權目標 Supabase project 的 migration 權限。
 
-## 目前兩個受控入口：查帳準備批次、後續前台發布
+## 目前兩個受控入口：應收對應查詢修正、後續前台發布
 
 此版本只接受以下兩組輸入，`release_phase` 與 `migration_versions` 任何不相符都在建置或資料庫連線前立即拒絕：
 
 | 順序 | `release_phase` | `migration_versions` | 允許的動作 |
 |---|---|---|---|
 | 1 | `frontend_compat` | `none` | 日常前台發布：建立、驗證並提升新前台；資料庫不得提交變更，只能做唯讀 gate 與整筆回滾 canary |
-| 2 | `database_employee_reliability_20260912` | `20260912145849` | 全部既有版本（含查帳準備）成立後，演練並原子提交付款疑慮 migration、ledger 及全部 12 份 postflight，再提升封存候選 |
+| 2 | `database_ar_mapping_20260913` | `20260913061745` | 全部既有版本（含讀取延遲修正 `20260913042629`）成立後，演練並原子提交應收對應查詢 migration、ledger 及全部 15 份 postflight，再提升相同封存候選 |
 
 正式資料庫目前受控 lineage 為 v1 `20260826070814`、v2 `20260826155840`、v3 `20260827052447`，以及已採納回版本庫的修復 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`、`20260831042040_top_level_ceo_self_route`、`20260831043517_expense_submit_derived_status`、`20260901024020_final_accountant_self_post`、`20260901073241_assign_ceo_cashier_and_reassign_pending_cashier`、`20260901081807_allow_formal_cashier_self_disbursement`。其中正式出納固定為李佳泰、總務備援已移除，且三張待放款單保留稽核轉派紀錄。任何其他未審查的 post-baseline migration 仍會 fail closed；採納既有版次不代表流程會再次執行其 SQL。
 
@@ -189,3 +189,14 @@ canary 的唯一結果必須是 `audit_readiness_canary_result`，內容精確�
 正式 apply 只接受 ledger 的 exact pending state，在同一交易完成 migration、ledger 與全部 postflight；最後 `NOTIFY pgrst` 僅於成功提交通知重載 RPC schema。已套版重試只能跑唯讀完整 gate 與回滾 canary，不會重跑 migration。套版後及 promotion 前均驗證 `employee_reliability_canary_result` 精確為 `{canary:'authenticated_employee_reliability_v1',ok:true,rolled_back:true,payment_authority_preserved:true}`；遺漏、重複、額外欄位、錯誤型別一律拒絕。
 
 前台使用原封存 deployment；不重建、不繞過人工保護環境及原公司／tenant／角色權限。表單與登入、通知、補件和付款防重回歸使用純 Node 套件；本機 1440/390 的 agent-browser／Chrome 操作證據另存，不將真人驗收或正式部署宣稱為已完成。
+
+
+## 2026-09-13 應收對應查詢發布契約
+
+本批次只替換 `private.finance_ar_ledger_v1(uuid,text,date,text)` 的查詢實作，固定 migration 為 `20260913061745_finance_ar_mapping_set_based_v1.sql`。歷史 phase 仍可供前置條件與既有測試驗證，但此候選只允許 `database_ar_mapping_20260913` 或 `frontend_compat` dispatch。`frontend_compat` 必須先核對全部既有版本及本版已套用。
+
+`prepare-ar-mapping-rehearsal` 以同一資料庫快照執行完整來源指紋、migration、全部 15 份 postflight、唯讀新舊對應結果比對，回滾至 migration savepoint 後再次核對指紋，最後整筆 `ROLLBACK`。指紋沿用 `finance_statement_source_fingerprint.sql`，涵蓋既有函式與完整營運資料。正式 apply 保留 advisory lock、migration ledger 鎖及精確 CAS；migration、ledger 與全部 postflight 只有一個 `COMMIT`，任何檢查失敗都不得提升候選。
+
+此 phase 的 `finance_ar_mapping_canary.sql` 只以唯讀查詢核對新舊函式全部排序結果的筆數與雜湊，驗證私有函式 ACL 及未登入 public RPC 拒絕。它不建立測試員工、不設定員工 claims，也不執行既有需寫入／借用真人身分的 canary。提交後與 promotion 前皆須收到唯一且完全符合 `ar_mapping_canary_result` 的結果：`canary=readonly_ar_mapping_v1`、`ok=true`、`rolled_back=true`、`mapping_preserved=true`。既有全部唯讀 postflight 保留。
+
+若 migration 已套用，重跑僅驗證 ledger、完整 postflight 與唯讀 parity canary，不得重跑 migration。promotion 只能提升先前通過建置、來源封存、候選收據與相同 deployment 驗證的候選；不得重建或重新部署。

@@ -148,6 +148,8 @@ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','no
 writeLedger([...prerequisites,...guard.UTILITY_MIGRATIONS,...guard.REPORT_MIGRATIONS,...guard.AMOUNT_SEARCH_MIGRATIONS,...guard.REPORTING_INTEGRITY_MIGRATIONS,...guard.AUDIT_READINESS_MIGRATIONS,...guard.EMPLOYEE_RELIABILITY_MIGRATIONS,...guard.HISTORY_PERFORMANCE_MIGRATIONS]);
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/read latency migration batch/);
 writeLedger([...prerequisites,...guard.UTILITY_MIGRATIONS,...guard.REPORT_MIGRATIONS,...guard.AMOUNT_SEARCH_MIGRATIONS,...guard.REPORTING_INTEGRITY_MIGRATIONS,...guard.AUDIT_READINESS_MIGRATIONS,...guard.EMPLOYEE_RELIABILITY_MIGRATIONS,...guard.HISTORY_PERFORMANCE_MIGRATIONS,...guard.READ_LATENCY_MIGRATIONS]);
+  assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/AR mapping migration batch/);
+fs.appendFileSync(ledger,guard.AR_MAPPING_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
   assert.throws(()=>renderApply('reapply'),/must be pending/);
 

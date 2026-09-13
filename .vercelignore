@@ -243,3 +243,9 @@ supabase/.temp
 !scripts/check_statement_source_canary.cjs
 !scripts/fixtures/finance_statement_source_cascades_20260913.json
 !scripts/fixtures/finance_statement_source_projection_helpers_20260913.sql
+
+# Receivables mapping and protected release checks
+!scripts/check_ar_mapping_performance.cjs
+!scripts/test_ar_mapping_release_batch.mjs
+!scripts/finance_ar_mapping_canary.sql
+!scripts/finance_ar_mapping_postflight.sql
