@@ -219,3 +219,8 @@ supabase/.temp
 !scripts/check_dashboard_aggregate_loading.cjs
 !scripts/check_reporting_profile_readiness.cjs
 !scripts/check_dashboard_readiness_browser.cjs
+
+!scripts/check_draft_readiness.cjs
+!scripts/check_draft_mutation_readiness.cjs
+!scripts/check_draft_readiness_browser.cjs
+!docs/finance-draft-readiness.md

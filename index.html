@@ -275,7 +275,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
   <!-- 放款申請 -->
   <div class="pg" id="pg-expenses">
     <div style="display:flex;justify-content:space-between;margin-bottom:12px;gap:10px;align-items:flex-start"><div><div class="ph">放款申請</div><div class="ps" id="exp-count">全集團共 0 筆</div></div><div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end"><button class="btn-p" onclick="nav('newreq',null)">+ 新增申請</button></div></div>
-    <div class="card" style="margin-bottom:10px"><div class="chd"><span class="cht">暫存欄位</span><span id="draft-count" style="font-size:10px;color:#94a3b8">0 筆</span></div><div id="draft-list" style="padding:10px"></div></div>
+    <div class="card" style="margin-bottom:10px"><div class="chd"><span class="cht">我的草稿</span><span id="draft-count" style="font-size:10px;color:#94a3b8">— 筆</span></div><div id="draft-list" style="padding:10px"></div></div>
     <section class="expense-query-panel" aria-label="放款申請搜尋與篩選">
       <div class="expense-query-primary">
         <div class="expense-query-filters">
@@ -6157,8 +6157,8 @@ function mapRemoteDraft(r){
     title:r.title||payload.title,
     amount:r.amount||payload.amount||'',
     applicant:r.applicant||payload.applicant||'',
-    ownerId:r.owner_id||payload.ownerId||'',
-    ownerEmail:r.owner_email||payload.ownerEmail||'',
+    ownerId:Object.prototype.hasOwnProperty.call(r,'owner_id')?(r.owner_id||''):(payload.ownerId||''),
+    ownerEmail:Object.prototype.hasOwnProperty.call(r,'owner_email')?(r.owner_email||''):(payload.ownerEmail||''),
     ownerName:r.owner_name||payload.ownerName||'',
     updatedAt:r.updated_at||payload.updatedAt,
     files:r.files||payload.files||[],
@@ -7629,9 +7629,121 @@ function approvalSourcesCompleteForCurrentUser(){
   var identity=approvalFastBootstrapIdentity();
   return !!(identity&&APPROVAL_SOURCE_COMPLETENESS.identity===identity&&APPROVAL_SOURCE_COMPLETENESS.expense_requests===true&&APPROVAL_SOURCE_COMPLETENESS.bills===true&&APPROVAL_SOURCE_COMPLETENESS.invoices===true);
 }
+var FINANCE_DRAFT_READ_RUNTIME={identity:'',status:'idle',complete:false,total:null,loadedCount:0,rows:[],updatedAt:'',error:'',generation:0,promise:null,controller:null};
+var FINANCE_DRAFT_READ_TIMEOUT_MS=12000;
+var FINANCE_DRAFT_IDENTITY_EPOCH=0;
+function financeDraftReadIdentity(){
+  if(!S.user||S.demoLogin||(typeof financeWorkspaceIdentityBlocked!=='undefined'&&financeWorkspaceIdentityBlocked))return '';
+  return [approvalFastBootstrapIdentity(),currentTenantId(),activeDataEnvironment(),S.user.id||'',String(S.user.email||'').trim().toLowerCase(),normalizedRoleKey(S.user),typeof CURRENT_PERMISSION_SNAPSHOT==='undefined'?'':JSON.stringify(CURRENT_PERMISSION_SNAPSHOT),FINANCE_DRAFT_IDENTITY_EPOCH].join('|');
+}
+function draftReadinessForCurrentUser(){
+  var identity=financeDraftReadIdentity(),old=FINANCE_DRAFT_READ_RUNTIME;
+  if(old.identity!==identity){
+    if(typeof old.cancel==='function')old.cancel();
+    FINANCE_DRAFT_READ_RUNTIME={identity:identity,status:'idle',complete:false,total:null,loadedCount:0,rows:[],updatedAt:'',error:'',generation:old.generation+1,promise:null,controller:null};
+    DRAFTS=[];
+  }
+  return FINANCE_DRAFT_READ_RUNTIME;
+}
+function paintCurrentUserDrafts(){
+  try{
+    if(typeof updateDraftCounters==='function')updateDraftCounters();
+    if(S.page==='approvals'&&S.aT==='drafts'&&typeof buildApprovals==='function')buildApprovals();
+    else if(typeof renderDrafts==='function')renderDrafts();
+  }catch(error){console.warn('Draft view refresh failed',error);}
+}
+function financeDraftOwnerFilter(ownerId,email){
+  function quoted(value){return '"'+String(value).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"';}
+  var filter='owner_id.eq.'+quoted(ownerId);
+  if(email){var literal=String(email).replace(/[\\%_*]/g,'\\$&');filter+=',and(owner_id.is.null,owner_email.ilike.'+quoted('%'+literal+'%')+')';}
+  return filter;
+}
+function loadCurrentUserDrafts(options){
+  options=options||{};
+  var state=draftReadinessForCurrentUser(),identity=state.identity;
+  if(S.demoLogin)return Promise.resolve({data:null,error:null,count:null,complete:false,unavailable:true});
+  if(state.promise)return state.promise;
+  if(!identity||!hasSupabase()){
+    var unavailableError=new Error('本人草稿連線或登入驗證尚未就緒，請重新讀取。');
+    state.status='error';state.error=unavailableError.message;state.complete=false;state.total=null;
+    if(identity)setApprovalSourceCompleteness('draft_requests',false,approvalFastBootstrapIdentity());
+    paintCurrentUserDrafts();
+    return Promise.resolve({data:null,error:unavailableError,count:null,complete:false,unavailable:true,identity:identity,generation:state.generation});
+  }
+  if(!options.force&&(state.status==='ready'||state.status==='error'))return Promise.resolve({data:state.complete?state.rows:null,error:state.error?new Error(state.error):null,count:state.complete?state.total:null,complete:state.complete,identity:identity,generation:state.generation});
+  if(typeof state.cancel==='function')state.cancel();
+  var generation=state.generation+1,ownerId=String(S.user.id||''),email=String(S.user.email||'').trim().toLowerCase(),tenant=currentTenantId(),environment=activeDataEnvironment(),auth=currentFinanceAuthUserId();
+  var previousComplete=state.complete===true||state.previousComplete===true,retained=state.rows.slice();
+  state={identity:identity,status:'loading',complete:false,previousComplete:previousComplete,total:null,loadedCount:retained.length,rows:retained,updatedAt:state.updatedAt,error:'',generation:generation,promise:null,controller:typeof AbortController==='function'?new AbortController():null};
+  FINANCE_DRAFT_READ_RUNTIME=state;
+  var resolvePromise,settled=false,timer;
+  state.promise=new Promise(function(resolve){resolvePromise=resolve;});
+  function current(){return FINANCE_DRAFT_READ_RUNTIME===state&&financeDraftReadIdentity()===identity;}
+  function finish(rows,error,cancelled){
+    if(settled)return;settled=true;clearTimeout(timer);
+    var active=current();state.promise=null;state.cancel=null;
+    if(active&&!cancelled){
+      if(error){state.status='error';state.error=error.message||String(error);state.complete=false;state.total=null;}
+      else{DRAFTS=rows;state.rows=rows;state.total=rows.length;state.loadedCount=rows.length;state.status='ready';state.complete=true;state.previousComplete=true;state.error='';state.updatedAt=new Date().toISOString();}
+      setApprovalSourceCompleteness('draft_requests',state.complete,approvalFastBootstrapIdentity());
+    }
+    var result=active&&!cancelled?{data:error?null:state.rows,error:error||null,count:state.complete?state.total:null,complete:state.complete,identity:identity,generation:generation}:{data:null,error:null,count:null,complete:false,stale:true};
+    resolvePromise(result);
+    if(active&&!cancelled)paintCurrentUserDrafts();
+  }
+  state.cancel=function(){finish(null,null,true);if(state.controller)state.controller.abort();};
+  timer=setTimeout(function(){finish(null,new Error('我的草稿讀取逾時，請重試；目前無法確認完整筆數。'));if(state.controller)state.controller.abort();},FINANCE_DRAFT_READ_TIMEOUT_MS);
+  var resultPromise=state.promise;
+  Promise.resolve().then(async function(){
+    if(!current()||settled)return;
+    var client=options.client||getSb();if(!client||!auth||!ownerId)throw new Error('本人草稿連線或登入驗證尚未就緒，請重新讀取。');
+    var rows=[],seen=Object.create(null),total=null,pageSize=100,filter=financeDraftOwnerFilter(ownerId,email);
+    for(var offset=0;offset<100000;offset+=pageSize){
+      if(!current()||settled){finish(null,null,true);return;}
+      var query=client.from('draft_requests').select('*',{count:'exact'}).eq('tenant_id',tenant).eq('data_environment',environment).or(filter).order('updated_at',{ascending:false}).order('id',{ascending:true}).range(offset,offset+pageSize-1);
+      if(state.controller&&typeof query.abortSignal==='function')query=query.abortSignal(state.controller.signal);
+      var result=await query;
+      if(!current()||settled){finish(null,null,true);return;}
+      if(!result||result.error)throw result&&result.error||new Error('草稿沒有回傳可核對的資料。');
+      if(!Array.isArray(result.data)||!Number.isSafeInteger(result.count)||result.count<0)throw new Error('草稿清單缺少完整筆數，請重新讀取。');
+      if(total===null)total=result.count;else if(total!==result.count)throw new Error('草稿在讀取期間已變更，請重新讀取完整清單。');
+      result.data.forEach(function(row){
+        if(!row||typeof row.id!=='string'||!row.id||seen[row.id]||row.tenant_id!==tenant||row.data_environment!==environment)throw new Error('草稿來源重複或範圍不符，請重新讀取。');
+        if(row.owner_id!==null&&row.owner_id!==ownerId)throw new Error('草稿擁有人與本人不符，請重新讀取。');
+        seen[row.id]=true;rows.push(row);
+      });
+      if(rows.length>total)throw new Error('草稿筆數不一致，請重新讀取。');
+      if(rows.length===total){
+        var mine=rows.filter(function(row){return row.owner_id===ownerId||row.owner_id===null&&email&&String(row.owner_email||'').trim().toLowerCase()===email;});
+        var mapped=mine.map(function(row){var draft=mapRemoteDraft(row);draft.ownerId=row.owner_id||'';draft.ownerEmail=row.owner_email||'';draft.ownerName=row.owner_name||'';return draft;});
+        finish(mapped,null,false);return;
+      }
+      if(result.data.length!==pageSize)throw new Error('草稿分頁尚未完整讀取，請重試。');
+    }
+    throw new Error('草稿清單超過安全讀取範圍，尚未確認完整筆數。');
+  }).catch(function(error){finish(null,error,false);});
+  setApprovalSourceCompleteness('draft_requests',false,approvalFastBootstrapIdentity());
+  paintCurrentUserDrafts();
+  return resultPromise;
+}
+function notifyDraftMutation(draft,id,identity){
+  var state=draftReadinessForCurrentUser();
+  if(!identity||identity!==state.identity||identity!==financeDraftReadIdentity())return false;
+  id=String(id||draft&&draft.id||'');if(!id||draft&&String(draft.id)!==id)return false;
+  if(draft&&(draft.dataEnv||draft.dataEnvironment||activeDataEnvironment())!==activeDataEnvironment())return false;
+  if(draft&&draft.ownerId&&draft.ownerId!==S.user.id)return false;
+  var complete=state.complete===true||state.previousComplete===true,rows=state.rows.filter(function(row){return String(row.id)!==id;});
+  var saved=draft?sanitizeDraftForStorage(Object.assign({},draft,{ownerId:S.user.id,ownerEmail:S.user.email||'',tenantId:currentTenantId(),dataEnv:activeDataEnvironment()})):null;
+  if(typeof state.cancel==='function')state.cancel();
+  if(saved)rows.unshift(saved);
+  DRAFTS=rows;
+  FINANCE_DRAFT_READ_RUNTIME={identity:identity,status:complete?'ready':'idle',complete:complete,previousComplete:complete,total:complete?rows.length:null,loadedCount:rows.length,rows:rows,updatedAt:new Date().toISOString(),error:'',generation:state.generation+1,promise:null,controller:null};
+  setApprovalSourceCompleteness('draft_requests',complete,approvalFastBootstrapIdentity());
+  // The caller owns the success UI. Do not paint/open another draft during save.
+  return true;
+}
 function approvalDraftsCompleteForCurrentUser(){
-  var identity=approvalFastBootstrapIdentity();
-  return !!(identity&&APPROVAL_SOURCE_COMPLETENESS.identity===identity&&APPROVAL_SOURCE_COMPLETENESS.draft_requests===true);
+  var state=draftReadinessForCurrentUser();return !!(state.identity&&state.status==='ready'&&state.complete===true);
 }
 function approvalRemoteSourceResultComplete(result,limit){
   if(!result||result.error||!Array.isArray(result.data))return false;
@@ -8356,7 +8468,7 @@ async function loadApprovalFastBootstrap(reason,options){
 }
 function approvalFastShouldHoldSkeleton(){
   if(S.demoLogin||!hasSupabase())return false;
-  if(S.aT==='drafts')return !approvalDraftsCompleteForCurrentUser();
+  if(S.aT==='drafts')return false; // Dedicated owner-scoped draft loading/error state.
   // Read-only lists keep their last confirmed rows while background sources
   // refresh. History has its own participant-scoped query below.
   if(S.aT!=='p'&&S.aT!=='cashier')return false;
@@ -8421,6 +8533,8 @@ function clearApprovalFastBootstrapState(){
   var key=approvalFastBootstrapCacheKey();
   if(key)sessionRemoveItem(key);
   approvalBootstrapGeneration++;
+  FINANCE_DRAFT_IDENTITY_EPOCH++;
+  draftReadinessForCurrentUser();
   APPROVAL_BOOTSTRAP_COORDINATOR={identity:'',generation:approvalBootstrapGeneration,phase:'idle',promise:null};
   approvalFastBootstrapRpcPromise=null;approvalFastBootstrapRpcIdentity='';approvalFastBootstrapRunPromise=null;approvalFastBootstrapRunIdentity='';
   approvalFastSummaryRpcPromise=null;approvalFastSummaryRpcIdentity='';
@@ -8591,6 +8705,7 @@ async function performRemoteDataLoad(){
   var activeApprovalIdentity=approvalFastBootstrapIdentity();
   if(!activeAuthUserId||!activeApprovalIdentity)return false;
   resetApprovalSourceCompleteness(activeApprovalIdentity);
+  var personalDraftRead=loadCurrentUserDrafts({client:client,force:true,reason:'broad_bootstrap'});
   var approvalFastInvariantValid=APPROVAL_FAST_BOOTSTRAP.identity===activeApprovalIdentity
     &&APPROVAL_FAST_BOOTSTRAP.hydrated===true
     &&APPROVAL_FAST_BOOTSTRAP.verified===true
@@ -8618,7 +8733,7 @@ async function performRemoteDataLoad(){
     function(){return loadFinanceNotifications({client:client,reuseFresh:true});},
     function(){return loadAccountingData?loadStatementSourcePages(client,'ledger_entries'):Promise.resolve({data:[],error:null});},
     function(){return client.from('system_settings').select('*').eq('tenant_id',currentTenantId()).in('key',SYSTEM_SETTINGS_RUNTIME_KEYS);},
-    function(){return applyRemoteLimit(client.from('draft_requests').select('*',{count:'exact'}).order('updated_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.optional);},
+    function(){return personalDraftRead;},
     function(){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'period_closes','closed_at',false):Promise.resolve([]);},
     function(){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'compliance_archives','archived_at',false):Promise.resolve([]);},
     function(){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'annual_reviews','reviewed_at',false):Promise.resolve([]);},
@@ -8641,6 +8756,7 @@ async function performRemoteDataLoad(){
         :null;
       if(fastPromise)try{await fastPromise;}catch(_){}
       if(fastIdentity!==approvalFastBootstrapIdentity())return {data:[],error:new Error('登入身分已變更')};
+      if(index===8)return personalDraftRead;
       return queueFinanceBootstrapRead(function(){return financeBootstrapRead(job(),'正式資料 '+index,index===1||index===4?120000:20000);},[0,5,7,8,16,18].indexOf(index)<0,false);
     };
   });
@@ -8658,7 +8774,7 @@ async function performRemoteDataLoad(){
   setApprovalSourceCompleteness('expense_requests',approvalRemoteSourceResultComplete(res[1],REMOTE_BOOTSTRAP_LIMITS.requests),activeApprovalIdentity);
   setApprovalSourceCompleteness('bills',approvalRemoteSourceResultComplete(res[3],REMOTE_BOOTSTRAP_LIMITS.bills),activeApprovalIdentity);
   setApprovalSourceCompleteness('invoices',approvalRemoteSourceResultComplete(res[4],REMOTE_BOOTSTRAP_LIMITS.invoices),activeApprovalIdentity);
-  setApprovalSourceCompleteness('draft_requests',approvalRemoteSourceResultComplete(res[8],REMOTE_BOOTSTRAP_LIMITS.optional),activeApprovalIdentity);
+  setApprovalSourceCompleteness('draft_requests',approvalDraftsCompleteForCurrentUser(),activeApprovalIdentity);
   function rowsAt(idx,label,currentRows,preserveCurrentRows){
     var item=res[idx]||{};
     if(item.error){
@@ -8719,7 +8835,7 @@ async function performRemoteDataLoad(){
   if(res[8]&&res[8].error){
     recordRemoteReadIssue('暫存表單',res[8].error);
     if(isTransientRemoteReadError(res[8].error)&&remoteWarnings.indexOf('暫存表單 讀取逾時')<0)remoteWarnings.push('暫存表單 讀取逾時');
-  }else if(res[8]&&Array.isArray(res[8].data))DRAFTS=res[8].data.map(mapRemoteDraft).filter(draftBelongsToCurrentUser);
+  } // The dedicated draft loader owns its generation and DRAFTS; broad results never reapply it.
   if(Array.isArray(res[9]))PERIOD_CLOSES=res[9].map(mapPeriodClose).filter(inActiveDataEnvironment);
   if(Array.isArray(res[10]))ARCHIVES=res[10].map(mapComplianceArchive).filter(inActiveDataEnvironment);
   if(Array.isArray(res[11]))ANNUAL_REVIEWS=res[11].map(mapAnnualReview).filter(inActiveDataEnvironment);
@@ -17706,7 +17822,7 @@ function buildDash(){
   updateRecvSidebarBadge();updateModuleTodoBadge();
   var scope=dashboardScope(),entityObj=scope.eid==='all'?null:gE(scope.eid),allReqs=financeView?(scope.eid==='all'?REQS:REQS.filter(function(r){return reqEntity(r)===scope.eid;})):REQS.filter(requestIsMine);
   var sub=el('dash-sub');if(sub)sub.textContent=financeView?('歲悅長照集團 · '+(entityObj?entityObj.full:'全體法人')+' · '+scope.label):'只顯示自己的申請、暫存與通知';
-  if(employeeGuide){var mineReqs=REQS.filter(requestIsMine),pendingMine=mineReqs.filter(function(r){return isReqOpen(r);});employeeGuide.style.display=financeView?'none':'block';employeeGuide.innerHTML=financeView?'':employeeDashboardGuideHtml(mineReqs,pendingMine,DRAFTS.length);}
+  if(employeeGuide){var mineReqs=REQS.filter(requestIsMine),pendingMine=mineReqs.filter(function(r){return isReqOpen(r);});employeeGuide.style.display=financeView?'none':'block';employeeGuide.innerHTML=financeView?'':employeeDashboardGuideHtml(mineReqs,pendingMine,draftCountForDisplay());}
   if(financeView){
     dashboardSyncControls(scope);
     ensureRemoteDashboardAggregate(scope);
@@ -18047,8 +18163,9 @@ function draftStorageKey(){
 function draftBelongsToCurrentUser(d){
   if(!S.user||!d)return false;
   if(rowDataEnvironment(d)!==activeDataEnvironment())return false;
-  if(d.ownerId&&d.ownerId===S.user.id)return true;
-  if(d.ownerEmail&&String(d.ownerEmail).toLowerCase()===String(S.user.email||'').toLowerCase())return true;
+  if((d.tenantId||d.tenant_id)&&rowTenantId(d)!==currentTenantId())return false;
+  if(d.ownerId)return String(d.ownerId)===String(S.user.id||'');
+  if(d.ownerEmail&&String(d.ownerEmail).trim().toLowerCase()===String(S.user.email||'').trim().toLowerCase())return true;
   return false;
 }
 function stampDraftOwner(d){
@@ -18057,6 +18174,7 @@ function stampDraftOwner(d){
     d.ownerId=S.user.id||'';
     d.ownerEmail=S.user.email||'';
     d.ownerName=S.user.n||'';
+    d.tenantId=currentTenantId();
   }
   return d;
 }
@@ -18075,6 +18193,10 @@ function migrateLegacyDraftsForCurrentUser(){
   if(mine.length)safeJsonSet(draftStorageKey(),mine);
 }
 function loadDrafts(){
+  if(S.user&&!S.demoLogin&&(hasSupabase()||requireRemotePersistence())){
+    var readiness=draftReadinessForCurrentUser();
+    if(readiness.status==='idle')loadCurrentUserDrafts({reason:'draft_view'}).catch(function(error){console.warn('draft view read failed',error);});
+  }
   if(hasSupabase()&&!S.demoLogin&&lastSyncAt){
     DRAFTS=(DRAFTS||[]).map(sanitizeDraftForStorage).filter(draftBelongsToCurrentUser);
     return;
@@ -18104,6 +18226,7 @@ function draftDbRow(d){
     applicant:d.applicant||'',
     payload:d,
     files:d.files||[],
+    tenant_id:d.tenantId||currentTenantId(),
     data_environment:d.dataEnv||d.dataEnvironment||activeDataEnvironment(),
     updated_at:d.updatedAt||new Date().toISOString()
   };
@@ -18120,10 +18243,10 @@ async function saveDraftRemote(d){
     return false;
   }
   var row=draftDbRow(d);
-  var r=await client.from('draft_requests').upsert(row);
+  var r=await client.from('draft_requests').upsert(row).select('id');
   if(r.error&&allowSchemaFallback()&&isSchemaCacheMiss(r.error.message)&&row.data_environment){
     delete row.data_environment;
-    r=await client.from('draft_requests').upsert(row);
+    r=await client.from('draft_requests').upsert(row).select('id');
   }
   if(r.error){
     if(remoteTableMissing(r.error)){
@@ -18133,6 +18256,7 @@ async function saveDraftRemote(d){
     }
     throw r.error;
   }
+  if(!Array.isArray(r.data)||!r.data.some(function(saved){return String(saved.id)===String(row.id);}))throw new Error('無法確認草稿已保存，請保留目前表單並重試。');
   return true;
 }
 async function deleteDraftRemote(id){
@@ -18146,7 +18270,7 @@ async function deleteDraftRemote(id){
     if(requireRemotePersistence())throw new Error('正式/預覽環境 Supabase 尚未初始化，不能只刪除本機暫存。');
     return false;
   }
-  var r=await client.from('draft_requests').delete().eq('id',id);
+  var r=await client.from('draft_requests').delete().eq('id',id).eq('tenant_id',currentTenantId()).eq('data_environment',activeDataEnvironment()).select('id');
   if(r.error){
     if(remoteTableMissing(r.error)){
       if(requireRemotePersistence())throw new Error('正式/預覽環境缺少 draft_requests 資料表，不能只刪除本機暫存。');
@@ -18155,6 +18279,7 @@ async function deleteDraftRemote(id){
     }
     throw r.error;
   }
+  if(!Array.isArray(r.data)||!r.data.some(function(removed){return String(removed.id)===String(id);}))throw new Error('尚未確認草稿刪除結果，請重新讀取草稿清單後確認。');
   return true;
 }
 async function upsertComplianceRemote(table,row){
@@ -18208,9 +18333,29 @@ function sanitizeDraftForStorage(d){
   return Object.assign({},d,{state:state,files:(d.files||[]).map(sanitizeDraftFile),ownerId:d.ownerId||'',ownerEmail:d.ownerEmail||'',ownerName:d.ownerName||'',dataEnv:d.dataEnv||d.dataEnvironment||activeDataEnvironment()});
 }
 function updateDraftCounters(){
-  var cnt=el('draft-count');if(cnt)cnt.textContent=DRAFTS.length+' 筆';
-  updateApprovalTodoBadge({tabCounts:{drafts:DRAFTS.length}});
+  var count=draftCountForDisplay();
+  var cnt=el('draft-count');if(cnt)cnt.textContent=count+' 筆';
+  updateApprovalTodoBadge({tabCounts:{drafts:count}});
 }
+function draftCountForDisplay(){
+  if(!S.demoLogin&&(hasSupabase()||requireRemotePersistence())){
+    var state=draftReadinessForCurrentUser();
+    if(state.status!=='ready'||state.complete!==true)return '—';
+  }
+  return (DRAFTS||[]).filter(draftBelongsToCurrentUser).length;
+}
+function draftLoadStatusHtml(){
+  if(S.demoLogin||(!hasSupabase()&&!requireRemotePersistence()))return '';
+  var state=draftReadinessForCurrentUser();
+  if(state.status==='ready'&&state.complete===true)return '';
+  var failed=state.status==='error',retained=(DRAFTS||[]).filter(draftBelongsToCurrentUser).length;
+  return '<div class="draft-load-status" data-draft-state="'+(failed?'error':'loading')+'" role="status" aria-live="polite" aria-busy="'+(!failed)+'">'
+    +'<div><strong>'+(failed?'草稿讀取未完成':'正在讀取我的草稿')+'</strong><p>'
+    +(failed?'目前無法確認完整草稿清單，請重試讀取。':'正在讀取你的草稿，完成後會顯示筆數。')
+    +(retained?' 下方保留已取得的草稿。':'')+'</p></div>'
+    +(failed?'<button type="button" class="btn-g" onclick="retryMyDrafts()">重試讀取草稿</button>':'')+'</div>';
+}
+window.retryMyDrafts=function(){return loadCurrentUserDrafts({force:true,reason:'draft_manual_retry'});};
 function openDraftsAfterSave(){
   renderDrafts();
   updateDraftCounters();
@@ -18338,6 +18483,8 @@ window.addEventListener('beforeunload',function(e){
 window.nrSaveDraft=async function(){
   if(isExpenseApplicantRevisionMode()){alert('補件中的原申請不能另存成新草稿；請完成補件重新送出，或返回申請單。');return false;}
   if(S.nrSavingDraft)return false;
+  var draftSaveOperation={identity:draftReadinessForCurrentUser().identity};
+  S.nrDraftSaveOperation=draftSaveOperation;
   S.nrSavingDraft=true;
   try{
     if(!S.nrType){alert('請先選擇申請類型，再進行暫存。');return false;}
@@ -18345,16 +18492,22 @@ window.nrSaveDraft=async function(){
     if(S.nrType==='purchase_request')applyPurchaseSummary(false);
     if(S.nrType==='hr_expense_request')applyHrSummary(false);
     loadDrafts();
+    var draftIdentity=draftReadinessForCurrentUser().identity;
     var tL=requestTypeLabel(S.nrType||'未選擇類型');
     var state=collectNRFormState();
     var id=S.nrDraftId||('draft_'+Date.now());
     var existing=DRAFTS.findIndex(function(d){return d.id===id;});
-    var draft=stampDraftOwner({id:id,type:S.nrType,rec:S.nrRec,pay:S.nrPay,lazyMode:!!S.lazyMode,step:S.nrStep,title:tL+' - '+((state.fields['nr-app']||state.fields['nr-desc-purpose']||state.fields['nr-desc']||'未命名草稿')),amount:state.fields['nr-amt']||'',applicant:state.fields['nr-app']||'',updatedAt:new Date().toISOString(),state:state,files:await serializeDraftFiles(id)});
-    if(existing>-1)DRAFTS[existing]=draft;else DRAFTS.unshift(draft);
+    var draft=stampDraftOwner({id:id,type:S.nrType,rec:S.nrRec,pay:S.nrPay,lazyMode:!!S.lazyMode,step:S.nrStep,title:tL+' - '+((state.fields['nr-app']||state.fields['nr-desc-purpose']||state.fields['nr-desc']||'未命名草稿')),amount:state.fields['nr-amt']||'',applicant:state.fields['nr-app']||'',updatedAt:new Date().toISOString(),state:state,files:[]});
+    draft.files=await serializeDraftFiles(id);
+    if(draftReadinessForCurrentUser().identity!==draftIdentity)return false;
+    // Keep the same upsert ID if the network loses the save response. The form
+    // remains editable, but its draft is not added to the confirmed list yet.
     S.nrDraftId=id;
     var localSaved=false,remoteSaved=false,localErr=null,remoteErr=null;
     var remoteRequired=requireRemotePersistence();
     if(!remoteRequired){
+      if(existing>-1)DRAFTS[existing]=draft;else DRAFTS.unshift(draft);
+      S.nrDraftId=id;
       try{localSaved=saveDrafts();}catch(storageErr){
         console.error('draft storage failed',storageErr);
         localErr=storageErr;
@@ -18371,6 +18524,7 @@ window.nrSaveDraft=async function(){
       localErr=new Error(localPersistenceDisabledMessage());
     }
     try{remoteSaved=await saveDraftRemote(draft);}catch(err2){remoteErr=err2;console.warn('remote draft save failed',err2);}
+    if(draftReadinessForCurrentUser().identity!==draftIdentity)return false;
     if(remoteRequired&&!remoteSaved){
       alert('暫存失敗：草稿沒有成功保存到正式資料。\n\n'+friendlyErrorMessage(remoteErr,{action:'暫存草稿'})+'\n\n請先不要關閉頁面；可重新登入或重新整理後再試。');
       return false;
@@ -18380,6 +18534,8 @@ window.nrSaveDraft=async function(){
       alert('暫存失敗：'+msg+'\n請先不要關閉頁面，避免剛填的資料遺失。');
       return false;
     }
+    if(remoteSaved)notifyDraftMutation(draft,id,draftIdentity);
+    S.nrDraftId=id;
     renderDrafts();
     updateDraftCounters();
     if(S.page==='approvals'&&S.aT==='drafts')buildApprovals();
@@ -18390,11 +18546,12 @@ window.nrSaveDraft=async function(){
     else alert('草稿已暫存');
     return true;
   }catch(err){
+    if(S.nrDraftSaveOperation!==draftSaveOperation||draftReadinessForCurrentUser().identity!==draftSaveOperation.identity)return false;
     console.error('draft save failed',err);
     alert('暫存失敗：'+friendlyErrorMessage(err,{action:'暫存草稿'}));
     return false;
   }finally{
-    S.nrSavingDraft=false;
+    if(S.nrDraftSaveOperation===draftSaveOperation){S.nrSavingDraft=false;S.nrDraftSaveOperation=null;}
   }
 };
 window.nrSaveDraftFromButton=async function(btn){
@@ -22796,6 +22953,7 @@ window.submitNR=async function(){
       var draftDeleted=await deleteDraftRemote(oldDraftId);
       if(!expenseSubmissionOperationCurrent(submissionIdentity,newReq))return;
       if(draftDeleted===false&&requireRemotePersistence())throw new Error('遠端暫存表單未刪除');
+      if(draftDeleted)notifyDraftMutation(null,oldDraftId,draftReadinessForCurrentUser().identity);
       loadDrafts();DRAFTS=DRAFTS.filter(function(d){return d.id!==oldDraftId||!draftBelongsToCurrentUser(d);});saveDrafts();S.nrDraftId='';renderDrafts();
     }catch(draftError){if(!expenseSubmissionOperationCurrent(submissionIdentity,newReq))return;manualWarnings.push('原暫存表單尚未清理，請手動刪除');}
   }
@@ -22855,8 +23013,9 @@ function renderDrafts(){
   updateDraftCounters();
   var box=el('draft-list');
   if(!box)return;
-  if(!DRAFTS.length){box.innerHTML='<div style="font-size:12px;color:#94a3b8;text-align:center;padding:10px">目前沒有暫存表單</div>';return;}
-  box.innerHTML=DRAFTS.map(function(d){
+  var statusHtml=draftLoadStatusHtml();
+  if(!DRAFTS.length){box.innerHTML=statusHtml||'<div style="font-size:12px;color:#94a3b8;text-align:center;padding:10px">目前沒有暫存表單</div>';return;}
+  box.innerHTML=statusHtml+DRAFTS.map(function(d){
     return'<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #f0e0c8;border-radius:8px;margin-bottom:6px;background:#fffaf3">'
       +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:650;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(d.title||requestTypeLabel(d.type))+'</div><div style="font-size:10px;color:#94a3b8">'+requestTypeLabel(d.type)+' · '+(d.amount?fmt(d.amount):'未填金額')+' · 附件 '+((d.files||[]).length)+' 個 · '+draftTime(d.updatedAt)+'</div></div>'
       +'<button class="btn-g" onclick="openDraft(\''+d.id+'\')">繼續填寫</button><button class="btn-g" style="color:#8a1010" onclick="deleteDraft(\''+d.id+'\')">刪除</button>'
@@ -22880,8 +23039,24 @@ window.openDraft=function(id){
 };
 window.deleteDraft=async function(id){
   if(!confirm('確定刪除這份暫存表單？'))return;
-  loadDrafts();DRAFTS=DRAFTS.filter(function(d){return d.id!==id||!draftBelongsToCurrentUser(d);});saveDrafts();await deleteDraftRemote(id);renderDrafts();updateDraftCounters();
-  if(S.page==='approvals'&&S.aT==='drafts')buildApprovals();
+  loadDrafts();
+  var draft=DRAFTS.find(function(d){return d.id===id&&draftBelongsToCurrentUser(d);});
+  if(!draft){alert('找不到屬於目前帳號的草稿，請重新讀取後再試。');return false;}
+  var identity=draftReadinessForCurrentUser().identity;
+  try{
+    var removed=await deleteDraftRemote(id);
+    if(draftReadinessForCurrentUser().identity!==identity)return false;
+    if(!removed&&requireRemotePersistence())throw new Error('草稿尚未從正式資料刪除。');
+    if(removed)notifyDraftMutation(null,id,identity);
+    else DRAFTS=DRAFTS.filter(function(d){return d.id!==id;});
+    saveDrafts();renderDrafts();updateDraftCounters();
+    if(S.page==='approvals'&&S.aT==='drafts')buildApprovals();
+    return true;
+  }catch(error){
+    if(draftReadinessForCurrentUser().identity!==identity)return false;
+    alert('尚未確認刪除結果，畫面上的草稿仍保留；請重新讀取後確認：'+friendlyErrorMessage(error,{action:'刪除草稿'}));
+    return false;
+  }
 };
 function requestRejectReason(r){
   var s=((r&&r.steps)||[]).slice().reverse().find(function(x){return x&&(x.a==='rejected'||x.a==='rejected_all');});
@@ -23057,15 +23232,18 @@ window.copyRejectedRequestToDraft=async function(rid){
     sourceRejectedRequestNo:r.no||''
   });
   loadDrafts();
-  DRAFTS.unshift(draft);
-  var localSaved=saveDrafts();
+  var draftIdentity=draftReadinessForCurrentUser().identity;
+  var localSaved=false;
+  if(!requireRemotePersistence()){DRAFTS.unshift(draft);localSaved=saveDrafts();}
   var remoteSaved=false,remoteErr=null;
   try{remoteSaved=await saveDraftRemote(draft);}catch(err){remoteErr=err;}
+  if(draftReadinessForCurrentUser().identity!==draftIdentity)return;
   if(requireRemotePersistence()&&!remoteSaved){
     DRAFTS=DRAFTS.filter(function(d){return d.id!==id;});
     alert('建立駁回修正草稿失敗：'+friendlyErrorMessage(remoteErr,{action:'建立駁回修正草稿'})+'\n\n請先不要關閉原單，重新登入或重新整理後再試。');
     return;
   }
+  if(remoteSaved)notifyDraftMutation(draft,id,draftIdentity);
   if(!remoteSaved&&!localSaved)alert('草稿已在目前畫面建立，但瀏覽器/雲端暫存可能未成功，請送出前勿關閉頁面。');
   closeAppr();
   openDraft(id);
@@ -24405,24 +24583,17 @@ function buildApprovals(){
 	    renderApprovalImmediateSkeleton('build_approvals');
 	    return;
 	  }
-	  if(S.aT==='drafts'){
-	    var draftAll=approvalAllItems();
-	    var draftMine=draftAll.filter(approvalItemIsMine);
-	    var draftRejected=approvalRejectedItems(draftAll);
-	    var draftHis=draftAll.filter(approvalItemHasUserStepAction);
-    el('appr-sub').textContent=(RL[currentRoleKey()]||currentRoleKey())+' · 暫存表單 '+DRAFTS.length+' 筆';
-    var msDraft=el('approval-manager-summary');if(msDraft)msDraft.innerHTML=approvalDataLoadWarningHtml();
+  if(S.aT==='drafts'){
+    var draftCount=draftCountForDisplay();
+    el('appr-sub').textContent=(RL[currentRoleKey()]||currentRoleKey())+' · 我的草稿 '+draftCount+' 筆';
+    var msDraft=el('approval-manager-summary');if(msDraft)msDraft.innerHTML='';
     var bsDraft=el('approval-bulk-slot');if(bsDraft)bsDraft.innerHTML='';
-    var draftActionItems=approvalActionableItems(draftAll);
-    var draftCashierItems=draftActionItems.filter(approvalItemIsCashierTask);
-    var draftPendingItems=draftActionItems.filter(function(item){return !approvalItemIsCashierTask(item);});
-	    applyApprovalBootstrapSnapshot({identity:approvalFastBootstrapIdentity()},approvalTodoBadgeApplyOptions({
-	      fallbackCount:draftActionItems.length,
-	      tabCounts:{pending:draftPendingItems.length,cashier:draftCashierItems.length,history:draftHis.length,mine:draftMine.length,drafts:DRAFTS.length,rejected:draftRejected.length}
-	    }));
+    // Drafts have no dependency on the expense/invoice/bill worklist. Keep its
+    // separately verified navigation counts while rendering this small list.
+    updateDraftCounters();
     renderApprDraftList();
     return;
-	  }
+  }
 	  var historyRuntime=approvalHistoryRuntimeForCurrentUser();
 	  if(historyRuntime.status==='idle'){
 	    loadApprovalHistoryPage({page:1,query:''}).catch(function(error){console.warn('approval history bootstrap failed',error);});
@@ -24450,7 +24621,7 @@ function buildApprovals(){
 	  var fastCounts=approvalFastCurrentCounts(),canonicalCounts=fastCounts&&fastCounts.counts;
 	  applyApprovalBootstrapSnapshot({identity:approvalFastBootstrapIdentity()},approvalTodoBadgeApplyOptions({
 	    fallbackCount:pm.length,
-	    tabCounts:{pending:canonicalCounts?canonicalCounts.pending:pendingItems.length,cashier:canonicalCounts?canonicalCounts.cashier:cashierItems.length,history:historyCount,mine:mine.length,drafts:DRAFTS.length,rejected:rejectedItems.length}
+	    tabCounts:{pending:canonicalCounts?canonicalCounts.pending:pendingItems.length,cashier:canonicalCounts?canonicalCounts.cashier:cashierItems.length,history:historyCount,mine:mine.length,drafts:draftCountForDisplay(),rejected:rejectedItems.length}
 	  }));
 	  var ms=el('approval-manager-summary');if(ms)ms.innerHTML=(S.aT==='h'?approvalHistoryStatusHtml():approvalDataLoadWarningHtml())+(S.aT==='p'?approvalManagerSummaryHtml(pendingItems):'');
   var bs=el('approval-bulk-slot');if(bs)bs.innerHTML=(S.aT==='p'||S.aT==='cashier')?approvalBulkBarHtml(approvalActionableItems(currentItems)):'';
@@ -25362,8 +25533,9 @@ function renderApprDraftList(){
   var filtered=approvalApplySearchSort(draftItems);
   var total=filtered.length,pages=Math.max(1,Math.ceil(total/50)),page=Math.min(Math.max(1,S.apprPage||1),pages);
   S.apprPage=page;
-  var hint=el('appr-list-hint');if(hint)hint.textContent='搜尋後 '+total+' 筆 · 每頁最多 50 筆';
-  if(!filtered.length){l.innerHTML='<div class="card" style="text-align:center;padding:34px;color:#c0a880;font-size:12px">'+((S.apprQuery||'')?'找不到符合搜尋條件的暫存表單':'目前沒有暫存表單')+'</div>';return;}
+  var statusHtml=draftLoadStatusHtml();
+  var hint=el('appr-list-hint');if(hint)hint.textContent=statusHtml?'草稿清單尚未完整確認':'搜尋後 '+total+' 筆 · 每頁最多 50 筆';
+  if(!filtered.length){l.innerHTML=statusHtml||'<div class="card" style="text-align:center;padding:34px;color:#c0a880;font-size:12px">'+((S.apprQuery||'')?'找不到符合搜尋條件的暫存表單':'目前沒有暫存表單')+'</div>';return;}
   var rows=filtered.slice((page-1)*50,page*50).map(function(item){
     var d=item.raw;
     var fields=(d.state&&d.state.fields)||{};
@@ -25381,11 +25553,11 @@ function renderApprDraftList(){
       +'<td class="appr-col-payDate date-cell" style="color:#94a3b8">'+escAttr(approvalShortDate(fields['nr-paydate']||'—'))+'</td>'
       +'</tr>';
   }).join('');
-  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table compact">'+approvalTableHeaderHtml()+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(total,page,pages)+'</div>';
+  l.innerHTML=statusHtml+'<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table compact">'+approvalTableHeaderHtml()+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(total,page,pages)+'</div>';
 }
 window.openApprovalDraft=function(id){
   var d=(DRAFTS||[]).find(function(x){return x.id===id;});
-  if(!d)return;
+  if(!d||!draftBelongsToCurrentUser(d))return;
   document.querySelectorAll('[data-appr-key].selected').forEach(function(x){x.classList.remove('selected');});
   document.querySelectorAll('[data-appr-key]').forEach(function(x){if(x.getAttribute('data-appr-key')==='draft:'+id)x.classList.add('selected');});
   showDraftD(d);
@@ -26804,8 +26976,7 @@ function showDraftD(d){
     +'<div style="display:flex;gap:7px"><button class="btn-p" onclick="openDraft(\''+d.id+'\')">繼續填寫</button><button class="btn-s" style="color:#8a1010" onclick="deleteDraftFromApprovals(\''+d.id+'\')">刪除暫存</button></div></div>';
 }
 window.deleteDraftFromApprovals=async function(id){
-  if(!confirm('確定刪除這份暫存表單？'))return;
-  loadDrafts();DRAFTS=DRAFTS.filter(function(d){return d.id!==id||!draftBelongsToCurrentUser(d);});saveDrafts();await deleteDraftRemote(id);renderDrafts();buildApprovals();
+  return window.deleteDraft(id);
 };
 function showApprD(r){
   openApprModal();
