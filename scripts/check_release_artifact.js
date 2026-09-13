@@ -107,6 +107,23 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+  'scripts/check_statement_source_canary.cjs',
+  'scripts/fixtures/finance_statement_source_cascades_20260913.json',
+  'scripts/fixtures/finance_statement_source_projection_helpers_20260913.sql',
+  'docs/finance-read-latency.md',
+  'scripts/check_read_latency.cjs',
+  'scripts/check_system_health_progress.cjs',
+  'scripts/check_read_latency_browser.cjs',
+  'scripts/check_approval_list_performance.cjs',
+  'scripts/check_voucher_pagination_browser.cjs',
+  'scripts/check_report_org_performance_browser.cjs',
+  'scripts/check_statement_source_page.cjs',
+  'scripts/fixtures/finance_statement_source_fixture.cjs',
+  'scripts/fixtures/finance_statement_source_authority_20260913.sql',
+  'scripts/finance_statement_source_canary.sql',
+  'scripts/finance_statement_source_postflight.sql',
+  'scripts/finance_statement_source_fingerprint.sql',
+  'scripts/test_read_latency_release_batch.mjs',
     'scripts/check_financial_statements.cjs',
     'scripts/check_financial_statement_runtime.cjs',
     'scripts/check_management_report_engine.cjs',

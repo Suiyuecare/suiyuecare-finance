@@ -40,7 +40,7 @@ await scope(`(async()=>{
  await nav('reports');refreshEntitySelectors();el('rpt-ent').value='F1';el('rpt-ent').dispatchEvent(new Event('change',{bubbles:true}));syncReportPeriodOptions('2026-09');el('rpt-month').value='2026-09';buildReports();
 })()`);
 if(!baseline)await page.waitForFunction(()=>window.FinanceReportingWorkspace.profileFor('F1'));
-await page.evaluate(()=>{window.__capturedReports=[];const write=XLSX.writeFile;XLSX.writeFile=function(wb,name){window.__capturedReports.push({name,sheets:wb.SheetNames.map(name=>({name,rows:XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:null})}))});return write.apply(this,arguments);};});
+await page.evaluate(async()=>{await window.ensureFinanceDocumentLibrary('xlsx');window.__capturedReports=[];const write=XLSX.writeFile;XLSX.writeFile=function(wb,name){window.__capturedReports.push({name,sheets:wb.SheetNames.map(name=>({name,rows:XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:null})}))});return write.apply(this,arguments);};});
 const checks=[];
 async function capture(name,width){await page.setViewportSize({width,height:width<600?844:1000});await page.locator('#finance-report-workspace').scrollIntoViewIfNeeded();await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));const size=await page.evaluate(()=>({w:innerWidth,scroll:document.documentElement.scrollWidth}));assert(size.scroll<=width,'no document overflow '+name+': '+JSON.stringify(size));await page.screenshot({path:path.join(output,(baseline?'before-':'after-')+name+'-'+width+'.png'),fullPage:false});checks.push({name,width,size});}
 if(baseline){for(const width of [1440,390])await capture('reports',width);}
