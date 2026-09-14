@@ -1,0 +1,39 @@
+{
+  "description": "Observed production role_permissions shape, reports/settings keys only; no person identifiers.",
+  "observedAt": "2026-09-14T00:25:04.749233+00:00",
+  "roles": {
+    "hr": [],
+    "ceo": {
+      "reports": "edit",
+      "settings": "edit"
+    },
+    "board": [
+      "reports"
+    ],
+    "cashier": [],
+    "employee": {
+      "reports": "none",
+      "settings": "none"
+    },
+    "accountant": {
+      "reports": "edit",
+      "settings": "none"
+    },
+    "shareholder": [
+      "reports"
+    ],
+    "dept_manager": [],
+    "section_chief": {
+      "reports": "none",
+      "settings": "none"
+    },
+    "admin_director": [
+      "reports",
+      "settings"
+    ],
+    "external_audit": [
+      "reports"
+    ],
+    "general_affairs": []
+  }
+}

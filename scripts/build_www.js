@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { createStartupBundle } = require('./finance_startup_bundle');
 const {
   applyBuildEnvironment,
   resolveBuildConfig
@@ -47,12 +48,18 @@ const assetVersion = versionedAssets
   .slice(0, 16);
 html = html.replace(/__FINANCE_ASSET_VERSION__/g, assetVersion);
 html = applyBuildEnvironment(html, buildConfig);
+const startupBundle = createStartupBundle(html, root);
+html = startupBundle.html;
+fs.writeFileSync(path.join(out, startupBundle.file), startupBundle.code);
+fs.writeFileSync(path.join(out, startupBundle.sdk.file), startupBundle.sdk.code);
 fs.writeFileSync(path.join(out, 'index.html'), html);
 
 copyFile('privacy.html', 'www/privacy.html');
 copyFile('assets/suiyue-logo-transparent.png', 'www/assets/suiyue-logo-transparent.png');
 copyDir('assets/styles', 'www/assets/styles');
 copyDir('assets/engines', 'www/assets/engines');
+copyFile('assets/vendor/supabase-js-2.111.0.LICENSE', 'www/assets/vendor/supabase-js-2.111.0.LICENSE');
+copyFile('assets/vendor/supabase-js-2.111.0.provenance.json', 'www/assets/vendor/supabase-js-2.111.0.provenance.json');
 copyFile('assets/templates/hr_expense_template.xlsx', 'www/assets/templates/hr_expense_template.xlsx');
 copyFile('assets/templates/labor_service_fee.docx', 'www/assets/templates/labor_service_fee.docx');
 copyFile('docs/歲悅會計系統_V4修訂重點.html', 'www/docs/歲悅會計系統_V4修訂重點.html');

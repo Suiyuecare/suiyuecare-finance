@@ -70,3 +70,40 @@ jobs:
           compression-level: 0
           overwrite: false
           include-hidden-files: true
+
+  interaction-gate:
+    name: Verify actual form and management actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FINANCE_BUILD_TARGET: local
+      FINANCE_BROWSER_CHANNEL: chromium
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Use fixed Node 22 runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: Use fixed pnpm runtime
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        with:
+          version: 11.21.0
+          run_install: false
+      - name: Install locked dependencies and browser
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      - name: Verify real DOM actions with isolated fictional data
+        run: |
+          node scripts/check_admin_action_browser.cjs
+          node scripts/check_shareholder_invoice_ocr_browser.cjs
+          node scripts/check_personnel_login_browser.cjs
+      - name: Verify actual bundled startup and workspace navigation
+        run: |
+          node scripts/build_www.js
+          node scripts/check_startup_bundle_browser.cjs

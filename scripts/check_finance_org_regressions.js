@@ -288,7 +288,7 @@ await check('engine uses the same Taipei end-date boundary and retains reporting
  assert.equal(engine.snapshotFromGraph({units:[],assignments:[],reporting_overrides:[{id:'preserve'}]}).reporting_overrides[0].id,'preserve');
 });
 await check('background refresh cannot attach a new revision to unsaved old supervisor edits',async()=>{
- const c=ctx({S:{demoLogin:false},ORG_CHART:[{userId:'staff',supervisorId:'new-local'}],ORG_CHART_PERSISTED:[{userId:'staff',supervisorId:'old'}],ORG_CHART_REVISION:'base',ORG_CHART_DIRTY:true,ORG_CHART_CONFLICT:false,normalizeOrgChartRuntimeRows:x=>x,SYSTEM_SETTINGS:{},cloneSettingValue:x=>structuredClone(x),isRpcMissing:()=>false});
+ const c=ctx({S:{demoLogin:false},financeStartupReadIdentity:()=> 'same-fictional-identity',financeAuthIdentityEpoch:0,ORG_CHART:[{userId:'staff',supervisorId:'new-local'}],ORG_CHART_PERSISTED:[{userId:'staff',supervisorId:'old'}],ORG_CHART_REVISION:'base',ORG_CHART_DIRTY:true,ORG_CHART_CONFLICT:false,normalizeOrgChartRuntimeRows:x=>x,SYSTEM_SETTINGS:{},cloneSettingValue:x=>structuredClone(x),isRpcMissing:()=>false});
  vm.runInContext(code('async function refreshOrgChartRowsFromRuntime(','async function refreshWorkflowEngineObservability('),c);
  const result=await c.refreshOrgChartRowsFromRuntime({rpc:async()=>({data:{revision:'remote-new',rows:[{userId:'staff',supervisorId:'remote'}]}})},'system_settings_realtime');
  assert.equal(result.conflict,true);assert.equal(c.ORG_CHART_REVISION,'base');assert.equal(c.ORG_CHART[0].supervisorId,'new-local');

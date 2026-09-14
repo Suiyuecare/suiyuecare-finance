@@ -92,6 +92,11 @@ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','no
 fs.appendFileSync(ledger,guard.READ_LATENCY_MIGRATIONS.join('\n')+'\n');
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/AR mapping migration batch/);
 fs.appendFileSync(ledger,guard.AR_MAPPING_MIGRATIONS.join('\n')+'\n');
+// Historical batch boundaries stay unchanged; the current frontend requires both new migrations.
+for(const version of guard.AUDIT_REMEDIATION_MIGRATIONS){
+ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/audit remediation migration batch/);
+ fs.appendFileSync(ledger,version+'\n');
+}
  assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
  assert.throws(()=>guard.prepareAuditBatchApply(migrationDir,path.join(dir,'again.sql'),versions,ledger,postflight,baseline,phase),/must be pending/);
  const expectedCanary={canary:'authenticated_finalize_accounting_lines',ok:true,rolled_back:true,accounting_lines_consistent:true};

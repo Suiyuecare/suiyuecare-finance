@@ -107,6 +107,35 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+  'scripts/check_invoice_ocr_contract.cjs',
+  'scripts/check_shareholder_invoice_ocr_browser.cjs',
+  'scripts/check_personnel_login_reliability.cjs',
+  'scripts/check_google_projection_identity.cjs',
+  'scripts/check_personnel_login_browser.cjs',
+  'scripts/finance_google_projection_postflight.sql',
+  'scripts/finance_google_projection_canary.sql',
+  'scripts/fixtures/finance_admin_google_account_link_status_v2.sql',
+  'scripts/fixtures/finance_google_projection_health_v2.sql',
+  'scripts/check_dashboard_scope_integrity.cjs',
+  'scripts/check_report_reconciliation_sources.cjs',
+  'scripts/finance_dashboard_scope_canary.sql',
+  'scripts/finance_dashboard_scope_postflight.sql',
+  'scripts/fixtures/finance_dashboard_read_authority_20260914.sql',
+  'scripts/fixtures/finance_dashboard_role_permissions_20260914.json',
+  'scripts/fixtures/finance_dashboard_step_authority_20260914.sql',
+  'scripts/fixtures/finance_dashboard_v2_pre_scope_20260914.sql',
+  'docs/finance-dashboard-scope-integrity.md',
+  'scripts/check_admin_action_identity.cjs',
+  'scripts/test_audit_remediation_release_batch.mjs',
+  'docs/finance-audit-remediation-20260914.md',
+  'scripts/finance_startup_bundle.js',
+  'assets/vendor/supabase-js-2.111.0.umd.js',
+  'assets/vendor/supabase-js-2.111.0.LICENSE',
+  'assets/vendor/supabase-js-2.111.0.provenance.json',
+  'scripts/check_startup_sdk.cjs',
+  'docs/finance-startup-sdk.md',
+  'scripts/check_admin_action_browser.cjs',
+  'scripts/check_startup_bundle_browser.cjs',
   'scripts/check_statement_source_canary.cjs',
   'scripts/fixtures/finance_statement_source_cascades_20260913.json',
   'scripts/fixtures/finance_statement_source_projection_helpers_20260913.sql',
@@ -345,7 +374,13 @@ function expectedBuiltIndex() {
   const hash = crypto.createHash('sha256');
   for (const asset of versionedAssets) hash.update(asset.key).update(fs.readFileSync(asset.file));
   html = html.replace(/__FINANCE_ASSET_VERSION__/g, hash.digest('hex').slice(0, 16));
-  return applyBuildEnvironment(html, buildConfig);
+  const bundle = require('./finance_startup_bundle').createStartupBundle(applyBuildEnvironment(html, buildConfig), ROOT);
+  if (fs.readFileSync(path.join(OUTPUT, bundle.file), 'utf8') !== bundle.code) fail('startup bundle is not the deterministic concatenation of source engines');
+  if (!fs.readFileSync(path.join(OUTPUT, bundle.sdk.file)).equals(bundle.sdk.code)) fail('built Supabase SDK differs from the fixed official UMD');
+  for (const file of ['assets/vendor/supabase-js-2.111.0.LICENSE', 'assets/vendor/supabase-js-2.111.0.provenance.json']) {
+    if (!fs.readFileSync(path.join(OUTPUT, file)).equals(fs.readFileSync(path.join(ROOT, file)))) fail('built Supabase SDK evidence differs: ' + file);
+  }
+  return bundle.html;
 }
 
 if (!fs.existsSync(OUTPUT) || !fs.statSync(OUTPUT).isDirectory()) fail('www does not exist; build first');

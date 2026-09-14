@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..'),engine=require('../assets/engines/financial-statements.js'),management=require('../assets/engines/management-report-engine.js');
+function extract(text,start){const p=text.indexOf(start);assert(p>=0,start);return text.slice(p,text.indexOf('\n'+(start.startsWith('  ')?'  ':'')+'function ',p+start.length));}
+const renderer=extract(fs.readFileSync(root+'/index.html','utf8'),'function dashboardRenderReconciliation(bundle){');
+const drilldown=extract(fs.readFileSync(root+'/assets/engines/reporting-workspace.js','utf8'),'  function sourceRows(');
+let checks=0;const check=(name,value)=>{assert(value,name);checks++;console.log('PASS '+name);};
+function render(revenue={},expense={}){const nodes={},states=[];const c={S:{dashReconOpen:false},DASH_REMOTE_ERRORS:{},dashboardRemoteKey:()=> 'fixture',num:x=>Number(x)||0,fmt:x=>String(Number(x)||0),escAttr:x=>String(x||''),el:id=>nodes[id]||(nodes[id]={innerHTML:''}),dashboardSetReconciliationDetails:(open,hint,tone)=>states.push({open,hint,tone})};vm.createContext(c);vm.runInContext(renderer,c);c.dashboardRenderReconciliation({scope:{},reconciliation:{revenue,expense},missingSourceCount:0,ledgerBalanceDiff:0});return {state:states.at(-1),nodes};}
+let r=render({officialAmount:50,officialUnlinked:50,unlinkedSourceCount:1,exceptions:[{class:'unlinked',amount:50,sourceNo:'FICT-MISSING'}]});check('real renderer opens a warning for balanced but unlinked revenue',r.state.open&&r.state.tone==='warning'&&r.nodes['dash-recon-source'].innerHTML.includes('勾稽有差異'));
+r=render({}, {officialAmount:30,officialUnlinked:30,unlinkedSourceCount:1});check('unlinked expense is not a green completed reconciliation',r.state.open&&r.state.tone==='warning');
+r=render({officialAmount:0,officialUnlinked:0,unlinkedSourceCount:2,unlinkedSourceAbsoluteAmount:100});check('equal positive and negative unlinked sources cannot cancel the warning',r.state.open&&r.state.tone==='warning'&&r.state.hint.includes('2 項'));
+r=render({officialAmount:50,officialUnlinked:50});check('old compatible payload lacking counts still warns on an unlinked amount',r.state.open&&r.state.tone==='warning');
+r=render({officialAmount:0,officialUnlinked:0,exceptions:[{class:'unlinked',amount:50},{class:'unlinked',amount:-50}]});check('legacy exception rows retain a zero-net source warning',r.state.open&&r.state.tone==='warning');
+r=render({officialAmount:50,officialFutureForms:50,futureFormCount:1});check('future-period form posted early is exposed for review',r.state.open&&r.state.tone==='warning');
+r=render({officialAmount:80,officialAdjustments:50,officialPriorForms:30,exceptions:[{class:'adjustment',amount:50},{class:'prior_form',amount:30}]});check('legitimate adjustment and prior-period posting do not become blanket errors',!r.state.open&&r.state.tone==='ok');
+r=render({officialAmount:100,officialCurrentForms:100,pendingCount:1,pendingNetAmount:40});check('pending unposted forms do not become false ledger errors',r.state.tone==='ok');
+r=render({officialAmount:100,officialCurrentForms:50});check('existing nonzero bridge-gap warning remains enforced',r.state.open&&r.state.tone==='warning');
+const ledger=[{id:'ar',eid:'F1',dc:'D1',date:'2026-09-01',ac:'1123',dr:100,cr:0,sourceType:'invoice',sourceId:'I'},{id:'income',eid:'F1',dc:'D1',date:'2026-09-01',ac:'4111',dr:0,cr:100,sourceType:'invoice',sourceId:'I'}];
+function sourceFixture(rows,tab='pl',options={}){const model=engine.buildModel({ledger:rows,entityId:options.eid||'F1',period:'2026-09',completeness:{complete:true}});const c={runtime:{completeness:()=>({tables:{ledger:{complete:options.complete!==false}}}),ledger:()=>rows},reportModel:()=>model,state:{tab},profileFor:()=>({}),global:{FinanceManagementReportEngine:management,FinanceFinancialStatements:options.missingHelper?{}:engine}};vm.createContext(c);vm.runInContext(drilldown,c);return{c,model,read:(account='4111',dept=null)=>c.sourceRows({eid:options.eid||'F1',period:'2026-09'},account,dept)};}
+for(const [label,flags] of [['canonical period close',{sourceType:'period_close'}],['raw closing type',{source_type:'closing_entry'}],['year end close',{sourceType:'year_end_close'}],['normalized closing flag',{closingEntry:true}],['raw closing flag',{closing_entry:true}]]){
+ const rows=ledger.concat([{id:'close-dr',eid:'F1',dc:'D1',date:'2026-09-30',ac:'4111',dr:100,cr:0,...flags},{id:'close-cr',eid:'F1',dc:'D1',date:'2026-09-30',ac:'3111',dr:0,cr:100,...flags}]),f=sourceFixture(rows),shown=f.read();
+ check(label+' uses the exact shared exclusion and source total equals report',f.model.current.pl.revenue===100&&shown.length===1&&shown.reduce((n,r)=>n+r.cr-r.dr,0)===100);
+ const bs=sourceFixture(rows,'bs');check(label+' remains visible in cumulative BS source',bs.read('3111').length===1);
+}
+const mixed=ledger.concat([{id:'prior',eid:'F1',dc:'D1',date:'2026-08-01',ac:'4111',dr:0,cr:50},{id:'future',eid:'F1',dc:'D1',date:'2026-10-01',ac:'4111',dr:0,cr:50},{id:'void',eid:'F1',dc:'D1',date:'2026-09-01',ac:'4111',dr:0,cr:50,voided_at:'2026-09-02'},{id:'foreign',eid:'F2',dc:'D2',date:'2026-09-01',ac:'4111',dr:0,cr:50},{id:'other-dept',eid:'F1',dc:'D2',date:'2026-09-01',ac:'4111',dr:0,cr:30},{id:'adjust',eid:'F1',dc:'D1',date:'2026-09-01',ac:'4111',dr:0,cr:20,sourceType:'accounting_adjustment'}]);
+let f=sourceFixture(mixed),shown=f.read('4111','D1');check('company department current period and void boundaries stay intact',shown.length===2&&shown.every(r=>['income','adjust'].includes(r.id)));check('legal adjustment is retained as a contributing P&L source',shown.some(r=>r.id==='adjust'));
+assert.throws(()=>sourceFixture(mixed,'pl',{complete:false}).read(),/尚未讀取/);check('incomplete ledger cannot be used for source drilldown',true);
+assert.throws(()=>sourceFixture(mixed,'pl',{missingHelper:true}).read(),/尚未更新/);check('stale engine cannot silently skip the shared closing rule',true);
+console.log(JSON.stringify({ok:true,checks,productionWrites:0}));

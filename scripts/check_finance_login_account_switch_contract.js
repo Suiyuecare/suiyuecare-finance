@@ -174,7 +174,9 @@ check(
   'standalone login always opens Google account selection and applies a trusted login hint',
   loginSection.includes("prompt:'select_account'") &&
     loginSection.includes('queryParams.login_hint=expectedEmail') &&
-    loginSection.includes("safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1')")
+    loginSection.includes('startFinanceInitialOAuth(client,expectedEmail,queryParams') &&
+    functionSource('startFinanceInitialOAuth').includes("safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1')") &&
+    functionSource('startFinanceInitialOAuth').includes('skipBrowserRedirect:true')
 );
 check(
   'account switch clears only the local browser session before starting a fresh OAuth flow',

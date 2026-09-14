@@ -83,7 +83,8 @@ body.finance-identity-syncing button[onclick*="submitNR"],
 body.finance-identity-syncing button[onclick*="issueInv"],
 body.finance-identity-syncing button[onclick*="issueBatch"],
 body.finance-identity-syncing button[onclick*="submitBill"],
-body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"]{
+body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"],
+body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
   pointer-events:none;
   opacity:.55;
   cursor:wait;
@@ -465,7 +466,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
         <div class="fg"><label class="fl">備註</label><textarea id="sh-note" rows="3" placeholder="例：股東匯入公司帳戶作為營運資金 / 增資款"></textarea></div>
         <div id="sh-preview" style="background:var(--warm);border:1px solid #f0e0c8;border-radius:9px;padding:9px;font-size:12px;color:#334155;margin-bottom:10px"></div>
         <div id="sh-flow" style="margin-bottom:10px"></div>
-        <button class="btn-p" id="sh-submit-btn" style="width:100%;justify-content:center" onclick="submitShareholderApprovalRequest()">送出簽核</button>
+        <button class="btn-p" id="sh-submit-btn" style="width:100%;justify-content:center" onclick="submitShareholderTxn()">送出簽核</button>
         </section>
         </div>
         <div class="mobile-shareholder-actions" data-mobile-shareholder-actions>
@@ -1064,7 +1065,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
     <div class="mobile-third-page-head" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:10px;flex-wrap:wrap">
       <div><div class="ph">系統健檢</div><div class="ps" id="health-sub">檢查前台是否真的連得到正式 Supabase、Auth、RPC 與簽核指向。</div></div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
-        <button class="btn-g" onclick="buildSystemHealth()">重新載入</button>
+        <button class="btn-g" onclick="financeAdminAction('health')">重新載入</button>
         <button class="btn-p" onclick="runSystemHealth()">開始健檢</button>
       </div>
     </div>
@@ -1585,6 +1586,10 @@ var USERS=[
 var FINANCE_USER_SAFE_COLUMNS='id,name,email,role,role_label,department_code,init,active,created_at,entity_id,auth_user_id,tenant_id,job_title,extension,org_contact_email,org_status,org_source,org_source_updated_at,google_login_verified_at,google_link_status,pending_login_email,google_link_revision,google_link_requested_at,google_link_status_detail,google_last_linked_at';
 var FINANCE_GOOGLE_LOGIN_HEALTH=Object.create(null);
 var FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=null;
+var FINANCE_GOOGLE_LOGIN_HEALTH_SCOPE='';
+var FINANCE_GOOGLE_LOGIN_HEALTH_READS=Object.create(null);
+var FINANCE_GOOGLE_LOGIN_HEALTH_BATCH=null;
+var FINANCE_GOOGLE_LOGIN_HEALTH_TIMEOUT_MS=12000;
 
 // 財務流程：申請人 → 上一層主管 → 申請人部門主任（若相同則跳過）→ 行政部門主任 → 會計 → 執行長檢視會計科目 → 出納放款 → 申請人確認 → 會計入帳
 var FLOW_STEPS=[
@@ -6530,10 +6535,15 @@ function normalizeOrgChartRuntimeRows(data){
   console.warn('Finance organization engine missing normalizeRuntimeRows; runtime organization chart rows are unavailable.');
   return null;
 }
-async function refreshOrgChartRowsFromRuntime(client,reason){
+async function refreshOrgChartRowsFromRuntime(client,reason,options){
+  options=options||{};
   client=client||getSb();
   if(!client||S.demoLogin)return {ok:false,skipped:true,reason:'no_supabase'};
+  var identity=financeStartupReadIdentity(),epoch=financeAuthIdentityEpoch;
+  function current(){return !!identity&&identity===financeStartupReadIdentity()&&epoch===financeAuthIdentityEpoch&&(!options.isCurrent||options.isCurrent());}
+  if(!current())return {ok:false,stale:true};
   var r=await client.rpc('finance_org_chart_editor_state_v2',{});
+  if(!current())return {ok:false,stale:true};
   if(r.error){
     if(isRpcMissing(r.error)){
       ORG_CHART_REVISION='';
@@ -6804,6 +6814,32 @@ async function readOrgAdminRuntimeRpc(client,name,args,fallback){
     return {data:typeof fallback==='function'?fallback():fallback,fallback:true,error:err,message:(err&&err.message)||String(err||'')};
   }
 }
+// Explicit UI entry points keep internal clients/arguments out of inline handlers.
+var FINANCE_ADMIN_ACTIONS_PENDING={};
+window.financeAdminAction=async function(action){
+  if(!S.user||financeWorkspaceIdentityBlocked)return {ok:false,denied:true};
+  var allowed=action==='org'?(canAccessPage('orgchart')||canManageUsers()||canManageSettings())
+    :action==='permissions'?canManageUsers()
+    :action==='compliance'?canAccessPage('compliance')
+    :(action==='health'||action==='workflows')?canManageSettings():false;
+  if(!allowed)return {ok:false,denied:true};
+  var identity=financeStartupReadIdentity(),epoch=financeAuthIdentityEpoch,pendingKey=epoch+'|'+identity+'|'+action;
+  function current(){return !!identity&&identity===financeStartupReadIdentity()&&epoch===financeAuthIdentityEpoch;}
+  if(FINANCE_ADMIN_ACTIONS_PENDING[pendingKey])return FINANCE_ADMIN_ACTIONS_PENDING[pendingKey];
+  var task=Promise.resolve().then(function(){
+    if(!current())return {ok:false,stale:true};
+    if(action==='org')return refreshApprovalOrgAdminRuntime(null,'manual',{force:true,isCurrent:current});
+    if(action==='permissions')return syncFrontOfficePermissionRuntime(null,'manual_user_management',{alert:true,isCurrent:current});
+    if(action==='compliance')return renderAccountingControlCenter(compEntity(),compPeriod());
+    if(action==='health')return buildSystemHealth();
+    if(action==='workflows')return renderWorkflowFlowGallery();
+  }).catch(function(error){
+    if(current())alert('操作未完成，請重試：'+((error&&error.message)||'讀取失敗'));
+    return {ok:false,error:true};
+  }).finally(function(){if(FINANCE_ADMIN_ACTIONS_PENDING[pendingKey]===task)delete FINANCE_ADMIN_ACTIONS_PENDING[pendingKey];});
+  FINANCE_ADMIN_ACTIONS_PENDING[pendingKey]=task;
+  return task;
+};
 function financeStartupReadIdentity(){
   var u=S.user;
   if(!u||financeWorkspaceIdentityBlocked)return '';
@@ -6822,13 +6858,13 @@ async function refreshApprovalOrgAdminRuntime(client,reason,options){
     if(state.promise)return state.promise;
     if(state.lastSuccessAt&&Date.now()-state.lastSuccessAt<30000&&ORG_ADMIN_RUNTIME.available===true)return {ok:true,reused:true,runtime:ORG_ADMIN_RUNTIME};
   }
-  state={identity:identity,sequence:state.sequence+1,promise:null,lastSuccessAt:0};
+  state={identity:identity,sequence:state.sequence+1,promise:null,lastSuccessAt:0,isCurrent:options.isCurrent||null};
   ORG_ADMIN_READ_STATE=state;
   state.promise=performApprovalOrgAdminRuntimeRead(client,reason,state);
   try{return await state.promise;}finally{state.promise=null;}
 }
 async function performApprovalOrgAdminRuntimeRead(client,reason,state){
-  function current(){return ORG_ADMIN_READ_STATE===state&&state.identity===financeStartupReadIdentity();}
+  function current(){return ORG_ADMIN_READ_STATE===state&&state.identity===financeStartupReadIdentity()&&(!state.isCurrent||state.isCurrent());}
   client=client||getSb();
   if(!client||S.demoLogin){
     ORG_ADMIN_RUNTIME.available=false;
@@ -6901,8 +6937,12 @@ async function syncFrontOfficePermissionRuntime(financeUserId,reason,opts){
   opts=opts||{};
   var client=getSb();
   if(!client||S.demoLogin)return {ok:false,skipped:true,reason:'no_supabase'};
+  var identity=financeStartupReadIdentity(),epoch=financeAuthIdentityEpoch;
+  function current(){return !!identity&&identity===financeStartupReadIdentity()&&epoch===financeAuthIdentityEpoch&&(!opts.isCurrent||opts.isCurrent());}
+  if(!current())return {ok:false,stale:true};
   var args={p_finance_user_id:financeUserId||null,p_reason:reason||'front_office_user_management'};
   var r=await client.rpc('sync_finance_user_permission_runtime',args);
+  if(!current())return {ok:false,stale:true};
   if(r.error){
     var missing=isRpcMissing(r.error);
     var detail=(missing?'正式資料庫尚未安裝前台人員權限同步 RPC；':'人員權限同步到簽核 runtime 失敗；')+(r.error.message||'未知錯誤');
@@ -6913,8 +6953,10 @@ async function syncFrontOfficePermissionRuntime(financeUserId,reason,opts){
     if(opts.alert)alert(detail);
     return {ok:false,skipped:missing,error:r.error,message:detail};
   }
-  await refreshOrgChartRowsFromRuntime(client,(reason||'front_office_permission')+'_after_sync');
-  await refreshApprovalOrgAdminRuntime(client,(reason||'front_office_permission')+'_after_sync');
+  await refreshOrgChartRowsFromRuntime(client,(reason||'front_office_permission')+'_after_sync',{isCurrent:current});
+  if(!current())return {ok:false,stale:true};
+  await refreshApprovalOrgAdminRuntime(client,(reason||'front_office_permission')+'_after_sync',{force:true,isCurrent:current});
+  if(!current())return {ok:false,stale:true};
   if(typeof recordOpsEvent==='function'){
     var data=normalizeSettingValue(r.data||{});
     recordOpsEvent('front_office_permission_runtime_synced','ok','人員權限 runtime 已同步','已由 finance_users 同步 tenant_members 與 employee_department_roles，前台組織圖與後端簽核 runtime 已重新讀取。',{reason:reason||'',financeUserId:financeUserId||'',primaryRolesTouched:num(data.primary_roles_touched),orphanRolesDisabled:num(data.orphan_roles_disabled),tenantMembersTouched:num(data.tenant_members_touched),dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
@@ -11510,7 +11552,26 @@ function normalizeFinanceGoogleLoginHealth(raw,user){
     raw:payload
   };
 }
+function financeGoogleLoginHealthIdentity(){
+  var user=S.user||{};
+  return JSON.stringify([currentFinanceAuthUserId(),user.id||'',user.email||'',currentTenantId(),activeDataEnvironment(),currentRoleKey(),ROLE_PERMISSIONS,CURRENT_PERMISSION_SNAPSHOT,financeAuthIdentityEpoch,financeWorkspaceIdentityBlocked,S.demoLogin]);
+}
+function ensureFinanceGoogleLoginHealthScope(){
+  var identity=financeGoogleLoginHealthIdentity();
+  if(FINANCE_GOOGLE_LOGIN_HEALTH_SCOPE!==identity){
+    FINANCE_GOOGLE_LOGIN_HEALTH_SCOPE=identity;
+    FINANCE_GOOGLE_LOGIN_HEALTH=Object.create(null);
+    FINANCE_GOOGLE_LOGIN_HEALTH_READS=Object.create(null);
+    FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=null;
+    FINANCE_GOOGLE_LOGIN_HEALTH_BATCH=null;
+  }
+  return identity;
+}
+function financeGoogleLoginHealthReadCurrent(identity){
+  return identity===financeGoogleLoginHealthIdentity()&&!financeWorkspaceIdentityBlocked&&!!S.user&&canManageUsers();
+}
 function rememberFinanceGoogleLoginHealth(user,raw){
+  ensureFinanceGoogleLoginHealthScope();
   var health=normalizeFinanceGoogleLoginHealth(raw,user);
   var id=String((user&&user.id)||(health.financeUser&&(health.financeUser.id||health.financeUser.finance_user_id))||'');
   var email=String(health.email||(user&&user.email)||'').trim().toLowerCase();
@@ -11519,6 +11580,7 @@ function rememberFinanceGoogleLoginHealth(user,raw){
   return health;
 }
 function financeGoogleLoginHealthForUser(user){
+  ensureFinanceGoogleLoginHealthScope();
   if(!user)return normalizeFinanceGoogleLoginHealth({},null);
   var cached=FINANCE_GOOGLE_LOGIN_HEALTH['id:'+String(user.id||'')]||FINANCE_GOOGLE_LOGIN_HEALTH['email:'+String(user.email||'').trim().toLowerCase()];
   if(cached)return cached;
@@ -14088,9 +14150,52 @@ function redirectUnauthedFinanceToPortal(){
   // create and bind the verified Google identity to finance_users.
   return false;
 }
+var financeInitialOAuthAttempt=null;
+var FINANCE_INITIAL_OAUTH_TIMEOUT_MS=12000;
+function setFinanceInitialOAuthBusy(busy){
+  document.querySelectorAll('.google-btn').forEach(function(button){
+    if(busy){button.dataset.financeOauthDisabled=button.disabled?'1':'0';button.disabled=true;button.setAttribute('aria-busy','true');}
+    else if(button.hasAttribute('data-finance-oauth-disabled')){button.disabled=button.dataset.financeOauthDisabled==='1';delete button.dataset.financeOauthDisabled;button.removeAttribute('aria-busy');}
+  });
+}
+function cancelFinanceInitialOAuth(){
+  financeInitialOAuthAttempt=null;
+  setFinanceInitialOAuthBusy(false);
+}
+async function startFinanceInitialOAuth(client,expectedEmail,queryParams,mode){
+  if(financeInitialOAuthAttempt||financeGoogleAccountSwitchInProgress)return false;
+  var attempt={identity:financeReauthenticationIdentity(),epoch:financeAuthIdentityEpoch};
+  financeInitialOAuthAttempt=attempt;
+  function current(){return financeInitialOAuthAttempt===attempt&&attempt.identity===financeReauthenticationIdentity()&&attempt.epoch===financeAuthIdentityEpoch;}
+  try{
+    setFinanceInitialOAuthBusy(true);
+    safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1');
+    safeSetItem(FINANCE_PORTAL_OAUTH_MODE_KEY,mode);
+    var response=await withOperationTimeout(Promise.resolve().then(function(){
+      if(!current())return null;
+      return client.auth.signInWithOAuth({provider:'google',options:{redirectTo:oauthRedirectUrl(),skipBrowserRedirect:true,queryParams:queryParams}});
+    }),'啟動 Google 登入',FINANCE_INITIAL_OAUTH_TIMEOUT_MS);
+    if(!current())return false;
+    if(response&&response.error)throw response.error;
+    var destination=financeReauthenticationDestination(response);
+    window.location.assign(destination);
+    return true;
+  }catch(error){
+    error=error||new Error('Google 登入沒有完成');
+    if(current()){
+      safeRemoveItem(FINANCE_PORTAL_OAUTH_PENDING_KEY);
+      safeRemoveItem(FINANCE_PORTAL_OAUTH_MODE_KEY);
+      await showFinanceOAuthFailure('oauth_start',error.code||error.name||'oauth_start_failed',error.code==='CLIENT_TIMEOUT'?'啟動 Google 登入逾時，請再按一次「使用 Google 帳號登入」。':String(error.message||error),{expectedEmail:expectedEmail});
+    }
+    return false;
+  }finally{
+    if(financeInitialOAuthAttempt===attempt){financeInitialOAuthAttempt=null;setFinanceInitialOAuthBusy(false);}
+  }
+}
 async function startPortalFinanceGoogleLogin(email,opts){
   opts=opts||{};
   if(!isFinanceProductionBuild())return false;
+  if(financeInitialOAuthAttempt||financeGoogleAccountSwitchInProgress)return false;
   if(!email)return false;
   email=String(email||'').trim().toLowerCase();
   if(!isCompanyGoogleLoginEmail(email))return false;
@@ -14103,23 +14208,8 @@ async function startPortalFinanceGoogleLogin(email,opts){
   }
   var client=getSb();
   if(!client||!client.auth)return false;
-  safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1');
   var forceAccountSelection=opts.forceAccountSelection!==false;
-  safeSetItem(FINANCE_PORTAL_OAUTH_MODE_KEY,forceAccountSelection?'select_account':'silent');
-  var res=await client.auth.signInWithOAuth({
-    provider:'google',
-    options:{
-      redirectTo:oauthRedirectUrl(),
-      queryParams:{login_hint:email,prompt:forceAccountSelection?'select_account':'none'}
-    }
-  });
-  if(res.error){
-    safeRemoveItem(FINANCE_PORTAL_OAUTH_PENDING_KEY);
-    safeRemoveItem(FINANCE_PORTAL_OAUTH_MODE_KEY);
-    await showFinanceOAuthFailure('oauth_start',res.error.code||res.error.name||'oauth_start_failed',res.error.message||'',{expectedEmail:email});
-    return false;
-  }
-  return true;
+  return await startFinanceInitialOAuth(client,email,{login_hint:email,prompt:forceAccountSelection?'select_account':'none'},forceAccountSelection?'select_account':'silent');
 }
 async function enterOrAuthorizePortalFinance(email){
   S.portalLogin=true;
@@ -14199,7 +14289,10 @@ function oauthProviderErrorInfo(code,description){
   code=safeOAuthErrorCode(code);
   var message='Google 登入沒有完成。';
   var next='請重新按「使用 Google 帳號快速登入」，並選擇畫面指定的公司帳號。';
-  if(code==='access_denied'){
+  if(code==='client_timeout'){
+    message='啟動 Google 登入逾時，這次登入尚未完成。';
+    next='請再按一次「使用 Google 帳號快速登入」；若持續逾時，請確認網路連線。';
+  }else if(code==='access_denied'){
     message='Google 登入已取消，或這個帳號沒有授權 Finance。';
     next='請重新登入並選擇本人公司的 Google 帳號；若仍被拒絕，請確認帳號已由公司啟用。';
   }else if(code==='login_required'){
@@ -14317,6 +14410,7 @@ window.quickLogin=function(role){
 };
 window.switchFinanceGoogleAccount=async function(){
   if(financeGoogleAccountSwitchInProgress)return false;
+  cancelFinanceInitialOAuth();
   financeGoogleAccountSwitchInProgress=true;
   var expectedEmail='';
   var actualEmail='';
@@ -14344,6 +14438,7 @@ window.switchFinanceGoogleAccount=async function(){
   }
 };
 window.googleLogin=async function(){
+  if(financeInitialOAuthAttempt||financeGoogleAccountSwitchInProgress)return false;
   if(!isFinanceProductionBuild()){
     alert('這是離線預覽版本，只能使用測試帳號操作；正式 Google 登入與資料寫入已停用。');
     return false;
@@ -14368,24 +14463,9 @@ window.googleLogin=async function(){
   var expectedEmail=financeExpectedLoginEmail();
   showFinanceLoginAccountGuidance({expectedEmail:expectedEmail,state:'expected'});
   if(expectedEmail)safeSetItem(FINANCE_PORTAL_EMAIL_AT_KEY,String(Date.now()));
-  safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1');
-  safeSetItem(FINANCE_PORTAL_OAUTH_MODE_KEY,'select_account');
   var queryParams={access_type:'offline',prompt:'select_account'};
   if(expectedEmail)queryParams.login_hint=expectedEmail;
-  var res=await client.auth.signInWithOAuth({
-    provider:'google',
-    options:{
-      redirectTo:oauthRedirectUrl(),
-      queryParams:queryParams
-    }
-  });
-  if(res.error){
-    safeRemoveItem(FINANCE_PORTAL_OAUTH_PENDING_KEY);
-    safeRemoveItem(FINANCE_PORTAL_OAUTH_MODE_KEY);
-    await showFinanceOAuthFailure('oauth_start',res.error.code||res.error.name||'oauth_start_failed',res.error.message||'',{expectedEmail:expectedEmail});
-    return false;
-  }
-  return true;
+  return await startFinanceInitialOAuth(client,expectedEmail,queryParams,'select_account');
 };
 async function completeOAuthFromUrl(rawUrl,cleanBrowserUrl){
   if(!rawUrl)return false;
@@ -17739,7 +17819,9 @@ function dashboardRenderReconciliation(bundle){
     summary.innerHTML='<div class="dash-recon-loading" style="grid-column:1/-1">'+(failed?'目前僅顯示瀏覽器已載入的正式分類帳，為避免誤判，表單差異暫不下結論。請重新整理後再試。':'正在由後端全量核對表單、入帳月份、稅額、資產負債項目與調整傳票。')+'</div>';
     body.innerHTML='<tr><td colspan="4" class="dash-empty">完整勾稽資料載入後會自動更新。</td></tr>';exceptions.innerHTML='';return;
   }
-  var e=recon.expense||{},r=recon.revenue||{},expenseBridge=num(e.officialCurrentForms)+num(e.officialPriorForms)+num(e.officialFutureForms)+num(e.officialAdjustments)+num(e.officialUnlinked),revenueBridge=num(r.officialCurrentForms)+num(r.officialPriorForms)+num(r.officialFutureForms)+num(r.officialAdjustments)+num(r.officialUnlinked),expenseGap=num(e.officialAmount)-expenseBridge,revenueGap=num(r.officialAmount)-revenueBridge,chainErrors=num(e.completedNoLedgerCount)+num(r.eligibleNoLedgerCount)+num(bundle.missingSourceCount)+((Math.abs(expenseGap)>.5||Math.abs(revenueGap)>.5||Math.abs(num(bundle.ledgerBalanceDiff))>.5)?1:0),generated=bundle.generatedAt?String(bundle.generatedAt).slice(0,16).replace('T',' '):'';
+  var e=recon.expense||{},r=recon.revenue||{},expenseBridge=num(e.officialCurrentForms)+num(e.officialPriorForms)+num(e.officialFutureForms)+num(e.officialAdjustments)+num(e.officialUnlinked),revenueBridge=num(r.officialCurrentForms)+num(r.officialPriorForms)+num(r.officialFutureForms)+num(r.officialAdjustments)+num(r.officialUnlinked),expenseGap=num(e.officialAmount)-expenseBridge,revenueGap=num(r.officialAmount)-revenueBridge;
+  function sourceIssueCount(row,key,amount,kind){return Math.max(num(row[key]),(row.exceptions||[]).filter(function(x){return x.class===kind;}).length,Math.abs(num(row[amount]))>.4?1:0);}
+  var sourceIssues=sourceIssueCount(e,'unlinkedSourceCount','officialUnlinked','unlinked')+sourceIssueCount(r,'unlinkedSourceCount','officialUnlinked','unlinked')+sourceIssueCount(e,'futureFormCount','officialFutureForms','future_form')+sourceIssueCount(r,'futureFormCount','officialFutureForms','future_form'),chainErrors=sourceIssues+num(e.completedNoLedgerCount)+num(r.eligibleNoLedgerCount)+num(bundle.missingSourceCount)+((Math.abs(expenseGap)>.5||Math.abs(revenueGap)>.5||Math.abs(num(bundle.ledgerBalanceDiff))>.5)?1:0),generated=bundle.generatedAt?String(bundle.generatedAt).slice(0,16).replace('T',' '):'';
   dashboardSetReconciliationDetails(!!chainErrors||S.dashReconOpen===true,chainErrors?'發現 '+chainErrors+' 項來源或平衡差異，已自動展開供會計處理。':'勾稽完成，收入與支出差額皆為 0；點擊可查看完整來源。',chainErrors?'warning':'ok');
   source.innerHTML='<span class="badge '+(chainErrors?'b-rej':'b-ok')+'" title="後端全量聚合，不受前台載入筆數影響">'+(chainErrors?'勾稽有差異':'全量勾稽完成')+(generated?' · '+escAttr(generated):'')+'</span>';
   summary.innerHTML='<div><span>本期支出表單</span><strong>'+fmt(e.formAmount)+'</strong><small>完成 '+num(e.completedCount)+' 筆 · 流程中 '+num(e.pendingCount)+' 筆</small></div>'
@@ -28553,7 +28635,7 @@ function renderAccountingControlCenter(eid,period){
   }
   box.innerHTML='<div class="accounting-control-panel">'
     +'<div class="accounting-control-head"><div><div class="accounting-control-title">會計內控總覽</div><div class="accounting-control-note">只讀檢查，不會修改歷史資料；集中顯示狀態機異常、關鍵異動稽核、待審、待付款、待入帳、支出未入三表、預支未沖銷、零用金未結清、缺憑證、重複發票、重複付款與三表追溯缺口。</div></div>'
-    +'<div class="accounting-control-actions"><button class="btn-g" onclick="exportAccountingControlCSV()">匯出清單</button><button class="btn-g" onclick="renderAccountingControlCenter(compEntity(),compPeriod())">重新檢查</button></div></div>'
+    +'<div class="accounting-control-actions"><button class="btn-g" onclick="exportAccountingControlCSV()">匯出清單</button><button class="btn-g" onclick="financeAdminAction(\'compliance\')">重新檢查</button></div></div>'
     +'<div class="accounting-control-body">'+accountingPrioritySummaryHtml(buckets,active)+accountingExceptionWorklistHtml(buckets)+accountingExceptionQueueHtml(buckets)+'<div class="accounting-control-grid">'+buckets.map(card).join('')+'</div>'
     +'<div class="card" style="margin:0"><div class="chd"><span class="cht">'+escAttr(active.label)+'</span><span style="font-size:11px;color:#94a3b8">'+escAttr(active.nextAction)+'</span></div>'
     +(active.records.length?'<div style="overflow-x:auto"><table class="accounting-control-table"><thead><tr><th>來源</th><th>摘要 / 部門</th><th>優先順序</th><th>會計風險</th><th style="text-align:right!important">金額</th><th>操作</th></tr></thead><tbody>'+active.records.slice(0,80).map(row).join('')+'</tbody></table></div>':'<div class="accounting-control-empty">這一類目前沒有待處理項目</div>')
@@ -29206,21 +29288,66 @@ window.clearSingleInvoiceRow=function(){
 };
 window.updInvPrev=function(){var buyer=(el('inv-buyer')||{}).value||'—';var identifier=invoiceIdentifierType((el('inv-identifier-type')||{}).value);var desc=(el('inv-desc')||{}).value||'';var amt=parseFloat((el('inv-amt')||{}).value||'0');var rate=invoiceRateValue((el('inv-tax')||{}).value||'5');var tax=Math.round(amt*rate);var no=(el('inv-no')||{}).value||'AA-XXXXXXXX';var date=((el('inv-date')||{}).value||todayIso());var p=el('inv-prev');if(!p)return;p.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid #e0d0b8"><div><div style="font-size:11px;font-weight:500;color:var(--brtxt)">'+no+'</div><div style="font-size:10px;color:#94a3b8">'+date+'</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:500;color:#334155">'+buyer+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">開立方式：'+identifier+'</div></div></div><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px"><span style="color:'+(desc?'#334155':'#94a3b8')+'">'+(desc||'請填寫品項說明')+'</span><span style="font-weight:500">'+(amt?fmt(amt):'—')+'</span></div><div style="text-align:right;padding-top:5px;border-top:1px solid #e0d0b8"><div style="font-size:10px;color:#94a3b8">未稅 '+fmt(amt)+' · 稅 '+fmt(tax)+'</div><div style="font-size:13px;font-weight:500;color:#1e293b">含稅 '+fmt(amt+tax)+'</div></div>';};
 function setInvOcrStatus(msg,color){var s=el('inv-ocr-status');if(s){s.textContent=msg||'';s.style.color=color||'#94a3b8';}}
+function invoiceOcrReviewError(message){
+  var error=new Error(message+'；原欄位保留，請依原始憑據人工核對後再填寫。');
+  error.code='INVOICE_OCR_REVIEW_REQUIRED';return error;
+}
+function invoiceOcrNumber(data,keys,label){
+  var found=null;
+  keys.forEach(function(key){
+    var value=data&&data[key];
+    if(value==null||(typeof value==='string'&&!value.trim()))return;
+    if(typeof value!=='number'&&typeof value!=='string')throw invoiceOcrReviewError(label+'格式無法確認');
+    var text=typeof value==='string'?value.trim():String(value);
+    if(!/^(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?|\.\d+)$/.test(text))throw invoiceOcrReviewError(label+'格式無法確認');
+    var amount=Number(text.replace(/,/g,''));
+    if(!Number.isFinite(amount)||amount<0||amount>Number.MAX_SAFE_INTEGER)throw invoiceOcrReviewError(label+'超出可核對範圍');
+    if(found!==null&&Math.abs(found-amount)>0.000001)throw invoiceOcrReviewError(label+'的辨識欄位互相矛盾');
+    found=amount;
+  });
+  return found;
+}
+function invoiceOcrAmountParts(data,defaultRate){
+  data=data||{};
+  var amount=invoiceOcrNumber(data,['amount_excluding_tax','subtotal','amount'],'未稅金額');
+  var tax=invoiceOcrNumber(data,['tax_amount','tax'],'稅額');
+  var total=invoiceOcrNumber(data,['total_amount','gross_amount','total'],'含稅總額');
+  var rawRate=data.tax_rate,rate=defaultRate==null?null:defaultRate;
+  if(rawRate!=null&&String(rawRate).trim()!==''){
+    var percent=typeof rawRate==='string'&&/%$/.test(rawRate.trim());
+    var parsedRate=invoiceOcrNumber({rate:percent?rawRate.trim().slice(0,-1):rawRate},['rate'],'稅率');
+    rate=percent||parsedRate>1?parsedRate/100:parsedRate;
+  }
+  if(rate!==null&&rate!==0&&Math.abs(rate-0.05)>0.000001)throw invoiceOcrReviewError('辨識稅率不適用目前表單的0%／5%選項');
+  if(amount===null&&tax!==null&&total!==null)amount=total-tax;
+  if(tax===null&&amount!==null&&total!==null)tax=total-amount;
+  if(total===null&&amount!==null&&tax!==null)total=amount+tax;
+  if(rate!==null){
+    if(amount===null&&total!==null&&tax===null){amount=rate===0?total:Math.round(total/(1+rate));tax=total-amount;}
+    if(tax===null&&amount!==null)tax=Math.round(amount*rate);
+    if(total===null&&amount!==null&&tax!==null)total=amount+tax;
+  }
+  if(amount===null||tax===null||total===null)throw invoiceOcrReviewError('辨識金額不足以確認未稅、稅額與總額');
+  if([amount,tax,total].some(function(value){return !Number.isFinite(value)||value<0||value>Number.MAX_SAFE_INTEGER;})||Math.abs(amount+tax-total)>0.000001)throw invoiceOcrReviewError('未稅金額加稅額與含稅總額不符');
+  if(rate===null)rate=tax===0?0:0.05;
+  if(Math.abs(Math.round(amount*rate)-tax)>0.000001)throw invoiceOcrReviewError('來源稅額與表單稅率計算不符');
+  return {amount:amount,tax:tax,total:total,rate:rate};
+}
 function applyInvoiceOcr(data){
   if(!data)data={};
+  // Validate the complete amount contract before changing any existing input.
+  var parts=invoiceOcrAmountParts(data);
   if(data.invoice_number&&el('inv-no'))el('inv-no').value=data.invoice_number;
   if(data.buyer_name&&el('inv-buyer'))el('inv-buyer').value=data.buyer_name;
   if(data.buyer_tax_id&&el('inv-taxid')){el('inv-taxid').value=data.buyer_tax_id;if(el('inv-identifier-type'))el('inv-identifier-type').value='統一編號';}
   if(data.invoice_date&&el('inv-date'))el('inv-date').value=String(data.invoice_date).replace(/\//g,'-').slice(0,10);
-  var amount=Number(data.amount_excluding_tax||data.subtotal||0);
-  var total=Number(data.total_amount||0);
-  var tax=Number(data.tax_amount||0);
-  if(!amount&&total)amount=tax?total-tax:Math.round(total/1.05);
-  if(amount&&el('inv-amt'))el('inv-amt').value=Math.round(amount);
-  if(el('inv-tax'))el('inv-tax').value=tax>0?'5':'0';
+  if(el('inv-amt'))el('inv-amt').value=parts.amount;
+  if(el('inv-tax'))el('inv-tax').value=parts.rate===0?'0':'5';
   if(data.description&&el('inv-desc'))el('inv-desc').value=data.description;
   if(el('inv-item-type'))el('inv-item-type').value=invoiceItemTypeFromText(data.item_type||data.description||'');
   calcInvTax();updInvPrev();
+  if(el('inv-total'))el('inv-total').value=fmt(parts.total);
+  return parts;
 }
 function invoiceNumberValue(v){
   var s=String(v==null?'':v).replace(/[^\d.-]/g,'');
@@ -29566,20 +29693,19 @@ function invoiceOcrDataToBatchRows(raw){
   var buyer=data.buyer_name||data.buyer||data.customer||'';
   var taxid=data.buyer_tax_id||data.tax_id||data.buyer_taxid||'';
   var identifier=taxid?'統一編號':'電子發票';
-  if(items.length){
-    return items.map(function(it){
-      var amount=num(it.amount_excluding_tax||it.subtotal||it.amount||it.total_amount||0);
-      var rate=num(data.tax_rate||0.05);if(rate>1)rate=rate/100;
-      var total=num(it.total_amount||it.gross_amount||0)||Math.round(amount*(1+rate));
-      var calc=invoiceAmountsFromTotal(total,rate,amount);
-      var desc=it.name||it.item||it.description||data.description||'';
-      return{buyer:buyer,identifierType:identifier,taxid:taxid,itemType:invoiceItemTypeFromText(desc),desc:desc,amt:calc.amount,tax:calc.tax,total:calc.total,rate:calc.rate};
-    }).filter(function(r){return r.buyer||r.desc||r.amt;});
-  }
-  var rate=num(data.tax_rate||0.05);if(rate>1)rate=rate/100;
-  var calc=invoiceAmountsFromTotal(data.total_amount||data.gross_amount,rate,data.amount_excluding_tax||data.subtotal);
-  var desc=data.description||data.item||'';
-  return[{buyer:buyer,identifierType:identifier,taxid:taxid,itemType:invoiceItemTypeFromText(desc),desc:desc,amt:calc.amount,tax:calc.tax,total:calc.total,rate:calc.rate}];
+  var documentParts=invoiceOcrAmountParts(data);
+  var rows=(items.length?items:[data]).map(function(it,index){
+    var parts=items.length?invoiceOcrAmountParts(it,documentParts.rate):documentParts;
+    // The editable batch renderer recomputes each row from gross and rate.
+    // Refuse any split that would silently change source net/tax on render.
+    var displayed=invoiceAmountsFromTotal(parts.total,parts.rate,parts.amount);
+    if(['amount','tax','total'].some(function(key){return Math.abs(displayed[key]-parts[key])>0.000001;}))throw invoiceOcrReviewError('第'+(index+1)+'列的辨識金額無法原樣帶入批次表格');
+    var desc=String(it.item_name||it.name||it.item||it.description||data.description||'').trim();
+    return{buyer:buyer,identifierType:identifier,taxid:taxid,itemType:invoiceItemTypeFromText(desc),desc:desc,amt:parts.amount,tax:parts.tax,total:parts.total,rate:parts.rate};
+  });
+  var sums=rows.reduce(function(acc,row){acc.amount+=row.amt;acc.tax+=row.tax;acc.total+=row.total;return acc;},{amount:0,tax:0,total:0});
+  if(['amount','tax','total'].some(function(key){return Math.abs(sums[key]-documentParts[key])>0.000001;}))throw invoiceOcrReviewError('逐列金額或稅額合計與原始憑據不符');
+  return rows;
 }
 window.analyzeBatchInvoiceUpload=async function(){
   if(!productModuleEnabled('ai-import')){alert('AI／OCR 匯入模組目前已停用；仍可直接匯入 CSV／Excel 範本或手動填寫。');return;}
@@ -29607,6 +29733,7 @@ window.analyzeBatchInvoiceUpload=async function(){
   }catch(err){
     if(pl)pl.textContent='辨識失敗：'+ocrErrorMessage(err);
     if(pf){pf.style.width='100%';pf.style.background='#c02020';}
+    return false;
   }
 };
 function parseCsv(text){
@@ -30704,6 +30831,8 @@ function syncShareholderDirection(){
   if(off){off.value=m.offset||'no';off.disabled=true;off.setAttribute('aria-disabled','true');refreshSearchableSelect(off);}
   updateShareholderPreview();
 }
+window.syncShareholderTxnOptions=syncShareholderTxnOptions;
+window.syncShareholderDirection=syncShareholderDirection;
 function shareholderParty(prefix){
   var type=(el('sh-'+prefix+'-type')||{}).value||'legal_entity';
   var eid=type==='legal_entity'?((el('sh-'+prefix+'-ent')||{}).value||''):'';
@@ -30929,9 +31058,9 @@ function renderShareholderFlow(){
     +'</div>';
 }
 async function submitShareholderApprovalRequest(){
-  if(!canAccessPage('shareholder')){alert('只有執行長、行政部門主任、會計可以操作');return;}
-  if(POSTING_IN_FLIGHT.shareholderApproval){alert('公司往來簽核單正在送出中，請勿重複送出。');return;}
-  if(!await guardSubmissionIdentityDirectory('公司往來簽核單'))return;
+  if(!canAccessPage('shareholder')){alert('只有執行長、行政部門主任、會計可以操作');return false;}
+  if(POSTING_IN_FLIGHT.shareholderApproval){alert('公司往來簽核單正在送出中，請勿重複送出。');return false;}
+  if(!await guardSubmissionIdentityDirectory('公司往來簽核單'))return false;
   var appUser=S.user||USERS[0];
   var type=(el('sh-type')||{}).value||'capital',payer=shareholderParty('payer'),payee=shareholderParty('payee');
   var eid=shareholderAccountingEntityId(type,payer,payee),dc=currentUserDeptForEntity(eid)||'A1100';
@@ -30940,14 +31069,14 @@ async function submitShareholderApprovalRequest(){
   var bankInfo=shareholderBankInfo(),bank=bankInfo.summary,note=((el('sh-note')||{}).value||'').trim(),m=shareholderTxnMeta(type),isInter=isIntercompanyTxn(type),offsetRequired=((el('sh-offset-required')||{}).value||m.offset||'no');
   var targetEid=(payer.type==='legal_entity'&&payer.eid!==eid)?payer.eid:((payee.type==='legal_entity'&&payee.eid!==eid)?payee.eid:'');
   var configuredMissing=collectShareholderFieldMissing(payer,payee,bankInfo,amt,dateIso,shFileInput&&shFileInput.files?shFileInput.files.length:0);
-  if(configuredMissing.length){alert('請填寫必要欄位：\n'+configuredMissing.join('\n'));return;}
-  if(!payer.name){alert('請填寫或選擇貸方（給錢的人）');return;}
-  if(!payee.name){alert('請填寫或選擇借方（收錢的人）');return;}
-  if(!amt){alert('請填寫金額');return;}
-  if(isInter&&(payer.type!=='legal_entity'||payee.type!=='legal_entity')){alert('公司借貸、公司還款或公司間資金往來的貸方與借方都必須是法人。');return;}
-  if(isInter&&payer.eid===payee.eid){alert('公司借貸、公司還款或公司間資金往來的貸方與借方不能是同一個法人。');return;}
-  if(['capital_temp','capital_registered','capital_decrease_refund'].indexOf((SH_TXN_ALIAS[type]||type))>-1&&note.length<4){alert('股東出資、增減資或轉股本請填寫備註，例：董事會決議、增資款、股東往來轉增資等依據。');return;}
-  if((shareholderTxnMeta(type).category==='investment_equity')&&note.length<4){alert('股權投資請在備註填寫取得標的、股權比例、合約或核准依據。');return;}
+  if(configuredMissing.length){alert('請填寫必要欄位：\n'+configuredMissing.join('\n'));return false;}
+  if(!payer.name){alert('請填寫或選擇貸方（給錢的人）');return false;}
+  if(!payee.name){alert('請填寫或選擇借方（收錢的人）');return false;}
+  if(!amt){alert('請填寫金額');return false;}
+  if(isInter&&(payer.type!=='legal_entity'||payee.type!=='legal_entity')){alert('公司借貸、公司還款或公司間資金往來的貸方與借方都必須是法人。');return false;}
+  if(isInter&&payer.eid===payee.eid){alert('公司借貸、公司還款或公司間資金往來的貸方與借方不能是同一個法人。');return false;}
+  if(['capital_temp','capital_registered','capital_decrease_refund'].indexOf((SH_TXN_ALIAS[type]||type))>-1&&note.length<4){alert('股東出資、增減資或轉股本請填寫備註，例：董事會決議、增資款、股東往來轉增資等依據。');return false;}
+  if((shareholderTxnMeta(type).category==='investment_equity')&&note.length<4){alert('股權投資請在備註填寫取得標的、股權比例、合約或核准依據。');return false;}
   var missingRoles=[];
   if(appUser.role!=='admin_director'&&!firstUserByRole('admin_director'))missingRoles.push('行政部門主任');
   if(!firstUserByRole('accountant'))missingRoles.push('會計');
@@ -30959,10 +31088,10 @@ async function submitShareholderApprovalRequest(){
   var shareholderRouteOpts={amount:amt,departmentCode:dc,category:m.category,itemCategory:m.category,requiresAccountingReview:true,requires_accounting_review:true};
   var shareholderStepsForPreflight=[applicantSubmitStep(appUser,appUser.n||'申請人')].concat(buildShareholderApprovalSteps(appUser,shareholderRouteOpts));
   var shareholderRouteReady=await prepareApprovalRouteForSubmit(appUser,'shareholder_transaction',dc,shareholderRouteOpts,shareholderStepsForPreflight,{label:'公司往來簽核單',title:'公司往來簽核流程尚未設定完整，這張單尚未送出。'});
-  if(!shareholderRouteReady.ok)return;
+  if(!shareholderRouteReady.ok)return false;
   shareholderStepsForPreflight=shareholderRouteReady.steps;
   var p1=await p1SubmissionPreflight('shareholder',{label:'公司往來簽核單',steps:shareholderStepsForPreflight,hasAttachments:!!(shFileInput&&shFileInput.files&&shFileInput.files.length)});
-  if(!p1.ok)return;
+  if(!p1.ok)return false;
   var no='';
   POSTING_IN_FLIGHT.shareholderApproval=true;
   try{
@@ -30971,7 +31100,7 @@ async function submitShareholderApprovalRequest(){
     delete POSTING_IN_FLIGHT.shareholderApproval;
     console.error(noErr);
     alert('系統目前無法產生正式單號，這張公司往來單尚未送出。\n\n請重新整理後再試；若仍失敗，請通知系統管理員檢查流水號設定。');
-    return;
+    return false;
   }
   try{
     var rawFiles=await readStepFiles('sh-file');
@@ -31001,9 +31130,11 @@ async function submitShareholderApprovalRequest(){
     var f=el('sh-file');if(f)f.value='';
     buildAll();renderNotifs();updateShareholderPreview();
     alert('公司往來簽核單 '+req.no+' 已送出。\n目前送到：'+requestNextStepLabel(nextStep)+'\n完成簽核後才會建立傳票並同步三表。');
+    return true;
   }catch(err){
     console.error(err);
     alert('公司往來送出簽核失敗：'+friendlyErrorMessage(err,{action:'公司往來送出簽核'})+'\n\n這張單尚未完成送出，請重新整理後確認資料再試一次。');
+    return false;
   }finally{
     delete POSTING_IN_FLIGHT.shareholderApproval;
   }
@@ -31084,7 +31215,11 @@ async function maybeFinalizeShareholderRequest(r){
   return finalizeShareholderRequest(r);
 }
 window.submitShareholderTxn=async function(){
-  return submitShareholderApprovalRequest();
+  var lockKey='shareholderSubmit';
+  if(POSTING_IN_FLIGHT[lockKey]){alert('公司往來簽核單正在送出中，請勿重複送出。');return false;}
+  POSTING_IN_FLIGHT[lockKey]=true;
+  try{return await submitShareholderApprovalRequest();}
+  finally{delete POSTING_IN_FLIGHT[lockKey];}
 };
 function renderShareholderList(){
   var rows=VOUCHERS.filter(function(v){return v.sourceType==='shareholder_transaction'||v.sourceType==='intercompany_transfer'||/^ICL\d{4}-/.test(v.id||v.no||'')||/^TXN-ICL\d{4}-/.test(v.reqId||'')||/^CAP\d{4}-/.test(v.id||v.no||'')||/^TXN-CAP\d{4}-/.test(v.reqId||'')||/^INV\d{4}-/.test(v.id||v.no||'')||/^TXN-INV\d{4}-/.test(v.reqId||'')||/^VCAP-/.test(v.id);}).slice(0,12);
@@ -33801,7 +33936,7 @@ function workflowFlowCardHtml(type){
 }
 function renderWorkflowFlowGallery(){
   var box=el('workflow-flow-gallery');if(!box)return;
-  box.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px"><div><div style="font-size:14px;font-weight:950;color:#334155">標準表單流程圖</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">以下流程圖使用目前模板與正式送單產生器即時產生，包含新增申請表單、股東往來、開立發票與申請繳費單。</div></div><button class="btn-g" onclick="renderWorkflowFlowGallery()">重新繪製</button></div>'
+  box.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px"><div><div style="font-size:14px;font-weight:950;color:#334155">標準表單流程圖</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">以下流程圖使用目前模板與正式送單產生器即時產生，包含新增申請表單、股東往來、開立發票與申請繳費單。</div></div><button class="btn-g" onclick="financeAdminAction(\'workflows\')">重新繪製</button></div>'
     +workflowRequestTypeGroups().map(function(g){return'<div class="workflow-flow-group"><div class="workflow-flow-group-title">'+escAttr(g.title)+'</div><div class="workflow-flow-grid">'+g.types.map(workflowFlowCardHtml).join('')+'</div></div>';}).join('');
 }
 window.selectWorkflowTemplate=function(id){
@@ -35881,7 +36016,7 @@ function renderUsersHealth(){
       result:'未指定直屬主管時，表單可能無法進入主管簽核關卡。',
       clearText:'所有需要主管的人員都已指定直屬主管。',
       action:'前往「人員主管圖」，為名單中的人員指定直屬主管並儲存簽核設定。',
-      buttonLabel:'前往人員主管圖',buttonAction:'go(&quot;orgchart&quot;)'
+      buttonLabel:'前往人員主管圖',buttonAction:'nav(&quot;orgchart&quot;)'
     },
     {
       label:'人員資料或部門有誤',count:profileDeptUsers.length,ok:profileDeptUsers.length===0,
@@ -36267,7 +36402,7 @@ function renderUsers(){
   var namedUsers=personnelUsers.filter(function(u){return u.orgStatus!=='system_account';});
   el('user-sub').textContent='共 '+namedUsers.length+' 位具名人員，'+personnelUsers.filter(function(u){return u.active;}).length+' 個啟用帳號｜登入身分已綁定 '+personnelUsers.filter(orgGoogleLoginReady).length+' 個';
   var canEdit=canManageUsers();
-  var aw=el('user-add-wrap');if(aw)aw.innerHTML=canEdit?'<div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end"><button class="btn-g" onclick="runAllUserRuntimeAssurance({alert:true})">檢查並修復全部帳號</button><button class="btn-g" onclick="syncFrontOfficePermissionRuntime(null,&quot;manual_user_management&quot;,{alert:true})">同步簽核權限</button><button class="btn-g" onclick="refreshAllGoogleLoginHealth({alert:true})">檢查 Google 登入狀態</button><button class="btn-p" onclick="openAddUser()">+ 新增人員</button></div>':'';
+  var aw=el('user-add-wrap');if(aw)aw.innerHTML=canEdit?'<div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end"><button class="btn-g" onclick="runAllUserRuntimeAssurance({alert:true})">檢查並修復全部帳號</button><button class="btn-g" onclick="financeAdminAction(&quot;permissions&quot;)">同步簽核權限</button><button class="btn-g" onclick="refreshAllGoogleLoginHealth({alert:true})">檢查 Google 登入狀態</button><button class="btn-p" onclick="openAddUser()">+ 新增人員</button></div>':'';
   var notice=el('user-readonly-notice');if(notice)notice.style.display=canEdit?'none':'block';
   renderUsersHealth();
   renderOrgAdminRuntimeStatus();
@@ -36318,30 +36453,42 @@ window.toggleU=async function(id){
   alert('人員已啟用，Google 登入預留與簽核權限已在同一筆交易完成。');
 };
 async function fetchFinanceGoogleLoginHealth(user){
-  var client=getSb();
-  if(!client||S.demoLogin)return{ok:false,skipped:true,health:rememberFinanceGoogleLoginHealth(user,{status:'failed',message_zh:'必須使用正式公司帳號登入後才能檢查。'})};
-  var response=await client.rpc('finance_admin_google_account_link_status_v2',{p_finance_user_id:String(user&&user.id||'')});
-  if(response.error){
-    var missing=isRpcMissing(response.error);
-    FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=missing?false:FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE;
-    var message=missing
-      ?'正式系統的 Google 登入狀態檢查功能尚未完成更新；目前不會變更或清除任何舊登入帳號。'
-      :'Google 登入狀態暫時無法讀取，請稍後再檢查。';
-    return{ok:false,missing:missing,error:response.error,health:rememberFinanceGoogleLoginHealth(user,{status:'failed',login_email:(user&&user.email)||'',message_zh:message})};
-  }
-  FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=true;
-  if(!response.data){
-    return{ok:false,nullResult:true,health:rememberFinanceGoogleLoginHealth(user,{status:'failed',login_email:(user&&user.email)||'',message_zh:'系統沒有回傳可確認的 Google 登入狀態，請勿把這次檢查視為已完成。'})};
-  }
-  var health=rememberFinanceGoogleLoginHealth(user,response.data);
-  return{ok:health.status==='bound'?!!health.authUserId:['waiting_first_login','pending_rebind'].indexOf(health.status)>-1,data:response.data,health:health};
+  var identity=ensureFinanceGoogleLoginHealthScope();
+  if(!financeGoogleLoginHealthReadCurrent(identity))return{ok:false,stale:true};
+  var id=String(user&&user.id||''),reads=FINANCE_GOOGLE_LOGIN_HEALTH_READS;
+  if(reads[id])return reads[id];
+  var promise=Promise.resolve().then(async function(){
+    function current(){return financeGoogleLoginHealthReadCurrent(identity)&&reads===FINANCE_GOOGLE_LOGIN_HEALTH_READS&&reads[id]===promise;}
+    var response;
+    if(!current())return{ok:false,stale:true};
+    try{
+      var client=getSb();
+      if(!client||S.demoLogin)throw new Error('必須使用正式公司帳號登入後才能檢查。');
+      response=await withOperationTimeout(Promise.resolve().then(function(){if(!current())return null;return client.rpc('finance_admin_google_account_link_status_v2',{p_finance_user_id:id});}),'Google 登入狀態檢查',FINANCE_GOOGLE_LOGIN_HEALTH_TIMEOUT_MS);
+    }catch(error){response={error:error};}
+    if(!current())return{ok:false,stale:true};
+    if(response&&response.error){
+      var missing=isRpcMissing(response.error);
+      FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=missing?false:FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE;
+      var message=missing?'正式系統的 Google 登入狀態檢查功能尚未完成更新；目前不會變更或清除任何舊登入帳號。':response.error.code==='CLIENT_TIMEOUT'?'Google 登入狀態檢查逾時，請稍後重新檢查。':'Google 登入狀態暫時無法讀取，請稍後再檢查。';
+      return{ok:false,missing:missing,error:response.error,health:rememberFinanceGoogleLoginHealth(user,{status:'failed',login_email:(user&&user.email)||'',message_zh:message})};
+    }
+    FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=true;
+    if(!response||!response.data)return{ok:false,nullResult:true,health:rememberFinanceGoogleLoginHealth(user,{status:'failed',login_email:(user&&user.email)||'',message_zh:'系統沒有回傳可確認的 Google 登入狀態，請勿把這次檢查視為已完成。'})};
+    var health=rememberFinanceGoogleLoginHealth(user,response.data);
+    return{ok:health.status==='bound'?!!health.authUserId:['waiting_first_login','pending_rebind'].indexOf(health.status)>-1,data:response.data,health:health};
+  });
+  reads[id]=promise;
+  try{return await promise;}finally{if(reads[id]===promise)delete reads[id];}
 }
 window.checkGoogleLoginStatusForUser=async function(id,opts){
   opts=opts||{};
   if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return null;}
   var user=USERS.find(function(row){return String(row.id)===String(id);});
   if(!user)return null;
+  var identity=ensureFinanceGoogleLoginHealthScope();
   var result=await fetchFinanceGoogleLoginHealth(user);
+  if(!financeGoogleLoginHealthReadCurrent(identity)||result.stale)return null;
   renderUsers();renderUsersHealth();
   if(opts.alert){
     var view=financeGoogleLoginStatusPresentation(result.health);
@@ -36352,12 +36499,19 @@ window.checkGoogleLoginStatusForUser=async function(id,opts){
 window.refreshAllGoogleLoginHealth=async function(opts){
   opts=opts||{};
   if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return[];}
+  var identity=ensureFinanceGoogleLoginHealthScope();
+  if(!financeGoogleLoginHealthReadCurrent(identity)||FINANCE_GOOGLE_LOGIN_HEALTH_BATCH)return[];
+  var batchState={identity:identity};
+  FINANCE_GOOGLE_LOGIN_HEALTH_BATCH=batchState;
+  try{
   var users=visiblePersonnelUsers().filter(function(user){return user.active!==false&&user.orgStatus!=='system_account'&&isCompanyGoogleLoginEmail(user.pendingLoginEmail||user.email);});
   var results=[];
   for(var offset=0;offset<users.length;offset+=4){
+    if(!financeGoogleLoginHealthReadCurrent(identity)||FINANCE_GOOGLE_LOGIN_HEALTH_BATCH!==batchState)return[];
     var batch=users.slice(offset,offset+4);
     results=results.concat(await Promise.all(batch.map(async function(user){return{user:user,result:await fetchFinanceGoogleLoginHealth(user)};})));
   }
+  if(!financeGoogleLoginHealthReadCurrent(identity)||FINANCE_GOOGLE_LOGIN_HEALTH_BATCH!==batchState||results.some(function(item){return item.result.stale;}))return[];
   renderUsers();renderUsersHealth();
   if(opts.alert){
     var counts={bound:0,waiting_first_login:0,pending_rebind:0,conflict:0,failed:0,unknown:0};
@@ -36372,6 +36526,7 @@ window.refreshAllGoogleLoginHealth=async function(opts){
     alert(detail);
   }
   return results;
+  }finally{if(FINANCE_GOOGLE_LOGIN_HEALTH_BATCH===batchState)FINANCE_GOOGLE_LOGIN_HEALTH_BATCH=null;}
 };
 // Backward-compatible callable name; this action now only checks status and never invents an Auth identity.
 window.syncGoogleFinanceIdentities=function(){return window.refreshAllGoogleLoginHealth({alert:true});};

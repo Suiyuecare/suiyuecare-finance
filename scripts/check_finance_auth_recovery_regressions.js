@@ -185,7 +185,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
   const hintStorage={email:'old@suiyuecare.com',at:String(Date.now()),role:'ceo',scope:'old-scope'};
   let oauthOptions,enteredEmail;
-  const switchCtx={window:{},financeGoogleAccountSwitchInProgress:false,console,URL,URLSearchParams,
+  const switchCtx={window:{location:{assign(){}}},financeInitialOAuthAttempt:null,FINANCE_INITIAL_OAUTH_TIMEOUT_MS:50,financeAuthIdentityEpoch:0,S:{user:null},currentFinanceAuthUserId:()=>'',currentTenantId:()=> 'tenant-a',activeDataEnvironment:()=> 'real',SUPABASE_URL:'https://fixture.example',document:{querySelectorAll:()=>[]},setTimeout,clearTimeout,financeGoogleAccountSwitchInProgress:false,console,URL,URLSearchParams,
     FINANCE_PORTAL_EMAIL_KEY:'email',FINANCE_PORTAL_EMAIL_AT_KEY:'at',FINANCE_PORTAL_ROLE_KEY:'role',FINANCE_PORTAL_SCOPE_KEY:'scope',FINANCE_PORTAL_OAUTH_PENDING_KEY:'pending',FINANCE_PORTAL_OAUTH_MODE_KEY:'mode',FINANCE_PORTAL_EMAIL_TTL_MS:1800000,
     safeGetItem:key=>hintStorage[key]||null,safeSetItem:(key,value)=>hintStorage[key]=value,safeRemoveItem:key=>delete hintStorage[key],
     el:()=>null,currentSupabaseSession:async()=>null,showFinanceLoginAccountGuidance(){},isFinanceProductionBuild:()=>true,
@@ -193,9 +193,9 @@ const plain = value => JSON.parse(JSON.stringify(value));
     oauthRedirectUrl:()=> 'https://fixture.example/',scrubOAuthUrl(){},
     showFinanceOAuthFailure:async()=>{throw new Error('fresh account switch must not inherit stale email mismatch');},
     enterByEmail:async email=>{enteredEmail=email;},
-    getSb:()=>({auth:{signOut:async()=>({error:null}),signInWithOAuth:async options=>{oauthOptions=options;return {error:null};},exchangeCodeForSession:async()=>({error:null}),getSession:async()=>({data:{session:{user:user('auth-b','new-person@suiyuecare.com')}}})}})
+    getSb:()=>({auth:{signOut:async()=>({error:null}),signInWithOAuth:async options=>{oauthOptions=options;return {error:null,data:{url:'https://fixture.example/auth/v1/authorize'}};},exchangeCodeForSession:async()=>({error:null}),getSession:async()=>({data:{session:{user:user('auth-b','new-person@suiyuecare.com')}}})}})
   };
-  vm.createContext(switchCtx);[...googleFns,'financeExpectedLoginEmail','completeOAuthFromUrl'].forEach(name=>vm.runInContext(fn(name),switchCtx));
+  vm.createContext(switchCtx);[...googleFns,'financeExpectedLoginEmail','completeOAuthFromUrl','financeReauthenticationIdentity','financeReauthenticationDestination','withOperationTimeout','setFinanceInitialOAuthBusy','cancelFinanceInitialOAuth','startFinanceInitialOAuth'].forEach(name=>vm.runInContext(fn(name),switchCtx));
   const switchStart=source.indexOf('window.switchFinanceGoogleAccount=async function()');
   vm.runInContext(source.slice(switchStart,source.indexOf('async function completeOAuthFromUrl',switchStart)),switchCtx);
   assert.equal(await switchCtx.window.switchFinanceGoogleAccount(),true);

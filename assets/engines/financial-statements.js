@@ -64,7 +64,7 @@
     if(mapping(row,mappings).ociCategory)return 0;
     return profitClass(c)?row.cr-row.dr:0;
   }
-  function isClosing(row) { return row.closingEntry||['period_close','closing_entry','year_end_close'].indexOf(row.sourceType)>-1; }
+  function isClosing(row) { return row.closingEntry===true||row.closing_entry===true||['period_close','closing_entry','year_end_close'].indexOf(row.sourceType||row.source_type)>-1; }
   function groupRows(rows,pick,value) {
     var groups=Object.create(null);
     (rows||[]).forEach(function(row){
@@ -288,7 +288,7 @@
     }
     throw new Error('Ledger pagination safety limit reached; data remains incomplete');
   }
-  var api={periodBounds:periodBounds,previousPeriod:previousPeriod,normalizeRows:normalizeRows,accountClass:accountClass,isCash:isCash,profitLoss:profitLoss,balanceSheet:balanceSheet,cashFlow:cashFlow,departmentRows:departmentRows,buildModel:buildModel,exportSheets:exportSheets,loadLedgerPages:loadLedgerPages};
+  var api={periodBounds:periodBounds,previousPeriod:previousPeriod,normalizeRows:normalizeRows,accountClass:accountClass,isCash:isCash,isClosing:isClosing,profitLoss:profitLoss,balanceSheet:balanceSheet,cashFlow:cashFlow,departmentRows:departmentRows,buildModel:buildModel,exportSheets:exportSheets,loadLedgerPages:loadLedgerPages};
   global.FinanceFinancialStatements=api;
   if(global.FinanceV4Engines&&typeof global.FinanceV4Engines.register==='function')global.FinanceV4Engines.register('financial-statements',api);
   if(typeof module!=='undefined'&&module.exports)module.exports=api;

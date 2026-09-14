@@ -249,3 +249,36 @@ supabase/.temp
 !scripts/test_ar_mapping_release_batch.mjs
 !scripts/finance_ar_mapping_canary.sql
 !scripts/finance_ar_mapping_postflight.sql
+
+# Reviewed audit remediation, startup bundle and real interaction regressions
+!scripts/check_invoice_ocr_contract.cjs
+!scripts/check_shareholder_invoice_ocr_browser.cjs
+!scripts/check_personnel_login_reliability.cjs
+!scripts/check_google_projection_identity.cjs
+!scripts/check_personnel_login_browser.cjs
+!scripts/finance_google_projection_postflight.sql
+!scripts/finance_google_projection_canary.sql
+!scripts/fixtures/finance_admin_google_account_link_status_v2.sql
+!scripts/fixtures/finance_google_projection_health_v2.sql
+!scripts/check_dashboard_scope_integrity.cjs
+!scripts/check_report_reconciliation_sources.cjs
+!scripts/finance_dashboard_scope_canary.sql
+!scripts/finance_dashboard_scope_postflight.sql
+!scripts/fixtures/finance_dashboard_read_authority_20260914.sql
+!scripts/fixtures/finance_dashboard_role_permissions_20260914.json
+!scripts/fixtures/finance_dashboard_step_authority_20260914.sql
+!scripts/fixtures/finance_dashboard_v2_pre_scope_20260914.sql
+!docs/finance-dashboard-scope-integrity.md
+!scripts/check_admin_action_identity.cjs
+!scripts/test_audit_remediation_release_batch.mjs
+!docs/finance-audit-remediation-20260914.md
+!scripts/finance_startup_bundle.js
+!scripts/check_admin_action_browser.cjs
+!scripts/check_startup_bundle_browser.cjs
+
+# Fixed official bootstrap SDK and its reproducibility proof
+!assets/vendor/supabase-js-2.111.0.umd.js
+!assets/vendor/supabase-js-2.111.0.LICENSE
+!assets/vendor/supabase-js-2.111.0.provenance.json
+!scripts/check_startup_sdk.cjs
+!docs/finance-startup-sdk.md
