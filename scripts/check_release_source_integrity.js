@@ -59,6 +59,7 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'docs/finance-audit-remediation-20260914.md',
   'scripts/finance_startup_bundle.js',
   'scripts/check_admin_action_browser.cjs',
   'scripts/check_startup_bundle_browser.cjs',
