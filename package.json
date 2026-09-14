@@ -58,6 +58,7 @@
     "test:read-latency-browser": "node scripts/check_read_latency_browser.cjs && node scripts/check_report_org_performance_browser.cjs && node scripts/check_voucher_pagination_browser.cjs"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.8"
+    "@electric-sql/pglite": "0.5.8",
+    "playwright": "1.62.1"
   }
 }

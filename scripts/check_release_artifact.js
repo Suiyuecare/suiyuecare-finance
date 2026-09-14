@@ -107,6 +107,9 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+  'scripts/finance_startup_bundle.js',
+  'scripts/check_admin_action_browser.cjs',
+  'scripts/check_startup_bundle_browser.cjs',
   'scripts/check_statement_source_canary.cjs',
   'scripts/fixtures/finance_statement_source_cascades_20260913.json',
   'scripts/fixtures/finance_statement_source_projection_helpers_20260913.sql',
@@ -345,7 +348,9 @@ function expectedBuiltIndex() {
   const hash = crypto.createHash('sha256');
   for (const asset of versionedAssets) hash.update(asset.key).update(fs.readFileSync(asset.file));
   html = html.replace(/__FINANCE_ASSET_VERSION__/g, hash.digest('hex').slice(0, 16));
-  return applyBuildEnvironment(html, buildConfig);
+  const bundle = require('./finance_startup_bundle').createStartupBundle(applyBuildEnvironment(html, buildConfig), ROOT);
+  if (fs.readFileSync(path.join(OUTPUT, bundle.file), 'utf8') !== bundle.code) fail('startup bundle is not the deterministic concatenation of source engines');
+  return bundle.html;
 }
 
 if (!fs.existsSync(OUTPUT) || !fs.statSync(OUTPUT).isDirectory()) fail('www does not exist; build first');

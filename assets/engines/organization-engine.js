@@ -283,7 +283,7 @@
 
     var escape = callOption(options, 'escape', htmlEscape);
     var healthBadgeClass = callOption(options, 'healthBadgeClass', function () { return 'b-gray'; });
-    var refreshAction = options.refreshAction || 'refreshApprovalOrgAdminRuntime(null,&quot;manual&quot;)';
+    var refreshAction = options.refreshAction || 'financeAdminAction(&quot;org&quot;)';
     var last = runtime.lastLoaded ? String(runtime.lastLoaded).slice(11, 19) : '尚未讀取';
     var deptCount = Array.isArray(runtime.departments) ? runtime.departments.length : 0;
     var roleCount = Array.isArray(runtime.employeeRoles) ? runtime.employeeRoles.length : 0;

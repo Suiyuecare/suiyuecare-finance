@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { createStartupBundle } = require('./finance_startup_bundle');
 const {
   applyBuildEnvironment,
   resolveBuildConfig
@@ -47,6 +48,9 @@ const assetVersion = versionedAssets
   .slice(0, 16);
 html = html.replace(/__FINANCE_ASSET_VERSION__/g, assetVersion);
 html = applyBuildEnvironment(html, buildConfig);
+const startupBundle = createStartupBundle(html, root);
+html = startupBundle.html;
+fs.writeFileSync(path.join(out, startupBundle.file), startupBundle.code);
 fs.writeFileSync(path.join(out, 'index.html'), html);
 
 copyFile('privacy.html', 'www/privacy.html');

@@ -59,6 +59,9 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'scripts/finance_startup_bundle.js',
+  'scripts/check_admin_action_browser.cjs',
+  'scripts/check_startup_bundle_browser.cjs',
   'scripts/check_statement_source_canary.cjs',
   'scripts/fixtures/finance_statement_source_cascades_20260913.json',
   'scripts/fixtures/finance_statement_source_projection_helpers_20260913.sql',
