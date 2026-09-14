@@ -465,7 +465,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderApprovalRequest"
         <div class="fg"><label class="fl">備註</label><textarea id="sh-note" rows="3" placeholder="例：股東匯入公司帳戶作為營運資金 / 增資款"></textarea></div>
         <div id="sh-preview" style="background:var(--warm);border:1px solid #f0e0c8;border-radius:9px;padding:9px;font-size:12px;color:#334155;margin-bottom:10px"></div>
         <div id="sh-flow" style="margin-bottom:10px"></div>
-        <button class="btn-p" id="sh-submit-btn" style="width:100%;justify-content:center" onclick="submitShareholderApprovalRequest()">送出簽核</button>
+        <button class="btn-p" id="sh-submit-btn" style="width:100%;justify-content:center" onclick="submitShareholderTxn()">送出簽核</button>
         </section>
         </div>
         <div class="mobile-shareholder-actions" data-mobile-shareholder-actions>
@@ -29231,21 +29231,66 @@ window.clearSingleInvoiceRow=function(){
 };
 window.updInvPrev=function(){var buyer=(el('inv-buyer')||{}).value||'—';var identifier=invoiceIdentifierType((el('inv-identifier-type')||{}).value);var desc=(el('inv-desc')||{}).value||'';var amt=parseFloat((el('inv-amt')||{}).value||'0');var rate=invoiceRateValue((el('inv-tax')||{}).value||'5');var tax=Math.round(amt*rate);var no=(el('inv-no')||{}).value||'AA-XXXXXXXX';var date=((el('inv-date')||{}).value||todayIso());var p=el('inv-prev');if(!p)return;p.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid #e0d0b8"><div><div style="font-size:11px;font-weight:500;color:var(--brtxt)">'+no+'</div><div style="font-size:10px;color:#94a3b8">'+date+'</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:500;color:#334155">'+buyer+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">開立方式：'+identifier+'</div></div></div><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px"><span style="color:'+(desc?'#334155':'#94a3b8')+'">'+(desc||'請填寫品項說明')+'</span><span style="font-weight:500">'+(amt?fmt(amt):'—')+'</span></div><div style="text-align:right;padding-top:5px;border-top:1px solid #e0d0b8"><div style="font-size:10px;color:#94a3b8">未稅 '+fmt(amt)+' · 稅 '+fmt(tax)+'</div><div style="font-size:13px;font-weight:500;color:#1e293b">含稅 '+fmt(amt+tax)+'</div></div>';};
 function setInvOcrStatus(msg,color){var s=el('inv-ocr-status');if(s){s.textContent=msg||'';s.style.color=color||'#94a3b8';}}
+function invoiceOcrReviewError(message){
+  var error=new Error(message+'；原欄位保留，請依原始憑據人工核對後再填寫。');
+  error.code='INVOICE_OCR_REVIEW_REQUIRED';return error;
+}
+function invoiceOcrNumber(data,keys,label){
+  var found=null;
+  keys.forEach(function(key){
+    var value=data&&data[key];
+    if(value==null||(typeof value==='string'&&!value.trim()))return;
+    if(typeof value!=='number'&&typeof value!=='string')throw invoiceOcrReviewError(label+'格式無法確認');
+    var text=typeof value==='string'?value.trim():String(value);
+    if(!/^(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?|\.\d+)$/.test(text))throw invoiceOcrReviewError(label+'格式無法確認');
+    var amount=Number(text.replace(/,/g,''));
+    if(!Number.isFinite(amount)||amount<0||amount>Number.MAX_SAFE_INTEGER)throw invoiceOcrReviewError(label+'超出可核對範圍');
+    if(found!==null&&Math.abs(found-amount)>0.000001)throw invoiceOcrReviewError(label+'的辨識欄位互相矛盾');
+    found=amount;
+  });
+  return found;
+}
+function invoiceOcrAmountParts(data,defaultRate){
+  data=data||{};
+  var amount=invoiceOcrNumber(data,['amount_excluding_tax','subtotal','amount'],'未稅金額');
+  var tax=invoiceOcrNumber(data,['tax_amount','tax'],'稅額');
+  var total=invoiceOcrNumber(data,['total_amount','gross_amount','total'],'含稅總額');
+  var rawRate=data.tax_rate,rate=defaultRate==null?null:defaultRate;
+  if(rawRate!=null&&String(rawRate).trim()!==''){
+    var percent=typeof rawRate==='string'&&/%$/.test(rawRate.trim());
+    var parsedRate=invoiceOcrNumber({rate:percent?rawRate.trim().slice(0,-1):rawRate},['rate'],'稅率');
+    rate=percent||parsedRate>1?parsedRate/100:parsedRate;
+  }
+  if(rate!==null&&rate!==0&&Math.abs(rate-0.05)>0.000001)throw invoiceOcrReviewError('辨識稅率不適用目前表單的0%／5%選項');
+  if(amount===null&&tax!==null&&total!==null)amount=total-tax;
+  if(tax===null&&amount!==null&&total!==null)tax=total-amount;
+  if(total===null&&amount!==null&&tax!==null)total=amount+tax;
+  if(rate!==null){
+    if(amount===null&&total!==null&&tax===null){amount=rate===0?total:Math.round(total/(1+rate));tax=total-amount;}
+    if(tax===null&&amount!==null)tax=Math.round(amount*rate);
+    if(total===null&&amount!==null&&tax!==null)total=amount+tax;
+  }
+  if(amount===null||tax===null||total===null)throw invoiceOcrReviewError('辨識金額不足以確認未稅、稅額與總額');
+  if([amount,tax,total].some(function(value){return !Number.isFinite(value)||value<0||value>Number.MAX_SAFE_INTEGER;})||Math.abs(amount+tax-total)>0.000001)throw invoiceOcrReviewError('未稅金額加稅額與含稅總額不符');
+  if(rate===null)rate=tax===0?0:0.05;
+  if(Math.abs(Math.round(amount*rate)-tax)>0.000001)throw invoiceOcrReviewError('來源稅額與表單稅率計算不符');
+  return {amount:amount,tax:tax,total:total,rate:rate};
+}
 function applyInvoiceOcr(data){
   if(!data)data={};
+  // Validate the complete amount contract before changing any existing input.
+  var parts=invoiceOcrAmountParts(data);
   if(data.invoice_number&&el('inv-no'))el('inv-no').value=data.invoice_number;
   if(data.buyer_name&&el('inv-buyer'))el('inv-buyer').value=data.buyer_name;
   if(data.buyer_tax_id&&el('inv-taxid')){el('inv-taxid').value=data.buyer_tax_id;if(el('inv-identifier-type'))el('inv-identifier-type').value='統一編號';}
   if(data.invoice_date&&el('inv-date'))el('inv-date').value=String(data.invoice_date).replace(/\//g,'-').slice(0,10);
-  var amount=Number(data.amount_excluding_tax||data.subtotal||0);
-  var total=Number(data.total_amount||0);
-  var tax=Number(data.tax_amount||0);
-  if(!amount&&total)amount=tax?total-tax:Math.round(total/1.05);
-  if(amount&&el('inv-amt'))el('inv-amt').value=Math.round(amount);
-  if(el('inv-tax'))el('inv-tax').value=tax>0?'5':'0';
+  if(el('inv-amt'))el('inv-amt').value=parts.amount;
+  if(el('inv-tax'))el('inv-tax').value=parts.rate===0?'0':'5';
   if(data.description&&el('inv-desc'))el('inv-desc').value=data.description;
   if(el('inv-item-type'))el('inv-item-type').value=invoiceItemTypeFromText(data.item_type||data.description||'');
   calcInvTax();updInvPrev();
+  if(el('inv-total'))el('inv-total').value=fmt(parts.total);
+  return parts;
 }
 function invoiceNumberValue(v){
   var s=String(v==null?'':v).replace(/[^\d.-]/g,'');
@@ -29591,20 +29636,19 @@ function invoiceOcrDataToBatchRows(raw){
   var buyer=data.buyer_name||data.buyer||data.customer||'';
   var taxid=data.buyer_tax_id||data.tax_id||data.buyer_taxid||'';
   var identifier=taxid?'統一編號':'電子發票';
-  if(items.length){
-    return items.map(function(it){
-      var amount=num(it.amount_excluding_tax||it.subtotal||it.amount||it.total_amount||0);
-      var rate=num(data.tax_rate||0.05);if(rate>1)rate=rate/100;
-      var total=num(it.total_amount||it.gross_amount||0)||Math.round(amount*(1+rate));
-      var calc=invoiceAmountsFromTotal(total,rate,amount);
-      var desc=it.name||it.item||it.description||data.description||'';
-      return{buyer:buyer,identifierType:identifier,taxid:taxid,itemType:invoiceItemTypeFromText(desc),desc:desc,amt:calc.amount,tax:calc.tax,total:calc.total,rate:calc.rate};
-    }).filter(function(r){return r.buyer||r.desc||r.amt;});
-  }
-  var rate=num(data.tax_rate||0.05);if(rate>1)rate=rate/100;
-  var calc=invoiceAmountsFromTotal(data.total_amount||data.gross_amount,rate,data.amount_excluding_tax||data.subtotal);
-  var desc=data.description||data.item||'';
-  return[{buyer:buyer,identifierType:identifier,taxid:taxid,itemType:invoiceItemTypeFromText(desc),desc:desc,amt:calc.amount,tax:calc.tax,total:calc.total,rate:calc.rate}];
+  var documentParts=invoiceOcrAmountParts(data);
+  var rows=(items.length?items:[data]).map(function(it,index){
+    var parts=items.length?invoiceOcrAmountParts(it,documentParts.rate):documentParts;
+    // The editable batch renderer recomputes each row from gross and rate.
+    // Refuse any split that would silently change source net/tax on render.
+    var displayed=invoiceAmountsFromTotal(parts.total,parts.rate,parts.amount);
+    if(['amount','tax','total'].some(function(key){return Math.abs(displayed[key]-parts[key])>0.000001;}))throw invoiceOcrReviewError('第'+(index+1)+'列的辨識金額無法原樣帶入批次表格');
+    var desc=String(it.item_name||it.name||it.item||it.description||data.description||'').trim();
+    return{buyer:buyer,identifierType:identifier,taxid:taxid,itemType:invoiceItemTypeFromText(desc),desc:desc,amt:parts.amount,tax:parts.tax,total:parts.total,rate:parts.rate};
+  });
+  var sums=rows.reduce(function(acc,row){acc.amount+=row.amt;acc.tax+=row.tax;acc.total+=row.total;return acc;},{amount:0,tax:0,total:0});
+  if(['amount','tax','total'].some(function(key){return Math.abs(sums[key]-documentParts[key])>0.000001;}))throw invoiceOcrReviewError('逐列金額或稅額合計與原始憑據不符');
+  return rows;
 }
 window.analyzeBatchInvoiceUpload=async function(){
   if(!productModuleEnabled('ai-import')){alert('AI／OCR 匯入模組目前已停用；仍可直接匯入 CSV／Excel 範本或手動填寫。');return;}
@@ -29632,6 +29676,7 @@ window.analyzeBatchInvoiceUpload=async function(){
   }catch(err){
     if(pl)pl.textContent='辨識失敗：'+ocrErrorMessage(err);
     if(pf){pf.style.width='100%';pf.style.background='#c02020';}
+    return false;
   }
 };
 function parseCsv(text){
@@ -30729,6 +30774,8 @@ function syncShareholderDirection(){
   if(off){off.value=m.offset||'no';off.disabled=true;off.setAttribute('aria-disabled','true');refreshSearchableSelect(off);}
   updateShareholderPreview();
 }
+window.syncShareholderTxnOptions=syncShareholderTxnOptions;
+window.syncShareholderDirection=syncShareholderDirection;
 function shareholderParty(prefix){
   var type=(el('sh-'+prefix+'-type')||{}).value||'legal_entity';
   var eid=type==='legal_entity'?((el('sh-'+prefix+'-ent')||{}).value||''):'';
@@ -30954,9 +31001,9 @@ function renderShareholderFlow(){
     +'</div>';
 }
 async function submitShareholderApprovalRequest(){
-  if(!canAccessPage('shareholder')){alert('只有執行長、行政部門主任、會計可以操作');return;}
-  if(POSTING_IN_FLIGHT.shareholderApproval){alert('公司往來簽核單正在送出中，請勿重複送出。');return;}
-  if(!await guardSubmissionIdentityDirectory('公司往來簽核單'))return;
+  if(!canAccessPage('shareholder')){alert('只有執行長、行政部門主任、會計可以操作');return false;}
+  if(POSTING_IN_FLIGHT.shareholderApproval){alert('公司往來簽核單正在送出中，請勿重複送出。');return false;}
+  if(!await guardSubmissionIdentityDirectory('公司往來簽核單'))return false;
   var appUser=S.user||USERS[0];
   var type=(el('sh-type')||{}).value||'capital',payer=shareholderParty('payer'),payee=shareholderParty('payee');
   var eid=shareholderAccountingEntityId(type,payer,payee),dc=currentUserDeptForEntity(eid)||'A1100';
@@ -30965,14 +31012,14 @@ async function submitShareholderApprovalRequest(){
   var bankInfo=shareholderBankInfo(),bank=bankInfo.summary,note=((el('sh-note')||{}).value||'').trim(),m=shareholderTxnMeta(type),isInter=isIntercompanyTxn(type),offsetRequired=((el('sh-offset-required')||{}).value||m.offset||'no');
   var targetEid=(payer.type==='legal_entity'&&payer.eid!==eid)?payer.eid:((payee.type==='legal_entity'&&payee.eid!==eid)?payee.eid:'');
   var configuredMissing=collectShareholderFieldMissing(payer,payee,bankInfo,amt,dateIso,shFileInput&&shFileInput.files?shFileInput.files.length:0);
-  if(configuredMissing.length){alert('請填寫必要欄位：\n'+configuredMissing.join('\n'));return;}
-  if(!payer.name){alert('請填寫或選擇貸方（給錢的人）');return;}
-  if(!payee.name){alert('請填寫或選擇借方（收錢的人）');return;}
-  if(!amt){alert('請填寫金額');return;}
-  if(isInter&&(payer.type!=='legal_entity'||payee.type!=='legal_entity')){alert('公司借貸、公司還款或公司間資金往來的貸方與借方都必須是法人。');return;}
-  if(isInter&&payer.eid===payee.eid){alert('公司借貸、公司還款或公司間資金往來的貸方與借方不能是同一個法人。');return;}
-  if(['capital_temp','capital_registered','capital_decrease_refund'].indexOf((SH_TXN_ALIAS[type]||type))>-1&&note.length<4){alert('股東出資、增減資或轉股本請填寫備註，例：董事會決議、增資款、股東往來轉增資等依據。');return;}
-  if((shareholderTxnMeta(type).category==='investment_equity')&&note.length<4){alert('股權投資請在備註填寫取得標的、股權比例、合約或核准依據。');return;}
+  if(configuredMissing.length){alert('請填寫必要欄位：\n'+configuredMissing.join('\n'));return false;}
+  if(!payer.name){alert('請填寫或選擇貸方（給錢的人）');return false;}
+  if(!payee.name){alert('請填寫或選擇借方（收錢的人）');return false;}
+  if(!amt){alert('請填寫金額');return false;}
+  if(isInter&&(payer.type!=='legal_entity'||payee.type!=='legal_entity')){alert('公司借貸、公司還款或公司間資金往來的貸方與借方都必須是法人。');return false;}
+  if(isInter&&payer.eid===payee.eid){alert('公司借貸、公司還款或公司間資金往來的貸方與借方不能是同一個法人。');return false;}
+  if(['capital_temp','capital_registered','capital_decrease_refund'].indexOf((SH_TXN_ALIAS[type]||type))>-1&&note.length<4){alert('股東出資、增減資或轉股本請填寫備註，例：董事會決議、增資款、股東往來轉增資等依據。');return false;}
+  if((shareholderTxnMeta(type).category==='investment_equity')&&note.length<4){alert('股權投資請在備註填寫取得標的、股權比例、合約或核准依據。');return false;}
   var missingRoles=[];
   if(appUser.role!=='admin_director'&&!firstUserByRole('admin_director'))missingRoles.push('行政部門主任');
   if(!firstUserByRole('accountant'))missingRoles.push('會計');
@@ -30984,10 +31031,10 @@ async function submitShareholderApprovalRequest(){
   var shareholderRouteOpts={amount:amt,departmentCode:dc,category:m.category,itemCategory:m.category,requiresAccountingReview:true,requires_accounting_review:true};
   var shareholderStepsForPreflight=[applicantSubmitStep(appUser,appUser.n||'申請人')].concat(buildShareholderApprovalSteps(appUser,shareholderRouteOpts));
   var shareholderRouteReady=await prepareApprovalRouteForSubmit(appUser,'shareholder_transaction',dc,shareholderRouteOpts,shareholderStepsForPreflight,{label:'公司往來簽核單',title:'公司往來簽核流程尚未設定完整，這張單尚未送出。'});
-  if(!shareholderRouteReady.ok)return;
+  if(!shareholderRouteReady.ok)return false;
   shareholderStepsForPreflight=shareholderRouteReady.steps;
   var p1=await p1SubmissionPreflight('shareholder',{label:'公司往來簽核單',steps:shareholderStepsForPreflight,hasAttachments:!!(shFileInput&&shFileInput.files&&shFileInput.files.length)});
-  if(!p1.ok)return;
+  if(!p1.ok)return false;
   var no='';
   POSTING_IN_FLIGHT.shareholderApproval=true;
   try{
@@ -30996,7 +31043,7 @@ async function submitShareholderApprovalRequest(){
     delete POSTING_IN_FLIGHT.shareholderApproval;
     console.error(noErr);
     alert('系統目前無法產生正式單號，這張公司往來單尚未送出。\n\n請重新整理後再試；若仍失敗，請通知系統管理員檢查流水號設定。');
-    return;
+    return false;
   }
   try{
     var rawFiles=await readStepFiles('sh-file');
@@ -31026,9 +31073,11 @@ async function submitShareholderApprovalRequest(){
     var f=el('sh-file');if(f)f.value='';
     buildAll();renderNotifs();updateShareholderPreview();
     alert('公司往來簽核單 '+req.no+' 已送出。\n目前送到：'+requestNextStepLabel(nextStep)+'\n完成簽核後才會建立傳票並同步三表。');
+    return true;
   }catch(err){
     console.error(err);
     alert('公司往來送出簽核失敗：'+friendlyErrorMessage(err,{action:'公司往來送出簽核'})+'\n\n這張單尚未完成送出，請重新整理後確認資料再試一次。');
+    return false;
   }finally{
     delete POSTING_IN_FLIGHT.shareholderApproval;
   }
@@ -31109,7 +31158,11 @@ async function maybeFinalizeShareholderRequest(r){
   return finalizeShareholderRequest(r);
 }
 window.submitShareholderTxn=async function(){
-  return submitShareholderApprovalRequest();
+  var lockKey='shareholderSubmit';
+  if(POSTING_IN_FLIGHT[lockKey]){alert('公司往來簽核單正在送出中，請勿重複送出。');return false;}
+  POSTING_IN_FLIGHT[lockKey]=true;
+  try{return await submitShareholderApprovalRequest();}
+  finally{delete POSTING_IN_FLIGHT[lockKey];}
 };
 function renderShareholderList(){
   var rows=VOUCHERS.filter(function(v){return v.sourceType==='shareholder_transaction'||v.sourceType==='intercompany_transfer'||/^ICL\d{4}-/.test(v.id||v.no||'')||/^TXN-ICL\d{4}-/.test(v.reqId||'')||/^CAP\d{4}-/.test(v.id||v.no||'')||/^TXN-CAP\d{4}-/.test(v.reqId||'')||/^INV\d{4}-/.test(v.id||v.no||'')||/^TXN-INV\d{4}-/.test(v.reqId||'')||/^VCAP-/.test(v.id);}).slice(0,12);
