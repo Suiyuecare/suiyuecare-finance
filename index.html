@@ -3298,6 +3298,14 @@ function bindSupabaseAuthState(client){
         }
         hideFinanceAuthRecovery();
         setTopSyncStatus(syncStatusText());
+        // A same-person token refresh advances the read epoch too. Resume the
+        // visible history from the new identity immediately, not from its late
+        // response. Keep any active IME/debounce quiet interval intact.
+        if(S.page==='approvals'&&S.aT==='h'&&typeof ensureApprovalHistoryCurrent==='function'){
+          var historyComposing=APPROVAL_HISTORY_RUNTIME.searchComposing===true;
+          if(historyComposing||approvalHistorySearchTimer)window.apprSearch(S.apprQuery||'',{isComposing:historyComposing});
+          else ensureApprovalHistoryCurrent({page:S.apprPage||1}).catch(function(error){console.warn('approval history auth refresh failed',error);});
+        }
       }
     },0);
   });
@@ -8803,7 +8811,9 @@ function loadApprovalHistoryPage(options){
     paintApprovalHistoryState();
     return{ok:false,error:error};
   }).finally(function(){
-    if(current()){runtime.promise=null;runtime.requestSignature='';runtime.controller=null;}
+    // Cleanup belongs to the request generation, even while its identity is
+    // locked/stale. Never retain a settled promise or clear a newer request.
+    if(APPROVAL_HISTORY_RUNTIME===runtime&&runtime.requestSeq===requestSeq){runtime.promise=null;runtime.requestSignature='';runtime.controller=null;}
   });
   runtime.promise=promise;
   paintApprovalHistoryState();
@@ -25682,6 +25692,7 @@ window.apprSearch=function(v,event){
     var runtime=approvalHistoryRuntimeForCurrentUser(),identity=approvalHistoryIdentity();
     var query=String(S.apprQuery).trim(),composing=!!(event&&event.isComposing);
     if(!identity){buildApprovals();return;}
+    runtime.searchComposing=composing;
     if(!composing&&runtime.query===query&&runtime.page===1
       &&(runtime.status==='ready'||runtime.status==='error'||runtime.promise)){
       buildApprovals();return;
