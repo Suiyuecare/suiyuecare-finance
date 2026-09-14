@@ -1,0 +1,42 @@
+{
+  "name": "@supabase/supabase-js",
+  "version": "2.111.0",
+  "license": "MIT",
+  "repository": {
+    "url": "https://github.com/supabase/supabase-js.git",
+    "type": "git",
+    "directory": "packages/core/supabase-js"
+  },
+  "dist": {
+    "shasum": "3e68c29d8354e186801e45dad1bb6b58c2a40bb3",
+    "tarball": "https://registry.npmjs.org/@supabase/supabase-js/-/supabase-js-2.111.0.tgz",
+    "fileCount": 33,
+    "integrity": "sha512-9q0/AULthQnWeiDh1vGyjoJZbSY04bu6qHcWit70pqEYn5Kv/dkCPY62Ja1123jEnJbB9Vd2pjY7Kvk/lK3peA==",
+    "signatures": [
+      {
+        "sig": "MEUCIQCw2xsN8NLHG8AA24Q2ochZUXVMl/FUSPr4NWrnnWfERwIgQh2v4qeP2j0BBAIG17HyaE5WrcVWA1ao8x3Z6fpnRaY=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "sig": "MEUCIQCepW/hJd2OiCFBPWBvIJkoCXRfW7l3bqfbBuABP9dQ4gIgNkYyUm8NDJ3q7nt++CWdep8J53dbH97p2+oqmh2EI70=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/@supabase%2fsupabase-js@2.111.0",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "unpackedSize": 670074
+  },
+  "unpkg": "dist/umd/supabase.js",
+  "jsdelivr": "dist/umd/supabase.js",
+  "retrievedAt": "2026-09-14",
+  "umdPackagePath": "package/dist/umd/supabase.js",
+  "umdSha256": "7396012594aa6d23bb373ebc25d1080bf3672fa847c3713f756520b40fd13453",
+  "licenseSha256": "334dd6820e2eaeab2064e7c59001b810566728a28a41a7c1dbf69bbee17d0936",
+  "verification": "npm tarball SHA-512 matched registry dist.integrity before extracting. UMD equals the previously used jsDelivr response after removing only its 292-byte generated comment prefix.",
+  "previousCdnUrl": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0",
+  "previousCdnSha256": "0c2562701c7ac6da5f79607f1e001c5d7fa1a56a591cf383996c4212267a925d"
+}

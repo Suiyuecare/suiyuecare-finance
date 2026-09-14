@@ -275,3 +275,10 @@ supabase/.temp
 !scripts/finance_startup_bundle.js
 !scripts/check_admin_action_browser.cjs
 !scripts/check_startup_bundle_browser.cjs
+
+# Fixed official bootstrap SDK and its reproducibility proof
+!assets/vendor/supabase-js-2.111.0.umd.js
+!assets/vendor/supabase-js-2.111.0.LICENSE
+!assets/vendor/supabase-js-2.111.0.provenance.json
+!scripts/check_startup_sdk.cjs
+!docs/finance-startup-sdk.md

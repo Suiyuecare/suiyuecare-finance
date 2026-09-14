@@ -129,6 +129,11 @@ function releaseSourceFiles() {
   'scripts/test_audit_remediation_release_batch.mjs',
   'docs/finance-audit-remediation-20260914.md',
   'scripts/finance_startup_bundle.js',
+  'assets/vendor/supabase-js-2.111.0.umd.js',
+  'assets/vendor/supabase-js-2.111.0.LICENSE',
+  'assets/vendor/supabase-js-2.111.0.provenance.json',
+  'scripts/check_startup_sdk.cjs',
+  'docs/finance-startup-sdk.md',
   'scripts/check_admin_action_browser.cjs',
   'scripts/check_startup_bundle_browser.cjs',
   'scripts/check_statement_source_canary.cjs',
@@ -371,6 +376,10 @@ function expectedBuiltIndex() {
   html = html.replace(/__FINANCE_ASSET_VERSION__/g, hash.digest('hex').slice(0, 16));
   const bundle = require('./finance_startup_bundle').createStartupBundle(applyBuildEnvironment(html, buildConfig), ROOT);
   if (fs.readFileSync(path.join(OUTPUT, bundle.file), 'utf8') !== bundle.code) fail('startup bundle is not the deterministic concatenation of source engines');
+  if (!fs.readFileSync(path.join(OUTPUT, bundle.sdk.file)).equals(bundle.sdk.code)) fail('built Supabase SDK differs from the fixed official UMD');
+  for (const file of ['assets/vendor/supabase-js-2.111.0.LICENSE', 'assets/vendor/supabase-js-2.111.0.provenance.json']) {
+    if (!fs.readFileSync(path.join(OUTPUT, file)).equals(fs.readFileSync(path.join(ROOT, file)))) fail('built Supabase SDK evidence differs: ' + file);
+  }
   return bundle.html;
 }
 

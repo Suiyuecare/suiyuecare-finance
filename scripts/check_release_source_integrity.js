@@ -81,6 +81,11 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/test_audit_remediation_release_batch.mjs',
   'docs/finance-audit-remediation-20260914.md',
   'scripts/finance_startup_bundle.js',
+  'assets/vendor/supabase-js-2.111.0.umd.js',
+  'assets/vendor/supabase-js-2.111.0.LICENSE',
+  'assets/vendor/supabase-js-2.111.0.provenance.json',
+  'scripts/check_startup_sdk.cjs',
+  'docs/finance-startup-sdk.md',
   'scripts/check_admin_action_browser.cjs',
   'scripts/check_startup_bundle_browser.cjs',
   'scripts/check_statement_source_canary.cjs',
@@ -327,7 +332,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'test:read-latency': "node scripts/check_read_latency.cjs && node scripts/check_approval_list_performance.cjs && node scripts/check_system_health_progress.cjs && node scripts/check_statement_source_page.cjs && node scripts/check_statement_source_canary.cjs && node scripts/test_read_latency_release_batch.mjs",
   'test:ar-mapping': 'node scripts/check_ar_mapping_performance.cjs && node scripts/test_ar_mapping_release_batch.mjs',
   'test:read-latency-browser': "node scripts/check_read_latency_browser.cjs && node scripts/check_report_org_performance_browser.cjs && node scripts/check_voucher_pagination_browser.cjs",
-  'test:audit-remediation-20260914': "node scripts/check_invoice_ocr_contract.cjs && node scripts/check_personnel_login_reliability.cjs && node scripts/check_google_projection_identity.cjs && node scripts/check_dashboard_scope_integrity.cjs && node scripts/check_report_reconciliation_sources.cjs && node scripts/check_admin_action_identity.cjs && node scripts/test_audit_remediation_release_batch.mjs",
+  'test:audit-remediation-20260914': "node scripts/check_startup_sdk.cjs && node scripts/check_invoice_ocr_contract.cjs && node scripts/check_personnel_login_reliability.cjs && node scripts/check_google_projection_identity.cjs && node scripts/check_dashboard_scope_integrity.cjs && node scripts/check_report_reconciliation_sources.cjs && node scripts/check_admin_action_identity.cjs && node scripts/test_audit_remediation_release_batch.mjs",
   'test:audit-remediation-browser': "node scripts/check_admin_action_browser.cjs && node scripts/check_shareholder_invoice_ocr_browser.cjs && node scripts/check_personnel_login_browser.cjs",
   'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914",
   'release:verify-artifact': 'node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js',
@@ -357,6 +362,11 @@ const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
   'scripts/test_audit_remediation_release_batch.mjs',
   'docs/finance-audit-remediation-20260914.md',
   'scripts/finance_startup_bundle.js',
+  'assets/vendor/supabase-js-2.111.0.umd.js',
+  'assets/vendor/supabase-js-2.111.0.LICENSE',
+  'assets/vendor/supabase-js-2.111.0.provenance.json',
+  'scripts/check_startup_sdk.cjs',
+  'docs/finance-startup-sdk.md',
   'scripts/check_admin_action_browser.cjs',
   'scripts/check_startup_bundle_browser.cjs',
   'scripts/check_statement_source_canary.cjs',
@@ -634,6 +644,12 @@ for (const relativePath of REQUIRED_RELEASE_FILES) {
   check(`required release file exists: ${relativePath}`, exists && fs.statSync(absolute).isFile());
   if (gitAvailable) check(`required release file is tracked: ${relativePath}`, tracked.has(relativePath));
   if (exists) check(`required release file is non-empty: ${relativePath}`, fs.statSync(absolute).size > 0);
+}
+try {
+  require('./finance_startup_bundle').pinnedSupabaseSdk(ROOT);
+  check('official bootstrap SDK bytes and license match the fixed source pins', true);
+} catch (error) {
+  check('official bootstrap SDK bytes and license match the fixed source pins', false, error.message);
 }
 
 let untracked = [];
