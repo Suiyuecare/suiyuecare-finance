@@ -1586,6 +1586,10 @@ var USERS=[
 var FINANCE_USER_SAFE_COLUMNS='id,name,email,role,role_label,department_code,init,active,created_at,entity_id,auth_user_id,tenant_id,job_title,extension,org_contact_email,org_status,org_source,org_source_updated_at,google_login_verified_at,google_link_status,pending_login_email,google_link_revision,google_link_requested_at,google_link_status_detail,google_last_linked_at';
 var FINANCE_GOOGLE_LOGIN_HEALTH=Object.create(null);
 var FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=null;
+var FINANCE_GOOGLE_LOGIN_HEALTH_SCOPE='';
+var FINANCE_GOOGLE_LOGIN_HEALTH_READS=Object.create(null);
+var FINANCE_GOOGLE_LOGIN_HEALTH_BATCH=null;
+var FINANCE_GOOGLE_LOGIN_HEALTH_TIMEOUT_MS=12000;
 
 // 財務流程：申請人 → 上一層主管 → 申請人部門主任（若相同則跳過）→ 行政部門主任 → 會計 → 執行長檢視會計科目 → 出納放款 → 申請人確認 → 會計入帳
 var FLOW_STEPS=[
@@ -11536,7 +11540,26 @@ function normalizeFinanceGoogleLoginHealth(raw,user){
     raw:payload
   };
 }
+function financeGoogleLoginHealthIdentity(){
+  var user=S.user||{};
+  return JSON.stringify([currentFinanceAuthUserId(),user.id||'',user.email||'',currentTenantId(),activeDataEnvironment(),currentRoleKey(),ROLE_PERMISSIONS,CURRENT_PERMISSION_SNAPSHOT,financeAuthIdentityEpoch,financeWorkspaceIdentityBlocked,S.demoLogin]);
+}
+function ensureFinanceGoogleLoginHealthScope(){
+  var identity=financeGoogleLoginHealthIdentity();
+  if(FINANCE_GOOGLE_LOGIN_HEALTH_SCOPE!==identity){
+    FINANCE_GOOGLE_LOGIN_HEALTH_SCOPE=identity;
+    FINANCE_GOOGLE_LOGIN_HEALTH=Object.create(null);
+    FINANCE_GOOGLE_LOGIN_HEALTH_READS=Object.create(null);
+    FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=null;
+    FINANCE_GOOGLE_LOGIN_HEALTH_BATCH=null;
+  }
+  return identity;
+}
+function financeGoogleLoginHealthReadCurrent(identity){
+  return identity===financeGoogleLoginHealthIdentity()&&!financeWorkspaceIdentityBlocked&&!!S.user&&canManageUsers();
+}
 function rememberFinanceGoogleLoginHealth(user,raw){
+  ensureFinanceGoogleLoginHealthScope();
   var health=normalizeFinanceGoogleLoginHealth(raw,user);
   var id=String((user&&user.id)||(health.financeUser&&(health.financeUser.id||health.financeUser.finance_user_id))||'');
   var email=String(health.email||(user&&user.email)||'').trim().toLowerCase();
@@ -11545,6 +11568,7 @@ function rememberFinanceGoogleLoginHealth(user,raw){
   return health;
 }
 function financeGoogleLoginHealthForUser(user){
+  ensureFinanceGoogleLoginHealthScope();
   if(!user)return normalizeFinanceGoogleLoginHealth({},null);
   var cached=FINANCE_GOOGLE_LOGIN_HEALTH['id:'+String(user.id||'')]||FINANCE_GOOGLE_LOGIN_HEALTH['email:'+String(user.email||'').trim().toLowerCase()];
   if(cached)return cached;
@@ -14114,9 +14138,52 @@ function redirectUnauthedFinanceToPortal(){
   // create and bind the verified Google identity to finance_users.
   return false;
 }
+var financeInitialOAuthAttempt=null;
+var FINANCE_INITIAL_OAUTH_TIMEOUT_MS=12000;
+function setFinanceInitialOAuthBusy(busy){
+  document.querySelectorAll('.google-btn').forEach(function(button){
+    if(busy){button.dataset.financeOauthDisabled=button.disabled?'1':'0';button.disabled=true;button.setAttribute('aria-busy','true');}
+    else if(button.hasAttribute('data-finance-oauth-disabled')){button.disabled=button.dataset.financeOauthDisabled==='1';delete button.dataset.financeOauthDisabled;button.removeAttribute('aria-busy');}
+  });
+}
+function cancelFinanceInitialOAuth(){
+  financeInitialOAuthAttempt=null;
+  setFinanceInitialOAuthBusy(false);
+}
+async function startFinanceInitialOAuth(client,expectedEmail,queryParams,mode){
+  if(financeInitialOAuthAttempt||financeGoogleAccountSwitchInProgress)return false;
+  var attempt={identity:financeReauthenticationIdentity(),epoch:financeAuthIdentityEpoch};
+  financeInitialOAuthAttempt=attempt;
+  function current(){return financeInitialOAuthAttempt===attempt&&attempt.identity===financeReauthenticationIdentity()&&attempt.epoch===financeAuthIdentityEpoch;}
+  try{
+    setFinanceInitialOAuthBusy(true);
+    safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1');
+    safeSetItem(FINANCE_PORTAL_OAUTH_MODE_KEY,mode);
+    var response=await withOperationTimeout(Promise.resolve().then(function(){
+      if(!current())return null;
+      return client.auth.signInWithOAuth({provider:'google',options:{redirectTo:oauthRedirectUrl(),skipBrowserRedirect:true,queryParams:queryParams}});
+    }),'啟動 Google 登入',FINANCE_INITIAL_OAUTH_TIMEOUT_MS);
+    if(!current())return false;
+    if(response&&response.error)throw response.error;
+    var destination=financeReauthenticationDestination(response);
+    window.location.assign(destination);
+    return true;
+  }catch(error){
+    error=error||new Error('Google 登入沒有完成');
+    if(current()){
+      safeRemoveItem(FINANCE_PORTAL_OAUTH_PENDING_KEY);
+      safeRemoveItem(FINANCE_PORTAL_OAUTH_MODE_KEY);
+      await showFinanceOAuthFailure('oauth_start',error.code||error.name||'oauth_start_failed',error.code==='CLIENT_TIMEOUT'?'啟動 Google 登入逾時，請再按一次「使用 Google 帳號登入」。':String(error.message||error),{expectedEmail:expectedEmail});
+    }
+    return false;
+  }finally{
+    if(financeInitialOAuthAttempt===attempt){financeInitialOAuthAttempt=null;setFinanceInitialOAuthBusy(false);}
+  }
+}
 async function startPortalFinanceGoogleLogin(email,opts){
   opts=opts||{};
   if(!isFinanceProductionBuild())return false;
+  if(financeInitialOAuthAttempt||financeGoogleAccountSwitchInProgress)return false;
   if(!email)return false;
   email=String(email||'').trim().toLowerCase();
   if(!isCompanyGoogleLoginEmail(email))return false;
@@ -14129,23 +14196,8 @@ async function startPortalFinanceGoogleLogin(email,opts){
   }
   var client=getSb();
   if(!client||!client.auth)return false;
-  safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1');
   var forceAccountSelection=opts.forceAccountSelection!==false;
-  safeSetItem(FINANCE_PORTAL_OAUTH_MODE_KEY,forceAccountSelection?'select_account':'silent');
-  var res=await client.auth.signInWithOAuth({
-    provider:'google',
-    options:{
-      redirectTo:oauthRedirectUrl(),
-      queryParams:{login_hint:email,prompt:forceAccountSelection?'select_account':'none'}
-    }
-  });
-  if(res.error){
-    safeRemoveItem(FINANCE_PORTAL_OAUTH_PENDING_KEY);
-    safeRemoveItem(FINANCE_PORTAL_OAUTH_MODE_KEY);
-    await showFinanceOAuthFailure('oauth_start',res.error.code||res.error.name||'oauth_start_failed',res.error.message||'',{expectedEmail:email});
-    return false;
-  }
-  return true;
+  return await startFinanceInitialOAuth(client,email,{login_hint:email,prompt:forceAccountSelection?'select_account':'none'},forceAccountSelection?'select_account':'silent');
 }
 async function enterOrAuthorizePortalFinance(email){
   S.portalLogin=true;
@@ -14225,7 +14277,10 @@ function oauthProviderErrorInfo(code,description){
   code=safeOAuthErrorCode(code);
   var message='Google 登入沒有完成。';
   var next='請重新按「使用 Google 帳號快速登入」，並選擇畫面指定的公司帳號。';
-  if(code==='access_denied'){
+  if(code==='client_timeout'){
+    message='啟動 Google 登入逾時，這次登入尚未完成。';
+    next='請再按一次「使用 Google 帳號快速登入」；若持續逾時，請確認網路連線。';
+  }else if(code==='access_denied'){
     message='Google 登入已取消，或這個帳號沒有授權 Finance。';
     next='請重新登入並選擇本人公司的 Google 帳號；若仍被拒絕，請確認帳號已由公司啟用。';
   }else if(code==='login_required'){
@@ -14343,6 +14398,7 @@ window.quickLogin=function(role){
 };
 window.switchFinanceGoogleAccount=async function(){
   if(financeGoogleAccountSwitchInProgress)return false;
+  cancelFinanceInitialOAuth();
   financeGoogleAccountSwitchInProgress=true;
   var expectedEmail='';
   var actualEmail='';
@@ -14370,6 +14426,7 @@ window.switchFinanceGoogleAccount=async function(){
   }
 };
 window.googleLogin=async function(){
+  if(financeInitialOAuthAttempt||financeGoogleAccountSwitchInProgress)return false;
   if(!isFinanceProductionBuild()){
     alert('這是離線預覽版本，只能使用測試帳號操作；正式 Google 登入與資料寫入已停用。');
     return false;
@@ -14394,24 +14451,9 @@ window.googleLogin=async function(){
   var expectedEmail=financeExpectedLoginEmail();
   showFinanceLoginAccountGuidance({expectedEmail:expectedEmail,state:'expected'});
   if(expectedEmail)safeSetItem(FINANCE_PORTAL_EMAIL_AT_KEY,String(Date.now()));
-  safeSetItem(FINANCE_PORTAL_OAUTH_PENDING_KEY,'1');
-  safeSetItem(FINANCE_PORTAL_OAUTH_MODE_KEY,'select_account');
   var queryParams={access_type:'offline',prompt:'select_account'};
   if(expectedEmail)queryParams.login_hint=expectedEmail;
-  var res=await client.auth.signInWithOAuth({
-    provider:'google',
-    options:{
-      redirectTo:oauthRedirectUrl(),
-      queryParams:queryParams
-    }
-  });
-  if(res.error){
-    safeRemoveItem(FINANCE_PORTAL_OAUTH_PENDING_KEY);
-    safeRemoveItem(FINANCE_PORTAL_OAUTH_MODE_KEY);
-    await showFinanceOAuthFailure('oauth_start',res.error.code||res.error.name||'oauth_start_failed',res.error.message||'',{expectedEmail:expectedEmail});
-    return false;
-  }
-  return true;
+  return await startFinanceInitialOAuth(client,expectedEmail,queryParams,'select_account');
 };
 async function completeOAuthFromUrl(rawUrl,cleanBrowserUrl){
   if(!rawUrl)return false;
@@ -36399,30 +36441,42 @@ window.toggleU=async function(id){
   alert('人員已啟用，Google 登入預留與簽核權限已在同一筆交易完成。');
 };
 async function fetchFinanceGoogleLoginHealth(user){
-  var client=getSb();
-  if(!client||S.demoLogin)return{ok:false,skipped:true,health:rememberFinanceGoogleLoginHealth(user,{status:'failed',message_zh:'必須使用正式公司帳號登入後才能檢查。'})};
-  var response=await client.rpc('finance_admin_google_account_link_status_v2',{p_finance_user_id:String(user&&user.id||'')});
-  if(response.error){
-    var missing=isRpcMissing(response.error);
-    FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=missing?false:FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE;
-    var message=missing
-      ?'正式系統的 Google 登入狀態檢查功能尚未完成更新；目前不會變更或清除任何舊登入帳號。'
-      :'Google 登入狀態暫時無法讀取，請稍後再檢查。';
-    return{ok:false,missing:missing,error:response.error,health:rememberFinanceGoogleLoginHealth(user,{status:'failed',login_email:(user&&user.email)||'',message_zh:message})};
-  }
-  FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=true;
-  if(!response.data){
-    return{ok:false,nullResult:true,health:rememberFinanceGoogleLoginHealth(user,{status:'failed',login_email:(user&&user.email)||'',message_zh:'系統沒有回傳可確認的 Google 登入狀態，請勿把這次檢查視為已完成。'})};
-  }
-  var health=rememberFinanceGoogleLoginHealth(user,response.data);
-  return{ok:health.status==='bound'?!!health.authUserId:['waiting_first_login','pending_rebind'].indexOf(health.status)>-1,data:response.data,health:health};
+  var identity=ensureFinanceGoogleLoginHealthScope();
+  if(!financeGoogleLoginHealthReadCurrent(identity))return{ok:false,stale:true};
+  var id=String(user&&user.id||''),reads=FINANCE_GOOGLE_LOGIN_HEALTH_READS;
+  if(reads[id])return reads[id];
+  var promise=Promise.resolve().then(async function(){
+    function current(){return financeGoogleLoginHealthReadCurrent(identity)&&reads===FINANCE_GOOGLE_LOGIN_HEALTH_READS&&reads[id]===promise;}
+    var response;
+    if(!current())return{ok:false,stale:true};
+    try{
+      var client=getSb();
+      if(!client||S.demoLogin)throw new Error('必須使用正式公司帳號登入後才能檢查。');
+      response=await withOperationTimeout(Promise.resolve().then(function(){if(!current())return null;return client.rpc('finance_admin_google_account_link_status_v2',{p_finance_user_id:id});}),'Google 登入狀態檢查',FINANCE_GOOGLE_LOGIN_HEALTH_TIMEOUT_MS);
+    }catch(error){response={error:error};}
+    if(!current())return{ok:false,stale:true};
+    if(response&&response.error){
+      var missing=isRpcMissing(response.error);
+      FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=missing?false:FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE;
+      var message=missing?'正式系統的 Google 登入狀態檢查功能尚未完成更新；目前不會變更或清除任何舊登入帳號。':response.error.code==='CLIENT_TIMEOUT'?'Google 登入狀態檢查逾時，請稍後重新檢查。':'Google 登入狀態暫時無法讀取，請稍後再檢查。';
+      return{ok:false,missing:missing,error:response.error,health:rememberFinanceGoogleLoginHealth(user,{status:'failed',login_email:(user&&user.email)||'',message_zh:message})};
+    }
+    FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=true;
+    if(!response||!response.data)return{ok:false,nullResult:true,health:rememberFinanceGoogleLoginHealth(user,{status:'failed',login_email:(user&&user.email)||'',message_zh:'系統沒有回傳可確認的 Google 登入狀態，請勿把這次檢查視為已完成。'})};
+    var health=rememberFinanceGoogleLoginHealth(user,response.data);
+    return{ok:health.status==='bound'?!!health.authUserId:['waiting_first_login','pending_rebind'].indexOf(health.status)>-1,data:response.data,health:health};
+  });
+  reads[id]=promise;
+  try{return await promise;}finally{if(reads[id]===promise)delete reads[id];}
 }
 window.checkGoogleLoginStatusForUser=async function(id,opts){
   opts=opts||{};
   if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return null;}
   var user=USERS.find(function(row){return String(row.id)===String(id);});
   if(!user)return null;
+  var identity=ensureFinanceGoogleLoginHealthScope();
   var result=await fetchFinanceGoogleLoginHealth(user);
+  if(!financeGoogleLoginHealthReadCurrent(identity)||result.stale)return null;
   renderUsers();renderUsersHealth();
   if(opts.alert){
     var view=financeGoogleLoginStatusPresentation(result.health);
@@ -36433,12 +36487,19 @@ window.checkGoogleLoginStatusForUser=async function(id,opts){
 window.refreshAllGoogleLoginHealth=async function(opts){
   opts=opts||{};
   if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return[];}
+  var identity=ensureFinanceGoogleLoginHealthScope();
+  if(!financeGoogleLoginHealthReadCurrent(identity)||FINANCE_GOOGLE_LOGIN_HEALTH_BATCH)return[];
+  var batchState={identity:identity};
+  FINANCE_GOOGLE_LOGIN_HEALTH_BATCH=batchState;
+  try{
   var users=visiblePersonnelUsers().filter(function(user){return user.active!==false&&user.orgStatus!=='system_account'&&isCompanyGoogleLoginEmail(user.pendingLoginEmail||user.email);});
   var results=[];
   for(var offset=0;offset<users.length;offset+=4){
+    if(!financeGoogleLoginHealthReadCurrent(identity)||FINANCE_GOOGLE_LOGIN_HEALTH_BATCH!==batchState)return[];
     var batch=users.slice(offset,offset+4);
     results=results.concat(await Promise.all(batch.map(async function(user){return{user:user,result:await fetchFinanceGoogleLoginHealth(user)};})));
   }
+  if(!financeGoogleLoginHealthReadCurrent(identity)||FINANCE_GOOGLE_LOGIN_HEALTH_BATCH!==batchState||results.some(function(item){return item.result.stale;}))return[];
   renderUsers();renderUsersHealth();
   if(opts.alert){
     var counts={bound:0,waiting_first_login:0,pending_rebind:0,conflict:0,failed:0,unknown:0};
@@ -36453,6 +36514,7 @@ window.refreshAllGoogleLoginHealth=async function(opts){
     alert(detail);
   }
   return results;
+  }finally{if(FINANCE_GOOGLE_LOGIN_HEALTH_BATCH===batchState)FINANCE_GOOGLE_LOGIN_HEALTH_BATCH=null;}
 };
 // Backward-compatible callable name; this action now only checks status and never invents an Auth identity.
 window.syncGoogleFinanceIdentities=function(){return window.refreshAllGoogleLoginHealth({alert:true});};
