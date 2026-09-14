@@ -205,6 +205,8 @@ jobs:
           cp scripts/finance_google_projection_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_google_projection_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_startup_bundle.js "$BUNDLE/release-tools/scripts/"
+          mkdir -p "$BUNDLE/release-tools/assets/vendor"
+          cp assets/vendor/supabase-js-2.111.0.umd.js assets/vendor/supabase-js-2.111.0.LICENSE assets/vendor/supabase-js-2.111.0.provenance.json "$BUNDLE/release-tools/assets/vendor/"
           cp scripts/finance_statement_source_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_statement_source_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_ar_reconciliation_postflight.sql "$BUNDLE/release-tools/scripts/"

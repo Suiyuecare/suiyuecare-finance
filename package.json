@@ -56,7 +56,7 @@
     "test:read-latency": "node scripts/check_read_latency.cjs && node scripts/check_approval_list_performance.cjs && node scripts/check_system_health_progress.cjs && node scripts/check_statement_source_page.cjs && node scripts/check_statement_source_canary.cjs && node scripts/test_read_latency_release_batch.mjs",
     "test:ar-mapping": "node scripts/check_ar_mapping_performance.cjs && node scripts/test_ar_mapping_release_batch.mjs",
     "test:read-latency-browser": "node scripts/check_read_latency_browser.cjs && node scripts/check_report_org_performance_browser.cjs && node scripts/check_voucher_pagination_browser.cjs",
-    "test:audit-remediation-20260914": "node scripts/check_invoice_ocr_contract.cjs && node scripts/check_personnel_login_reliability.cjs && node scripts/check_google_projection_identity.cjs && node scripts/check_dashboard_scope_integrity.cjs && node scripts/check_report_reconciliation_sources.cjs && node scripts/check_admin_action_identity.cjs && node scripts/test_audit_remediation_release_batch.mjs",
+    "test:audit-remediation-20260914": "node scripts/check_startup_sdk.cjs && node scripts/check_invoice_ocr_contract.cjs && node scripts/check_personnel_login_reliability.cjs && node scripts/check_google_projection_identity.cjs && node scripts/check_dashboard_scope_integrity.cjs && node scripts/check_report_reconciliation_sources.cjs && node scripts/check_admin_action_identity.cjs && node scripts/test_audit_remediation_release_batch.mjs",
     "test:audit-remediation-browser": "node scripts/check_admin_action_browser.cjs && node scripts/check_shareholder_invoice_ocr_browser.cjs && node scripts/check_personnel_login_browser.cjs"
   },
   "devDependencies": {
