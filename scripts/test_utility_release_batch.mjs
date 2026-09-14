@@ -155,7 +155,9 @@ for(const version of guard.AUDIT_REMEDIATION_MIGRATIONS){
  assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/audit remediation migration batch/);
  fs.appendFileSync(ledger,version+'\n');
 }
-  assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
+  assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/approval search migration batch/);
+fs.appendFileSync(ledger,guard.APPROVAL_SEARCH_MIGRATIONS.join('\n')+'\n');
+assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
   assert.throws(()=>renderApply('reapply'),/must be pending/);
 
   const marker='utility_tax_canary_result';

@@ -4,7 +4,7 @@ do $history_page_first_postflight$
 declare p record; source text; marker text; denied boolean:=false;
 begin
  select * into p from pg_proc where oid=to_regprocedure('public.finance_approval_participant_history_for_current_user(integer,integer,text,text)');
- if p.oid is null or md5(p.prosrc)<>'53f526628bded4241c3bbe61de6efcd3' or not p.prosecdef or p.provolatile<>'s'
+ if p.oid is null or md5(p.prosrc) not in ('53f526628bded4241c3bbe61de6efcd3','3474c4a2001ee6e299634d68213b3f92') or not p.prosecdef or p.provolatile<>'s'
   or pg_get_userbyid(p.proowner)<>'postgres' or p.proconfig is distinct from array['search_path=""']::text[]
   or not has_function_privilege('authenticated',p.oid,'EXECUTE') or not has_function_privilege('service_role',p.oid,'EXECUTE') or has_function_privilege('anon',p.oid,'EXECUTE')
   or exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a where a.grantee=0 and a.privilege_type='EXECUTE') then raise exception 'History page-first implementation or authority drifted';end if;

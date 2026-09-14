@@ -113,9 +113,11 @@ try{
   assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/audit remediation migration batch/);
   fs.appendFileSync(ledger,version+'\n');check();
  }
- assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');check();
- const frontendPostflights=postflights.concat(guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES);
- guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES.forEach(name=>write(name,'\\set ON_ERROR_STOP on\nselect 1;\n'));
+ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/approval search migration batch/);
+fs.appendFileSync(ledger,guard.APPROVAL_SEARCH_MIGRATIONS.join('\n')+'\n');
+assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');check();
+ const frontendPostflights=postflights.concat(guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES,guard.APPROVAL_SEARCH_POSTFLIGHT_FILES);
+ guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES.concat(guard.APPROVAL_SEARCH_POSTFLIGHT_FILES).forEach(name=>write(name,'\\set ON_ERROR_STOP on\nselect 1;\n'));
  for(const p of [phase,'frontend_compat']){const out=path.join(dir,p+'_recovery.sql');guard.preparePhaseQuery(path.join(dir,postflights[0]),out,p,p===phase?versions:'none');const raw=fs.readFileSync(out,'utf8');assert.match(raw,/^begin read only;/);for(const name of p==='frontend_compat'?frontendPostflights:postflights)assert.ok(raw.includes('-- Reviewed reports postflight: '+name));if(p===phase)for(const name of guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES)assert.ok(!raw.includes('-- Reviewed reports postflight: '+name),'historical AR phase does not require future contract '+name);await db.exec(raw);assert.equal(await fp(),applied);check();}
  for(const [domain,markerKey,result] of [['ar_mapping','ar_mapping_canary_result',{canary:'readonly_ar_mapping_v1',ok:true,rolled_back:true,mapping_preserved:true}]]){
  const marker=value=>({[markerKey]:value}),out=write(domain+'_canary.json','[]');
@@ -169,7 +171,7 @@ try{
   assert.throws(()=>guard.prepareAuditBatchApply(path.join(repo,'supabase/migrations'),path.join(realDir,'reapply-refused.sql'),versions,realLedger,realAr,baseline,phase,realProfile),/pending/);check();
   const standalone=await real.exec(fs.readFileSync(path.join(repo,'scripts/finance_ar_mapping_canary.sql'),'utf8'));assert.equal(await realFp(),realApplied,'standalone actual read-only canary rolls back after installation');
   const realResult=path.join(realDir,'canary.json');fs.writeFileSync(realResult,JSON.stringify(standalone));guard.verifyReportsCanary(realResult,'ar_mapping');check();
-  guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES.forEach(name=>fs.writeFileSync(path.join(realDir,name),'\\set ON_ERROR_STOP on\nselect 1;\n'));
+  guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES.concat(guard.APPROVAL_SEARCH_POSTFLIGHT_FILES).forEach(name=>fs.writeFileSync(path.join(realDir,name),'\\set ON_ERROR_STOP on\nselect 1;\n'));
   for(const current of [phase,'frontend_compat']){const file=path.join(realDir,current+'-readonly.sql');guard.preparePhaseQuery(path.join(realDir,postflights[0]),file,current,current===phase?versions:'none');await real.exec(fs.readFileSync(file,'utf8'));assert.equal(await realFp(),realApplied);check();}
  }finally{await real.close();}
  console.log('PASS AR mapping release: '+checks+' exact phase/prerequisites, one read-only parity canary, fifteen pre-COMMIT contracts, full rollback fingerprint and strict CLI checks');

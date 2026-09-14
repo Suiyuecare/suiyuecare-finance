@@ -282,3 +282,12 @@ supabase/.temp
 !assets/vendor/supabase-js-2.111.0.provenance.json
 !scripts/check_startup_sdk.cjs
 !docs/finance-startup-sdk.md
+
+# Approval search protected release and local browser evidence sources
+!scripts/check_approval_history_search.cjs
+!scripts/check_approval_search_projection.cjs
+!scripts/test_approval_search_release_batch.mjs
+!scripts/check_approval_tab_colors_browser.cjs
+!scripts/finance_approval_search_postflight.sql
+!scripts/finance_approval_search_canary.sql
+!docs/finance-approval-search-release-20260914.md
