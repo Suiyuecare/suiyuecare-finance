@@ -102,6 +102,7 @@ jobs:
         run: |
           node scripts/check_admin_action_browser.cjs
           node scripts/check_shareholder_invoice_ocr_browser.cjs
+          node scripts/check_personnel_login_browser.cjs
       - name: Verify actual bundled startup and workspace navigation
         run: |
           node scripts/build_www.js
