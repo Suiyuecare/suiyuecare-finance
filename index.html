@@ -6535,10 +6535,15 @@ function normalizeOrgChartRuntimeRows(data){
   console.warn('Finance organization engine missing normalizeRuntimeRows; runtime organization chart rows are unavailable.');
   return null;
 }
-async function refreshOrgChartRowsFromRuntime(client,reason){
+async function refreshOrgChartRowsFromRuntime(client,reason,options){
+  options=options||{};
   client=client||getSb();
   if(!client||S.demoLogin)return {ok:false,skipped:true,reason:'no_supabase'};
+  var identity=financeStartupReadIdentity(),epoch=financeAuthIdentityEpoch;
+  function current(){return !!identity&&identity===financeStartupReadIdentity()&&epoch===financeAuthIdentityEpoch&&(!options.isCurrent||options.isCurrent());}
+  if(!current())return {ok:false,stale:true};
   var r=await client.rpc('finance_org_chart_editor_state_v2',{});
+  if(!current())return {ok:false,stale:true};
   if(r.error){
     if(isRpcMissing(r.error)){
       ORG_CHART_REVISION='';
@@ -6818,17 +6823,18 @@ window.financeAdminAction=async function(action){
     :action==='compliance'?canAccessPage('compliance')
     :(action==='health'||action==='workflows')?canManageSettings():false;
   if(!allowed)return {ok:false,denied:true};
-  var identity=financeStartupReadIdentity(),pendingKey=identity+'|'+action;
+  var identity=financeStartupReadIdentity(),epoch=financeAuthIdentityEpoch,pendingKey=epoch+'|'+identity+'|'+action;
+  function current(){return !!identity&&identity===financeStartupReadIdentity()&&epoch===financeAuthIdentityEpoch;}
   if(FINANCE_ADMIN_ACTIONS_PENDING[pendingKey])return FINANCE_ADMIN_ACTIONS_PENDING[pendingKey];
   var task=Promise.resolve().then(function(){
-    if(identity!==financeStartupReadIdentity())return {ok:false,stale:true};
-    if(action==='org')return refreshApprovalOrgAdminRuntime(null,'manual',{force:true});
-    if(action==='permissions')return syncFrontOfficePermissionRuntime(null,'manual_user_management',{alert:true});
+    if(!current())return {ok:false,stale:true};
+    if(action==='org')return refreshApprovalOrgAdminRuntime(null,'manual',{force:true,isCurrent:current});
+    if(action==='permissions')return syncFrontOfficePermissionRuntime(null,'manual_user_management',{alert:true,isCurrent:current});
     if(action==='compliance')return renderAccountingControlCenter(compEntity(),compPeriod());
     if(action==='health')return buildSystemHealth();
     if(action==='workflows')return renderWorkflowFlowGallery();
   }).catch(function(error){
-    if(identity===financeStartupReadIdentity())alert('操作未完成，請重試：'+((error&&error.message)||'讀取失敗'));
+    if(current())alert('操作未完成，請重試：'+((error&&error.message)||'讀取失敗'));
     return {ok:false,error:true};
   }).finally(function(){if(FINANCE_ADMIN_ACTIONS_PENDING[pendingKey]===task)delete FINANCE_ADMIN_ACTIONS_PENDING[pendingKey];});
   FINANCE_ADMIN_ACTIONS_PENDING[pendingKey]=task;
@@ -6852,13 +6858,13 @@ async function refreshApprovalOrgAdminRuntime(client,reason,options){
     if(state.promise)return state.promise;
     if(state.lastSuccessAt&&Date.now()-state.lastSuccessAt<30000&&ORG_ADMIN_RUNTIME.available===true)return {ok:true,reused:true,runtime:ORG_ADMIN_RUNTIME};
   }
-  state={identity:identity,sequence:state.sequence+1,promise:null,lastSuccessAt:0};
+  state={identity:identity,sequence:state.sequence+1,promise:null,lastSuccessAt:0,isCurrent:options.isCurrent||null};
   ORG_ADMIN_READ_STATE=state;
   state.promise=performApprovalOrgAdminRuntimeRead(client,reason,state);
   try{return await state.promise;}finally{state.promise=null;}
 }
 async function performApprovalOrgAdminRuntimeRead(client,reason,state){
-  function current(){return ORG_ADMIN_READ_STATE===state&&state.identity===financeStartupReadIdentity();}
+  function current(){return ORG_ADMIN_READ_STATE===state&&state.identity===financeStartupReadIdentity()&&(!state.isCurrent||state.isCurrent());}
   client=client||getSb();
   if(!client||S.demoLogin){
     ORG_ADMIN_RUNTIME.available=false;
@@ -6931,8 +6937,12 @@ async function syncFrontOfficePermissionRuntime(financeUserId,reason,opts){
   opts=opts||{};
   var client=getSb();
   if(!client||S.demoLogin)return {ok:false,skipped:true,reason:'no_supabase'};
+  var identity=financeStartupReadIdentity(),epoch=financeAuthIdentityEpoch;
+  function current(){return !!identity&&identity===financeStartupReadIdentity()&&epoch===financeAuthIdentityEpoch&&(!opts.isCurrent||opts.isCurrent());}
+  if(!current())return {ok:false,stale:true};
   var args={p_finance_user_id:financeUserId||null,p_reason:reason||'front_office_user_management'};
   var r=await client.rpc('sync_finance_user_permission_runtime',args);
+  if(!current())return {ok:false,stale:true};
   if(r.error){
     var missing=isRpcMissing(r.error);
     var detail=(missing?'正式資料庫尚未安裝前台人員權限同步 RPC；':'人員權限同步到簽核 runtime 失敗；')+(r.error.message||'未知錯誤');
@@ -6943,8 +6953,10 @@ async function syncFrontOfficePermissionRuntime(financeUserId,reason,opts){
     if(opts.alert)alert(detail);
     return {ok:false,skipped:missing,error:r.error,message:detail};
   }
-  await refreshOrgChartRowsFromRuntime(client,(reason||'front_office_permission')+'_after_sync');
-  await refreshApprovalOrgAdminRuntime(client,(reason||'front_office_permission')+'_after_sync');
+  await refreshOrgChartRowsFromRuntime(client,(reason||'front_office_permission')+'_after_sync',{isCurrent:current});
+  if(!current())return {ok:false,stale:true};
+  await refreshApprovalOrgAdminRuntime(client,(reason||'front_office_permission')+'_after_sync',{force:true,isCurrent:current});
+  if(!current())return {ok:false,stale:true};
   if(typeof recordOpsEvent==='function'){
     var data=normalizeSettingValue(r.data||{});
     recordOpsEvent('front_office_permission_runtime_synced','ok','人員權限 runtime 已同步','已由 finance_users 同步 tenant_members 與 employee_department_roles，前台組織圖與後端簽核 runtime 已重新讀取。',{reason:reason||'',financeUserId:financeUserId||'',primaryRolesTouched:num(data.primary_roles_touched),orphanRolesDisabled:num(data.orphan_roles_disabled),tenantMembersTouched:num(data.tenant_members_touched),dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
