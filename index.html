@@ -339,7 +339,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
         </div>
         <p id="approval-tab-description" class="approval-tab-description">輪到你簽核、補件或確認的單據。出納付款與收款請看「出納待辦」。</p>
         <div class="appr-toolbar">
-          <input type="search" id="appr-q" aria-label="搜尋簽核單據與金額" placeholder="搜尋單號、部門、申請人、目的、金額…" oninput="apprSearch(this.value)">
+          <input type="search" id="appr-q" aria-label="搜尋簽核單據與金額" placeholder="搜尋單號、部門、申請人、目的、金額…" oninput="apprSearch(this.value,event)" oncompositionstart="apprSearch(this.value,{isComposing:true})" oncompositionend="apprSearch(this.value)">
           <span id="appr-list-hint" style="font-size:11px;color:#94a3b8">每頁最多 50 筆</span>
         </div>
       </div>
@@ -3298,6 +3298,14 @@ function bindSupabaseAuthState(client){
         }
         hideFinanceAuthRecovery();
         setTopSyncStatus(syncStatusText());
+        // A same-person token refresh advances the read epoch too. Resume the
+        // visible history from the new identity immediately, not from its late
+        // response. Keep any active IME/debounce quiet interval intact.
+        if(S.page==='approvals'&&S.aT==='h'&&typeof ensureApprovalHistoryCurrent==='function'){
+          var historyComposing=APPROVAL_HISTORY_RUNTIME.searchComposing===true;
+          if(historyComposing||approvalHistorySearchTimer)window.apprSearch(S.apprQuery||'',{isComposing:historyComposing});
+          else ensureApprovalHistoryCurrent({page:S.apprPage||1}).catch(function(error){console.warn('approval history auth refresh failed',error);});
+        }
       }
     },0);
   });
@@ -8651,7 +8659,15 @@ function clearApprovalFastBootstrapState(){
 }
 function approvalHistoryIdentity(){
   if(!S.user||S.demoLogin||(typeof financeWorkspaceIdentityBlocked!=='undefined'&&financeWorkspaceIdentityBlocked))return '';
-  return [approvalFastBootstrapIdentity(),String(S.user.id||''),String(activeDataEnvironment())].join('|');
+  return [approvalFastBootstrapIdentity(),String(S.user.id||''),String(activeDataEnvironment()),typeof financeAuthIdentityEpoch==='undefined'?0:financeAuthIdentityEpoch].join('|');
+}
+function cancelApprovalHistorySearchTimer(){
+  if(approvalHistorySearchTimer){clearTimeout(approvalHistorySearchTimer);approvalHistorySearchTimer=null;}
+}
+function cancelApprovalHistoryRequest(runtime){
+  runtime.requestSeq=(runtime.requestSeq||0)+1;
+  if(runtime.controller){try{runtime.controller.abort();}catch(_){} }
+  runtime.controller=null;runtime.promise=null;runtime.requestSignature='';
 }
 function approvalHistoryRuntimeForCurrentUser(){
   var identity=approvalHistoryIdentity();
@@ -8749,12 +8765,15 @@ function paintApprovalHistoryState(){
 }
 function loadApprovalHistoryPage(options){
   options=options||{};
+  cancelApprovalHistorySearchTimer();
   var identity=approvalHistoryIdentity(),runtime=approvalHistoryRuntimeForCurrentUser();
   if(!identity)return Promise.resolve({ok:false,skipped:true});
   var page=Math.max(1,Math.floor(Number(options.page||S.apprPage||runtime.page||1))||1);
   var query=String(options.query!=null?options.query:(S.apprQuery||'')).trim();
   var limit=50,environment=activeDataEnvironment(),signature=JSON.stringify([identity,page,query]);
-  if(runtime.promise&&runtime.requestSignature===signature&&!options.force)return runtime.promise;
+  // Retry joins the same in-flight query, preserving its original timeout.
+  // Only a different identity/page/query supersedes a request already running.
+  if(runtime.promise&&runtime.requestSignature===signature)return runtime.promise;
   if(!options.force&&runtime.status==='ready'&&runtime.page===page&&runtime.query===query)return Promise.resolve({ok:true,reused:true,total:runtime.total,items:runtime.items});
   var requestSeq=(runtime.requestSeq||0)+1;
   if(runtime.controller){try{runtime.controller.abort();}catch(_){} }
@@ -8792,7 +8811,9 @@ function loadApprovalHistoryPage(options){
     paintApprovalHistoryState();
     return{ok:false,error:error};
   }).finally(function(){
-    if(current()){runtime.promise=null;runtime.requestSignature='';runtime.controller=null;}
+    // Cleanup belongs to the request generation, even while its identity is
+    // locked/stale. Never retain a settled promise or clear a newer request.
+    if(APPROVAL_HISTORY_RUNTIME===runtime&&runtime.requestSeq===requestSeq){runtime.promise=null;runtime.requestSignature='';runtime.controller=null;}
   });
   runtime.promise=promise;
   paintApprovalHistoryState();
@@ -25663,16 +25684,37 @@ function approvalPagerHtml(total,page,pages){
   btns.push('<button class="btn-g" '+(page>=pages?'disabled':'')+' onclick="apprPage('+(page+1)+')">下一頁</button>');
   return '<div class="appr-pager"><span style="font-size:11px;color:#8b7358;margin-right:auto">顯示 '+start+'-'+end+' / 共 '+total+' 筆，每頁最多 50 筆</span>'+btns.join('')+'</div>';
 }
-window.apprSearch=function(v){
+window.apprSearch=function(v,event){
   S.apprQuery=v||'';
   S.apprPage=1;
   if(S.aT==='h'){
-    if(approvalHistorySearchTimer)clearTimeout(approvalHistorySearchTimer);
-    buildApprovals();
-    approvalHistorySearchTimer=setTimeout(function(){
+    cancelApprovalHistorySearchTimer();
+    var runtime=approvalHistoryRuntimeForCurrentUser(),identity=approvalHistoryIdentity();
+    var query=String(S.apprQuery).trim(),composing=!!(event&&event.isComposing);
+    if(!identity){buildApprovals();return;}
+    runtime.searchComposing=composing;
+    if(!composing&&runtime.query===query&&runtime.page===1
+      &&(runtime.status==='ready'||runtime.status==='error'||runtime.promise)){
+      buildApprovals();return;
+    }
+    // Invalidate as soon as the user edits. During the quiet interval an older
+    // query must not paint results under the new input, even if abort is ignored.
+    cancelApprovalHistoryRequest(runtime);
+    if(runtime.query!==query||runtime.page!==1){runtime.items=[];runtime.total=0;}
+    runtime.page=1;runtime.query=query;runtime.status='loading';runtime.error='';
+    var requestSeq=runtime.requestSeq;
+    if(composing){buildApprovals();return;}
+    var timer=setTimeout(function(){
+      if(approvalHistorySearchTimer!==timer)return;
       approvalHistorySearchTimer=null;
-      loadApprovalHistoryPage({force:true,page:1,query:S.apprQuery||''}).catch(function(error){console.warn('approval history search failed',error);});
+      if(APPROVAL_HISTORY_RUNTIME!==runtime||identity!==approvalHistoryIdentity()||runtime.requestSeq!==requestSeq
+        ||S.page!=='approvals'||S.aT!=='h'||String(S.apprQuery||'').trim()!==query)return;
+      loadApprovalHistoryPage({page:1,query:query}).catch(function(error){console.warn('approval history search failed',error);});
     },250);
+    approvalHistorySearchTimer=timer;
+    // Pending state and timer exist before render, so a cold page cannot start
+    // its unrelated empty-query bootstrap on every input event.
+    buildApprovals();
     return;
   }
   buildApprovals();
@@ -25688,7 +25730,7 @@ window.apprSort=function(field){
 window.apprPage=function(page){
   S.apprPage=Math.max(1,Number(page)||1);
   if(S.aT==='h'){
-    loadApprovalHistoryPage({force:true,page:S.apprPage,query:S.apprQuery||''}).catch(function(error){console.warn('approval history page failed',error);});
+    loadApprovalHistoryPage({page:S.apprPage,query:S.apprQuery||''}).catch(function(error){console.warn('approval history page failed',error);});
     return;
   }
   buildApprovals();

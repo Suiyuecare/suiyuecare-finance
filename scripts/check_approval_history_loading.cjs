@@ -8,7 +8,7 @@ let checks=0;function check(name,condition=true){assert(condition,name);checks++
 const tick=()=>new Promise(r=>setImmediate(r));
 function fixture(mode){
  const c={window:{},Promise,Date,Number,String,Object,Array,Math,JSON,Error,AbortController,console:{warn(){},error(){}},setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,20)),clearTimeout,
- S:{user:{id:'FICTION',authUserId:'AUTH'},page:'approvals',aT:'h',apprPage:1,apprQuery:'',demoLogin:false},REQS:[],BILLS:[],INVS:[],calls:[],paint:[],env:'test',tenant:'T',financeWorkspaceIdentityBlocked:false,
+ S:{user:{id:'FICTION',authUserId:'AUTH'},page:'approvals',aT:'h',apprPage:1,apprQuery:'',demoLogin:false},REQS:[],BILLS:[],INVS:[],calls:[],paint:[],env:'test',tenant:'T',financeWorkspaceIdentityBlocked:false,approvalHistorySearchTimer:null,financeAuthIdentityEpoch:1,
  APPROVAL_HISTORY_RUNTIME:{identity:'',status:'idle',items:[],total:0,allTotal:0,page:1,limit:50,query:'',error:'',updatedAt:'',promise:null,requestSeq:0}};
  Object.assign(c,{approvalFastBootstrapIdentity:()=>c.tenant+'|auth:'+c.S.user?.authUserId,currentTenantId:()=>c.tenant,activeDataEnvironment:()=>c.env,DEFAULT_TENANT_ID:'T',getSb:()=>({rpc:(name,args)=>{c.calls.push(args);return mode(args,c);}}),updateApprovalTodoBadge:()=>{},buildApprovals:()=>c.paint.push(c.APPROVAL_HISTORY_RUNTIME.status),remoteReadIssueText:e=>e.message,recordRemoteReadIssue:()=>{},escAttr:x=>String(x),el:()=>null,mapReq:x=>({...x}),mapBill:x=>({...x}),mapInv:x=>({...x}),mergeRemoteRowsByKey:(a,b)=>[...a,...b.filter(x=>!a.some(y=>x.id===y.id))]});
  vm.createContext(c);vm.runInContext(fn('withOperationTimeout')+'\n'+block,c);return c;
