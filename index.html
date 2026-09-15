@@ -3303,7 +3303,7 @@ function bindSupabaseAuthState(client){
         // response. Keep any active IME/debounce quiet interval intact.
         if(S.page==='approvals'&&S.aT==='h'&&typeof ensureApprovalHistoryCurrent==='function'){
           var historyComposing=APPROVAL_HISTORY_RUNTIME.searchComposing===true;
-          if(historyComposing||approvalHistorySearchTimer)window.apprSearch(S.apprQuery||'',{isComposing:historyComposing});
+          if(historyComposing||approvalHistorySearchTimer)window.apprSearch(S.apprQuery||'',{isComposing:historyComposing,historyRefresh:true});
           else ensureApprovalHistoryCurrent({page:S.apprPage||1}).catch(function(error){console.warn('approval history auth refresh failed',error);});
         }
       }
@@ -8639,6 +8639,7 @@ function renderApprovalImmediateSkeleton(reason){
   return true;
 }
 function clearApprovalFastBootstrapState(){
+  if(typeof cancelApprovalHistoryDetail==='function')cancelApprovalHistoryDetail();
   if(typeof clearSystemHealthRuntime==='function')clearSystemHealthRuntime();
   var key=approvalFastBootstrapCacheKey();
   if(key)sessionRemoveItem(key);
@@ -8659,7 +8660,7 @@ function clearApprovalFastBootstrapState(){
 }
 function approvalHistoryIdentity(){
   if(!S.user||S.demoLogin||(typeof financeWorkspaceIdentityBlocked!=='undefined'&&financeWorkspaceIdentityBlocked))return '';
-  return [approvalFastBootstrapIdentity(),String(S.user.id||''),String(activeDataEnvironment()),typeof financeAuthIdentityEpoch==='undefined'?0:financeAuthIdentityEpoch].join('|');
+  return [approvalFastBootstrapIdentity(),String(S.user.id||''),String(activeDataEnvironment()),typeof financeAuthIdentityEpoch==='undefined'?0:financeAuthIdentityEpoch,typeof normalizedRoleKey==='function'?normalizedRoleKey(S.user):String(S.user.role||''),typeof CURRENT_PERMISSION_SNAPSHOT==='undefined'?'':JSON.stringify(CURRENT_PERMISSION_SNAPSHOT)].join('|');
 }
 function cancelApprovalHistorySearchTimer(){
   if(approvalHistorySearchTimer){clearTimeout(approvalHistorySearchTimer);approvalHistorySearchTimer=null;}
@@ -8687,41 +8688,133 @@ function approvalHistoryPayloadIdentityMatches(payload,identity){
     &&String(actor.data_environment||'')===String(activeDataEnvironment()));
 }
 function approvalHistoryItemsFromPayload(payload){
-  var mapped=[],requestGroups=[],billGroups=[],invoiceGroups=[];
-  (Array.isArray(payload&&payload.items)?payload.items:[]).forEach(function(entry){
-    var table=String(entry.record_type||''),sourceRows=Array.isArray(entry.source_rows)?entry.source_rows:[entry.source_row].filter(Boolean);
-    var rows=[];
-    if(table==='expense_requests'){
-      rows=sourceRows.map(mapReq);
-      requestGroups.push(rows);
-    }else if(table==='bills'){
-      rows=sourceRows.map(mapBill);
-      billGroups.push(rows);
-    }else if(table==='invoices'){
-      rows=sourceRows.map(mapInv);
-      invoiceGroups.push(rows);
+  // Summary rows are a separate read model, never partial source documents.
+  return payload.items.map(function(entry){return {
+    historySummary:true,historyKey:entry.history_key,recordType:entry.record_type,recordId:entry.record_id,
+    recordNo:entry.record_no||'',batchId:entry.batch_id||'',kind:entry.kind,
+    historyPersonallyActed:entry.personally_acted===true,
+    historyParticipationLabel:entry.personally_acted===true?'本人已處理':'曾列入流程',
+    historyLastParticipatedAt:entry.last_participated_at||'',summary:Object.assign({},entry.summary)
+  };});
+}
+function approvalHistoryClock(){return typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();}
+function approvalHistoryMarkPaint(runtime){
+  var timing=runtime.timing,seq=runtime.requestSeq,identity=runtime.identity;
+  if(!timing||timing.measured||runtime.status!=='ready'||typeof requestAnimationFrame!=='function')return;
+  requestAnimationFrame(function(){requestAnimationFrame(function(){
+    if(APPROVAL_HISTORY_RUNTIME!==runtime||runtime.requestSeq!==seq||identity!==approvalHistoryIdentity()||S.page!=='approvals'||S.aT!=='h'||runtime.status!=='ready'||runtime.timing!==timing||timing.measured)return;
+    timing.measured=true;timing.paintedAt=approvalHistoryClock();
+    var detail={trigger:timing.trigger||'load',page:runtime.page,groups:runtime.items.length,
+      inputToPaintMs:timing.paintedAt-timing.startedAt,debounceMs:timing.dispatchedAt-timing.startedAt,
+      rpcMs:timing.receivedAt-timing.dispatchedAt,mapMs:timing.mappedAt-timing.receivedAt,paintMs:timing.paintedAt-timing.mappedAt};
+    // Only timings/counts are emitted. Search terms, document IDs and identities
+    // are deliberately absent from browser performance entries.
+    if(typeof performance!=='undefined'&&typeof performance.measure==='function'){
+      try{performance.measure('finance.approvalHistory.inputToPaint',{start:timing.startedAt,end:timing.paintedAt,detail:detail});}catch(_){}
     }
-    var recordId=String(entry.record_id||''),raw=rows.find(function(row){return String(row&&row.id||'')===recordId;})||rows[0];
-    if(!raw)return;
-    mapped.push({
-      kind:entry.kind||(table==='expense_requests'?'req':(table==='bills'?'bill':'inv')),
-      raw:raw,
-      rows:rows,
-      historyTrusted:true,
-      historyKey:String(entry.history_key||table+':'+(entry.batch_id||recordId)),
-      historyPersonallyActed:entry.personally_acted===true,
-      historyParticipationLabel:String(entry.participation_label||(entry.personally_acted===true?'本人已處理':'曾列入流程')),
-      historyLastParticipatedAt:String(entry.last_participated_at||''),
-      historyParticipantSteps:Array.isArray(entry.participant_steps)?entry.participant_steps:[]
-    });
+  });});
+}
+var APPROVAL_HISTORY_DETAIL_RUNTIME={seq:0,identity:'',key:'',status:'idle',promise:null,controller:null};
+var APPROVAL_HISTORY_MODAL_CONTEXT=null;
+function approvalHistoryModalIdentity(){
+  if(!approvalHistoryIdentity())return '';
+  return JSON.stringify([approvalFastBootstrapIdentity(),S.user.id,activeDataEnvironment(),typeof normalizedRoleKey==='function'?normalizedRoleKey(S.user):S.user.role||'',typeof CURRENT_PERMISSION_SNAPSHOT==='undefined'?null:CURRENT_PERMISSION_SNAPSHOT]);
+}
+function cancelApprovalHistoryDetail(clearModal){
+  if(clearModal)APPROVAL_HISTORY_MODAL_CONTEXT=null;
+  var state=APPROVAL_HISTORY_DETAIL_RUNTIME;
+  if(state.controller){try{state.controller.abort();}catch(_){} }
+  APPROVAL_HISTORY_DETAIL_RUNTIME={seq:state.seq+1,identity:'',key:'',status:'idle',promise:null,controller:null,context:null};
+}
+function approvalHistoryExactGroupRows(kind,row){
+  var ctx=APPROVAL_HISTORY_MODAL_CONTEXT;
+  if(!ctx||ctx.kind!==kind||!row||!ctx.ids.has(String(row.id)))return null;
+  if(ctx.identity!==approvalHistoryModalIdentity())throw new Error('登入或權限已更新，請關閉後重新開啟完整明細。');
+  var rows=(kind==='bill'?BILLS:INVS).filter(function(r){return ctx.ids.has(String(r.id));});
+  // Do not quietly reconstruct a partial group after a concurrent cache change.
+  if(rows.length!==ctx.ids.size)throw new Error('此批次已變更，請關閉後重新開啟完整明細。');
+  return rows;
+}
+function approvalHistoryDetailFeedback(key,message,busy){
+  if(typeof document==='undefined')return;
+  document.querySelectorAll('[data-history-detail-message]').forEach(function(node){
+    var active=node.getAttribute('data-history-detail-message')===key;
+    node.textContent=active?message:'';
   });
-  // Match the former last-group-first merge order, including duplicate priority,
-  // while scanning each existing cache once instead of once per history item.
-  var nextReqs=requestGroups.length?mergeRemoteRowsByKey([].concat.apply([],requestGroups.reverse()),REQS):REQS;
-  var nextBills=billGroups.length?mergeRemoteRowsByKey([].concat.apply([],billGroups.reverse()),BILLS):BILLS;
-  var nextInvs=invoiceGroups.length?mergeRemoteRowsByKey([].concat.apply([],invoiceGroups.reverse()),INVS):INVS;
-  REQS=nextReqs;BILLS=nextBills;INVS=nextInvs;
-  return mapped;
+  document.querySelectorAll('[data-history-open]').forEach(function(node){
+    var active=node.getAttribute('data-history-open')===key;
+    node.disabled=!!(active&&busy);node.setAttribute('aria-busy',String(!!(active&&busy)));
+  });
+}
+function approvalHistoryValidateDetail(payload,key){
+  var entry=payload&&payload.item,rows=entry&&entry.source_rows,table=entry&&entry.record_type;
+  if(!entry||entry.history_key!==key||['expense_requests','bills','invoices'].indexOf(table)<0
+    ||(table==='expense_requests'?entry.kind!=='req':table==='bills'?entry.kind!=='bill':['inv','recv'].indexOf(entry.kind)<0)
+    ||!Number.isSafeInteger(entry.source_count)||entry.source_count<1||!Array.isArray(rows)||rows.length!==entry.source_count
+    ||!Array.isArray(entry.participant_steps)||!rows.some(function(row){return row&&String(row.id)===String(entry.record_id);})){
+    throw new Error('完整批次尚未讀齊，未開啟部分明細；請重試。');
+  }
+  var ids=new Set();
+  rows.forEach(function(row){
+    if(!row||!row.id||ids.has(String(row.id))||String(row.tenant_id)!==String(currentTenantId()||DEFAULT_TENANT_ID)||row.data_environment!==activeDataEnvironment())throw new Error('單據來源範圍不一致，未套用明細。');
+    ids.add(String(row.id));
+  });
+  return entry;
+}
+function openApprovalHistoryItem(key){
+  var list=approvalHistoryRuntimeForCurrentUser(),summary=list.items.find(function(item){return item.historyKey===key;});
+  var identity=approvalHistoryIdentity();
+  if(!summary||!identity||S.page!=='approvals'||S.aT!=='h')return Promise.resolve({ok:false,stale:true});
+  var previous=APPROVAL_HISTORY_DETAIL_RUNTIME;
+  if(previous.promise&&previous.key===key&&previous.identity===identity)return previous.promise;
+  cancelApprovalHistoryDetail();
+  var state=APPROVAL_HISTORY_DETAIL_RUNTIME,seq=list.requestSeq,page=list.page,query=list.query;
+  state.identity=identity;state.key=key;state.status='loading';
+  var source=summary.recordType==='expense_requests'?REQS:summary.recordType==='bills'?BILLS:INVS;
+  var snapshot=financeReadSourceSnapshot(source);
+  var controller=typeof AbortController!=='undefined'?new AbortController():null;state.controller=controller;
+  function current(){return APPROVAL_HISTORY_DETAIL_RUNTIME===state&&identity===approvalHistoryIdentity()&&APPROVAL_HISTORY_RUNTIME===list&&list.requestSeq===seq&&list.page===page&&list.query===query&&S.page==='approvals'&&S.aT==='h';}
+  state.promise=Promise.resolve().then(function(){
+    if(!current())return null;
+    var client=getSb();if(!client||typeof client.rpc!=='function')throw new Error('完整明細服務尚未連線，請重試。');
+    var operation=client.rpc('finance_approval_history_detail_v1',{p_history_key:key,p_data_environment:activeDataEnvironment()});
+    if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
+    return withOperationTimeout(operation,'簽核完整明細',30000);
+  }).then(function(result){
+    if(!current())return {ok:false,stale:true};
+    if(result&&result.error)throw result.error;
+    var payload=result&&result.data;
+    if(!payload||payload.ok!==true||!approvalHistoryPayloadIdentityMatches(payload,identity))throw new Error('完整明細的登入身分不一致。');
+    var entry=approvalHistoryValidateDetail(payload,key);
+    if(entry.record_type!==summary.recordType||String(entry.record_id)!==String(summary.recordId))throw new Error('此筆紀錄已變更，請重新搜尋。');
+    var table=entry.record_type,mapper=table==='expense_requests'?mapReq:table==='bills'?mapBill:mapInv;
+    var rows=entry.source_rows.map(mapper),ids=new Set(rows.map(function(row){return String(row.id);}));
+    var cache=table==='expense_requests'?REQS:table==='bills'?BILLS:INVS;
+    rows.forEach(function(row){
+      var id=remoteRowKey(row),existing=cache.find(function(r){return remoteRowKey(r)===id;});
+      if((snapshot.has(id)&&(!existing||snapshot.get(id)!==JSON.stringify(existing)))||(!snapshot.has(id)&&existing))throw new Error('讀取期間單據已更新，請重新開啟明細。');
+    });
+    if(!current())return {ok:false,stale:true};
+    var next=mergeRemoteRowsByKey(rows,cache),raw=rows.find(function(row){return String(row.id)===String(entry.record_id);});
+    if(table==='expense_requests')REQS=next;else if(table==='bills')BILLS=next;else INVS=next;
+    // Pin this fresh, fully authorized group. Legacy grouping must not append
+    // other cached siblings or stale rows to the detail/action modal.
+    APPROVAL_HISTORY_MODAL_CONTEXT=table==='expense_requests'?null:{identity:approvalHistoryModalIdentity(),kind:table==='bills'?'bill':'inv',ids:ids};
+    var item={kind:entry.kind,raw:raw,rows:rows,historyTrusted:true,historyKey:key,historyParticipantSteps:entry.participant_steps};
+    state.status='ready';approvalHistoryDetailFeedback(key,'',false);
+    openApprovalFullItem(item,key);
+    return {ok:true,item:item};
+  }).catch(function(error){
+    if(!current())return {ok:false,stale:true};
+    if(controller){try{controller.abort();}catch(_){} }
+    state.status='error';
+    approvalHistoryDetailFeedback(key,'明細未開啟：'+remoteReadIssueText(error)+'。請再按「查看明細」重試。',false);
+    return {ok:false,error:error};
+  }).finally(function(){
+    if(APPROVAL_HISTORY_DETAIL_RUNTIME===state){state.promise=null;state.controller=null;}
+  });
+  approvalHistoryDetailFeedback(key,'正在讀取完整批次…',true);
+  return state.promise;
 }
 function approvalHistoryStatusHtml(){
   var runtime=approvalHistoryRuntimeForCurrentUser();
@@ -8738,19 +8831,21 @@ function approvalHistoryStatusHtml(){
 function approvalHistoryValidatePage(payload,page,query){
   function count(value){return typeof value==='number'&&Number.isSafeInteger(value)&&value>=0;}
   var meta=payload&&payload.page,items=payload&&payload.items,offset=(page-1)*50;
-  if(!payload||!count(payload.total)||!count(payload.all_total)||payload.all_total<payload.total||!meta||meta.limit!==50||meta.offset!==offset
+  if(!payload||payload.mode!=='summary'||!count(payload.total)||!count(payload.all_total)||payload.all_total<payload.total||!meta||meta.limit!==50||meta.offset!==offset
     ||meta.has_more!==(offset+50<payload.total)||!Array.isArray(items)||items.length!==Math.min(50,Math.max(0,payload.total-offset))){
     throw new Error('簽核紀錄回應不完整，尚未確認總筆數或分頁；請重新載入。');
   }
-  var keys={};
+  var keys=new Set();
   items.forEach(function(entry){
-    var table=entry&&entry.record_type,key=entry&&entry.history_key,rows=entry&&entry.source_rows;
-    if(['expense_requests','bills','invoices'].indexOf(table)<0||typeof key!=='string'||!key||keys[key]||!Array.isArray(rows)||!rows.length
-      ||!rows.some(function(row){return row&&String(row.id)===String(entry.record_id);})
-      ||rows.some(function(row){return !row||String(row.tenant_id)!==String(currentTenantId()||DEFAULT_TENANT_ID)||row.data_environment!==activeDataEnvironment();})){
-      throw new Error('簽核紀錄來源或批次資料不完整，未套用部分回應；請重新載入。');
+    var table=entry&&entry.record_type,key=entry&&entry.history_key,summary=entry&&entry.summary;
+    if(['expense_requests','bills','invoices'].indexOf(table)<0||typeof key!=='string'||!key||keys.has(key)||!entry.record_id
+      ||!summary||!count(summary.source_count)||summary.source_count<1||(summary.has_attachments!==null&&typeof summary.has_attachments!=='boolean')
+      ||(summary.amount!==null&&(typeof summary.amount!=='number'||!Number.isFinite(summary.amount)))
+      ||(table==='expense_requests'?entry.kind!=='req':table==='bills'?entry.kind!=='bill':['inv','recv'].indexOf(entry.kind)<0)
+      ||entry.source_rows!==undefined||entry.source_row!==undefined){
+      throw new Error('簽核紀錄摘要不完整，未套用部分回應；請重新載入。');
     }
-    keys[key]=true;
+    keys.add(key);
   });
   return true;
 }
@@ -8758,7 +8853,7 @@ function paintApprovalHistoryState(){
   var runtime=approvalHistoryRuntimeForCurrentUser();
   try{updateApprovalTodoBadge({tabCounts:{history:runtime.updatedAt?runtime.allTotal:'—'}});}catch(error){console.warn('history badge paint failed',error);}
   if(S.page!=='approvals'||S.aT!=='h')return;
-  try{buildApprovals();}catch(error){
+  try{buildApprovals();approvalHistoryMarkPaint(runtime);}catch(error){
     console.error('history view paint failed',error);
     var slot=el('appr-list');if(slot)slot.innerHTML='<div class="card" role="alert" style="padding:14px">簽核紀錄畫面未能更新，請重新載入；資料尚未被當成空集合。<br><button type="button" class="btn-g" style="min-height:44px!important" onclick="loadApprovalHistoryPage({force:true})">重新載入簽核紀錄</button></div>';
   }
@@ -8767,7 +8862,7 @@ function loadApprovalHistoryPage(options){
   options=options||{};
   cancelApprovalHistorySearchTimer();
   var identity=approvalHistoryIdentity(),runtime=approvalHistoryRuntimeForCurrentUser();
-  if(!identity)return Promise.resolve({ok:false,skipped:true});
+  if(!identity||S.page!=='approvals'||S.aT!=='h')return Promise.resolve({ok:false,skipped:true});
   var page=Math.max(1,Math.floor(Number(options.page||S.apprPage||runtime.page||1))||1);
   var query=String(options.query!=null?options.query:(S.apprQuery||'')).trim();
   var limit=50,environment=activeDataEnvironment(),signature=JSON.stringify([identity,page,query]);
@@ -8779,15 +8874,18 @@ function loadApprovalHistoryPage(options){
   if(runtime.controller){try{runtime.controller.abort();}catch(_){} }
   var controller=typeof AbortController!=='undefined'?new AbortController():null;
   runtime.requestSeq=requestSeq;runtime.controller=controller;
+  cancelApprovalHistoryDetail();
+  if(!runtime.timing||runtime.timing.query!==query||runtime.timing.measured||runtime.timing.dispatchedAt!=null)runtime.timing={startedAt:approvalHistoryClock(),trigger:options.trigger||'load',query:query};
   if(runtime.page!==page||runtime.query!==query)runtime.items=[];
   runtime.identity=identity;runtime.status='loading';runtime.error='';runtime.page=page;runtime.limit=limit;runtime.query=query;runtime.requestSignature=signature;
-  function current(){return APPROVAL_HISTORY_RUNTIME===runtime&&identity===approvalHistoryIdentity()&&runtime.requestSeq===requestSeq;}
+  function current(){return APPROVAL_HISTORY_RUNTIME===runtime&&identity===approvalHistoryIdentity()&&runtime.requestSeq===requestSeq&&S.page==='approvals'&&S.aT==='h';}
   // Install the promise before rendering. Synchronous client/paint exceptions
   // must not strand the runtime in loading before its timeout has even started.
   var promise=Promise.resolve().then(function(){
     if(!current())return null;
     var client=getSb();if(!client||typeof client.rpc!=='function')throw new Error('簽核紀錄服務尚未連線，請重新載入。');
-    var operation=client.rpc('finance_approval_participant_history_for_current_user',{p_limit:limit,p_offset:(page-1)*limit,p_search:query||null,p_data_environment:environment});
+    runtime.timing.dispatchedAt=approvalHistoryClock();
+    var operation=client.rpc('finance_approval_history_summary_v1',{p_limit:limit,p_offset:(page-1)*limit,p_search:query||null,p_data_environment:environment});
     if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
     return withOperationTimeout(operation,'個人簽核歷史',12000);
   }).then(function(result){
@@ -8795,10 +8893,12 @@ function loadApprovalHistoryPage(options){
     if(result&&result.error)throw result.error;
     var payload=result&&result.data;
     if(!payload||payload.ok!==true||!approvalHistoryPayloadIdentityMatches(payload,identity))throw new Error('簽核紀錄的登入身分不一致');
+    runtime.timing.receivedAt=approvalHistoryClock();
     approvalHistoryValidatePage(payload,page,query);
     if(payload.total>0&&(page-1)*limit>=payload.total)return loadApprovalHistoryPage({force:true,page:Math.ceil(payload.total/limit),query:query});
     runtime.items=approvalHistoryItemsFromPayload(payload);
     if(runtime.items.length!==payload.items.length)throw new Error('簽核紀錄來源未能完整顯示，請重新載入。');
+    runtime.timing.mappedAt=approvalHistoryClock();
     runtime.total=payload.total;runtime.allTotal=payload.all_total;runtime.status='ready';runtime.error='';runtime.updatedAt=new Date().toISOString();
     if(S.aT==='h')S.apprPage=page;
     paintApprovalHistoryState();
@@ -8813,7 +8913,7 @@ function loadApprovalHistoryPage(options){
   }).finally(function(){
     // Cleanup belongs to the request generation, even while its identity is
     // locked/stale. Never retain a settled promise or clear a newer request.
-    if(APPROVAL_HISTORY_RUNTIME===runtime&&runtime.requestSeq===requestSeq){runtime.promise=null;runtime.requestSignature='';runtime.controller=null;}
+    if(APPROVAL_HISTORY_RUNTIME===runtime&&runtime.requestSeq===requestSeq){runtime.promise=null;runtime.requestSignature='';runtime.controller=null;if(runtime.status==='loading')runtime.status='idle';}
   });
   runtime.promise=promise;
   paintApprovalHistoryState();
@@ -8821,7 +8921,7 @@ function loadApprovalHistoryPage(options){
 }
 window.loadApprovalHistoryPage=function(options){return loadApprovalHistoryPage(options);};
 function ensureApprovalHistoryCurrent(options){
-  if(S.aT!=='h'||!S.user)return Promise.resolve({ok:false,skipped:true});
+  if(S.page!=='approvals'||S.aT!=='h'||!S.user)return Promise.resolve({ok:false,skipped:true});
   var runtime=approvalHistoryRuntimeForCurrentUser(),query=String(S.apprQuery||'').trim(),page=Math.max(1,Number(S.apprPage)||1);
   if(!options&&runtime.status==='ready'&&runtime.page===page&&runtime.query===query)return Promise.resolve({ok:true,reused:true});
   return loadApprovalHistoryPage(Object.assign({page:page,query:query},options||{}));
@@ -13251,6 +13351,7 @@ function invoiceGroupKey(i){
 }
 function invoiceGroupRows(i){
   if(!i)return [];
+  var exact=approvalHistoryExactGroupRows('inv',i);if(exact!==null)return exact;
   var key=invoiceGroupKey(i);
   if(key.indexOf('inv:')===0)return [i];
   var rows=INVS.filter(function(x){return invoiceGroupKey(x)===key;});
@@ -13360,6 +13461,7 @@ function billGroupKey(b){
 }
 function billGroupRows(b){
   if(!b)return [];
+  var exact=approvalHistoryExactGroupRows('bill',b);if(exact!==null)return exact;
   var key=billGroupKey(b);
   if(key.indexOf('bill:')===0)return [b];
   var rows=BILLS.filter(function(x){return billGroupKey(x)===key;});
@@ -24835,6 +24937,15 @@ function buildApprovals(){
   if(!correctionQueue&&el('appr-list')){correctionQueue=document.createElement('div');correctionQueue.id='accounting-correction-queue';el('appr-list').before(correctionQueue);}
   if(correctionQueue)correctionQueue.innerHTML=canReviseAccountingDetails()||currentRoleKey()==='cashier'?'<button type="button" class="btn-g" onclick="openExpenseAccountingCorrections()">金額更正與差額待辦</button>':'';
   if(!S.user)return;
+  var historyRuntime=approvalHistoryRuntimeForCurrentUser();
+  if(S.aT==='h'){
+    var recovery=el('expense-revision-recovery');if(recovery)recovery.innerHTML='';
+    var historySummary=el('approval-manager-summary');if(historySummary)historySummary.innerHTML=approvalHistoryStatusHtml();
+    var historyBulk=el('approval-bulk-slot');if(historyBulk)historyBulk.innerHTML='';
+    renderApprovalHistorySummaries(historyRuntime);
+    if(S.page==='approvals'&&historyRuntime.status==='idle')ensureApprovalHistoryCurrent().catch(function(error){console.warn('approval history bootstrap failed',error);});
+    return;
+  }
   loadDrafts();
   var revisionRecovery=el('expense-revision-recovery');
   if(!revisionRecovery&&el('appr-list')){revisionRecovery=document.createElement('div');revisionRecovery.id='expense-revision-recovery';el('appr-list').before(revisionRecovery);}
@@ -24854,21 +24965,6 @@ function buildApprovals(){
     renderApprDraftList();
     return;
   }
-	  var historyRuntime=approvalHistoryRuntimeForCurrentUser();
-	  if(historyRuntime.status==='idle'){
-	    loadApprovalHistoryPage({page:1,query:''}).catch(function(error){console.warn('approval history bootstrap failed',error);});
-	  }
-  if(S.aT==='h'){
-    var historyCount=historyRuntime.updatedAt?historyRuntime.allTotal:'—';
-    el('appr-sub').textContent=(RL[currentRoleKey()]||currentRoleKey())+(currentRoleKey()==='admin_director'?' — 行政主任':'')+' · 曾參與流程 '+historyCount+' 筆';
-    var historyBadge=el('history-appr-cnt');if(historyBadge)historyBadge.textContent=String(historyCount);
-    var historySummary=el('approval-manager-summary');if(historySummary)historySummary.innerHTML=approvalHistoryStatusHtml();
-    var historyBulk=el('approval-bulk-slot');if(historyBulk)historyBulk.innerHTML='';
-    // The server owns this page and its complete batch members. Do not rebuild
-    // unrelated pending/mine/rejected lists just to render fifty history groups.
-    renderApprList(historyRuntime.items);
-    return;
-  }
 	  var all=approvalAllItems();
 	  var pm=approvalPendingCandidateItems(all);
   pm=pm.slice().sort(function(a,b){
@@ -24881,9 +24977,8 @@ function buildApprovals(){
   var mine=all.filter(approvalItemIsMine);
   // History is authoritative from immutable actor/assignee snapshots. Current
   // department visibility must not erase a workflow the user participated in.
-	  var localHis=all.filter(approvalItemHasUserStepAction);
-	  var his=S.aT==='h'?historyRuntime.items:localHis;
-	  var historyCount=historyRuntime.updatedAt?historyRuntime.allTotal:((historyRuntime.status==='loading'||historyRuntime.status==='error')?'—':localHis.length);
+	  var his=[];
+	  var historyCount=historyRuntime.updatedAt?historyRuntime.allTotal:'—';
 	  var rejectedItems=approvalRejectedItems(all);
 	  var tabData={p:pendingItems,cashier:cashierItems,h:his,mine:mine,drafts:[],rejected:rejectedItems};
 	  var currentItems=tabData[S.aT]||pendingItems;
@@ -24959,6 +25054,7 @@ window.openInvoiceBridgeWorklist=function(query,tab){
   openApprovalTab(tab||'p');
 };
 window.apprTab=function(t,btn){
+  if(t!=='h'){cancelApprovalHistorySearchTimer();cancelApprovalHistoryRequest(APPROVAL_HISTORY_RUNTIME);cancelApprovalHistoryDetail();}
   S.aT=t;
   S.apprPage=1;
   S.apprSelected={};
@@ -25697,6 +25793,8 @@ window.apprSearch=function(v,event){
       &&(runtime.status==='ready'||runtime.status==='error'||runtime.promise)){
       buildApprovals();return;
     }
+    cancelApprovalHistoryDetail();
+    if(!event||!event.historyRefresh)runtime.timing={startedAt:approvalHistoryClock(),trigger:'input',query:query};
     // Invalidate as soon as the user edits. During the quiet interval an older
     // query must not paint results under the new input, even if abort is ignored.
     cancelApprovalHistoryRequest(runtime);
@@ -25730,13 +25828,18 @@ window.apprSort=function(field){
 window.apprPage=function(page){
   S.apprPage=Math.max(1,Number(page)||1);
   if(S.aT==='h'){
-    loadApprovalHistoryPage({page:S.apprPage,query:S.apprQuery||''}).catch(function(error){console.warn('approval history page failed',error);});
+    loadApprovalHistoryPage({page:S.apprPage,query:S.apprQuery||'',trigger:'page'}).catch(function(error){console.warn('approval history page failed',error);});
     return;
   }
   buildApprovals();
 };
 window.openApprovalItem=function(key){
   var item=(S.apprItemMap||{})[key];if(!item)return;
+  if(item.historySummary)return openApprovalHistoryItem(key);
+  cancelApprovalHistoryDetail(true);
+  return openApprovalFullItem(item,key);
+};
+function openApprovalFullItem(item,key){
   var availability=approvalItemAvailability(item);
   if(!availability.ok){setTopSyncStatus(availability.message);return;}
   document.querySelectorAll('[data-appr-key].selected').forEach(function(x){x.classList.remove('selected');});
@@ -25744,7 +25847,7 @@ window.openApprovalItem=function(key){
   var invoiceRow=item.kind==='inv'?invoiceGroupActionRow(item.raw,canActInvoice):item.raw;
   var receiptRow=item.kind==='recv'?invoiceGroupActionRow(item.raw,canActReceipt):item.raw;
   item.kind==='req'?showApprD(item.raw):(item.kind==='recv'?showReceiptTaskD(receiptRow):(item.kind==='bill'?showBillApprD(item.raw):showInvApprD(invoiceRow)));
-};
+}
 function employeeRequestProgressHtml(item,status){
   if(S.aT!=='mine'||item.kind!=='req')return '';
   var r=item.raw,step=activeStep(r),done=flowIsTerminal(r),person=step&&step.uid?userById(step.uid):null;
@@ -25753,7 +25856,48 @@ function employeeRequestProgressHtml(item,status){
   var next=done?'查看處理紀錄':mine?(step.rk==='applicant_revision'?'請依退回原因補件':step.rk==='applicant_confirm'?'請確認收款或回報疑義':'輪到你處理'):'等待簽核，可開啟查看流程';
   return '<div class="employee-progress"><span class="badge '+escAttr(status.cls)+'">'+escAttr(status.label)+'</span>'+(!done&&step?'<small>目前：'+escAttr(stepTitle(step)||'待確認關卡')+'</small><small>待處理：'+escAttr(name||'待確認承辦人')+'</small>':'')+'<small>'+escAttr(next)+'</small></div>';
 }
+function renderApprovalHistorySummaries(runtime){
+  var list=el('appr-list');if(!list)return;
+  S.apprItemMap={};
+  var queryInput=el('appr-q');if(queryInput&&queryInput.value!==(S.apprQuery||''))queryInput.value=S.apprQuery||'';
+  var ready=runtime.status==='ready',known=!!runtime.updatedAt;
+  var counts=ready?'全部曾參與 '+runtime.allTotal+' 組 · '+(runtime.query?'符合搜尋 '+runtime.total+' 組':'目前顯示全部 '+runtime.total+' 組'):
+    runtime.status==='error'?'搜尋尚未完成，請重新載入':'正在查詢曾參與流程…';
+  var sub=el('appr-sub');if(sub)sub.textContent=counts;
+  var badge=el('history-appr-cnt');if(badge)badge.textContent=known?String(runtime.allTotal):'—';
+  var hint=el('appr-list-hint');if(hint)hint.textContent=counts+' · 每頁最多 50 組；點「查看明細」讀取完整單據';
+  list.setAttribute('aria-busy',String(runtime.status==='loading'));
+  list.setAttribute('data-history-status',runtime.status);
+  list.setAttribute('data-history-total',ready?String(runtime.total):'');
+  list.setAttribute('data-history-all-total',known?String(runtime.allTotal):'');
+  if(!runtime.items.length){
+    list.innerHTML='<div class="card" role="status" style="text-align:center;padding:30px">'+(runtime.status==='error'
+      ?'紀錄暫時無法更新，不能當成 0 筆。<br><button type="button" class="btn-g" style="min-height:44px!important;margin-top:10px" onclick="loadApprovalHistoryPage({force:true})">重新載入</button>'
+      :ready?(runtime.query?'找不到符合搜尋條件的流程。':'目前沒有曾參與的流程。'):'正在查詢曾參與流程…')+'</div>';
+    syncApprovalWaitTimer();return;
+  }
+  var rows=runtime.items.map(function(item){
+    var s=item.summary,key=item.historyKey;
+    S.apprItemMap[key]=item;
+    var amount=s.amount===null?'待確認':'NT$'+s.amount.toLocaleString('zh-TW',{maximumFractionDigits:20});
+    var type=s.type_label||(item.kind==='req'?'申請單':item.kind==='bill'?'申請繳費單':item.kind==='recv'?'收款情形':'開立發票');
+    return '<tr data-appr-key="'+escAttr(key)+'" data-history-key="'+escAttr(key)+'">'
+      +'<td class="appr-col-select"><button type="button" class="btn-g" style="min-height:44px!important;white-space:nowrap" data-history-open="'+escAttr(key)+'" onclick="openApprovalItem(this.getAttribute(\'data-history-open\'))">查看明細</button></td>'
+      +'<td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">'+escAttr(item.recordNo||'—')+'</span><span class="approval-form-badges"><span class="badge b-gray">'+escAttr(type)+'</span><span class="badge '+(item.historyPersonallyActed?'b-ok':'b-blue')+'">'+escAttr(item.historyParticipationLabel)+'</span>'+(s.source_count>1?'<span class="badge b-blue">整批 '+s.source_count+' 張</span>':'')+(s.has_attachments?'<span class="badge b-gray">附有憑證</span>':'')+'</span></div></td>'
+      +'<td class="appr-col-dept">'+escAttr(s.department_name||s.department_code||'—')+'</td>'
+      +'<td class="appr-col-applicant">'+escAttr(s.applicant||'—')+'</td>'
+      +'<td class="appr-col-purpose"><div class="summary-cell">'+escAttr(s.description||'—')+'</div><small class="muted">'+escAttr(s.entity_name||s.entity_id||'')+'</small><div role="status" data-history-detail-message="'+escAttr(key)+'" style="color:#991b1b;white-space:normal"></div></td>'
+      +'<td class="appr-col-amount" style="font-weight:800">'+amount+'</td>'
+      +'<td class="appr-col-applyDate date-cell">'+escAttr(approvalShortDate(s.request_date||''))+'</td>'
+      +'<td class="appr-col-actionDate date-cell">'+escAttr(item.historyLastParticipatedAt?draftTime(item.historyLastParticipatedAt):'—')+'</td></tr>';
+  }).join('');
+  var page=Math.max(1,runtime.page),pages=Math.max(1,Math.ceil(runtime.total/50));
+  list.innerHTML='<div class="card"><div class="finance-detail-scroll" style="width:100%;contain:inline-size" tabindex="0" role="region" aria-label="簽核歷史摘要表，可左右捲動"><table class="approval-table finance-list-table compact finance-detail-table approval-history-summary-table" style="min-width:1040px!important;table-layout:auto!important">'+approvalTableHeaderHtml().replace('>選取<','>明細<').replace('>簽核日期<','>最後參與時間<')+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(runtime.total,page,pages)+'</div>';
+  if(typeof window.refreshFinancialTableScrollHints==='function')window.refreshFinancialTableScrollHints(list);
+  syncApprovalWaitTimer();
+}
 function renderApprList(data){
+  if(S.aT==='h')return renderApprovalHistorySummaries(approvalHistoryRuntimeForCurrentUser());
   if(window.FinancePaymentConcerns)window.FinancePaymentConcerns.loadQueue();
   var l=el('appr-list');l.innerHTML='';
   var guard=approvalDataLoadWarningHtml();
@@ -27436,6 +27580,7 @@ function showReceiptTaskD(i){
   hydrateApprovalRuntimeLogsForRecord('receipt',i,shRuntime.slotId);
 }
 window.closeAppr=function(){
+  cancelApprovalHistoryDetail(true);
   receiptReviewSnapshotState().modal=null;
   approvalClearModalExpectedSteps();
   var m=el('m-appr');

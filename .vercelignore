@@ -291,3 +291,13 @@ supabase/.temp
 !scripts/finance_approval_search_postflight.sql
 !scripts/finance_approval_search_canary.sql
 !docs/finance-approval-search-release-20260914.md
+
+# Approval history summary protected release and acceptance sources
+!scripts/test_history_summary_release_batch.mjs
+!scripts/check_approval_history_summary_frontend.cjs
+!scripts/check_approval_history_summary.cjs
+!scripts/check_approval_history_summary_concurrency.cjs
+!scripts/check_approval_search_summary_browser.cjs
+!scripts/finance_approval_history_summary_postflight.sql
+!scripts/finance_approval_history_summary_canary.sql
+!scripts/finance_approval_history_summary_fingerprint.sql

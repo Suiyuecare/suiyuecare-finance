@@ -81,6 +81,8 @@ for(const version of guard.AUDIT_REMEDIATION_MIGRATIONS){
 }
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/approval search migration batch/);
 fs.appendFileSync(ledger,guard.APPROVAL_SEARCH_MIGRATIONS.join('\n')+'\n');
+assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/history summary migration batch/);
+fs.appendFileSync(ledger,guard.HISTORY_SUMMARY_MIGRATIONS.join('\n')+'\n');
 assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
 fs.unlinkSync(finalFile);assert.throws(()=>guard.readAuditBatch(migrationDir,versions),/missing/);
 await db.close();fs.rmSync(dir,{recursive:true});
