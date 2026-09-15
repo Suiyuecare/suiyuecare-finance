@@ -7,6 +7,7 @@ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const fn=name=>{const a=html.indexOf('function '+name+'(');assert(a>=0,name);return html.slice(a,html.indexOf('\n}',a)+2);};
 const handler=name=>{const a=html.indexOf('window.'+name+'=function(');assert(a>=0,name);return html.slice(a,html.indexOf('\n};',a)+3);};
 const history=html.slice(html.indexOf('function approvalHistoryIdentity(){'),html.indexOf('function financeReadSourceSnapshot('));
+const optionalCapabilities=html.slice(html.indexOf('var FINANCE_OPTIONAL_READ_CAPABILITIES='),html.indexOf('var AUTHORIZATION_CHANGE_SETS='));
 const flush=async()=>{for(let n=0;n<3;n++)await new Promise(r=>setImmediate(r));};
 const plain=x=>JSON.parse(JSON.stringify(x));
 let passed=0;
@@ -36,15 +37,19 @@ function summary(c,{table='invoices',kind='inv',key='invoices:B',id='I1',amount=
 function detail(c,{table='invoices',kind='inv',key='invoices:B',id='I1',ids=['I1','I2']}={}){return{ok:true,identity:identity(c),item:{history_key:key,kind,record_type:table,record_id:id,batch_id:'B',source_count:ids.length,participant_steps:[],source_rows:ids.map(id=>({id,tenant_id:c.tenant,data_environment:c.env,batch_id:'B',row_version:7,files:[{name:'完整憑證.pdf',storage_path:'fictional/proof'}],form_payload:{accountingLines:[{item:'日照',net:1250,tax:0,gross:1250,manualOverride:true}]}}))}};}
 async function seed(c,opts){const p=c.loadApprovalHistoryPage();await flush();await c.respond(0,summary(c,opts));assert((await p).ok);c.renderApprovalHistorySummaries(c.APPROVAL_HISTORY_RUNTIME);}
 
-function permissionRefreshFixture(){
+function permissionRefreshFixture(options={}){
  const c=fixture(),baseClient=c.getSb();
- Object.assign(c,{currentPermissionSnapshotReadSeq:0,permissionReads:[],timers:[],
+ Object.assign(c,{currentPermissionSnapshotReadSeq:0,CURRENT_PERMISSION_SNAPSHOT_READ_STATE:{status:'idle',message:''},permissionReads:[],timers:[],
   membershipRuntimeArray:x=>Array.isArray(x)?x:[],uniqueRemoteStrings:x=>[...new Set(x.filter(Boolean))],normalizedRoleKey:u=>u.role,
   isRpcMissing:e=>e&&e.code==='PGRST202',isTransientRemoteReadError:e=>e&&e.code==='57014',applyRolePermissions(){},canAccessPage:()=>true,recordOpsEvent(){},friendlyErrorMessage:e=>e.message,
   setApprovalTabVisual(){},canReviseAccountingDetails:()=>false,currentRoleKey:()=>c.S.user.role,
   setTimeout(callback,ms){const timer={callback,ms,active:true};c.timers.push(timer);return timer;},clearTimeout(timer){if(timer)timer.active=false;},
   getSb:()=>({rpc(name,args){if(name!=='membership_current_permission_snapshot')return baseClient.rpc(name,args);return new Promise(resolve=>c.permissionReads.push({resolve}));}})
  });
+ vm.runInContext(optionalCapabilities,c);
+ // Existing refresh cases represent a deployment where this optional RPC is
+ // explicitly installed. Keep the real gate, including its strict boolean test.
+ if(options.enabled!==false)c.FINANCE_OPTIONAL_READ_CAPABILITIES=Object.freeze({...c.FINANCE_OPTIONAL_READ_CAPABILITIES,membership_current_permission_snapshot:Object.freeze({available:true,policy:'fixture_installed',label:'進階權限快照'})});
  vm.runInContext([fn('currentPermissionSnapshotReadIdentity'),fn('captureApprovalHistoryPermissionRefreshIntent'),fn('resumeApprovalHistoryAfterPermissionRefresh'),fn('applyRemotePermissionSnapshotResult'),'async '+fn('refreshCurrentPermissionSnapshotRuntime'),fn('buildApprovals'),handler('apprSearch')].join('\n'),c);
  c.permissionPayload=(tag='read')=>({data:{membership_user_id:'FICT-MEMBERSHIP',primary_role_code:'accountant',role_codes:['accountant'],permissions:[{permission_key:'finance.request.view.all',tag}]}});
  c.respondPermission=async(index,result)=>{c.permissionReads[index].resolve(result||c.permissionPayload());await flush();};
@@ -53,13 +58,50 @@ function permissionRefreshFixture(){
 }
 
 
-function realPermissionRefreshFixture(){
- const c=permissionRefreshFixture();c.moduleAllowed=true;
+function realPermissionRefreshFixture(options){
+ const c=permissionRefreshFixture(options);c.moduleAllowed=true;
  Object.assign(c,{pageModuleEnabled:()=>c.moduleAllowed,financePermissionEngine:()=>null,roleHasPermission:()=>true});
  vm.runInContext([fn('runtimePermissionDecision'),fn('runtimePagePermissionCode'),fn('canAccessPage')].join('\n'),c);return c;
 }
 
 (async()=>{
+ await check('release optional read manifest disables absent endpoints and denies unknown or inherited names',async()=>{
+  const c=permissionRefreshFixture({enabled:false});assert(Object.isFrozen(c.FINANCE_OPTIONAL_READ_CAPABILITIES));
+  for(const name of ['membership_current_permission_snapshot','finance_approval_workflow_admin_health','finance_approval_workflow_catalog','finance_approval_workflow_engine_health','finance_approval_workflow_definition']){assert.equal(c.financeOptionalReadAvailable(name),false);assert.equal(c.financeOptionalReadCapability(name).policy,'disabled_until_manifested');assert(Object.isFrozen(c.financeOptionalReadCapability(name)));}
+  for(const name of ['unknown_rpc','constructor','__proto__','']){assert.equal(c.financeOptionalReadAvailable(name),false);assert.equal(c.financeOptionalReadCapability(name).policy,'unknown_deny');}
+  c.FINANCE_OPTIONAL_READ_CAPABILITIES={membership_current_permission_snapshot:{available:'true'}};assert.equal(c.financeOptionalReadAvailable('membership_current_permission_snapshot'),false);
+  c.FINANCE_OPTIONAL_READ_CAPABILITIES={membership_current_permission_snapshot:null};assert.equal(c.financeOptionalReadAvailable('membership_current_permission_snapshot'),false);
+ });
+ await check('disabled background permission refresh makes zero probes and leaves a pending search and snapshot untouched',async()=>{
+  const c=permissionRefreshFixture({enabled:false}),snapshot=c.CURRENT_PERMISSION_SNAPSHOT,before=JSON.stringify(snapshot),statuses=[];let applies=0;c.setTopSyncStatus=s=>statuses.push(s);c.applyRolePermissions=()=>applies++;
+  c.S.apprQuery='日照';const pending=c.loadApprovalHistoryPage();await flush();const runtime=c.APPROVAL_HISTORY_RUNTIME;
+  for(let i=0;i<10;i++)assert.equal(await c.refreshCurrentPermissionSnapshotRuntime('load_remote_data_deferred'),false);
+  assert.equal(c.permissionReads.length,0);assert.equal(c.calls.length,1);assert.equal(c.calls[0].aborts,0);assert.equal(c.APPROVAL_HISTORY_RUNTIME,runtime);assert.equal(c.CURRENT_PERMISSION_SNAPSHOT,snapshot);assert.equal(JSON.stringify(snapshot),before);assert.equal(applies,10);assert.equal(c.CURRENT_PERMISSION_SNAPSHOT_READ_STATE.status,'not_enabled');assert(statuses.every(s=>s==='進階權限快照未啟用'));
+  await c.respond(0,summary(c));assert((await pending).ok);assert.equal(c.node('appr-list').attributes['data-history-status'],'ready');
+ });
+ await check('disabled permission reads preserve an authoritative deny and never reopen history through retry or input',async()=>{
+  const c=realPermissionRefreshFixture({enabled:false}),deny=c.permissionPayload();deny.data.permissions=[{permission_code:'finance.page.approvals.view',effect:'deny'}];c.applyRemotePermissionSnapshotResult(deny,true,[]);const snapshot=c.CURRENT_PERMISSION_SNAPSHOT,before=JSON.stringify(snapshot);
+  assert.equal(await c.refreshCurrentPermissionSnapshotRuntime('disabled'),false);assert.equal(c.CURRENT_PERMISSION_SNAPSHOT,snapshot);assert.equal(JSON.stringify(snapshot),before);assert.equal(c.canAccessPage('approvals'),false);assert.equal(c.permissionReads.length,0);assert.equal(c.APPROVAL_HISTORY_RUNTIME.status,'error');assert.match(c.node('appr-list').innerHTML,/權限已變更/);assert(!c.node('appr-list').innerHTML.includes('重新載入'));
+  assert((await c.loadApprovalHistoryPage({force:true})).forbidden);assert((await c.openApprovalHistoryItem('invoices:B')).forbidden);c.window.apprSearch('自費',{isComposing:false});await flush();assert.equal(c.calls.length,0);
+ });
+ await check('disabled permission endpoint still resumes a permitted organization-role change with the original pending input time',async()=>{
+  const c=realPermissionRefreshFixture({enabled:false}),before=JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT);c.S.apprQuery='自費';c.now=100;const old=c.loadApprovalHistoryPage();await flush();const start=c.APPROVAL_HISTORY_RUNTIME.timing.startedAt;c.S.user.role='employee';c.now=500;
+  assert.equal(await c.refreshCurrentPermissionSnapshotRuntime('org-role-change'),false);await flush();assert.equal(c.permissionReads.length,0);assert.equal(JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),before);assert.equal(c.calls.length,2);assert.equal(c.calls[1].args.p_search,'自費');assert.equal(c.APPROVAL_HISTORY_RUNTIME.timing.startedAt,start);
+  await c.respond(0,summary(c));assert((await old).stale);await c.respond(1,summary(c));assert.equal(c.node('appr-list').attributes['data-history-status'],'ready');
+ });
+ await check('disabled permission endpoint applies a revoked organization role without issuing replacement reads',async()=>{
+  const c=realPermissionRefreshFixture({enabled:false});c.roleHasPermission=role=>role==='accountant';c.S.apprQuery='日照';const old=c.loadApprovalHistoryPage();await flush();c.S.user.role='employee';const before=JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT);
+  await c.refreshCurrentPermissionSnapshotRuntime('org-role-revoked');assert.equal(c.canAccessPage('approvals'),false);assert.equal(c.permissionReads.length,0);assert.equal(c.calls.length,1);assert.equal(JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),before);assert.equal(c.node('appr-list').attributes['data-history-status'],'error');await c.respond(0,summary(c));await old;assert.equal(c.APPROVAL_HISTORY_RUNTIME.items.length,0);
+ });
+ await check('unknown capability never probes and does not erase existing permissions',async()=>{
+  const c=realPermissionRefreshFixture({enabled:false});c.FINANCE_OPTIONAL_READ_CAPABILITIES={};const before=JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT);await c.refreshCurrentPermissionSnapshotRuntime('unknown');assert.equal(c.permissionReads.length,0);assert.equal(JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),before);assert.equal(c.CURRENT_PERMISSION_SNAPSHOT_READ_STATE.status,'not_enabled');
+ });
+ await check('disabling an endpoint invalidates an earlier in-flight optional permission response',async()=>{
+  const c=permissionRefreshFixture();c.S.aT='p';const before=JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),old=c.refreshCurrentPermissionSnapshotRuntime('enabled');vm.runInContext(optionalCapabilities,c);await c.refreshCurrentPermissionSnapshotRuntime('disabled');assert.equal(c.permissionReads.length,1);await c.respondPermission(0);assert.equal(await old,false);assert.equal(JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),before);assert.equal(c.CURRENT_PERMISSION_SNAPSHOT_READ_STATE.status,'not_enabled');assert.equal(c.calls.length,0);
+ });
+ await check('an in-flight permission response cannot apply after its declared capability is removed',async()=>{
+  const c=permissionRefreshFixture(),before=JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),old=c.refreshCurrentPermissionSnapshotRuntime('enabled');c.FINANCE_OPTIONAL_READ_CAPABILITIES={};await c.respondPermission(0);assert.equal(await old,false);assert.equal(JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),before);assert.equal(c.calls.length,0);
+ });
  await check('summaries preserve all authoritative cache bytes and render counts/decimal amounts',async()=>{const c=fixture();c.REQS=[{id:'R',files:['a'],formPayload:{manualOverride:true}}];c.INVS=[{id:'OLD',steps:[1],rowVersion:11}];const before=JSON.stringify([c.REQS,c.BILLS,c.INVS]);await seed(c);assert.equal(JSON.stringify([c.REQS,c.BILLS,c.INVS]),before);assert(!('raw' in c.APPROVAL_HISTORY_RUNTIME.items[0]));assert.match(c.node('appr-sub').textContent,/全部曾參與 737 組/);assert.match(c.node('appr-list').innerHTML,/1,250\.5/);assert.match(c.node('appr-list').innerHTML,/data-history-open/);});
  await check('a true zero and unknown attachment state are not forged as missing data',async()=>{const c=fixture();await seed(c,{amount:0,attachments:null});assert.match(c.node('appr-list').innerHTML,/NT\$0/);assert(!c.node('appr-list').innerHTML.includes('附有憑證'));});
  await check('summary display is escaped and never treats description as markup',async()=>{const c=fixture(),p=c.loadApprovalHistoryPage();await flush();const x=summary(c);x.items[0].summary.description='<img src=x onerror=alert(1)>';await c.respond(0,x);assert((await p).ok);c.renderApprovalHistorySummaries(c.APPROVAL_HISTORY_RUNTIME);assert(!c.node('appr-list').innerHTML.includes('<img'));assert(c.node('appr-list').innerHTML.includes('&lt;img'));});

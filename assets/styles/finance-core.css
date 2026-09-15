@@ -4606,3 +4606,12 @@ input:focus,select:focus,textarea:focus{
 .draft-load-status p{font-size:13px;line-height:1.7;margin:6px 0 0;overflow-wrap:anywhere}
 .draft-load-status[data-draft-state="error"]{border-color:#e9bb8e;background:#fff8ed}
 .draft-load-status button{min-height:44px!important;min-width:44px!important;flex-shrink:0}
+
+/* Keep summary columns legible inside the horizontal mobile table. */
+#pg-approvals .approval-history-summary-table .appr-col-select{width:100px!important}
+#pg-approvals .approval-history-summary-table .appr-col-purpose{width:312px!important}
+#pg-approvals .approval-history-summary-table .approval-form-inline{flex-direction:column!important;align-items:center!important;white-space:normal!important;overflow:visible!important}
+#pg-approvals .approval-history-summary-table .approval-form-badges{justify-content:center;flex-wrap:wrap!important}
+#pg-approvals .approval-history-summary-table .summary-cell{display:-webkit-box!important;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden!important;max-height:4.5em!important}
+
+#pg-approvals #appr-list .card>.approval-history-summary-scroll{overflow-x:auto!important;overflow-y:hidden!important}

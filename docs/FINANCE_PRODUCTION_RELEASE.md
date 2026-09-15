@@ -24,18 +24,20 @@ Environment `finance-production` 必須設定：
 
 Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權該 team/project 的 pull、build、candidate deploy、inspect/API/curl 與 promote；資料庫帳號只授權目標 Supabase project 的 migration 權限。
 
-## 目前兩個受控入口：應收對應查詢修正、後續前台發布
+## 目前兩個受控入口：發票讀取權限效能修正、後續前台發布
 
 此版本只接受以下兩組輸入，`release_phase` 與 `migration_versions` 任何不相符都在建置或資料庫連線前立即拒絕：
 
 | 順序 | `release_phase` | `migration_versions` | 允許的動作 |
 |---|---|---|---|
 | 1 | `frontend_compat` | `none` | 日常前台發布：建立、驗證並提升新前台；資料庫不得提交變更，只能做唯讀 gate 與整筆回滾 canary |
-| 2 | `database_ar_mapping_20260913` | `20260913061745` | 全部既有版本（含讀取延遲修正 `20260913042629`）成立後，演練並原子提交應收對應查詢 migration、ledger 及全部 15 份 postflight，再提升相同封存候選 |
+| 2 | `database_invoice_read_scope_20260915` | `20260915080928` | 全部既有版本（含搜尋摘要 `20260915050313`）成立後，演練並原子提交發票 SELECT policy 優化、ledger 及全部 20 份 postflight，再提升相同封存候選 |
 
 正式資料庫目前受控 lineage 為 v1 `20260826070814`、v2 `20260826155840`、v3 `20260827052447`，以及已採納回版本庫的修復 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`、`20260831042040_top_level_ceo_self_route`、`20260831043517_expense_submit_derived_status`、`20260901024020_final_accountant_self_post`、`20260901073241_assign_ceo_cashier_and_reassign_pending_cashier`、`20260901081807_allow_formal_cashier_self_disbursement`。其中正式出納固定為李佳泰、總務備援已移除，且三張待放款單保留稽核轉派紀錄。任何其他未審查的 post-baseline migration 仍會 fail closed；採納既有版次不代表流程會再次執行其 SQL。
 
 舊的 audit、cases、utility、reports、amount search、reporting integrity phase 只保留歷史 gate／前置相容驗證；此候選不得用它們 dispatch 或 promotion。
+
+本次資料庫修正只將會計角色的既有身分條件改為每次查詢計算一次；一般員工及主管仍走原有逐筆可見性判斷。既有 identity、來源 RPC、權限函式及讀寫 ACL 不變。演練在同一交易內執行完整 migration、20 份 postflight 與 5 份唯讀 canary，再回滾並比對含所有 policy 的指紋。正式提交與 ledger 為同一交易；後續前台相容發布必須確認此版本已存在。
 
 ### Phase 1：`frontend_compat`
 
