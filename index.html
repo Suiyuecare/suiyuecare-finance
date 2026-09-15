@@ -2027,6 +2027,7 @@ var MEMBERSHIP_ROLE_CATALOG=[];
 var MEMBERSHIP_PERMISSION_CATALOG=[];
 var MEMBERSHIP_ASSIGNMENT_CATALOG={users:[],org_units:[],assignments:[]};
 var CURRENT_PERMISSION_SNAPSHOT={loaded:false,authUserId:'',membershipUserId:'',primaryRoleCode:'',roleCodes:[],permissions:[],error:''};
+var currentPermissionSnapshotReadSeq=0;
 var AUTHORIZATION_CHANGE_SETS=[];
 var AUTHORIZATION_GOVERNANCE_RUNTIME={available:false,error:''};
 var MEMBERSHIP_ROLE_RUNTIME={loading:false,loaded:false,compatibility:false,error:'',editingRoleId:''};
@@ -7502,13 +7503,56 @@ function applyRemotePermissionSnapshotResult(result,keepExisting,remoteWarnings)
   };
   return false;
 }
+function currentPermissionSnapshotReadIdentity(){
+  if(!S.user||S.demoLogin||financeWorkspaceIdentityBlocked)return '';
+  return JSON.stringify([String(S.user.authUserId||S.user.auth_user_id||''),String(S.user.id||''),String(currentTenantId()||''),String(activeDataEnvironment()),typeof financeAuthIdentityEpoch==='undefined'?0:financeAuthIdentityEpoch]);
+}
+function captureApprovalHistoryPermissionRefreshIntent(){
+  if(S.page!=='approvals'||S.aT!=='h'||!approvalHistoryIdentity())return null;
+  // Read the old runtime without resetting it: an earlier organization refresh
+  // may already have changed the role while the permission read was in flight.
+  var runtime=APPROVAL_HISTORY_RUNTIME,query=String(S.apprQuery||'').trim();
+  var pending=runtime.status==='loading'||runtime.searchComposing===true||!!approvalHistorySearchTimer;
+  var timing=pending&&runtime.query===query&&runtime.timing&&runtime.timing.measured!==true&&runtime.timing.query===query?runtime.timing:null;
+  return {identity:runtime.identity,owner:currentPermissionSnapshotReadIdentity(),query:query,page:Math.max(1,Number(S.apprPage)||1),
+    composing:runtime.searchComposing===true,debouncing:!!approvalHistorySearchTimer,
+    startedAt:timing&&Number.isFinite(timing.startedAt)?timing.startedAt:null,trigger:timing&&timing.trigger||'permission-refresh'};
+}
+function resumeApprovalHistoryAfterPermissionRefresh(intent){
+  if(!intent||!intent.owner||intent.owner!==currentPermissionSnapshotReadIdentity()||S.page!=='approvals'||S.aT!=='h'
+    ||String(S.apprQuery||'').trim()!==intent.query||Math.max(1,Number(S.apprPage)||1)!==intent.page
+    ||intent.identity===approvalHistoryIdentity())return false;
+  // Old rows and late responses belong to the previous permission snapshot.
+  // Reload through the same authenticated summary RPC; never repaint that data.
+  var runtime=approvalHistoryRuntimeForCurrentUser();
+  cancelApprovalHistorySearchTimer();cancelApprovalHistoryDetail();
+  if(!approvalHistoryPageAllowed()){rejectApprovalHistoryPageAccess();return true;}
+  var now=approvalHistoryClock();
+  runtime.timing={startedAt:intent.startedAt===null?now:intent.startedAt,trigger:intent.trigger,query:intent.query};
+  runtime.searchComposing=intent.composing;
+  if(intent.composing||intent.debouncing){
+    var remaining=intent.startedAt===null?250:Math.max(0,250-(now-intent.startedAt));
+    window.apprSearch(intent.query,{isComposing:intent.composing,historyRefresh:true,historyDebounceMs:remaining});
+  }else{
+    loadApprovalHistoryPage({page:intent.page,query:intent.query,trigger:intent.trigger}).catch(function(error){console.warn('approval history permission refresh failed',error);});
+  }
+  return true;
+}
 async function refreshCurrentPermissionSnapshotRuntime(reason){
-  var client=getSb();
-  if(!client||!S.user||S.demoLogin)return false;
+  var client=getSb(),identity=currentPermissionSnapshotReadIdentity();
+  if(!client||!identity)return false;
+  var seq=++currentPermissionSnapshotReadSeq;
   var result=await client.rpc('membership_current_permission_snapshot',{});
+  // A background read may finish after another employee signs in or after a
+  // newer permissions read. Neither may overwrite the current actor's grants.
+  if(seq!==currentPermissionSnapshotReadSeq||identity!==currentPermissionSnapshotReadIdentity())return false;
+  // Capture the latest input immediately before applying the new snapshot, not
+  // the query that happened to be visible when this remote read started.
+  var historyIntent=captureApprovalHistoryPermissionRefreshIntent();
   var warnings=[];
   var ok=applyRemotePermissionSnapshotResult(result,true,warnings);
   applyRolePermissions();
+  resumeApprovalHistoryAfterPermissionRefresh(historyIntent);
   if(S.page==='settings'){
     renderMembershipRoleControl();
     renderSettingPermissions();
@@ -8662,6 +8706,31 @@ function approvalHistoryIdentity(){
   if(!S.user||S.demoLogin||(typeof financeWorkspaceIdentityBlocked!=='undefined'&&financeWorkspaceIdentityBlocked))return '';
   return [approvalFastBootstrapIdentity(),String(S.user.id||''),String(activeDataEnvironment()),typeof financeAuthIdentityEpoch==='undefined'?0:financeAuthIdentityEpoch,typeof normalizedRoleKey==='function'?normalizedRoleKey(S.user):String(S.user.role||''),typeof CURRENT_PERMISSION_SNAPSHOT==='undefined'?'':JSON.stringify(CURRENT_PERMISSION_SNAPSHOT)].join('|');
 }
+function approvalHistoryReadOwnerIdentity(){
+  if(!S.user||S.demoLogin||financeWorkspaceIdentityBlocked)return '';
+  return JSON.stringify([approvalFastBootstrapIdentity(),String(S.user.id||''),activeDataEnvironment(),typeof financeAuthIdentityEpoch==='undefined'?0:financeAuthIdentityEpoch]);
+}
+function approvalHistoryPageAllowed(){
+  return typeof canAccessPage==='function'&&canAccessPage('approvals');
+}
+function rejectApprovalHistoryPageAccess(){
+  var runtime=approvalHistoryRuntimeForCurrentUser();
+  cancelApprovalHistorySearchTimer();cancelApprovalHistoryRequest(runtime);
+  // Preserve an already-open modal's exact membership context. Its own identity
+  // check must keep rejecting access; clearing it could enable cache fallback.
+  cancelApprovalHistoryDetail();
+  runtime.items=[];runtime.total=0;runtime.allTotal=0;runtime.updatedAt='';runtime.timing=null;
+  runtime.query=String(S.apprQuery||'').trim();runtime.status='error';runtime.accessDenied=true;
+  runtime.error='簽核頁面的權限已變更，目前無法讀取這些紀錄。';
+  S.apprItemMap={};paintApprovalHistoryState();
+  return {ok:false,forbidden:true};
+}
+function approvalHistoryRejectDeniedResponse(owner,runtime,seq,detailState){
+  if(!owner||owner!==approvalHistoryReadOwnerIdentity()||S.page!=='approvals'||S.aT!=='h'
+    ||APPROVAL_HISTORY_RUNTIME!==runtime||runtime.requestSeq!==seq
+    ||detailState&&APPROVAL_HISTORY_DETAIL_RUNTIME!==detailState||approvalHistoryPageAllowed())return false;
+  rejectApprovalHistoryPageAccess();return true;
+}
 function cancelApprovalHistorySearchTimer(){
   if(approvalHistorySearchTimer){clearTimeout(approvalHistorySearchTimer);approvalHistorySearchTimer=null;}
 }
@@ -8699,9 +8768,10 @@ function approvalHistoryItemsFromPayload(payload){
 }
 function approvalHistoryClock(){return typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();}
 function approvalHistoryMarkPaint(runtime){
-  var timing=runtime.timing,seq=runtime.requestSeq,identity=runtime.identity;
+  var timing=runtime.timing,seq=runtime.requestSeq,identity=runtime.identity,owner=approvalHistoryReadOwnerIdentity();
   if(!timing||timing.measured||runtime.status!=='ready'||typeof requestAnimationFrame!=='function')return;
   requestAnimationFrame(function(){requestAnimationFrame(function(){
+    if(approvalHistoryRejectDeniedResponse(owner,runtime,seq))return;
     if(APPROVAL_HISTORY_RUNTIME!==runtime||runtime.requestSeq!==seq||identity!==approvalHistoryIdentity()||S.page!=='approvals'||S.aT!=='h'||runtime.status!=='ready'||runtime.timing!==timing||timing.measured)return;
     timing.measured=true;timing.paintedAt=approvalHistoryClock();
     var detail={trigger:timing.trigger||'load',page:runtime.page,groups:runtime.items.length,
@@ -8729,7 +8799,7 @@ function cancelApprovalHistoryDetail(clearModal){
 function approvalHistoryExactGroupRows(kind,row){
   var ctx=APPROVAL_HISTORY_MODAL_CONTEXT;
   if(!ctx||ctx.kind!==kind||!row||!ctx.ids.has(String(row.id)))return null;
-  if(ctx.identity!==approvalHistoryModalIdentity())throw new Error('登入或權限已更新，請關閉後重新開啟完整明細。');
+  if(ctx.identity!==approvalHistoryModalIdentity()||(typeof canAccessPage==='function'&&!canAccessPage('approvals')))throw new Error('登入或權限已更新，請關閉後重新開啟完整明細。');
   var rows=(kind==='bill'?BILLS:INVS).filter(function(r){return ctx.ids.has(String(r.id));});
   // Do not quietly reconstruct a partial group after a concurrent cache change.
   if(rows.length!==ctx.ids.size)throw new Error('此批次已變更，請關閉後重新開啟完整明細。');
@@ -8762,6 +8832,9 @@ function approvalHistoryValidateDetail(payload,key){
   return entry;
 }
 function openApprovalHistoryItem(key){
+  if(!approvalHistoryReadOwnerIdentity()||S.page!=='approvals'||S.aT!=='h')return Promise.resolve({ok:false,stale:true});
+  if(!approvalHistoryPageAllowed())return Promise.resolve(rejectApprovalHistoryPageAccess());
+  var owner=approvalHistoryReadOwnerIdentity();
   var list=approvalHistoryRuntimeForCurrentUser(),summary=list.items.find(function(item){return item.historyKey===key;});
   var identity=approvalHistoryIdentity();
   if(!summary||!identity||S.page!=='approvals'||S.aT!=='h')return Promise.resolve({ok:false,stale:true});
@@ -8773,14 +8846,16 @@ function openApprovalHistoryItem(key){
   var source=summary.recordType==='expense_requests'?REQS:summary.recordType==='bills'?BILLS:INVS;
   var snapshot=financeReadSourceSnapshot(source);
   var controller=typeof AbortController!=='undefined'?new AbortController():null;state.controller=controller;
-  function current(){return APPROVAL_HISTORY_DETAIL_RUNTIME===state&&identity===approvalHistoryIdentity()&&APPROVAL_HISTORY_RUNTIME===list&&list.requestSeq===seq&&list.page===page&&list.query===query&&S.page==='approvals'&&S.aT==='h';}
+  function current(){return APPROVAL_HISTORY_DETAIL_RUNTIME===state&&identity===approvalHistoryIdentity()&&APPROVAL_HISTORY_RUNTIME===list&&list.requestSeq===seq&&list.page===page&&list.query===query&&S.page==='approvals'&&S.aT==='h'&&approvalHistoryPageAllowed();}
   state.promise=Promise.resolve().then(function(){
+    if(approvalHistoryRejectDeniedResponse(owner,list,seq,state))return null;
     if(!current())return null;
     var client=getSb();if(!client||typeof client.rpc!=='function')throw new Error('完整明細服務尚未連線，請重試。');
     var operation=client.rpc('finance_approval_history_detail_v1',{p_history_key:key,p_data_environment:activeDataEnvironment()});
     if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
     return withOperationTimeout(operation,'簽核完整明細',30000);
   }).then(function(result){
+    if(approvalHistoryRejectDeniedResponse(owner,list,seq,state))return {ok:false,forbidden:true};
     if(!current())return {ok:false,stale:true};
     if(result&&result.error)throw result.error;
     var payload=result&&result.data;
@@ -8794,6 +8869,7 @@ function openApprovalHistoryItem(key){
       var id=remoteRowKey(row),existing=cache.find(function(r){return remoteRowKey(r)===id;});
       if((snapshot.has(id)&&(!existing||snapshot.get(id)!==JSON.stringify(existing)))||(!snapshot.has(id)&&existing))throw new Error('讀取期間單據已更新，請重新開啟明細。');
     });
+    if(approvalHistoryRejectDeniedResponse(owner,list,seq,state))return {ok:false,forbidden:true};
     if(!current())return {ok:false,stale:true};
     var next=mergeRemoteRowsByKey(rows,cache),raw=rows.find(function(row){return String(row.id)===String(entry.record_id);});
     if(table==='expense_requests')REQS=next;else if(table==='bills')BILLS=next;else INVS=next;
@@ -8805,6 +8881,7 @@ function openApprovalHistoryItem(key){
     openApprovalFullItem(item,key);
     return {ok:true,item:item};
   }).catch(function(error){
+    if(approvalHistoryRejectDeniedResponse(owner,list,seq,state))return {ok:false,forbidden:true};
     if(!current())return {ok:false,stale:true};
     if(controller){try{controller.abort();}catch(_){} }
     state.status='error';
@@ -8818,6 +8895,7 @@ function openApprovalHistoryItem(key){
 }
 function approvalHistoryStatusHtml(){
   var runtime=approvalHistoryRuntimeForCurrentUser();
+  if(runtime.accessDenied)return '<div class="card" role="alert" style="margin-bottom:10px;padding:11px 13px;color:#991b1b">'+escAttr(runtime.error||'簽核頁面的權限已變更，目前無法讀取這些紀錄。')+'</div>';
   if(runtime.status==='loading'){
     return '<div class="card" style="margin-bottom:10px;padding:11px 13px;color:#8b7358;font-size:11px">正在載入你曾經被指派或實際處理過的流程；既有紀錄仍可查看。</div>';
   }
@@ -8863,6 +8941,8 @@ function loadApprovalHistoryPage(options){
   cancelApprovalHistorySearchTimer();
   var identity=approvalHistoryIdentity(),runtime=approvalHistoryRuntimeForCurrentUser();
   if(!identity||S.page!=='approvals'||S.aT!=='h')return Promise.resolve({ok:false,skipped:true});
+  if(!approvalHistoryPageAllowed())return Promise.resolve(rejectApprovalHistoryPageAccess());
+  var owner=approvalHistoryReadOwnerIdentity();
   var page=Math.max(1,Math.floor(Number(options.page||S.apprPage||runtime.page||1))||1);
   var query=String(options.query!=null?options.query:(S.apprQuery||'')).trim();
   var limit=50,environment=activeDataEnvironment(),signature=JSON.stringify([identity,page,query]);
@@ -8877,11 +8957,12 @@ function loadApprovalHistoryPage(options){
   cancelApprovalHistoryDetail();
   if(!runtime.timing||runtime.timing.query!==query||runtime.timing.measured||runtime.timing.dispatchedAt!=null)runtime.timing={startedAt:approvalHistoryClock(),trigger:options.trigger||'load',query:query};
   if(runtime.page!==page||runtime.query!==query)runtime.items=[];
-  runtime.identity=identity;runtime.status='loading';runtime.error='';runtime.page=page;runtime.limit=limit;runtime.query=query;runtime.requestSignature=signature;
-  function current(){return APPROVAL_HISTORY_RUNTIME===runtime&&identity===approvalHistoryIdentity()&&runtime.requestSeq===requestSeq&&S.page==='approvals'&&S.aT==='h';}
+  runtime.identity=identity;runtime.status='loading';runtime.error='';runtime.accessDenied=false;runtime.page=page;runtime.limit=limit;runtime.query=query;runtime.requestSignature=signature;
+  function current(){return APPROVAL_HISTORY_RUNTIME===runtime&&identity===approvalHistoryIdentity()&&runtime.requestSeq===requestSeq&&S.page==='approvals'&&S.aT==='h'&&approvalHistoryPageAllowed();}
   // Install the promise before rendering. Synchronous client/paint exceptions
   // must not strand the runtime in loading before its timeout has even started.
   var promise=Promise.resolve().then(function(){
+    if(approvalHistoryRejectDeniedResponse(owner,runtime,requestSeq))return null;
     if(!current())return null;
     var client=getSb();if(!client||typeof client.rpc!=='function')throw new Error('簽核紀錄服務尚未連線，請重新載入。');
     runtime.timing.dispatchedAt=approvalHistoryClock();
@@ -8889,6 +8970,7 @@ function loadApprovalHistoryPage(options){
     if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
     return withOperationTimeout(operation,'個人簽核歷史',12000);
   }).then(function(result){
+    if(approvalHistoryRejectDeniedResponse(owner,runtime,requestSeq))return{ok:false,forbidden:true};
     if(!current())return{ok:false,stale:true};
     if(result&&result.error)throw result.error;
     var payload=result&&result.data;
@@ -8904,6 +8986,7 @@ function loadApprovalHistoryPage(options){
     paintApprovalHistoryState();
     return{ok:true,total:runtime.total,items:runtime.items};
   }).catch(function(error){
+    if(approvalHistoryRejectDeniedResponse(owner,runtime,requestSeq))return{ok:false,forbidden:true};
     if(!current())return{ok:false,stale:true,error:error};
     if(controller){try{controller.abort();}catch(_){} }
     runtime.status='error';runtime.error=remoteReadIssueText(error);
@@ -8922,6 +9005,7 @@ function loadApprovalHistoryPage(options){
 window.loadApprovalHistoryPage=function(options){return loadApprovalHistoryPage(options);};
 function ensureApprovalHistoryCurrent(options){
   if(S.page!=='approvals'||S.aT!=='h'||!S.user)return Promise.resolve({ok:false,skipped:true});
+  if(approvalHistoryReadOwnerIdentity()&&!approvalHistoryPageAllowed())return Promise.resolve(rejectApprovalHistoryPageAccess());
   var runtime=approvalHistoryRuntimeForCurrentUser(),query=String(S.apprQuery||'').trim(),page=Math.max(1,Number(S.apprPage)||1);
   if(!options&&runtime.status==='ready'&&runtime.page===page&&runtime.query===query)return Promise.resolve({ok:true,reused:true});
   return loadApprovalHistoryPage(Object.assign({page:page,query:query},options||{}));
@@ -25788,6 +25872,7 @@ window.apprSearch=function(v,event){
     var runtime=approvalHistoryRuntimeForCurrentUser(),identity=approvalHistoryIdentity();
     var query=String(S.apprQuery).trim(),composing=!!(event&&event.isComposing);
     if(!identity){buildApprovals();return;}
+    if(!approvalHistoryPageAllowed()){rejectApprovalHistoryPageAccess();return;}
     runtime.searchComposing=composing;
     if(!composing&&runtime.query===query&&runtime.page===1
       &&(runtime.status==='ready'||runtime.status==='error'||runtime.promise)){
@@ -25808,7 +25893,7 @@ window.apprSearch=function(v,event){
       if(APPROVAL_HISTORY_RUNTIME!==runtime||identity!==approvalHistoryIdentity()||runtime.requestSeq!==requestSeq
         ||S.page!=='approvals'||S.aT!=='h'||String(S.apprQuery||'').trim()!==query)return;
       loadApprovalHistoryPage({page:1,query:query}).catch(function(error){console.warn('approval history search failed',error);});
-    },250);
+    },event&&event.historyRefresh&&Number.isFinite(event.historyDebounceMs)?Math.max(0,Math.min(250,event.historyDebounceMs)):250);
     approvalHistorySearchTimer=timer;
     // Pending state and timer exist before render, so a cold page cannot start
     // its unrelated empty-query bootstrap on every input event.
@@ -25857,11 +25942,12 @@ function employeeRequestProgressHtml(item,status){
   return '<div class="employee-progress"><span class="badge '+escAttr(status.cls)+'">'+escAttr(status.label)+'</span>'+(!done&&step?'<small>目前：'+escAttr(stepTitle(step)||'待確認關卡')+'</small><small>待處理：'+escAttr(name||'待確認承辦人')+'</small>':'')+'<small>'+escAttr(next)+'</small></div>';
 }
 function renderApprovalHistorySummaries(runtime){
+  if(typeof canAccessPage==='function'&&!canAccessPage('approvals')&&runtime.accessDenied!==true){rejectApprovalHistoryPageAccess();return;}
   var list=el('appr-list');if(!list)return;
   S.apprItemMap={};
   var queryInput=el('appr-q');if(queryInput&&queryInput.value!==(S.apprQuery||''))queryInput.value=S.apprQuery||'';
   var ready=runtime.status==='ready',known=!!runtime.updatedAt;
-  var counts=ready?'全部曾參與 '+runtime.allTotal+' 組 · '+(runtime.query?'符合搜尋 '+runtime.total+' 組':'目前顯示全部 '+runtime.total+' 組'):
+  var counts=runtime.accessDenied?'簽核頁面的權限已變更，目前無法讀取紀錄':ready?'全部曾參與 '+runtime.allTotal+' 組 · '+(runtime.query?'符合搜尋 '+runtime.total+' 組':'目前顯示全部 '+runtime.total+' 組'):
     runtime.status==='error'?'搜尋尚未完成，請重新載入':'正在查詢曾參與流程…';
   var sub=el('appr-sub');if(sub)sub.textContent=counts;
   var badge=el('history-appr-cnt');if(badge)badge.textContent=known?String(runtime.allTotal):'—';
@@ -25872,7 +25958,7 @@ function renderApprovalHistorySummaries(runtime){
   list.setAttribute('data-history-all-total',known?String(runtime.allTotal):'');
   if(!runtime.items.length){
     list.innerHTML='<div class="card" role="status" style="text-align:center;padding:30px">'+(runtime.status==='error'
-      ?'紀錄暫時無法更新，不能當成 0 筆。<br><button type="button" class="btn-g" style="min-height:44px!important;margin-top:10px" onclick="loadApprovalHistoryPage({force:true})">重新載入</button>'
+      ?runtime.accessDenied?escAttr(runtime.error||'簽核頁面的權限已變更，目前無法讀取這些紀錄。'):'紀錄暫時無法更新，不能當成 0 筆。<br><button type="button" class="btn-g" style="min-height:44px!important;margin-top:10px" onclick="loadApprovalHistoryPage({force:true})">重新載入</button>'
       :ready?(runtime.query?'找不到符合搜尋條件的流程。':'目前沒有曾參與的流程。'):'正在查詢曾參與流程…')+'</div>';
     syncApprovalWaitTimer();return;
   }

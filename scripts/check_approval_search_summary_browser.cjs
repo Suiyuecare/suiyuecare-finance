@@ -19,6 +19,9 @@ const evidence = { scope: 'Isolated local HTTP and actual PostgreSQL, fictional 
 const check = (name, condition) => { assert(condition, name); evidence.checks.push(name); console.log('PASS ' + name); };
 const summaryRpc = 'finance_approval_history_summary_v1';
 const detailRpc = 'finance_approval_history_detail_v1';
+const permissionRpc='membership_current_permission_snapshot';
+const permissionOnly=process.env.FINANCE_SEARCH_PERMISSION_ONLY==='1';
+let permissionRevision=0,permissionGrant='allow',permissionDelayMs=0;
 let db, browser, server, nativePool, nativeAdmin, nativeDatabase;
 const requests = [];
 let fault = '', delayMs = 0;
@@ -103,7 +106,10 @@ const cases = [
 ];
 
 async function startServer() {
-  let html = applyBuildEnvironment(fs.readFileSync(path.join(root, 'index.html'), 'utf8'), { target: 'local', supabaseUrl: '', supabaseAnonKey: '' });
+  const sourceRef=process.env.FINANCE_SEARCH_SOURCE_REF;
+  const sourceHtml=sourceRef?require('node:child_process').execFileSync('git',['show',sourceRef+':index.html'],{cwd:root,encoding:'utf8',maxBuffer:16*1024*1024}):fs.readFileSync(path.join(root,'index.html'),'utf8');
+  evidence.sourceRef=sourceRef||'working-tree';evidence.rawSourceSha256=crypto.createHash('sha256').update(sourceHtml).digest('hex');
+  let html = applyBuildEnvironment(sourceHtml, { target: 'local', supabaseUrl: '', supabaseAnonKey: '' });
   evidence.sourceSha256 = crypto.createHash('sha256').update(html).digest('hex');
   const anchor = 'bootAuthGate();\n\n})();';
   assert(html.includes(anchor));
@@ -114,14 +120,27 @@ async function startServer() {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname.startsWith('/rpc/')) {
       const name = url.pathname.slice(5);
-      if (![summaryRpc, detailRpc].includes(name)) { res.writeHead(404); return res.end(); }
+      if (![summaryRpc, detailRpc, permissionRpc].includes(name)) { res.writeHead(404); return res.end(); }
       const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const args = JSON.parse(Buffer.concat(chunks).toString());
-      const measurement = { name, query: args.p_search, start: performance.now(), fault };
+      const measurement = { name, query: args.p_search, key:args.p_history_key, start: performance.now(), fault, permissionRevision:Number(req.headers['x-fixture-permission-revision']||0), delayMs };
       requests.push(measurement);
+      if(name===permissionRpc){
+        // Transport fixture only. The real application refresh/apply/resume chain
+        // handles each newly published snapshot; no loader/resume helper is stubbed.
+        const revision=++permissionRevision;measurement.permissionDelayMs=permissionDelayMs;measurement.permissionGrant=permissionGrant;
+        const body=JSON.stringify({data:{membership_user_id:'FICT-MEMBERSHIP',primary_role_code:'accountant',role_codes:['accountant'],permissions:[
+          {permission_code:'finance.page.approvals.view',role_code:'accountant',effect:measurement.permissionGrant},
+          {permission_code:'finance.page.notif.view',role_code:'accountant',effect:revision%2?'allow':'deny'}
+        ]}});
+        measurement.responseRevision=revision;measurement.bytes=Buffer.byteLength(body);
+        if(measurement.permissionDelayMs)await new Promise(resolve=>setTimeout(resolve,measurement.permissionDelayMs));
+        measurement.totalMs=performance.now()-measurement.start;
+        res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-fixture-permission-revision':String(revision)});return res.end(body);
+      }
       try {
         if (fault === 'timeout') { res.writeHead(504, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: { code: '57014', message: 'controlled isolated timeout' } })); }
-        if (delayMs) await new Promise(r => setTimeout(r, delayMs));
+        if (measurement.delayMs) await new Promise(r => setTimeout(r, measurement.delayMs));
         const started = performance.now();
         const sql = name===summaryRpc ? `select public.${name}($1,$2,$3,$4) payload` : `select public.${name}($1,$2) payload`;
         const values = name===summaryRpc ? [args.p_limit,args.p_offset,args.p_search,args.p_data_environment] : [args.p_history_key,args.p_data_environment];
@@ -169,7 +188,7 @@ const setup = `(function(){
   REQS=[];INVS=[];BILLS=[];NOTIFS=[];VOUCHERS=[];LEDGER=[];ORG_CHART=[];
   quickLogin('accountant'); S.user.authUserId='${authId}'; S.user.tenantId='${tenant}';
   approvalFastShouldHoldSkeleton=function(){return false};
-  getSb=function(){return {rpc:function(name,args){var signal;return {abortSignal:function(s){signal=s;return this},then:function(resolve,reject){return fetch('/rpc/'+name,{method:'POST',headers:{'content-type':'application/json','x-fixture-actor':S.user.id},body:JSON.stringify(args),signal:signal}).then(function(r){return r.json()}).then(resolve,reject)}}}}};
+  getSb=function(){return {rpc:function(name,args){var signal;return {abortSignal:function(s){signal=s;return this},then:function(resolve,reject){return fetch('/rpc/'+name,{method:'POST',headers:{'content-type':'application/json','x-fixture-actor':S.user.id,'x-fixture-permission-revision':String(window.__fixturePermissionRevision||0)},body:JSON.stringify(args),signal:signal}).then(function(r){if(name==='membership_current_permission_snapshot')window.__fixturePermissionRevision=Number(r.headers.get('x-fixture-permission-revision'));return r.json()}).then(resolve,reject)}}}}};
   S.demoLogin=false;S.apprQuery='';openApprovalTab('p');return true;
 })()`;
 const scope = (page, code) => page.evaluate(code => window.__acceptance.run(code), code);
@@ -182,6 +201,104 @@ async function runQuery(page, query) {
   // Timestamp the browser input event (not the automation round trip).
   await ready(page, query);
   return scope(page, `({ms:performance.now()-window.__lastSearchInput,query:APPROVAL_HISTORY_RUNTIME.query,total:APPROVAL_HISTORY_RUNTIME.total,allTotal:APPROVAL_HISTORY_RUNTIME.allTotal,keys:APPROVAL_HISTORY_RUNTIME.items.map(x=>x.historyKey),cache:[REQS.length,BILLS.length,INVS.length],text:el('appr-list').innerText})`);
+}
+
+async function waitRequests(predicate,label){
+  const deadline=performance.now()+5000;
+  while(!predicate()){
+    if(performance.now()>deadline)throw Error('HTTP evidence did not arrive: '+label);
+    await new Promise(resolve=>setTimeout(resolve,15));
+  }
+}
+async function refreshPermission(page,label){
+  const before=await scope(page,'JSON.stringify(CURRENT_PERMISSION_SNAPSHOT)');
+  const n=requests.filter(r=>r.name===permissionRpc).length;
+  assert.equal(await scope(page,`refreshCurrentPermissionSnapshotRuntime(${JSON.stringify(label)})`),true);
+  assert.equal(requests.filter(r=>r.name===permissionRpc).length,n+1,'actual permission refresh must perform HTTP');
+  assert.notEqual(await scope(page,'JSON.stringify(CURRENT_PERMISSION_SNAPSHOT)'),before,'actual snapshot application must change history identity');
+}
+async function permissionRefreshCases(page,width){
+  await runQuery(page,'自費');
+  let start=requests.length;delayMs=750;
+  await page.locator('#appr-q').fill('日照');
+  await waitRequests(()=>requests.slice(start).some(r=>r.name===summaryRpc&&r.query==='日照'),'inflight history before permissions');
+  const stale=requests.slice(start).find(r=>r.name===summaryRpc&&r.query==='日照');
+  delayMs=0;const refreshStarted=performance.now();await refreshPermission(page,'acceptance_inflight');
+  await ready(page,'日照');
+  const resumeMs=performance.now()-refreshStarted;(evidence.permissionRefreshTimings||(evidence.permissionRefreshTimings=[])).push({width,scenario:'inflight',resumeMs});
+  check(width+' background permission refresh reaches usable history within 3 seconds',resumeMs<=3000);
+  check(width+' actual permission refresh resumes an in-flight history query without a manual retry',requests.slice(start).filter(r=>r.name===summaryRpc&&r.query==='日照').length===2&&await scope(page,"APPROVAL_HISTORY_RUNTIME.total===97&&APPROVAL_HISTORY_RUNTIME.identity===approvalHistoryIdentity()&&!el('appr-list').querySelector('[aria-busy=\"true\"]')"));
+  await runQuery(page,'自費');await waitRequests(()=>stale.totalMs!==undefined,'old HTTP response completes');
+  check(width+' old pre-permission response cannot overwrite the latest visible query',await scope(page,"S.apprQuery==='自費'&&APPROVAL_HISTORY_RUNTIME.query==='自費'&&APPROVAL_HISTORY_RUNTIME.total===32&&el('appr-q').value==='自費'"));
+
+  // Dispatch actual input and the production background callback in one browser
+  // turn so the 250 ms debounce is definitely still pending.
+  start=requests.length;
+  await scope(page,`(function(){var input=el('appr-q');input.value='日照';input.dispatchEvent(new Event('input',{bubbles:true}));return refreshCurrentPermissionSnapshotRuntime('acceptance_debounce');})()`);
+  await ready(page,'日照');await page.waitForTimeout(300);
+  check(width+' permission refresh during debounce retains the newest input and dispatches once',requests.slice(start).filter(r=>r.name===summaryRpc).length===1&&await scope(page,"S.apprQuery==='日照'&&APPROVAL_HISTORY_RUNTIME.query==='日照'&&APPROVAL_HISTORY_RUNTIME.total===97"));
+
+  start=requests.length;
+  await page.locator('#appr-q').evaluate(input=>{input.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true,data:''}));input.value='自';input.dispatchEvent(new InputEvent('input',{bubbles:true,data:'自',isComposing:true}));});
+  await refreshPermission(page,'acceptance_ime');await page.waitForTimeout(300);
+  check(width+' permission refresh does not dispatch incomplete Chinese IME text',requests.slice(start).filter(r=>r.name===summaryRpc).length===0&&await page.locator('#appr-q').inputValue()==='自');
+  await page.locator('#appr-q').evaluate(input=>{input.value='自費';input.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'自費'}));input.dispatchEvent(new InputEvent('input',{bubbles:true,data:'自費',isComposing:false}));});
+  await ready(page,'自費');await page.waitForTimeout(300);
+  check(width+' IME commit after background permission refresh shows complete latest results once',requests.slice(start).filter(r=>r.name===summaryRpc).length===1&&await scope(page,"APPROVAL_HISTORY_RUNTIME.total===32&&S.apprQuery==='自費'&&el('appr-q').value==='自費'"));
+
+  // The same previously opened batch must perform a fresh secured detail RPC
+  // after the permission identity changes; source caches are not authority.
+  const key='invoices:BATCH-003';
+  const beforeDetails=requests.filter(r=>r.name===detailRpc).length;
+  await page.locator('[data-history-open="'+key+'"]').click();
+  await page.waitForFunction(()=>window.__acceptance.read("APPROVAL_HISTORY_DETAIL_RUNTIME.status==='ready'"),null,{timeout:10000});
+  const previousIdentity=await scope(page,'APPROVAL_HISTORY_DETAIL_RUNTIME.identity');
+  const first=requests.filter(r=>r.name===detailRpc).at(-1);
+  await scope(page,'closeAppr();true');
+  await refreshPermission(page,'acceptance_detail_epoch');await ready(page,'自費');
+  await page.locator('[data-history-open="'+key+'"]').click();
+  await page.waitForFunction(()=>window.__acceptance.read("APPROVAL_HISTORY_DETAIL_RUNTIME.status==='ready'"),null,{timeout:10000});
+  const latest=requests.filter(r=>r.name===detailRpc).at(-1);
+  check(width+' new permission epoch revalidates cached detail via the actual secure HTTP RPC',requests.filter(r=>r.name===detailRpc).length===beforeDetails+2&&latest.key===key&&latest.permissionRevision>first.permissionRevision&&await scope(page,`APPROVAL_HISTORY_DETAIL_RUNTIME.identity!==${JSON.stringify(previousIdentity)}&&APPROVAL_HISTORY_DETAIL_RUNTIME.identity===approvalHistoryIdentity()&&APPROVAL_HISTORY_MODAL_CONTEXT.ids.size===2`));
+  await scope(page,'closeAppr();true');
+  check(width+' background permission refresh leaves no permanent loading or blocked search controls',await scope(page,"APPROVAL_HISTORY_RUNTIME.status==='ready'&&!el('appr-q').disabled&&el('appr-list').querySelectorAll('[data-history-open]').length===32"));
+
+  // Retain actual DOM controls from the old page to exercise already queued
+  // UI actions after a true permission deny snapshot has been applied.
+  await scope(page,`window.__revokedDetailButton=el('appr-list').querySelector('[data-history-open="invoices:BATCH-003"]');true`);
+  fault='timeout';await page.locator('#appr-q').fill('撤權前控制故障');
+  await page.waitForFunction(()=>window.__acceptance.read("APPROVAL_HISTORY_RUNTIME.status==='error'"));
+  await scope(page,`window.__revokedRetryButton=el('appr-list').querySelector('button');true`);
+  fault='';delayMs=750;start=requests.length;
+  await page.locator('#appr-q').fill('日照');
+  await waitRequests(()=>requests.slice(start).some(r=>r.name===summaryRpc&&r.query==='日照'),'pending response before page grant revoked');
+  const revokedPending=requests.slice(start).find(r=>r.name===summaryRpc&&r.query==='日照');
+  delayMs=0;permissionGrant='deny';await refreshPermission(page,'acceptance_revoke_approvals');
+  assert.equal(await scope(page,"canAccessPage('approvals')"),false,'actual page authority must deny the applied snapshot');
+  const deniedRequestStart=requests.length;
+  await scope(page,"window.__revokedRetryButton.click();window.__revokedDetailButton.click();true");
+  await page.locator('#appr-q').evaluate(input=>{input.value='自費';input.dispatchEvent(new InputEvent('input',{bubbles:true,data:'自費',isComposing:false}));});
+  await waitRequests(()=>revokedPending.totalMs!==undefined,'pre-revocation HTTP finishes');await page.waitForTimeout(350);
+  check(width+' revoked page grant blocks actual retry input and retained detail DOM actions',requests.slice(deniedRequestStart).filter(r=>r.name===summaryRpc||r.name===detailRpc).length===0);
+  check(width+' pre-revocation 200 response cannot restore history data after actual deny',revokedPending.responseMeta&&revokedPending.responseMeta.total===97&&revokedPending.responseMeta.groups===50&&!revokedPending.error&&await scope(page,"!canAccessPage('approvals')&&APPROVAL_HISTORY_RUNTIME.status!=='ready'&&APPROVAL_HISTORY_RUNTIME.items.length===0&&el('appr-list').querySelectorAll('[data-history-open]').length===0&&APPROVAL_HISTORY_DETAIL_RUNTIME.status!=='ready'"));
+  permissionGrant='allow';await refreshPermission(page,'acceptance_restore_approvals');await ready(page,await scope(page,"String(S.apprQuery||'').trim()"));await runQuery(page,'自費');
+
+  // No newer request exists when the old deny response completes: a mere
+  // request-sequence check cannot make this auth-epoch negative case pass.
+  const snapshotBeforeEpoch=await scope(page,'JSON.stringify(CURRENT_PERMISSION_SNAPSHOT)');
+  const ownerBeforeEpoch=await scope(page,"[S.user.id,S.user.authUserId,currentTenantId()].join('|')");
+  start=requests.length;permissionGrant='deny';permissionDelayMs=650;
+  await scope(page,"window.__oldEpochPermission=refreshCurrentPermissionSnapshotRuntime('acceptance_old_epoch');true");
+  await waitRequests(()=>requests.slice(start).some(r=>r.name===permissionRpc),'permission HTTP pending before new auth epoch');
+  await scope(page,'financeAuthIdentityEpoch++;true');
+  const accepted=await scope(page,'window.__oldEpochPermission');
+  check(width+' same-account new auth epoch rejects an old permission response without a newer read',accepted===false&&requests.slice(start).filter(r=>r.name===permissionRpc).length===1&&requests.slice(start).find(r=>r.name===permissionRpc).permissionGrant==='deny'&&await scope(page,`JSON.stringify(CURRENT_PERMISSION_SNAPSHOT)===${JSON.stringify(snapshotBeforeEpoch)}&&[S.user.id,S.user.authUserId,currentTenantId()].join('|')===${JSON.stringify(ownerBeforeEpoch)}&&canAccessPage('approvals')`));
+  permissionDelayMs=0;permissionGrant='allow';
+  assert.equal(await scope(page,"refreshCurrentPermissionSnapshotRuntime('acceptance_current_epoch')"),true);
+  await ready(page,'自費');
+  check(width+' current epoch can refresh and resume after discarding obsolete permissions',await scope(page,"APPROVAL_HISTORY_RUNTIME.identity===approvalHistoryIdentity()&&APPROVAL_HISTORY_RUNTIME.total===32&&canAccessPage('approvals')"));
+
+  const screenshot=path.join(output,'permission-refresh-ready-'+width+'.png');await page.screenshot({path:screenshot});evidence.screenshots.push(screenshot);
 }
 
 async function main() {
@@ -197,6 +314,7 @@ async function main() {
     await scope(page, setup);
     await page.evaluate(()=>document.addEventListener('input',e=>{if(e.target.id==='appr-q')window.__lastSearchInput=performance.now()},true));
     const before = requests.length;
+    const detailCountAtViewportStart=requests.filter(r=>r.name===detailRpc).length;
     await page.waitForTimeout(350);
     check(width+' pending tab starts no history RPC', requests.length===before);
     await scope(page,"openApprovalTab('h');true");
@@ -204,6 +322,7 @@ async function main() {
     const initial = await scope(page,'({total:APPROVAL_HISTORY_RUNTIME.total,keys:APPROVAL_HISTORY_RUNTIME.items.map(x=>x.historyKey),cache:[REQS.length,BILLS.length,INVS.length]})');
     check(width+' initial summary has all 737 groups and 50 rows',initial.total===737&&initial.keys.length===50);
     check(width+' summary never populates full document caches',initial.cache.every(n=>n===0));
+    if(permissionOnly){await permissionRefreshCases(page,width);check(width+' no browser exceptions',errors.length===0);await context.close();continue;}
     for (const test of cases) {
       const result = await runQuery(page,test.query), expectedKeys=test.expected().map(x=>x.key).sort();
       const keys=[...result.keys];
@@ -224,7 +343,7 @@ async function main() {
     check(width+' list has no page overflow',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
     const screen=path.join(output,'history-search-'+width+'.png');await page.screenshot({path:screen,fullPage:true});evidence.screenshots.push(screen);
     const beforeDetail=requests.filter(r=>r.name===detailRpc).length;
-    check(width+' no full details fetched during list searches',beforeDetail===(width===1440?0:1));
+    check(width+' no full details fetched during list searches',beforeDetail===detailCountAtViewportStart);
     // An unrelated cached row with the same batch must not pollute this detail.
     await scope(page,`INVS.push(mapInv({id:'GHOST',no:'GHOST-NUMBER',tenant_id:'${tenant}',data_environment:'test',batch_id:'BATCH-097',amount:999,total:999}));true`);
     await scope(page,'window.apprPage(2);true');await ready(page,'日照');
@@ -243,9 +362,11 @@ async function main() {
     await page.locator('#appr-q').fill('自費');await page.waitForTimeout(300);
     await page.locator('#appr-q').fill('日照');await ready(page,'日照');
     check(width+' slow superseded response cannot replace final query',await scope(page,"APPROVAL_HISTORY_RUNTIME.query==='日照'&&APPROVAL_HISTORY_RUNTIME.total===97"));delayMs=0;
+    await permissionRefreshCases(page,width);
     check(width+' no browser exceptions',errors.length===0);
     await context.close();
   }
+  if(permissionOnly){evidence.focus='Actual permission refresh history/IME/detail race';return;}
   for(const width of [1440,390])for(let n=0;n<15;n++){
     const context=await browser.newContext({viewport:{width,height:width===390?844:1000}}),page=await context.newPage();
     await page.goto(url);await scope(page,setup);
@@ -281,8 +402,11 @@ async function main() {
   check('50-group summary payloads <= 200KB',requests.filter(r=>r.name===summaryRpc&&!r.error&&!r.fault).every(r=>r.bytes<=200000));
   console.log(JSON.stringify(evidence.timing));
 }
-main().catch(error=>{evidence.failure={message:error.message,stack:error.stack};console.error(error);process.exitCode=1}).finally(async()=>{
+main().catch(async error=>{evidence.failure={message:error.message,stack:error.stack};
+  if(browser){evidence.failure.dom=[];for(const context of browser.contexts())for(const page of context.pages())try{evidence.failure.dom.push(await scope(page,"({status:APPROVAL_HISTORY_RUNTIME.status,query:APPROVAL_HISTORY_RUNTIME.query,total:APPROVAL_HISTORY_RUNTIME.total,currentIdentity:APPROVAL_HISTORY_RUNTIME.identity===approvalHistoryIdentity(),input:el('appr-q')&&el('appr-q').value,list:el('appr-list')&&el('appr-list').innerText.slice(0,800)})"));}catch(_){} }
+  console.error(error);process.exitCode=1}).finally(async()=>{
   evidence.requests=requests;
+  if(evidence.rawSourceSha256&&!process.env.FINANCE_SEARCH_SOURCE_REF){evidence.rawSourceEndSha256=crypto.createHash('sha256').update(fs.readFileSync(path.join(root,'index.html'))).digest('hex');evidence.sourceUnchanged=evidence.rawSourceEndSha256===evidence.rawSourceSha256;if(!evidence.sourceUnchanged){evidence.failure=evidence.failure||{message:'HTML source changed during browser acceptance; rerun exact frozen source'};process.exitCode=1;}}
   fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'evidence.json'),JSON.stringify(evidence,null,2));
   if(browser)await browser.close();if(server)await new Promise(r=>server.close(r));if(nativePool)await nativePool.end();if(db)await db.close();
   if(nativeAdmin){if(nativeDatabase)await nativeAdmin.query('drop database '+nativeDatabase);await nativeAdmin.end();}
