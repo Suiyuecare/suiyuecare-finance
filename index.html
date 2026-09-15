@@ -1973,6 +1973,8 @@ var WORKFLOW_ENGINE_HEALTH=[];
 var WORKFLOW_ADMIN_HEALTH=null;
 var WORKFLOW_ADMIN_DEFINITIONS={};
 var WORKFLOW_ADMIN_RPC_AVAILABLE=null;
+var WORKFLOW_OPTIONAL_READ_SEQUENCE={};
+var WORKFLOW_OPTIONAL_READ_ERRORS={};
 var APPROVAL_RUNTIME_AVAILABLE=null;
 var APPROVAL_RUNTIME_DISABLED_REASON='';
 var ORG_ADMIN_READ_STATE={identity:'',sequence:0,promise:null,lastSuccessAt:0};
@@ -2028,6 +2030,27 @@ var MEMBERSHIP_PERMISSION_CATALOG=[];
 var MEMBERSHIP_ASSIGNMENT_CATALOG={users:[],org_units:[],assignments:[]};
 var CURRENT_PERMISSION_SNAPSHOT={loaded:false,authUserId:'',membershipUserId:'',primaryRoleCode:'',roleCodes:[],permissions:[],error:''};
 var currentPermissionSnapshotReadSeq=0;
+var CURRENT_PERMISSION_SNAPSHOT_READ_STATE={status:'idle',message:''};
+// Release-owned optional read capabilities, verified against the production
+// catalog on 2026-09-15. These entries control endpoint use, never user grants.
+// Enabling an endpoint requires an explicitly reviewed deployment; missing or
+// unknown entries must not trigger availability probes or authorize anything.
+var FINANCE_OPTIONAL_READ_CAPABILITIES=Object.freeze({
+  membership_current_permission_snapshot:Object.freeze({available:false,policy:'disabled_until_manifested',label:'進階權限快照'}),
+  finance_approval_workflow_admin_health:Object.freeze({available:false,policy:'disabled_until_manifested',label:'進階簽核流程健檢'}),
+  finance_approval_workflow_catalog:Object.freeze({available:false,policy:'disabled_until_manifested',label:'進階簽核流程目錄'}),
+  finance_approval_workflow_engine_health:Object.freeze({available:false,policy:'disabled_until_manifested',label:'進階簽核引擎健檢'}),
+  finance_approval_workflow_definition:Object.freeze({available:false,policy:'disabled_until_manifested',label:'進階簽核流程定義'})
+});
+function financeOptionalReadCapability(rpcName){
+  var name=String(rpcName||'');
+  if(Object.prototype.hasOwnProperty.call(FINANCE_OPTIONAL_READ_CAPABILITIES,name))return FINANCE_OPTIONAL_READ_CAPABILITIES[name];
+  return {available:false,policy:'unknown_deny',label:'選配唯讀功能'};
+}
+function financeOptionalReadAvailable(rpcName){
+  var capability=financeOptionalReadCapability(rpcName);
+  return !!(capability&&capability.available===true);
+}
 var AUTHORIZATION_CHANGE_SETS=[];
 var AUTHORIZATION_GOVERNANCE_RUNTIME={available:false,error:''};
 var MEMBERSHIP_ROLE_RUNTIME={loading:false,loaded:false,compatibility:false,error:'',editingRoleId:''};
@@ -6465,7 +6488,7 @@ async function loadStatementSourcePages(client,table,options){
     var result=await engine.loadLedgerPages(function(start,end){
       if(table!=='ledger_entries')return loadFinanceDocumentSourcePage(client,table,tenant,environment,start,end);
       return (typeof financeBootstrapRead==='function'?financeBootstrapRead:withOperationTimeout)(client.from(table).select('*',{count:'exact'}).eq('tenant_id',tenant).eq('data_environment',environment).order('id',{ascending:true}).range(start,end),'報表資料分頁 '+table,20000);
-    },{pageSize:1000,isCurrent:current,onProgress:function(progress){if(current()){Object.assign(state,progress);if(options.onProgress)options.onProgress(progress);}}});
+    },{pageSize:table==='ledger_entries'?1000:250,isCurrent:current,onProgress:function(progress){if(current()){Object.assign(state,progress);if(options.onProgress)options.onProgress(progress);}}});
     if(!current())throw new Error('報表讀取期間登入身分已變更');
     result.data.sort(function(a,b){return String(b.entry_date||b.created_at||'').localeCompare(String(a.entry_date||a.created_at||''))||String(a.id).localeCompare(String(b.id));});
     if(key){
@@ -6576,59 +6599,90 @@ async function refreshOrgChartRowsFromRuntime(client,reason,options){
   }
   return {ok:true,count:rows.length,rows:rows};
 }
-async function refreshWorkflowEngineObservability(client){
+function workflowOptionalReadAvailable(name){
+  return typeof financeOptionalReadAvailable==='function'&&financeOptionalReadAvailable(name)===true;
+}
+function workflowAdminReadsEnabled(){
+  return ['finance_approval_workflow_admin_health','finance_approval_workflow_definition','finance_approval_workflow_catalog','finance_approval_workflow_engine_health'].every(workflowOptionalReadAvailable);
+}
+function clearDisabledWorkflowRead(name){
+  // This is an unavailable optional feature, never an empty successful check.
+  WORKFLOW_OPTIONAL_READ_SEQUENCE[name]=(WORKFLOW_OPTIONAL_READ_SEQUENCE[name]||0)+1;
+  delete WORKFLOW_OPTIONAL_READ_ERRORS[name];
+  if(name==='finance_approval_workflow_catalog')WORKFLOW_ENGINE_CATALOG=[];
+  if(name==='finance_approval_workflow_engine_health')WORKFLOW_ENGINE_HEALTH=[];
+  if(name==='finance_approval_workflow_admin_health'){WORKFLOW_ADMIN_HEALTH=null;WORKFLOW_ADMIN_RPC_AVAILABLE=false;}
+  if(name==='finance_approval_workflow_definition'){WORKFLOW_ADMIN_DEFINITIONS={};WORKFLOW_ADMIN_RPC_AVAILABLE=false;}
+}
+async function readWorkflowOptionalRpc(client,name,args){
+  if(!workflowOptionalReadAvailable(name)){clearDisabledWorkflowRead(name);return {disabled:true};}
   client=client||getSb();
-  if(!client)return false;
-  var catalog=await loadOptionalRpc(client,'finance_approval_workflow_catalog',{});
-  var health=await loadOptionalRpc(client,'finance_approval_workflow_engine_health',{});
-  if(Array.isArray(catalog))WORKFLOW_ENGINE_CATALOG=catalog.map(mapWorkflowEngineCatalog);
-  if(Array.isArray(health))WORKFLOW_ENGINE_HEALTH=health.map(mapWorkflowEngineHealth);
-  if((Array.isArray(WORKFLOW_ENGINE_CATALOG)&&WORKFLOW_ENGINE_CATALOG.length)||(Array.isArray(WORKFLOW_ENGINE_HEALTH)&&WORKFLOW_ENGINE_HEALTH.length)){
+  if(!client||S.demoLogin)return {skipped:true};
+  var identity=financeStartupReadIdentity(),epoch=financeAuthIdentityEpoch;
+  if(!identity)return {stale:true};
+  var seq=(WORKFLOW_OPTIONAL_READ_SEQUENCE[name]||0)+1;
+  WORKFLOW_OPTIONAL_READ_SEQUENCE[name]=seq;
+  function current(){return workflowOptionalReadAvailable(name)&&WORKFLOW_OPTIONAL_READ_SEQUENCE[name]===seq&&identity===financeStartupReadIdentity()&&epoch===financeAuthIdentityEpoch;}
+  try{
+    var r=await withOperationTimeout(client.rpc(name,args||{}),'讀取流程管理狀態',12000);
+    if(!current())return {stale:true};
+    if(!r||r.error)throw r&&r.error||new Error('流程管理狀態回傳格式不正確');
+    delete WORKFLOW_OPTIONAL_READ_ERRORS[name];
+    return {data:r.data,current:current};
+  }catch(err){
+    if(!current())return {stale:true};
+    WORKFLOW_OPTIONAL_READ_ERRORS[name]=String(err&&err.message||err||'讀取失敗');
+    console.warn('Workflow optional read failed:',name,err&&err.message||err);
+    return {error:err,missing:isRpcMissing(err),current:current};
+  }
+}
+async function refreshWorkflowEngineObservability(client){
+  var names=['finance_approval_workflow_catalog','finance_approval_workflow_engine_health'];
+  var results=await Promise.all(names.map(function(name){return readWorkflowOptionalRpc(client,name,{});}));
+  var complete=true;
+  results.forEach(function(r,index){
+    if(!r.current||!r.current()||r.error){complete=false;return;}
+    if(!Array.isArray(r.data)){
+      WORKFLOW_OPTIONAL_READ_ERRORS[names[index]]='流程管理清單回傳格式不正確';complete=false;return;
+    }
+    if(index===0)WORKFLOW_ENGINE_CATALOG=r.data.map(mapWorkflowEngineCatalog);
+    else WORKFLOW_ENGINE_HEALTH=r.data.map(mapWorkflowEngineHealth);
+  });
+  if(complete&&((Array.isArray(WORKFLOW_ENGINE_CATALOG)&&WORKFLOW_ENGINE_CATALOG.length)||(Array.isArray(WORKFLOW_ENGINE_HEALTH)&&WORKFLOW_ENGINE_HEALTH.length))){
     APPROVAL_RUNTIME_AVAILABLE=true;
     APPROVAL_RUNTIME_DISABLED_REASON='';
   }
-  return true;
+  return complete;
 }
 function normalizeWorkflowAdminHealth(data){
   data=Array.isArray(data)?(data[0]||null):data;
   if(!data||typeof data!=='object')return null;
   data=normalizeSettingValue(data);
-  data.workflows_with_drafts=Array.isArray(data.workflows_with_drafts)?data.workflows_with_drafts:[];
-  data.workflows_missing_published=Array.isArray(data.workflows_missing_published)?data.workflows_missing_published:[];
-  data.broken_versions=Array.isArray(data.broken_versions)?data.broken_versions:[];
+  // Missing arrays cannot certify that there are no broken or unpublished versions.
+  if(!['workflows_with_drafts','workflows_missing_published','broken_versions'].every(function(key){return Array.isArray(data[key]);}))return null;
   return data;
 }
 async function refreshWorkflowAdminHealth(client){
-  client=client||getSb();
-  if(!client||S.demoLogin)return null;
-  var r=await client.rpc('finance_approval_workflow_admin_health',{});
+  var r=await readWorkflowOptionalRpc(client,'finance_approval_workflow_admin_health',{});
+  if(!r.current||!r.current())return null;
   if(r.error){
-    if(isRpcMissing(r.error)){
-      WORKFLOW_ADMIN_RPC_AVAILABLE=false;
-      return null;
-    }
-    console.warn('Approval workflow admin health failed:',r.error.message||r.error);
-    return WORKFLOW_ADMIN_HEALTH;
+    if(r.missing){WORKFLOW_ADMIN_RPC_AVAILABLE=false;WORKFLOW_ADMIN_HEALTH=null;}
+    return null;
   }
+  var data=normalizeWorkflowAdminHealth(r.data);
+  if(!data){WORKFLOW_OPTIONAL_READ_ERRORS.finance_approval_workflow_admin_health='流程管理健檢回傳格式不正確';return null;}
   WORKFLOW_ADMIN_RPC_AVAILABLE=true;
-  WORKFLOW_ADMIN_HEALTH=normalizeWorkflowAdminHealth(r.data);
-  return WORKFLOW_ADMIN_HEALTH;
+  WORKFLOW_ADMIN_HEALTH=data;
+  return data;
 }
 async function refreshWorkflowAdminDefinition(workflowKey,client){
   workflowKey=String(workflowKey||'').trim();
-  client=client||getSb();
-  if(!workflowKey||!client||S.demoLogin)return null;
-  var r=await client.rpc('finance_approval_workflow_definition',{p_workflow_key:workflowKey,p_version_id:null});
-  if(r.error){
-    if(isRpcMissing(r.error)){
-      WORKFLOW_ADMIN_RPC_AVAILABLE=false;
-      return null;
-    }
-    console.warn('Approval workflow definition failed:',workflowKey,r.error.message||r.error);
-    return null;
-  }
-  WORKFLOW_ADMIN_RPC_AVAILABLE=true;
-  var data=normalizeSettingValue(r.data||{});
+  if(!workflowKey)return null;
+  var r=await readWorkflowOptionalRpc(client,'finance_approval_workflow_definition',{p_workflow_key:workflowKey,p_version_id:null});
+  if(!r.current||!r.current())return null;
+  if(r.error){if(r.missing){WORKFLOW_ADMIN_RPC_AVAILABLE=false;WORKFLOW_ADMIN_DEFINITIONS={};}return null;}
+  var data=normalizeSettingValue(r.data);
+  if(!data||typeof data!=='object'||Array.isArray(data)){WORKFLOW_OPTIONAL_READ_ERRORS.finance_approval_workflow_definition='流程定義回傳格式不正確';return null;}
   WORKFLOW_ADMIN_DEFINITIONS[workflowKey]=data;
   return data;
 }
@@ -7542,15 +7596,32 @@ async function refreshCurrentPermissionSnapshotRuntime(reason){
   var client=getSb(),identity=currentPermissionSnapshotReadIdentity();
   if(!client||!identity)return false;
   var seq=++currentPermissionSnapshotReadSeq;
+  if(!financeOptionalReadAvailable('membership_current_permission_snapshot')){
+    // Preserve every existing grant/deny. An uninstalled optional endpoint is
+    // not a new permission snapshot and must not reset the verified role matrix.
+    var skippedIntent=captureApprovalHistoryPermissionRefreshIntent();
+    CURRENT_PERMISSION_SNAPSHOT_READ_STATE={status:'not_enabled',message:'進階權限快照未啟用'};
+    applyRolePermissions();
+    resumeApprovalHistoryAfterPermissionRefresh(skippedIntent);
+    if(S.page==='approvals'&&S.aT==='h'&&!approvalHistoryPageAllowed())rejectApprovalHistoryPageAccess();
+    if(S.page==='settings'){
+      renderMembershipRoleControl();
+      renderSettingPermissions();
+    }
+    setTopSyncStatus(CURRENT_PERMISSION_SNAPSHOT_READ_STATE.message);
+    return false;
+  }
   var result=await client.rpc('membership_current_permission_snapshot',{});
   // A background read may finish after another employee signs in or after a
   // newer permissions read. Neither may overwrite the current actor's grants.
-  if(seq!==currentPermissionSnapshotReadSeq||identity!==currentPermissionSnapshotReadIdentity())return false;
+  if(seq!==currentPermissionSnapshotReadSeq||identity!==currentPermissionSnapshotReadIdentity()
+    ||!financeOptionalReadAvailable('membership_current_permission_snapshot'))return false;
   // Capture the latest input immediately before applying the new snapshot, not
   // the query that happened to be visible when this remote read started.
   var historyIntent=captureApprovalHistoryPermissionRefreshIntent();
   var warnings=[];
   var ok=applyRemotePermissionSnapshotResult(result,true,warnings);
+  CURRENT_PERMISSION_SNAPSHOT_READ_STATE={status:ok?'applied':'error',message:ok?'正式權限已套用':'正式權限同步未完成'};
   applyRolePermissions();
   resumeApprovalHistoryAfterPermissionRefresh(historyIntent);
   if(S.page==='settings'){
@@ -9240,7 +9311,9 @@ function scheduleDeferredFinanceRuntimeRefresh(authUserId){
     var client=getSb();if(!client)return;
     try{await refreshMembershipOrgGraph('load_remote_data_deferred',{silent:true,preserveDraft:true});}catch(err){console.warn('Deferred organization runtime refresh failed',err&&err.message?err.message:err);}
     try{await refreshCurrentPermissionSnapshotRuntime('load_remote_data_deferred');}catch(err){console.warn('Deferred permission snapshot refresh failed',err&&err.message?err.message:err);}
-    try{await refreshWorkflowAdminHealth(client);}catch(err){console.warn('Deferred workflow health refresh failed',err&&err.message?err.message:err);}
+    if(workflowOptionalReadAvailable('finance_approval_workflow_admin_health')){
+      try{await refreshWorkflowAdminHealth(client);}catch(err){console.warn('Deferred workflow health refresh failed',err&&err.message?err.message:err);}
+    }else clearDisabledWorkflowRead('finance_approval_workflow_admin_health');
     try{await refreshApprovalOrgAdminRuntime(client,'load_remote_data_deferred');}catch(err){console.warn('Deferred approval admin refresh failed',err&&err.message?err.message:err);}
   },0);
 }
@@ -10309,7 +10382,7 @@ var SYSTEM_HEALTH_RPC_CHECKS=[
   {group:'身份與簽核',label:'P1 權限變更治理',name:'finance_p1_authorization_governance_health',args:function(){return {};},required:false},
   {group:'身份與簽核',label:'Google / Finance 身份合併稽核',name:'finance_identity_merge_audit',args:function(){return {};},required:true},
   {group:'身份與簽核',label:'簽核指向快照健康檢查',name:'finance_approval_actor_health',args:function(){return {p_data_environment:activeDataEnvironment()};},required:true},
-  {group:'身份與簽核',label:'版本化簽核流程引擎健康檢查',name:'finance_approval_workflow_engine_health',args:function(){return {};},required:false},
+  {group:'身份與簽核',label:'版本化簽核流程引擎健康檢查',name:'finance_approval_workflow_engine_health',args:function(){return {};},required:false,optionalReadCapability:'finance_approval_workflow_engine_health'},
   {group:'身份與簽核',label:'組織圖 runtime 後台 API',name:'finance_org_admin_health',args:function(){return {};},required:false},
   {group:'收入與應收',label:'發票金額完整性',name:'finance_invoice_amount_health',args:function(){return {p_data_environment:activeDataEnvironment()};},required:true},
   {group:'收入與應收',label:'已收繳費單發票追蹤',name:'finance_bill_invoice_followup_health',args:function(){return {p_data_environment:activeDataEnvironment()};},required:true},
@@ -10402,6 +10475,9 @@ async function probeSystemHealthTable(item,options){
   }
 }
 async function probeSystemHealthRpc(item,options){
+  if(item.required!==true&&item.optionalReadCapability===item.name&&!workflowOptionalReadAvailable(item.optionalReadCapability)){
+    return Object.assign({},item,{status:'skip',detail:'此發布版本未啟用此選配查詢，未執行檢查。'});
+  }
   var client=options&&options.client||getSb();
   try{
     var r=await systemHealthProbeRead(client.rpc(item.name,item.args?item.args():{}),options);
@@ -25978,7 +26054,7 @@ function renderApprovalHistorySummaries(runtime){
       +'<td class="appr-col-actionDate date-cell">'+escAttr(item.historyLastParticipatedAt?draftTime(item.historyLastParticipatedAt):'—')+'</td></tr>';
   }).join('');
   var page=Math.max(1,runtime.page),pages=Math.max(1,Math.ceil(runtime.total/50));
-  list.innerHTML='<div class="card"><div class="finance-detail-scroll" style="width:100%;contain:inline-size" tabindex="0" role="region" aria-label="簽核歷史摘要表，可左右捲動"><table class="approval-table finance-list-table compact finance-detail-table approval-history-summary-table" style="min-width:1040px!important;table-layout:auto!important">'+approvalTableHeaderHtml().replace('>選取<','>明細<').replace('>簽核日期<','>最後參與時間<')+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(runtime.total,page,pages)+'</div>';
+  list.innerHTML='<div class="card"><div class="finance-detail-scroll approval-history-summary-scroll" style="width:100%;contain:inline-size" tabindex="0" role="region" aria-label="簽核歷史摘要表，可左右捲動"><table class="approval-table finance-list-table compact finance-detail-table approval-history-summary-table" style="min-width:1120px!important;table-layout:fixed!important">'+approvalTableHeaderHtml().replace('>選取<','>明細<').replace('>簽核日期<','>最後參與時間<')+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(runtime.total,page,pages)+'</div>';
   if(typeof window.refreshFinancialTableScrollHints==='function')window.refreshFinancialTableScrollHints(list);
   syncApprovalWaitTimer();
 }
@@ -33828,13 +33904,14 @@ function workflowAdminBrokenCount(){
   return WORKFLOW_ADMIN_HEALTH&&Array.isArray(WORKFLOW_ADMIN_HEALTH.broken_versions)?WORKFLOW_ADMIN_HEALTH.broken_versions.length:0;
 }
 function workflowAdminStatusBadgeClass(status,hasDraft,missing,broken){
-  if(WORKFLOW_ADMIN_RPC_AVAILABLE===false||missing||broken)return'b-wait';
+  if(!workflowAdminReadsEnabled()||WORKFLOW_ADMIN_RPC_AVAILABLE===false||Object.keys(WORKFLOW_OPTIONAL_READ_ERRORS).length||missing||broken)return'b-wait';
   if(hasDraft)return'b-purp';
   if(status==='published')return'b-ok';
   return'b-gray';
 }
 function workflowAdminStatusText(status,hasDraft,missing,broken){
-  if(WORKFLOW_ADMIN_RPC_AVAILABLE===false)return'RPC 未安裝';
+  if(!workflowAdminReadsEnabled()||WORKFLOW_ADMIN_RPC_AVAILABLE===false)return'RPC 未安裝';
+  if(Object.keys(WORKFLOW_OPTIONAL_READ_ERRORS).length)return'讀取失敗';
   if(missing)return'未發布';
   if(broken)return'需修正';
   if(hasDraft)return'有草稿';
@@ -33864,12 +33941,12 @@ function workflowAdminStatusHtml(template){
   var publishedAt=(version&&(version.published_at||version.publishedAt))||'';
   var publishedText=publishedAt?String(publishedAt).slice(0,10):'';
   var badgeClass=workflowAdminStatusBadgeClass(status,draftCount>0,missing,broken);
-  var canPublish=canManageWorkflowAdminFrontend()&&hasSupabase()&&!S.demoLogin&&WORKFLOW_ADMIN_RPC_AVAILABLE!==false&&draftCount>0&&!broken;
+  var canPublish=canManageWorkflowAdminFrontend()&&hasSupabase()&&!S.demoLogin&&workflowAdminReadsEnabled()&&WORKFLOW_ADMIN_RPC_AVAILABLE===true&&!Object.keys(WORKFLOW_OPTIONAL_READ_ERRORS).length&&draftCount>0&&!broken;
   var publishDisabled=canPublish?'':' disabled';
   return '<div class="workflow-admin-status" style="border:1px solid #efd7b8;border-radius:12px;background:#fffaf3;padding:12px;margin:10px 0;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center">'
     +'<div><div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><strong style="font-size:13px;color:#334155">正式流程版本</strong><span class="badge '+badgeClass+'">'+workflowAdminStatusText(status,draftCount>0,missing,broken)+'</span><span class="badge b-blue">'+escAttr(versionLabel)+'</span>'+(draftCount?'<span class="badge b-purp">draft '+draftCount+'</span>':'')+'</div>'
     +'<div style="font-size:11px;color:#64748b;line-height:1.65">節點 '+nodeCount+'、連線 '+edgeCount+(publishedText?'｜發布 '+escAttr(publishedText):'')+'｜發布只影響新送單，既有簽核單維持原版本。</div>'
-    +(WORKFLOW_ADMIN_RPC_AVAILABLE===false?'<div style="font-size:11px;color:#9f1239;margin-top:4px">正式資料庫尚未套用 workflow admin RPC migration。</div>':'')
+    +(!workflowAdminReadsEnabled()?'<div style="font-size:11px;color:#9f1239;margin-top:4px">此發布版本尚未啟用流程版本管理查詢，未執行健檢。</div>':WORKFLOW_ADMIN_RPC_AVAILABLE===false?'<div style="font-size:11px;color:#9f1239;margin-top:4px">正式資料庫尚未套用 workflow admin RPC migration。</div>':Object.keys(WORKFLOW_OPTIONAL_READ_ERRORS).length?'<div style="font-size:11px;color:#9f1239;margin-top:4px">流程版本狀態讀取失敗；上次結果不代表目前狀態，請重新讀取。</div>':'')
     +(missing?'<div style="font-size:11px;color:#9f1239;margin-top:4px">此流程在 DB 端還沒有正式發布版本。</div>':'')
     +(broken?'<div style="font-size:11px;color:#9f1239;margin-top:4px">DB 端有 '+broken+' 個流程版本缺節點或連線，請先到系統健檢確認。</div>':'')+'</div>'
     +'<div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn-g" onclick="refreshSelectedWorkflowAdminStatus()">重新讀取</button><button type="button" class="btn-p" onclick="publishSelectedWorkflowVersion()"'+publishDisabled+'>發布 draft</button></div>'

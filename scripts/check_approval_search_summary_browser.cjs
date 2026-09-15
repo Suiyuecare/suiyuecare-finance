@@ -120,7 +120,7 @@ async function startServer() {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname.startsWith('/rpc/')) {
       const name = url.pathname.slice(5);
-      if (![summaryRpc, detailRpc, permissionRpc].includes(name)) { res.writeHead(404); return res.end(); }
+      if (![summaryRpc, detailRpc, permissionRpc].includes(name)) { if(name.startsWith('finance_approval_workflow_'))requests.push({name,unexpected:true,start:performance.now()});res.writeHead(404);return res.end(); }
       const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const args = JSON.parse(Buffer.concat(chunks).toString());
       const measurement = { name, query: args.p_search, key:args.p_history_key, start: performance.now(), fault, permissionRevision:Number(req.headers['x-fixture-permission-revision']||0), delayMs };
@@ -217,7 +217,28 @@ async function refreshPermission(page,label){
   assert.equal(requests.filter(r=>r.name===permissionRpc).length,n+1,'actual permission refresh must perform HTTP');
   assert.notEqual(await scope(page,'JSON.stringify(CURRENT_PERMISSION_SNAPSHOT)'),before,'actual snapshot application must change history identity');
 }
+async function optionalDefaultCases(page,width){
+  const start=requests.length;
+  const result=await scope(page,`(async function(){
+    var before=JSON.stringify(CURRENT_PERMISSION_SNAPSHOT),core=APPROVAL_RUNTIME_AVAILABLE;
+    var refreshed=await refreshCurrentPermissionSnapshotRuntime('acceptance_release_default');
+    await Promise.all([refreshWorkflowAdminHealth(),refreshWorkflowEngineObservability(),refreshWorkflowAdminDefinition('FICT-WORKFLOW')]);
+    var probe=await probeSystemHealthRpc(SYSTEM_HEALTH_RPC_CHECKS.find(function(item){return item.name==='finance_approval_workflow_engine_health'}));
+    var node=document.createElement('div');node.id='acceptance-workflow-status';node.innerHTML=workflowAdminStatusHtml({id:'FICT-WORKFLOW'})+healthSectionHtml('選配健檢',[probe]);document.body.appendChild(node);
+    return {refreshed:refreshed,snapshotUnchanged:before===JSON.stringify(CURRENT_PERMISSION_SNAPSHOT),state:CURRENT_PERMISSION_SNAPSHOT_READ_STATE.status,coreUnchanged:core===APPROVAL_RUNTIME_AVAILABLE,adminHealth:WORKFLOW_ADMIN_HEALTH,probeStatus:probe.status,capabilities:Object.keys(FINANCE_OPTIONAL_READ_CAPABILITIES).map(function(name){return [name,financeOptionalReadAvailable(name)]})};
+  })()`);
+  (evidence.optionalDefaults||(evidence.optionalDefaults=[])).push({width,result,requests:requests.slice(start).map(r=>r.name)});
+  check(width+' release default optional reads issue zero HTTP and retain the real permission snapshot',requests.slice(start).filter(r=>r.name===permissionRpc||r.name.startsWith('finance_approval_workflow_')).length===0&&result.refreshed===false&&result.snapshotUnchanged&&result.state==='not_enabled'&&result.capabilities.every(x=>x[1]===false));
+  const status=page.locator('#acceptance-workflow-status');
+  check(width+' actual workflow status DOM says uninstalled and unchecked without enabling publish or altering core approvals',(await status.innerText()).includes('RPC 未安裝')&&(await status.innerText()).includes('未執行健檢')&&await status.locator('button.btn-p').isDisabled()&&result.adminHealth===null&&result.coreUnchanged);
+  check(width+' actual system health DOM reports optional workflow probe as unchecked',result.probeStatus==='skip'&&(await status.locator('.health-row-skip').innerText()).includes('未檢查')&&(await status.locator('.health-row-skip').innerText()).includes('未執行檢查'));
+  await status.evaluate(node=>node.remove());
+}
+
 async function permissionRefreshCases(page,width){
+  // This separate fictional deployment has installed the optional snapshot RPC.
+  // The real capability helper and refresh/resume chain remain untouched.
+  await scope(page,"FINANCE_OPTIONAL_READ_CAPABILITIES=Object.freeze(Object.assign({},FINANCE_OPTIONAL_READ_CAPABILITIES,{membership_current_permission_snapshot:Object.freeze({available:true,policy:'fixture_installed'})}));true");
   await runQuery(page,'自費');
   let start=requests.length;delayMs=750;
   await page.locator('#appr-q').fill('日照');
@@ -322,6 +343,7 @@ async function main() {
     const initial = await scope(page,'({total:APPROVAL_HISTORY_RUNTIME.total,keys:APPROVAL_HISTORY_RUNTIME.items.map(x=>x.historyKey),cache:[REQS.length,BILLS.length,INVS.length]})');
     check(width+' initial summary has all 737 groups and 50 rows',initial.total===737&&initial.keys.length===50);
     check(width+' summary never populates full document caches',initial.cache.every(n=>n===0));
+    await optionalDefaultCases(page,width);
     if(permissionOnly){await permissionRefreshCases(page,width);check(width+' no browser exceptions',errors.length===0);await context.close();continue;}
     for (const test of cases) {
       const result = await runQuery(page,test.query), expectedKeys=test.expected().map(x=>x.key).sort();
@@ -347,6 +369,18 @@ async function main() {
     // An unrelated cached row with the same batch must not pollute this detail.
     await scope(page,`INVS.push(mapInv({id:'GHOST',no:'GHOST-NUMBER',tenant_id:'${tenant}',data_environment:'test',batch_id:'BATCH-097',amount:999,total:999}));true`);
     await scope(page,'window.apprPage(2);true');await ready(page,'日照');
+    const longRow=page.locator('[data-history-key="invoices:BATCH-097"]');
+    const geometry=await longRow.evaluate(row=>{
+      const purpose=row.querySelector('.appr-col-purpose'),summary=purpose.querySelector('.summary-cell'),scroll=row.closest('.finance-detail-scroll');
+      const expected=window.__acceptance.read("APPROVAL_HISTORY_RUNTIME.items.find(x=>x.historyKey==='invoices:BATCH-097').summary.description");
+      const start=scroll.scrollLeft;scroll.scrollTo({left:70,behavior:'instant'});const moved=scroll.scrollLeft;scroll.scrollLeft=start;
+      return {purposeWidth:purpose.getBoundingClientRect().width,rowHeight:row.getBoundingClientRect().height,summaryLength:summary.textContent.length,summaryIntact:summary.textContent===expected,lineClamp:getComputedStyle(summary).webkitLineClamp,scrollWidth:scroll.scrollWidth,clientWidth:scroll.clientWidth,canScroll:moved>0,scrollStart:start,scrollMoved:moved,scrollStyle:{overflowX:getComputedStyle(scroll).overflowX,overflowY:getComputedStyle(scroll).overflowY,display:getComputedStyle(scroll).display,direction:getComputedStyle(scroll).direction,scrollSnapType:getComputedStyle(scroll).scrollSnapType},pageWidth:document.documentElement.scrollWidth,viewport:innerWidth};
+    });
+    (evidence.summaryGeometry||(evidence.summaryGeometry=[])).push({width,...geometry});
+    check(width+' 103-member long-summary row stays legible and bounded',geometry.purposeWidth>=250&&geometry.rowHeight<=200&&geometry.summaryLength>=100&&geometry.summaryIntact&&geometry.lineClamp==='3');
+    check(width+' summary overflows only its scroll container, never the page',geometry.pageWidth<=geometry.viewport+1&&(width!==390||(geometry.scrollWidth>geometry.clientWidth&&geometry.canScroll)));
+    await longRow.scrollIntoViewIfNeeded();
+    const longScreen=path.join(output,'history-long-summary-'+width+'.png');await page.screenshot({path:longScreen});evidence.screenshots.push(longScreen);
     await page.locator('[data-history-open="invoices:BATCH-097"]').click();
     await page.waitForFunction(()=>window.__acceptance.read("APPROVAL_HISTORY_DETAIL_RUNTIME.status==='ready'"),null,{timeout:15000});
     const detail=await scope(page,"({rows:invoiceGroupRows(INVS.find(x=>x.id==='INV-097-1')).map(x=>x.id),hasAttachment:INVS.some(x=>x.id==='INV-097-1'&&x.receiptFiles&&x.receiptFiles.length)})");
