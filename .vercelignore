@@ -301,3 +301,8 @@ supabase/.temp
 !scripts/finance_approval_history_summary_postflight.sql
 !scripts/finance_approval_history_summary_canary.sql
 !scripts/finance_approval_history_summary_fingerprint.sql
+!scripts/check_workflow_optional_reads.cjs
+!scripts/check_invoice_select_initplan.cjs
+!scripts/test_invoice_read_scope_release_batch.mjs
+!scripts/finance_invoice_select_initplan_postflight.sql
+!scripts/finance_invoice_select_initplan_canary.sql
