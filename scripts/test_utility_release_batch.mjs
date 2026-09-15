@@ -159,6 +159,8 @@ for(const version of guard.AUDIT_REMEDIATION_MIGRATIONS){
 fs.appendFileSync(ledger,guard.APPROVAL_SEARCH_MIGRATIONS.join('\n')+'\n');
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/history summary migration batch/);
 fs.appendFileSync(ledger,guard.HISTORY_SUMMARY_MIGRATIONS.join('\n')+'\n');
+assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/invoice read scope migration batch/);
+fs.appendFileSync(ledger,guard.INVOICE_READ_SCOPE_MIGRATIONS.join('\n')+'\n');
 assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
   assert.throws(()=>renderApply('reapply'),/must be pending/);
 
