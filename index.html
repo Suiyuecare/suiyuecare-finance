@@ -26009,13 +26009,48 @@ function openApprovalFullItem(item,key){
   var receiptRow=item.kind==='recv'?invoiceGroupActionRow(item.raw,canActReceipt):item.raw;
   item.kind==='req'?showApprD(item.raw):(item.kind==='recv'?showReceiptTaskD(receiptRow):(item.kind==='bill'?showBillApprD(item.raw):showInvApprD(invoiceRow)));
 }
+function employeeApplicationStage(item){
+  if(!item||!item.raw)return {label:'待確認流程',cls:'b-gray'};
+  var rows=item.kind==='req'?[item.raw]:(item.kind==='bill'?billGroupApprovalRows(item):invoiceGroupApprovalRows(item));
+  var stages=[];
+  (rows||[]).forEach(function(row){
+    if(!row){stages.push({label:'待確認流程',cls:'b-gray'});return;}
+    var state=flowStatusValue(row),documentState=row.status||'',stage;
+    // A stopped workflow may retain its former pending steps. Its terminal
+    // state must win, while completed invoice approval is not collected cash.
+    if(state==='cancelled'||documentState==='cancelled')stage={label:'已抽單取消',cls:'b-gray'};
+    else if(['void','voided'].indexOf(state)>-1||['void','voided'].indexOf(documentState)>-1)stage={label:'已作廢',cls:'b-gray'};
+    else if(requestIsRejected(row))stage={label:'被駁回',cls:'b-rej'};
+    else if(state==='closed'||documentState==='closed')stage={label:'已結案',cls:'b-gray'};
+    else if(item.kind==='recv')stage={label:receiptStatusLabel(row),cls:'b-ok'};
+    else if(item.kind==='req'&&state==='completed')stage={label:SL.completed,cls:'b-ok'};
+    else if(item.kind==='bill'&&state==='completed')stage={label:billApprovalLabel(row),cls:'b-ok'};
+    else if(item.kind==='inv'&&(state==='completed'||state==='delivered'))stage={label:invApprovalLabel(row),cls:'b-ok'};
+    else{
+      var step=activeStep(row);
+      if(step&&step.rk==='applicant_revision')stage={label:'待申請人補件',cls:'b-ok'};
+      else if(step)stage={label:SL[step.status]||stepTitle(step)||SL[state]||'待確認流程',cls:'b-ok'};
+      else stage={label:SL[state]||'待確認流程',cls:'b-gray'};
+    }
+    stages.push(stage);
+  });
+  if(!stages.length)return {label:'待確認流程',cls:'b-gray'};
+  var groups=[];
+  stages.forEach(function(stage){
+    var group=groups.find(function(entry){return entry.label===stage.label;});
+    if(group)group.count++;else groups.push({label:stage.label,count:1});
+  });
+  var cls=stages.some(function(stage){return stage.cls==='b-rej';})?'b-rej':(stages.some(function(stage){return stage.cls==='b-gray';})?'b-gray':'b-ok');
+  if(groups.length===1)return {label:groups[0].label,cls:cls};
+  // Explicit counts describe the whole displayed batch, not its first row.
+  var label=groups.slice(0,3).map(function(group){return group.label+' '+group.count+' 張';}).join('／');
+  if(groups.length>3)label+='／另 '+(groups.length-3)+' 種流程階段';
+  return {label:label,cls:cls};
+}
 function employeeRequestProgressHtml(item,status){
-  if(S.aT!=='mine'||item.kind!=='req')return '';
-  var r=item.raw,step=activeStep(r),done=flowIsTerminal(r),person=step&&step.uid?userById(step.uid):null;
-  var name=person&&person.n||step&&(step.assigneeName||step.assignee_name)||'';
-  var mine=!done&&step&&stepBelongsToUser(step,r);
-  var next=done?'查看處理紀錄':mine?(step.rk==='applicant_revision'?'請依退回原因補件':step.rk==='applicant_confirm'?'請確認收款或回報疑義':'輪到你處理'):'等待簽核，可開啟查看流程';
-  return '<div class="employee-progress"><span class="badge '+escAttr(status.cls)+'">'+escAttr(status.label)+'</span>'+(!done&&step?'<small>目前：'+escAttr(stepTitle(step)||'待確認關卡')+'</small><small>待處理：'+escAttr(name||'待確認承辦人')+'</small>':'')+'<small>'+escAttr(next)+'</small></div>';
+  if(['mine','p','cashier'].indexOf(S.aT)<0||!item||['req','bill','inv','recv'].indexOf(item.kind)<0)return '';
+  var stage=employeeApplicationStage(item);
+  return '<div class="employee-progress"><span class="badge '+escAttr(stage.cls)+'">'+escAttr(stage.label)+'</span></div>';
 }
 function renderApprovalHistorySummaries(runtime){
   if(typeof canAccessPage==='function'&&!canAccessPage('approvals')&&runtime.accessDenied!==true){rejectApprovalHistoryPageAccess();return;}
