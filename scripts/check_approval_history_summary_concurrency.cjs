@@ -3,14 +3,14 @@
 // Optional actual PostgreSQL concurrency proof. Uses no production credentials
 // or real employee claims, and leaves application dependencies unchanged.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
-const {createRequire}=require('node:module'),{performance}=require('node:perf_hooks');
+const {performance}=require('node:perf_hooks');
 (async()=>{
 const root=path.resolve(__dirname,'..');
 const configPath=process.env.FINANCE_SUMMARY_PG_CONFIG;
 if(!configPath)throw Error('FINANCE_SUMMARY_PG_CONFIG must point to the disposable loopback PostgreSQL config; this optional native test does not claim a pass without a server');
 const cfg=JSON.parse(fs.readFileSync(configPath,'utf8'));
 assert.equal(cfg.host,'127.0.0.1','Concurrency proof must use a disposable loopback database');
-const {Client}=createRequire(path.join(path.dirname(path.resolve(configPath)),'package.json'))('pg');
+const {Client}=require('pg');
 const {createSummarySearchFixture,addSummarySearchDocument,fixtureIdentity}=require('./check_approval_history_summary.cjs');
 const database='finance_summary_concurrency_'+process.pid+'_'+Date.now();
 const bootstrap=new Client(cfg);await bootstrap.connect();await bootstrap.query('create database '+database);await bootstrap.end();

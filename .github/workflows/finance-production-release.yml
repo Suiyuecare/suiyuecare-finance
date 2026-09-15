@@ -36,6 +36,20 @@ jobs:
     name: Build and seal the immutable candidate before DB mutation
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    services:
+      history-search-postgres:
+        image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: finance_browser_fixture_only
+          POSTGRES_DB: postgres
+        ports:
+          - "127.0.0.1:5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     environment:
       name: finance-production
     outputs:
@@ -101,10 +115,24 @@ jobs:
           pnpm install --frozen-lockfile --ignore-scripts
           pnpm release:preflight
 
+      - name: Configure private disposable PostgreSQL for browser concurrency
+        env:
+          FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json
+          FINANCE_FIXTURE_PG_PASSWORD: finance_browser_fixture_only
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const file = process.env.FINANCE_NATIVE_PG_CONFIG;
+          if (path.dirname(path.resolve(file)) !== path.resolve(process.env.RUNNER_TEMP)) throw new Error('Browser fixture config must remain outside the source checkout');
+          fs.writeFileSync(file, JSON.stringify({host:'127.0.0.1',port:5432,user:'postgres',password:process.env.FINANCE_FIXTURE_PG_PASSWORD,database:'postgres'}), {mode:0o600,flag:'wx'});
+          NODE
+
       - name: Verify real offline DOM actions before building the production candidate
         shell: bash
         env:
           FINANCE_BROWSER_CHANNEL: chromium
+          FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json
         run: |
           set -euo pipefail
           pnpm exec playwright install --with-deps chromium

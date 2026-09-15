@@ -9,7 +9,6 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { chromium } = require('playwright');
 const { PGlite } = require('@electric-sql/pglite');
-const { createRequire } = require('node:module');
 const { applyBuildEnvironment } = require('./finance_build_environment');
 const root = path.resolve(__dirname, '..');
 const output = path.resolve(process.env.FINANCE_SEARCH_EVIDENCE || '/tmp/finance-search-summary-acceptance-20260915');
@@ -33,7 +32,7 @@ async function seed() {
   if(process.env.FINANCE_NATIVE_PG_CONFIG){
     const configPath=path.resolve(process.env.FINANCE_NATIVE_PG_CONFIG),config=JSON.parse(fs.readFileSync(configPath,'utf8'));
     assert(['127.0.0.1','localhost','::1'].includes(config.host),'Native acceptance database must be local and disposable');
-    const {Client,Pool}=createRequire(path.join(path.dirname(configPath),'package.json'))('pg');
+    const {Client,Pool}=require('pg');
     nativeAdmin=new Client(config);await nativeAdmin.connect();nativeDatabase='finance_browser_'+process.pid;
     await nativeAdmin.query('create database '+nativeDatabase);
     const client=new Client({...config,database:nativeDatabase});await client.connect();
