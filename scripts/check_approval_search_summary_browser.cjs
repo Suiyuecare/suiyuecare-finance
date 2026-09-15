@@ -21,7 +21,7 @@ const summaryRpc = 'finance_approval_history_summary_v1';
 const detailRpc = 'finance_approval_history_detail_v1';
 const permissionRpc='membership_current_permission_snapshot';
 const permissionOnly=process.env.FINANCE_SEARCH_PERMISSION_ONLY==='1';
-let permissionRevision=0;
+let permissionRevision=0,permissionGrant='allow',permissionDelayMs=0;
 let db, browser, server, nativePool, nativeAdmin, nativeDatabase;
 const requests = [];
 let fault = '', delayMs = 0;
@@ -128,13 +128,15 @@ async function startServer() {
       if(name===permissionRpc){
         // Transport fixture only. The real application refresh/apply/resume chain
         // handles each newly published snapshot; no loader/resume helper is stubbed.
-        permissionRevision++;
+        const revision=++permissionRevision;measurement.permissionDelayMs=permissionDelayMs;measurement.permissionGrant=permissionGrant;
         const body=JSON.stringify({data:{membership_user_id:'FICT-MEMBERSHIP',primary_role_code:'accountant',role_codes:['accountant'],permissions:[
-          {permission_code:'finance.page.approvals.view',role_code:'accountant',effect:'allow'},
-          {permission_code:'finance.page.notif.view',role_code:'accountant',effect:permissionRevision%2?'allow':'deny'}
+          {permission_code:'finance.page.approvals.view',role_code:'accountant',effect:measurement.permissionGrant},
+          {permission_code:'finance.page.notif.view',role_code:'accountant',effect:revision%2?'allow':'deny'}
         ]}});
-        measurement.responseRevision=permissionRevision;measurement.bytes=Buffer.byteLength(body);measurement.totalMs=performance.now()-measurement.start;
-        res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-fixture-permission-revision':String(permissionRevision)});return res.end(body);
+        measurement.responseRevision=revision;measurement.bytes=Buffer.byteLength(body);
+        if(measurement.permissionDelayMs)await new Promise(resolve=>setTimeout(resolve,measurement.permissionDelayMs));
+        measurement.totalMs=performance.now()-measurement.start;
+        res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-fixture-permission-revision':String(revision)});return res.end(body);
       }
       try {
         if (fault === 'timeout') { res.writeHead(504, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: { code: '57014', message: 'controlled isolated timeout' } })); }
@@ -260,6 +262,42 @@ async function permissionRefreshCases(page,width){
   check(width+' new permission epoch revalidates cached detail via the actual secure HTTP RPC',requests.filter(r=>r.name===detailRpc).length===beforeDetails+2&&latest.key===key&&latest.permissionRevision>first.permissionRevision&&await scope(page,`APPROVAL_HISTORY_DETAIL_RUNTIME.identity!==${JSON.stringify(previousIdentity)}&&APPROVAL_HISTORY_DETAIL_RUNTIME.identity===approvalHistoryIdentity()&&APPROVAL_HISTORY_MODAL_CONTEXT.ids.size===2`));
   await scope(page,'closeAppr();true');
   check(width+' background permission refresh leaves no permanent loading or blocked search controls',await scope(page,"APPROVAL_HISTORY_RUNTIME.status==='ready'&&!el('appr-q').disabled&&el('appr-list').querySelectorAll('[data-history-open]').length===32"));
+
+  // Retain actual DOM controls from the old page to exercise already queued
+  // UI actions after a true permission deny snapshot has been applied.
+  await scope(page,`window.__revokedDetailButton=el('appr-list').querySelector('[data-history-open="invoices:BATCH-003"]');true`);
+  fault='timeout';await page.locator('#appr-q').fill('撤權前控制故障');
+  await page.waitForFunction(()=>window.__acceptance.read("APPROVAL_HISTORY_RUNTIME.status==='error'"));
+  await scope(page,`window.__revokedRetryButton=el('appr-list').querySelector('button');true`);
+  fault='';delayMs=750;start=requests.length;
+  await page.locator('#appr-q').fill('日照');
+  await waitRequests(()=>requests.slice(start).some(r=>r.name===summaryRpc&&r.query==='日照'),'pending response before page grant revoked');
+  const revokedPending=requests.slice(start).find(r=>r.name===summaryRpc&&r.query==='日照');
+  delayMs=0;permissionGrant='deny';await refreshPermission(page,'acceptance_revoke_approvals');
+  assert.equal(await scope(page,"canAccessPage('approvals')"),false,'actual page authority must deny the applied snapshot');
+  const deniedRequestStart=requests.length;
+  await scope(page,"window.__revokedRetryButton.click();window.__revokedDetailButton.click();true");
+  await page.locator('#appr-q').evaluate(input=>{input.value='自費';input.dispatchEvent(new InputEvent('input',{bubbles:true,data:'自費',isComposing:false}));});
+  await waitRequests(()=>revokedPending.totalMs!==undefined,'pre-revocation HTTP finishes');await page.waitForTimeout(350);
+  check(width+' revoked page grant blocks actual retry input and retained detail DOM actions',requests.slice(deniedRequestStart).filter(r=>r.name===summaryRpc||r.name===detailRpc).length===0);
+  check(width+' pre-revocation 200 response cannot restore history data after actual deny',revokedPending.responseMeta&&revokedPending.responseMeta.total===97&&revokedPending.responseMeta.groups===50&&!revokedPending.error&&await scope(page,"!canAccessPage('approvals')&&APPROVAL_HISTORY_RUNTIME.status!=='ready'&&APPROVAL_HISTORY_RUNTIME.items.length===0&&el('appr-list').querySelectorAll('[data-history-open]').length===0&&APPROVAL_HISTORY_DETAIL_RUNTIME.status!=='ready'"));
+  permissionGrant='allow';await refreshPermission(page,'acceptance_restore_approvals');await ready(page,await scope(page,"String(S.apprQuery||'').trim()"));await runQuery(page,'自費');
+
+  // No newer request exists when the old deny response completes: a mere
+  // request-sequence check cannot make this auth-epoch negative case pass.
+  const snapshotBeforeEpoch=await scope(page,'JSON.stringify(CURRENT_PERMISSION_SNAPSHOT)');
+  const ownerBeforeEpoch=await scope(page,"[S.user.id,S.user.authUserId,currentTenantId()].join('|')");
+  start=requests.length;permissionGrant='deny';permissionDelayMs=650;
+  await scope(page,"window.__oldEpochPermission=refreshCurrentPermissionSnapshotRuntime('acceptance_old_epoch');true");
+  await waitRequests(()=>requests.slice(start).some(r=>r.name===permissionRpc),'permission HTTP pending before new auth epoch');
+  await scope(page,'financeAuthIdentityEpoch++;true');
+  const accepted=await scope(page,'window.__oldEpochPermission');
+  check(width+' same-account new auth epoch rejects an old permission response without a newer read',accepted===false&&requests.slice(start).filter(r=>r.name===permissionRpc).length===1&&requests.slice(start).find(r=>r.name===permissionRpc).permissionGrant==='deny'&&await scope(page,`JSON.stringify(CURRENT_PERMISSION_SNAPSHOT)===${JSON.stringify(snapshotBeforeEpoch)}&&[S.user.id,S.user.authUserId,currentTenantId()].join('|')===${JSON.stringify(ownerBeforeEpoch)}&&canAccessPage('approvals')`));
+  permissionDelayMs=0;permissionGrant='allow';
+  assert.equal(await scope(page,"refreshCurrentPermissionSnapshotRuntime('acceptance_current_epoch')"),true);
+  await ready(page,'自費');
+  check(width+' current epoch can refresh and resume after discarding obsolete permissions',await scope(page,"APPROVAL_HISTORY_RUNTIME.identity===approvalHistoryIdentity()&&APPROVAL_HISTORY_RUNTIME.total===32&&canAccessPage('approvals')"));
+
   const screenshot=path.join(output,'permission-refresh-ready-'+width+'.png');await page.screenshot({path:screenshot});evidence.screenshots.push(screenshot);
 }
 

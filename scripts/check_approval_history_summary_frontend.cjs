@@ -19,7 +19,7 @@ function fixture(){
  Object.assign(c,{DEFAULT_TENANT_ID:'T',currentTenantId:()=>c.tenant,activeDataEnvironment:()=>c.env,approvalFastBootstrapIdentity:()=>c.tenant+'|'+c.S.user?.authUserId,
   getSb:()=>({rpc(name,args){let resolve;const p=new Promise(r=>resolve=r),call={name,args,resolve,aborts:0};c.calls.push(call);return{abortSignal(signal){signal.addEventListener('abort',()=>call.aborts++);return this;},then(ok,bad){return p.then(ok,bad);}};}}),
   performance:{now:()=>c.now,measure:(name,options)=>c.measures.push({name,...options})},requestAnimationFrame:f=>c.frames.push(f),
-  buildApprovals(){},updateApprovalTodoBadge(){},remoteReadIssueText:e=>e.message,recordRemoteReadIssue(){},el:node,
+  canAccessPage:()=>true,buildApprovals(){},updateApprovalTodoBadge(){},remoteReadIssueText:e=>e.message,recordRemoteReadIssue(){},el:node,
   escAttr:x=>String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'),
   mapReq:x=>({...x,formPayload:x.form_payload}),mapBill:x=>({...x,batchId:x.batch_id}),mapInv:x=>({...x,batchId:x.batch_id}),
   document:{querySelectorAll:()=>[]},setTopSyncStatus(){},approvalItemAvailability:item=>{assert(item.historyTrusted&&!item.historySummary,'only full validated detail enters original read gate');return{ok:true};},
@@ -50,6 +50,13 @@ function permissionRefreshFixture(){
  c.respondPermission=async(index,result)=>{c.permissionReads[index].resolve(result||c.permissionPayload());await flush();};
  c.fireDebounce=async()=>{const timer=c.timers.filter(t=>t.active&&t.ms<=250).at(-1);assert(timer,'real debounce exists');timer.active=false;timer.callback();await flush();};
  return c;
+}
+
+
+function realPermissionRefreshFixture(){
+ const c=permissionRefreshFixture();c.moduleAllowed=true;
+ Object.assign(c,{pageModuleEnabled:()=>c.moduleAllowed,financePermissionEngine:()=>null,roleHasPermission:()=>true});
+ vm.runInContext([fn('runtimePermissionDecision'),fn('runtimePagePermissionCode'),fn('canAccessPage')].join('\n'),c);return c;
 }
 
 (async()=>{
@@ -119,6 +126,37 @@ function permissionRefreshFixture(){
  });
  await check('hidden history stays quiet after permission refresh',async()=>{
   const c=permissionRefreshFixture();c.S.aT='p';const refresh=c.refreshCurrentPermissionSnapshotRuntime('hidden');await c.respondPermission(0);assert.equal(await refresh,true);assert.equal(c.calls.length,0);
+ });
+ await check('real deny permission cannot be bypassed by retry, input, ensure or detail',async()=>{
+  const c=realPermissionRefreshFixture();c.S.apprQuery='日照';const old=c.loadApprovalHistoryPage();await flush();const deny=c.permissionPayload();deny.data.permissions=[{permission_code:'finance.page.approvals.view',effect:'deny'}];const refresh=c.refreshCurrentPermissionSnapshotRuntime('revoked');await c.respondPermission(0,deny);await refresh;
+  assert.equal(c.canAccessPage('approvals'),false);const count=c.calls.length;assert((await c.loadApprovalHistoryPage({force:true})).forbidden);assert((await c.ensureApprovalHistoryCurrent()).forbidden);assert((await c.openApprovalHistoryItem('invoices:B')).forbidden);c.window.apprSearch('自費',{isComposing:false});await flush();assert.equal(c.S.apprQuery,'自費');assert.equal(c.calls.length,count);assert.equal(c.timers.filter(t=>t.active&&t.ms<=250).length,0);await c.respond(0,summary(c));await old;assert.equal(c.APPROVAL_HISTORY_RUNTIME.status,'error');assert.equal(c.node('appr-list').attributes['data-history-status'],'error');assert.equal(c.APPROVAL_HISTORY_RUNTIME.items.length,0);
+ });
+ await check('module revocation blocks cached detail even when history identity is unchanged',async()=>{
+  const c=realPermissionRefreshFixture();await seed(c);const identity=c.approvalHistoryIdentity(),count=c.calls.length;c.moduleAllowed=false;assert.equal(c.approvalHistoryIdentity(),identity);assert((await c.openApprovalHistoryItem('invoices:B')).forbidden);assert.equal(c.calls.length,count);assert.equal(c.opened.length,0);assert.equal(c.APPROVAL_HISTORY_RUNTIME.status,'error');
+ });
+ await check('in-flight summary denial clears the loading DOM without another refresh call',async()=>{
+  const c=realPermissionRefreshFixture();c.S.apprQuery='日照';const pending=c.loadApprovalHistoryPage();await flush();c.moduleAllowed=false;await c.respond(0,summary(c));await pending;assert.equal(c.APPROVAL_HISTORY_RUNTIME.status,'error');assert.equal(c.node('appr-list').attributes['data-history-status'],'error');assert.equal(c.APPROVAL_HISTORY_RUNTIME.items.length,0);while(c.frames.length)c.frames.shift()();assert.equal(c.measures.length,0);
+ });
+ await check('in-flight detail denial cannot cache sources or open the old modal',async()=>{
+  const c=realPermissionRefreshFixture();await seed(c);const pending=c.openApprovalHistoryItem('invoices:B');await flush();c.moduleAllowed=false;await c.respond(1,detail(c));await pending;assert.equal(c.INVS.length,0);assert.equal(c.opened.length,0);assert.equal(c.node('appr-list').attributes['data-history-status'],'error');
+ });
+ await check('a ready list cannot repaint after module revocation and preserves the exact modal fence',async()=>{
+  const c=realPermissionRefreshFixture();await seed(c);const open=c.openApprovalHistoryItem('invoices:B');await flush();await c.respond(1,detail(c));assert((await open).ok);const ctx=c.APPROVAL_HISTORY_MODAL_CONTEXT;c.moduleAllowed=false;c.buildApprovals();assert.equal(c.node('appr-list').attributes['data-history-status'],'error');assert.equal(c.APPROVAL_HISTORY_MODAL_CONTEXT,ctx);assert.throws(()=>c.invoiceGroupRows(c.INVS[0]),/登入或權限/);
+ });
+ await check('an earlier auth epoch cannot apply permissions during same-person reauthentication',async()=>{
+  const c=realPermissionRefreshFixture(),before=JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),pending=c.refreshCurrentPermissionSnapshotRuntime('old-session');c.financeAuthIdentityEpoch++;await c.respondPermission(0);assert.equal(await pending,false);assert.equal(JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),before);assert.equal(c.calls.length,0);const next=c.refreshCurrentPermissionSnapshotRuntime('current-session');await c.respondPermission(1);assert.equal(await next,true);await flush();assert.equal(c.calls.length,1);await c.respond(0,summary(c));
+ });
+ await check('an old actor denied callback cannot clear or repaint a replacement actor request',async()=>{
+  const c=realPermissionRefreshFixture();c.S.apprQuery='日照';const old=c.loadApprovalHistoryPage();await flush();const oldPayload=summary(c);c.S.user.authUserId='NEXT';c.S.user.id='NEXT';const next=c.loadApprovalHistoryPage();await flush();const current=c.APPROVAL_HISTORY_RUNTIME;c.moduleAllowed=false;await c.respond(0,oldPayload);assert((await old).stale);assert.equal(c.APPROVAL_HISTORY_RUNTIME,current);assert.equal(c.APPROVAL_HISTORY_RUNTIME.status,'loading');assert(c.APPROVAL_HISTORY_RUNTIME.promise);c.moduleAllowed=true;await c.respond(1,summary(c));assert((await next).ok);assert.equal(c.node('appr-list').attributes['data-history-status'],'ready');
+ });
+ await check('a newer query generation is untouched by a previous denied callback',async()=>{
+  const c=realPermissionRefreshFixture();c.S.apprQuery='日照';const old=c.loadApprovalHistoryPage();await flush();c.S.apprQuery='自費';const next=c.loadApprovalHistoryPage();await flush();const seq=c.APPROVAL_HISTORY_RUNTIME.requestSeq;c.moduleAllowed=false;await c.respond(0,summary(c));assert((await old).stale);assert.equal(c.APPROVAL_HISTORY_RUNTIME.requestSeq,seq);assert.equal(c.APPROVAL_HISTORY_RUNTIME.status,'loading');c.moduleAllowed=true;await c.respond(1,summary(c));assert((await next).ok);
+ });
+ await check('denied UI explains revoked access without offering a misleading retry',async()=>{
+  const c=realPermissionRefreshFixture();c.moduleAllowed=false;await c.loadApprovalHistoryPage({force:true});assert.match(c.node('appr-list').innerHTML,/權限已變更/);assert(!c.node('appr-list').innerHTML.includes('重新載入'));assert(!c.approvalHistoryStatusHtml().includes('重新載入'));assert.equal(c.calls.length,0);
+ });
+ await check('missing page-permission runtime fails closed before summary or detail RPC',async()=>{
+  const c=fixture();delete c.canAccessPage;assert.equal(c.approvalHistoryPageAllowed(),false);assert((await c.loadApprovalHistoryPage()).forbidden);assert((await c.openApprovalHistoryItem('invoices:B')).forbidden);assert.equal(c.calls.length,0);
  });
  console.log('History summary frontend: '+passed+' checks passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
