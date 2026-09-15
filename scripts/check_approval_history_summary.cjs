@@ -62,6 +62,26 @@ async function runTests(){
   assert.equal((await db.query("select to_regclass('private.finance_history_source_projection_v1') s,to_regclass('private.finance_history_group_projection_v1') g")).rows[0].s,null);check('first-install rollback removes projection schema/backfill without touching prior functions');
   await db.exec('begin;'+migration+'\ncommit;');
   assert.equal((await db.query("select md5(pg_get_functiondef('public.finance_approval_participant_history_for_current_user(integer,integer,text,text)'::regprocedure)) h")).rows[0].h,unchanged);check('deployed full-history RPC remains byte-for-byte compatible');
+  // Exact legacy gram-set parity: no large quadratic baseline execution.
+  const gramCases=[null,'','A','日照','自費 日照','\n\r\t','e\u0301','é','👩‍⚕️','𠮷野家','🇹🇼','A\u0001B',' a a ','−001,250.00 元','ＡＢＣ１２３','\ufeff','\u2028','\u2060'];
+  for(const text of gramCases){
+   const p=(await db.query(`select private.finance_history_index_grams_v1($1) current,
+    (select coalesce(array_agg(distinct gram),'{}'::text[]) from(select substr(coalesce($1::text,''),n,k) gram
+     from generate_series(1,length(coalesce($1::text,'')))n cross join generate_series(1,2)k
+     where n+k-1<=length(coalesce($1::text,'')))g) legacy`,[text])).rows[0];
+   assert.deepEqual(p.current,p.legacy,'exact old gram order and set '+JSON.stringify(text));
+   const points=Array.from(text||''),expected=[...new Set(points.flatMap((ch,n)=>n+1<points.length?[ch,ch+points[n+1]]:[ch]))].sort();
+   assert.deepEqual([...p.current].sort(),expected,'independent Unicode code-point set '+JSON.stringify(text));
+  }
+  check('18 legacy and independent Unicode gram parity cases including empty astral combining newline');
+  for(const repeats of[16000,32000]){
+   const started=performance.now();const p=(await db.query(`select length(repeat('日照自費服務備註',$1)) chars,
+    private.finance_history_index_grams_v1(repeat('日照自費服務備註',$1)) grams`,[repeats])).rows[0];const elapsedMs=performance.now()-started;
+   const unit=Array.from('日照自費服務備註'),expected=[...new Set(unit.flatMap((ch,n)=>[ch,ch+unit[(n+1)%unit.length]]))].sort();
+   assert.deepEqual([...p.grams].sort(),expected);assert(p.chars>=128000);assert(elapsedMs<8000,'long multibyte indexing exceeds local bounded budget');
+   console.log('GRAM_STRESS '+JSON.stringify({chars:p.chars,elapsedMs,uniqueGrams:p.grams.length,note:'Actual new helper only; greater than production max normalized/plain combined group'}));
+   check('linear gram helper handles '+p.chars+' UTF-8 characters with exact expected set');
+  }
   const queries=[null,'日照','自費','日照 自費','交通費 88.75','自費附件.pdf','METASECRET','URLSECRET','接送長者','測試日照課','1250','1,250','NT$ 1,250.00','１２５０元','12.50','12.5','-12.50','−12.50','+00012.500','00012.50','0.5','-0.50','0','0.00','12.00','1,25','1.250','+1250','12','23','71.23','R-DAY','a"b','a\\b','😀','care','123ABC','用途不可消失','不存在的搜尋字','金額零','曾指派'];
   for(const q of queries){const a=await old(q),b=await summary(q);assert.equal(b.total,a.total,q);assert.equal(b.all_total,a.all_total,q);assert.deepEqual(b.items.map(i=>i.history_key),a.items.map(i=>i.history_key),q);check('real old/new authorization and result ordering parity '+JSON.stringify(q));}
   assert.deepEqual(ids(await summary('日照 自費')),['I-A','R-DAY']);check('independent expected IDs include cross-row batch terms, not just representative');

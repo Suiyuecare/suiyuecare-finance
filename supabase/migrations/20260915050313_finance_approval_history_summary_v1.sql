@@ -43,10 +43,16 @@ revoke all on private.finance_history_source_projection_v1,private.finance_histo
 
 create function private.finance_history_index_grams_v1(p_text text) returns text[]
 language sql immutable set search_path='' as $grams$
- select coalesce(array_agg(distinct gram),'{}'::text[]) from(
-  select substr(coalesce(p_text,''),n,k) gram from generate_series(1,length(coalesce(p_text,''))) n cross join generate_series(1,2) k
-  where n+k-1<=length(coalesce(p_text,''))
- ) g;
+ -- Split UTF-8 once. Repeated substr(text,position,1/2) rescans every prefix
+ -- and becomes quadratic for long multibyte batches. Adjacent characters
+ -- preserve the exact original unigram/bigram set, including combining marks.
+ with chars as (
+  select ch,lead(ch) over(order by ord) next_ch
+  from string_to_table(coalesce(p_text,''),null) with ordinality c(ch,ord)
+ )
+ select coalesce(array_agg(distinct gram),'{}'::text[])
+ from chars cross join lateral(values(ch),(ch||next_ch)) grams(gram)
+ where gram is not null;
 $grams$;
 create function private.finance_history_compile_query_v1(p_query text) returns jsonb
 language sql immutable set search_path='' as $query$

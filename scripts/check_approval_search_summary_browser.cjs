@@ -52,7 +52,7 @@ async function seed() {
     from generate_series(1,640) n;
     insert into public.invoices(id,no,tenant_id,data_environment,entity_id,entity_name,department_code,applicant,status,approval_status,amount,tax,total,batch_id,buyer,description,invoice_date,receipt_files)
     select 'INV-'||lpad(n::text,3,'0')||'-'||part,'I20260915'||lpad(n::text,3,'0')||part,'${tenant}','test','F1','星河照護','DAYCARE','許晴川','completed','completed',1000+n,0,1000+n,'BATCH-'||lpad(n::text,3,'0'),'星光日照',
-      '日照九月'||case when n%3=0 then '自費' else '服務' end||'第'||n||'期','2026-09-15',jsonb_build_array(jsonb_build_object('name','明細.pdf','content',repeat('x',20000)))
+      '日照九月'||case when n%3=0 then '自費' else '服務' end||'第'||n||'期'||case when n>=93 then repeat('長文索引驗收',100) else '' end,'2026-09-15',jsonb_build_array(jsonb_build_object('name','明細.pdf','content',repeat('x',20000)))
     from generate_series(1,97) n cross join lateral generate_series(1,case when n>=93 then 103 else 2 end) part;
     insert into public.approval_step_actor_snapshots(tenant_id,data_environment,record_type,record_id,record_no,step_index,resolved_user_id,acted_by_user_id,acted_by_name,acted_at_text,updated_at)
     select tenant_id,data_environment,'expense_requests',id,no,0,'FICT-USER','FICT-USER','測試會計','2026-09-15T00:00:00Z','2026-09-15T00:00:00Z'::timestamptz from public.expense_requests
@@ -68,7 +68,14 @@ async function seed() {
   evidence.migrationSha256=crypto.createHash('sha256').update(migrationSql).digest('hex');
   await db.exec(migrationSql);
   evidence.backfillMs = performance.now() - started;
-  evidence.dataset = { groups: 737, sourceRows: 1339, invoiceBatchMembers: '92 batches of 2; 5 batches of 103', expenseAttachmentBytes: 40000, invoiceAttachmentBytes: 20000 };
+  evidence.maxIndexInputCharacters=Number((await db.query("select max(length(normalized_text||' '||plain_text||' '||array_to_string(amounts,' '))) n from private.finance_history_group_projection_v1")).rows[0].n);
+  check('large Chinese batches cover more than 120k index-input characters',evidence.maxIndexInputCharacters>=120000);
+  check('representative long-text backfill completes within 30 seconds',evidence.backfillMs<=30000);
+  const writeStarted=performance.now();
+  await db.query("update public.invoices set description=description||'更新' where batch_id='BATCH-097'");
+  evidence.largeBatchWriteMs=performance.now()-writeStarted;
+  check('103-row long-text business update completes within 3 seconds',evidence.largeBatchWriteMs<=3000);
+  evidence.dataset = { groups: 737, sourceRows: 1339, invoiceBatchMembers: '92 batches of 2; 5 batches of 103', longPurposeCharactersPerLargeBatchMember:600, expenseAttachmentBytes: 40000, invoiceAttachmentBytes: 20000 };
   const before = performance.now();
   const oldPayload = (await db.query('select public.finance_approval_participant_history_for_current_user(50,0,\'日照\',\'test\') payload')).rows[0].payload;
   evidence.localOldRpc = { ms:performance.now()-before,bytes:Buffer.byteLength(JSON.stringify(oldPayload)),total:oldPayload.total,scope:'One isolated PostgreSQL sample; not production or browser latency' };
