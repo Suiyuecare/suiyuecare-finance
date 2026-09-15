@@ -10,6 +10,7 @@
 .payment-concern-queue{border:1px solid #e9cfac;border-radius:12px;padding:14px;margin:12px 0;background:#fffaf2}.payment-concern-queue summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700}
 .payment-concern-queue [data-queue-body]{display:flex;gap:8px;flex-wrap:wrap}.payment-concern-queue p{width:100%}
 .employee-progress{display:grid;margin-top:7px;font-size:12px;line-height:1.5;white-space:normal;text-align:center}.employee-progress>.badge{display:flex;align-items:center;justify-content:center;text-align:center!important;white-space:normal;overflow-wrap:anywhere}.org-person-contact{font-size:12px;overflow-wrap:anywhere;line-height:1.6}
+@media(min-width:769px){#appr-list:is([aria-labelledby="approval-tab-p"],[aria-labelledby="approval-tab-mine"],[aria-labelledby="approval-tab-cashier"]) .approval-table.compact .appr-col-formNo{width:174px}}
 @media(max-width:600px){.payment-concern-dialog{padding:16px}.payment-concern-actions button{flex:1}.org-person-contact{font-size:14px}}
 .payment-concern-dialog{margin:auto;inset:0}
 @media(max-width:768px){#pg-approvals .approval-table td.appr-col-formNo .employee-progress{grid-column:1 / -1;width:100%;justify-self:stretch!important;text-align:center!important}}

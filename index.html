@@ -26140,7 +26140,7 @@ function renderApprList(data){
     var issues=(!rejected&&kind==='req')?supervisorReviewIssues(r):[];
     var riskBadge=issues.some(function(x){return x.level==='high';})?'<span class="badge b-rej" style="font-size:9px;margin-left:4px">高風險</span>':(issues.length?'<span class="badge b-wait" style="font-size:9px;margin-left:4px">需確認</span>':'');
     var histBadge=S.aT==='h'?'<span class="badge '+(item.historyPersonallyActed?'b-ok':'b-blue')+'" style="font-size:9px;margin-left:4px">'+escAttr(item.historyParticipationLabel||(item.historyPersonallyActed?'本人已處理':'曾列入流程'))+'</span>':(myStep&&myStep.a?('<span class="badge '+(myStep.a==='approved'?'b-ok':'b-rej')+'" style="font-size:9px;margin-left:4px">'+(myStep.a==='approved'?'已核准':'不通過')+'</span>'):'');
-    if(S.aT==='mine')histBadge='';
+    if(S.aT==='mine'||(S.aT==='cashier'&&myStep&&myStep.a==='approved'))histBadge='';
     var historyOutcomeBadge=S.aT==='h'&&status.label==='已抽單取消'
       ?'<span class="badge b-gray" style="font-size:9px;margin-left:4px">後續已抽單取消</span>'
       :'';
