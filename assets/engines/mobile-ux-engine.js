@@ -257,7 +257,7 @@
     });
   }
   function markRows(table,kind,attribute){
-    if(!table)return;
+    if(!table||table.classList.contains('approval-history-summary-table'))return;
     setCellLabels(table);
     table.classList.add('mobile-native-card-table');
     Array.prototype.forEach.call(table.tBodies||[],function(body){Array.prototype.forEach.call(body.rows,function(row){
