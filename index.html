@@ -2027,6 +2027,7 @@ var MEMBERSHIP_ROLE_CATALOG=[];
 var MEMBERSHIP_PERMISSION_CATALOG=[];
 var MEMBERSHIP_ASSIGNMENT_CATALOG={users:[],org_units:[],assignments:[]};
 var CURRENT_PERMISSION_SNAPSHOT={loaded:false,authUserId:'',membershipUserId:'',primaryRoleCode:'',roleCodes:[],permissions:[],error:''};
+var currentPermissionSnapshotReadSeq=0;
 var AUTHORIZATION_CHANGE_SETS=[];
 var AUTHORIZATION_GOVERNANCE_RUNTIME={available:false,error:''};
 var MEMBERSHIP_ROLE_RUNTIME={loading:false,loaded:false,compatibility:false,error:'',editingRoleId:''};
@@ -7502,13 +7503,59 @@ function applyRemotePermissionSnapshotResult(result,keepExisting,remoteWarnings)
   };
   return false;
 }
+function currentPermissionSnapshotReadIdentity(){
+  if(!S.user||S.demoLogin||financeWorkspaceIdentityBlocked)return '';
+  return JSON.stringify([String(S.user.authUserId||S.user.auth_user_id||''),String(S.user.id||''),String(currentTenantId()||''),String(activeDataEnvironment())]);
+}
+function captureApprovalHistoryPermissionRefreshIntent(){
+  if(S.page!=='approvals'||S.aT!=='h'||!approvalHistoryIdentity())return null;
+  // Read the old runtime without resetting it: an earlier organization refresh
+  // may already have changed the role while the permission read was in flight.
+  var runtime=APPROVAL_HISTORY_RUNTIME,query=String(S.apprQuery||'').trim();
+  var pending=runtime.status==='loading'||runtime.searchComposing===true||!!approvalHistorySearchTimer;
+  var timing=pending&&runtime.query===query&&runtime.timing&&runtime.timing.measured!==true&&runtime.timing.query===query?runtime.timing:null;
+  return {identity:runtime.identity,owner:currentPermissionSnapshotReadIdentity(),query:query,page:Math.max(1,Number(S.apprPage)||1),
+    composing:runtime.searchComposing===true,debouncing:!!approvalHistorySearchTimer,
+    startedAt:timing&&Number.isFinite(timing.startedAt)?timing.startedAt:null,trigger:timing&&timing.trigger||'permission-refresh'};
+}
+function resumeApprovalHistoryAfterPermissionRefresh(intent){
+  if(!intent||!intent.owner||intent.owner!==currentPermissionSnapshotReadIdentity()||S.page!=='approvals'||S.aT!=='h'
+    ||String(S.apprQuery||'').trim()!==intent.query||Math.max(1,Number(S.apprPage)||1)!==intent.page
+    ||intent.identity===approvalHistoryIdentity())return false;
+  // Old rows and late responses belong to the previous permission snapshot.
+  // Reload through the same authenticated summary RPC; never repaint that data.
+  var runtime=approvalHistoryRuntimeForCurrentUser();
+  cancelApprovalHistorySearchTimer();cancelApprovalHistoryDetail();
+  if(typeof canAccessPage==='function'&&!canAccessPage('approvals')){
+    runtime.status='error';runtime.error='簽核頁面的權限已變更，請確認目前可使用的功能。';
+    paintApprovalHistoryState();return true;
+  }
+  var now=approvalHistoryClock();
+  runtime.timing={startedAt:intent.startedAt===null?now:intent.startedAt,trigger:intent.trigger,query:intent.query};
+  runtime.searchComposing=intent.composing;
+  if(intent.composing||intent.debouncing){
+    var remaining=intent.startedAt===null?250:Math.max(0,250-(now-intent.startedAt));
+    window.apprSearch(intent.query,{isComposing:intent.composing,historyRefresh:true,historyDebounceMs:remaining});
+  }else{
+    loadApprovalHistoryPage({page:intent.page,query:intent.query,trigger:intent.trigger}).catch(function(error){console.warn('approval history permission refresh failed',error);});
+  }
+  return true;
+}
 async function refreshCurrentPermissionSnapshotRuntime(reason){
-  var client=getSb();
-  if(!client||!S.user||S.demoLogin)return false;
+  var client=getSb(),identity=currentPermissionSnapshotReadIdentity();
+  if(!client||!identity)return false;
+  var seq=++currentPermissionSnapshotReadSeq;
   var result=await client.rpc('membership_current_permission_snapshot',{});
+  // A background read may finish after another employee signs in or after a
+  // newer permissions read. Neither may overwrite the current actor's grants.
+  if(seq!==currentPermissionSnapshotReadSeq||identity!==currentPermissionSnapshotReadIdentity())return false;
+  // Capture the latest input immediately before applying the new snapshot, not
+  // the query that happened to be visible when this remote read started.
+  var historyIntent=captureApprovalHistoryPermissionRefreshIntent();
   var warnings=[];
   var ok=applyRemotePermissionSnapshotResult(result,true,warnings);
   applyRolePermissions();
+  resumeApprovalHistoryAfterPermissionRefresh(historyIntent);
   if(S.page==='settings'){
     renderMembershipRoleControl();
     renderSettingPermissions();
@@ -25808,7 +25855,7 @@ window.apprSearch=function(v,event){
       if(APPROVAL_HISTORY_RUNTIME!==runtime||identity!==approvalHistoryIdentity()||runtime.requestSeq!==requestSeq
         ||S.page!=='approvals'||S.aT!=='h'||String(S.apprQuery||'').trim()!==query)return;
       loadApprovalHistoryPage({page:1,query:query}).catch(function(error){console.warn('approval history search failed',error);});
-    },250);
+    },event&&event.historyRefresh&&Number.isFinite(event.historyDebounceMs)?Math.max(0,Math.min(250,event.historyDebounceMs)):250);
     approvalHistorySearchTimer=timer;
     // Pending state and timer exist before render, so a cold page cannot start
     // its unrelated empty-query bootstrap on every input event.
