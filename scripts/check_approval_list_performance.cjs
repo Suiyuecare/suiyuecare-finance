@@ -9,16 +9,16 @@ const clone=x=>JSON.parse(JSON.stringify(x)),delay=ms=>new Promise(r=>setTimeout
 function deferred(){let resolve;const promise=new Promise(r=>resolve=r);return{promise,resolve};}
 let checks=0;function pass(name){checks++;console.log('PASS '+name);}
 function fixture(){
- const c={Date,Promise,Object,Array,String,Number,Math,Set,Map,Error,JSON,console:{warn(){}},setTimeout,clearTimeout,S:{user:{id:'owner-a',email:'a@example.invalid',n:'匿名本人'},demoLogin:false,aT:'p'},REQS:[],INVS:[],BILLS:[],VOUCHERS:[],APPROVAL_FAST_BOOTSTRAP:{summaryItems:[]},queries:[],issues:[],active:0,max:0,nodes:{},window:{FinanceDocumentSearch:search}};
+ const c={Date,Promise,Object,Array,String,Number,Math,Set,Map,Error,JSON,console:{warn(){}},setTimeout,clearTimeout,S:{user:{id:'owner-a',email:'a@example.invalid',n:'匿名本人'},demoLogin:false,aT:'p'},REQS:[],INVS:[],BILLS:[],VOUCHERS:[],APPROVAL_HISTORY_MODAL_CONTEXT:null,APPROVAL_FAST_BOOTSTRAP:{summaryItems:[]},queries:[],issues:[],active:0,max:0,nodes:{},window:{FinanceDocumentSearch:search}};
  Object.assign(c,{recordRemoteReadIssue:(label,error)=>c.issues.push({label,error}),approvalFastSummarySourceIds:(items,table)=>items.filter(x=>x.source_table===table).flatMap(x=>x.source_ids),withOperationTimeout:q=>q,
   num:x=>Number(x)||0,normDate:x=>String(x||'').replaceAll('/','-'),normalizeFiles:x=>x||[],invoiceIsReceivable:x=>!!x.receivable,approvalReceiptItemCandidate:x=>!!x.receiptCandidate,
   currentFinanceAuthUserId:()=>c.S.user&&c.S.user.auth||'auth-a',currentTenantId:()=>c.tenant||'tenant-a',activeDataEnvironment:()=>c.env||'production',fmt:n=>String(n),voucherBadgeClass:()=>'',voucherKind:()=> '一般傳票',
-  el(id){return c.nodes[id]||(c.nodes[id]={value:'',innerHTML:'',textContent:'',before(){}})}
+  el(id){return c.nodes[id]||(c.nodes[id]={value:'',innerHTML:'',textContent:'',before(){},setAttribute(name,value){this[name]=value;}})}
  });
  c.transport=()=>null;
  c.client={from(table){const q={table,filters:[],select(){return q},in(key,ids){q.ids=ids;return q},eq(key,value){q.filters.push([key,value]);return q},limit(limit){q.limitValue=limit;return q},then(resolve,reject){c.queries.push(q);c.active++;c.max=Math.max(c.max,c.active);let result;try{result=c.transport(q,c);}catch(e){result=Promise.reject(e);}return Promise.resolve(result||{data:(q.ids||[]).map(id=>({id}))}).then(value=>{c.active--;return resolve(value)},error=>{c.active--;return reject(error)});}};return q}};
  vm.createContext(c);
- const names=['remoteRowKey','mergeRemoteRowsByKey','uniqueRemoteStrings','runRemoteJobsWithConcurrency','safeRemoteRows','loadRowsByIdsForApprovalFallback','loadRowsForCurrentApplicant','approvalFallbackSourceIds','approvalFastMergeSummaryIdsIntoFallback','remoteRowsMissingIds','loadRemoteApprovalFallbackData','approvalHistoryItemsFromPayload','invoiceBatchFallbackKey','invoiceGroupKey','invoiceGroupRows','uniqueInvoiceGroups','billCreatedBucket','billGroupKey','billGroupRows','billGroupLeader','uniqueBillGroups','approvalGroupRowsIndex','approvalAllItems','financeDocumentMatchesQuery','voucherListPage','voucherPagerHtml'];
+ const names=['remoteRowKey','mergeRemoteRowsByKey','uniqueRemoteStrings','runRemoteJobsWithConcurrency','safeRemoteRows','loadRowsByIdsForApprovalFallback','loadRowsForCurrentApplicant','approvalFallbackSourceIds','approvalFastMergeSummaryIdsIntoFallback','remoteRowsMissingIds','loadRemoteApprovalFallbackData','approvalHistoryItemsFromPayload','approvalHistoryValidatePage','approvalHistoryExactGroupRows','renderApprovalHistorySummaries','invoiceBatchFallbackKey','invoiceGroupKey','invoiceGroupRows','uniqueInvoiceGroups','billCreatedBucket','billGroupKey','billGroupRows','billGroupLeader','uniqueBillGroups','approvalGroupRowsIndex','approvalAllItems','financeDocumentMatchesQuery','voucherListPage','voucherPagerHtml'];
  vm.runInContext(names.map(x=>fn(x)).join('\n'),c);
  return c;
 }
@@ -58,20 +58,21 @@ async function run(){
  }
  {
   const c=fixture();c.REQS=Array.from({length:5000},(_,i)=>({id:'cached-'+i}));c.INVS=[{id:'old-invoice'}];c.BILLS=[{id:'old-bill'}];
-  c.mapReq=c.mapBill=c.mapInv=x=>({...x});const merge=c.mergeRemoteRowsByKey;let calls=0;c.mergeRemoteRowsByKey=(...args)=>{calls++;return merge(...args)};
-  const entries=Array.from({length:50},(_,i)=>({record_type:['expense_requests','bills','invoices'][i%3],record_id:'new-'+i,history_key:'h-'+i,source_rows:[{id:'new-'+i},{id:'batch-'+i}],personally_acted:i%2===0}));
-  const out=c.approvalHistoryItemsFromPayload({items:entries});assert.equal(calls,3);assert.equal(out.length,50);assert(out.every(x=>x.rows.length===2));assert.deepEqual(clone(out.map(x=>x.raw.id)),entries.map(x=>x.record_id));assert.equal(c.REQS.length,5034);assert.equal(c.REQS[0].id,'new-48');assert.equal(c.REQS[2].id,'new-45');assert.equal(c.REQS.at(-1).id,'cached-4999');
-  pass('fifty history groups merge each source cache exactly once, with all batch rows, page order and former last-group precedence');
+  const before=clone([c.REQS,c.BILLS,c.INVS]);let calls=0;c.mergeRemoteRowsByKey=()=>{calls++;throw Error('summary must not merge document cache')};c.mapReq=c.mapBill=c.mapInv=()=>{throw Error('summary must not map partial documents')};
+  const entries=Array.from({length:50},(_,i)=>({record_type:['expense_requests','bills','invoices'][i%3],record_id:'new-'+i,history_key:'h-'+i,summary:{source_count:103,amount:1250,has_attachments:true},personally_acted:i%2===0}));
+  const out=c.approvalHistoryItemsFromPayload({items:entries});assert.equal(calls,0);assert.equal(out.length,50);assert(out.every(x=>x.historySummary&&!('raw' in x)&&!('rows' in x)&&x.summary.source_count===103));assert.deepEqual(clone(out.map(x=>x.recordId)),entries.map(x=>x.record_id));assert.deepEqual(clone([c.REQS,c.BILLS,c.INVS]),before);
+  pass('fifty summaries preserve complete batch counts and page order with zero source mapping, zero cache scans/merges and all cached documents unchanged');
  }
  {
-  const c=fixture();c.REQS=[{id:'keep'}];c.BILLS=[{id:'bill'}];c.INVS=[{id:'invoice'}];const before=clone([c.REQS,c.BILLS,c.INVS]);c.mapReq=x=>x;c.mapBill=()=>{throw Error('malformed mapping')};
-  assert.throws(()=>c.approvalHistoryItemsFromPayload({items:[{record_type:'expense_requests',record_id:'new',source_rows:[{id:'new'}]},{record_type:'bills',record_id:'bad',source_rows:[{id:'bad'}]}]}),/malformed/);assert.deepEqual(clone([c.REQS,c.BILLS,c.INVS]),before);
-  pass('late mapping error commits none of the history page caches');
+  const c=fixture();c.REQS=[{id:'keep'}];c.BILLS=[{id:'bill'}];c.INVS=[{id:'invoice'}];const before=clone([c.REQS,c.BILLS,c.INVS]);
+  const payload={mode:'summary',total:2,all_total:2,page:{limit:50,offset:0,has_more:false},items:[{kind:'req',record_type:'expense_requests',record_id:'new',history_key:'expense_requests:new',summary:{source_count:1,amount:0,has_attachments:false}},{kind:'bill',record_type:'bills',record_id:'bad',history_key:'bills:bad',summary:{source_count:2,amount:'malformed',has_attachments:false}}]};
+  assert.throws(()=>{c.approvalHistoryValidatePage(payload,1,'');c.approvalHistoryItemsFromPayload(payload);},/摘要不完整/);assert.deepEqual(clone([c.REQS,c.BILLS,c.INVS]),before);
+  pass('late malformed summary fails real page validation before any partial result or source cache is applied');
  }
  {
-  const c=fixture();c.mapReq=c.mapBill=c.mapInv=x=>({...x});c.REQS=[{id:'duplicate',value:'old'}];
-  c.approvalHistoryItemsFromPayload({items:[{record_type:'expense_requests',record_id:'duplicate',source_rows:[{id:'duplicate',value:'first'}]},{record_type:'expense_requests',record_id:'duplicate',source_rows:[{id:'duplicate',value:'last'}]}]});assert.equal(c.REQS.length,1);assert.equal(c.REQS[0].value,'last');
-  pass('overlapping source rows keep the original last-group-wins cache precedence');
+  const c=fixture();c.REQS=[{id:'duplicate',value:'old',formPayload:{manualOverride:true},rowVersion:7}];const before=clone(c.REQS);
+  const items=c.approvalHistoryItemsFromPayload({items:[{record_type:'expense_requests',record_id:'duplicate',history_key:'first',summary:{description:'first'}},{record_type:'expense_requests',record_id:'duplicate',history_key:'last',summary:{description:'last'}}]});assert.deepEqual(clone(c.REQS),before);assert.deepEqual(clone(items.map(x=>x.summary.description)),['first','last']);assert(items.every(x=>!('raw' in x)));
+  pass('overlapping summary record IDs never replace authoritative document values, manual accounting or content versions');
  }
  {
   const c=fixture();c.REQS=[{id:'r'}];c.INVS=[{id:'i1',batchId:'b',steps:[]},{id:'i2',batchId:'b',receivable:true,receiptCandidate:true,steps:[{a:'approved'}]},{id:'solo',receivable:true,receiptCandidate:true,steps:[]}];
@@ -85,10 +86,11 @@ async function run(){
   const start=performance.now(),items=c.approvalAllItems();assert.equal(items.length,2500);assert(keyCalls<=10000);pass('2500 bill groups use linear key work ('+keyCalls+' keys; '+(performance.now()-start).toFixed(1)+'ms), not repeated full-array scans');
  }
  for(const status of ['ready','loading','error']){
-  const c=fixture(),items=status==='ready'?[{kind:'req',raw:{id:'history'}}]:[];c.S.aT='h';let rendered=null;
-  Object.assign(c,{document:{createElement:()=>({})},RL:{employee:'員工'},setApprovalTabVisual(){},canReviseAccountingDetails:()=>false,currentRoleKey:()=> 'employee',loadDrafts(){},expenseRevisionRecoveryHtml:()=>'',approvalFastShouldHoldSkeleton:()=>false,approvalHistoryRuntimeForCurrentUser:()=>({status,items,allTotal:1,updatedAt:status==='ready'?'verified':''}),approvalHistoryStatusHtml:()=>status,renderApprList:rows=>rendered=rows,approvalAllItems:()=>{throw Error('unrelated full worklist traversal')}});
-  vm.runInContext(fn('buildApprovals'),c);c.buildApprovals();assert.equal(rendered,items);assert.equal(c.nodes['history-appr-cnt'].textContent,status==='ready'?'1':'—');assert.equal(c.nodes['approval-bulk-slot'].innerHTML,'');
-  pass('actual history '+status+' renderer bypasses unrelated lists while preserving unknown counts and read-only batch page');
+  const c=fixture(),items=status==='ready'?[{kind:'req',historySummary:true,historyKey:'history',recordId:'history',recordNo:'HISTORY-001',summary:{source_count:1,amount:0,has_attachments:false}}]:[];c.S.aT='h';let rendered=null;
+  const render=c.renderApprovalHistorySummaries;
+  Object.assign(c,{document:{createElement:()=>({})},RL:{employee:'員工'},setApprovalTabVisual(){},canReviseAccountingDetails:()=>false,currentRoleKey:()=> 'employee',loadDrafts(){throw Error('unrelated draft scan')},expenseRevisionRecoveryHtml:()=>'',approvalFastShouldHoldSkeleton:()=>false,approvalHistoryRuntimeForCurrentUser:()=>({status,items,total:items.length,allTotal:1,page:1,updatedAt:status==='ready'?'verified':''}),approvalHistoryStatusHtml:()=>status,renderApprovalHistorySummaries:runtime=>{rendered=runtime.items;render(runtime)},approvalAllItems:()=>{throw Error('unrelated full worklist traversal')},escAttr:x=>String(x||''),approvalShortDate:x=>x||'—',draftTime:x=>x,approvalTableHeaderHtml:()=>'<thead><tr><th>明細</th></tr></thead>',approvalPagerHtml:()=>'',syncApprovalWaitTimer(){}});
+  vm.runInContext(fn('buildApprovals'),c);c.buildApprovals();assert.equal(rendered,items);assert.equal(c.nodes['history-appr-cnt'].textContent,status==='ready'?'1':'—');assert.equal(c.nodes['approval-bulk-slot'].innerHTML,'');assert.equal(c.nodes['appr-list']['data-history-status'],status);if(status==='ready')assert(c.nodes['appr-list'].innerHTML.includes('HISTORY-001'));if(status==='error')assert(c.nodes['appr-list'].innerHTML.includes('不能當成 0 筆'));
+  pass('actual history '+status+' renderer bypasses unrelated lists while preserving unknown counts and read-only summary page');
  }
  {
   const c=fixture(),rows=Array.from({length:123},(_,i)=>({id:'v'+i,no:'ANON-'+i,date:i%2?'2026/04/01':'2026/05/01',eid:i%2?'B':'A',desc:'虛構傳票',total:i+1,entries:[{amt:i===122?1250.25:i+1}]}));const original=clone(rows);let ids=[];
