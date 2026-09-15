@@ -4,7 +4,7 @@ do $history_summary_postflight$
 declare x record;proc record;rel regclass;n integer;
 begin
  for x in select * from(values
-  ('private.finance_history_index_grams_v1(text)','dbdd59be4c6b73f59115003f680dc099',false,false),
+  ('private.finance_history_index_grams_v1(text)','f4ddedc9860d42e3e491bb62994472ed',false,false),
   ('private.finance_history_compile_query_v1(text)','03169c24adb1d8ae210a943a48612108',false,false),
   ('private.finance_history_index_matches_v1(jsonb,text,text,text[])','8a3310ad9dd3db6e75a1da0d4272a42d',false,false),
   ('private.finance_history_source_business_v1(text,jsonb,text)','1eb4756117802d82ef66ebb0229c77b8',false,false),
