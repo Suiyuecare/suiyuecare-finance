@@ -82,14 +82,16 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
   const workspaceFrames=[],workspaceTargets=[];
   const workspace=install({
-    S:{page:'dashboard'},financeWorkspaceNavigationRevision:0,APPROVAL_WAIT_TIMER_ID:null,PT:{newreq:'新增申請'},
+    S:{page:'dashboard',user:profile()},financeWorkspaceNavigationRevision:0,financeAuthIdentityEpoch:0,
+    financeWorkspaceIdentityBlocked:false,currentTenantId:()=> 'tenant-a',activeDataEnvironment:()=> 'production',
+    APPROVAL_WAIT_TIMER_ID:null,PT:{newreq:'新增申請'},
     el:()=>({style:{},classList:{add(){}}}),document:{querySelectorAll:()=>[]},
     requestAnimationFrame:callback=>workspaceFrames.push(callback),restoreFinanceRefreshTarget:target=>workspaceTargets.push(target),
     applyRolePermissions(){},setRuntimeDefaults(){},initFilters(){},consumeFinanceRefreshReturnPage:()=>null,
     pendingApprovalDeepLink:()=>null,isExpenseApplicantRevisionMode:()=>false,shouldPromptUnsavedNewReq:()=>false,
     shouldPromptUnsavedIncomeDoc:()=>false,canAccessPage:()=>true,buildNR(){},syncMobileNavSelect(){},
     enhanceLongSelects(){},startSearchableSelectObserver(){},enhanceMobileTables(){},startMobileEnhancer(){}
-  },['openFinanceWorkspace','guardedNav']);
+  },['currentFinanceAuthUserId','financeReauthenticationIdentity','openFinanceWorkspace','guardedNav']);
   workspace.openFinanceWorkspace();
   await workspace.guardedNav('newreq',null);
   workspaceFrames.shift()();
