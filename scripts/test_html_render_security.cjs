@@ -30,3 +30,16 @@ let retried;const recoveryContext={doConfirmVoucher:id=>{retried=id;}};vm.runInN
 assert.equal(retried,maliciousId);assert.equal(recoveryContext.injected,undefined,'recovery action cannot execute an injected request ID');
 assert.ok(!source.includes("'+r.desc+'"));
 console.log('PASS actual request detail and attachment rendering: description, applicant, bank details, filenames, extension and JavaScript argument injection');
+// Voucher text originates from employee descriptions and imported accounting
+// labels. It must remain text in both the work list and detail dialog.
+Object.assign(context,{VOUCHERS:[{id:maliciousId,no:attack,date:attack,desc:attack,creator:attack,entS:attack,eid:'E1',posted:true,entries:[{t:'dr',ac:attack,an:attack,amt:1}],total:1}],ENTS:[{id:'E1',s:attack}],currentFinanceAuthUserId:()=> 'fixture-auth',currentTenantId:()=> 'fixture-tenant',activeDataEnvironment:()=> 'production',voucherBadgeClass:()=> 'b-ok',voucherKind:()=> '付款傳票',document:{getElementById:id=>{const n=context.el(id);n.style=n.style||{};return n;}},requestPrimaryFilesHtml:()=>'',refreshSearchableSelect(){}});
+context.window.FinanceDocumentSearch=require('../assets/engines/document-search.js');
+vm.runInContext(between('function financeDocumentMatchesQuery(', 'function requestSearchAmounts('),context);
+vm.runInContext(between('function voucherMonthKey(', 'window.setVoucherPage='),context);
+vm.runInContext(between('window.renderVouchers=function(', 'function reportVoucherRows('),context);
+context.window.renderVouchers();
+assert.ok(!nodes['voucher-list'].innerHTML.includes('<img'),'voucher list cannot create stored HTML');assert.ok(nodes['voucher-list'].innerHTML.includes('&lt;img'),'voucher list keeps literal text');
+const voucherHandler=nodes['voucher-list'].innerHTML.match(/onclick="([^"]+)"/)[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+let selected;const voucherClickContext={showVoucherById:id=>{selected=id;}};vm.runInNewContext(voucherHandler,voucherClickContext);assert.equal(selected,maliciousId);assert.equal(voucherClickContext.injected,undefined);
+context.window.showVoucherById(maliciousId);assert.ok(!nodes['m-voucher-body'].innerHTML.includes('<img'));assert.ok(nodes['m-voucher-body'].innerHTML.includes('&lt;img'));
+console.log('PASS actual voucher list/detail: stored HTML stays literal and quoted IDs cannot inject click actions');
