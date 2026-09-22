@@ -322,3 +322,22 @@ supabase/.temp
 !scripts/test_ar_read_scope_release_batch.mjs
 !scripts/finance_ar_verified_accounting_scope_postflight.sql
 !scripts/finance_ar_verified_accounting_scope_canary.sql
+
+# Sealed 2026-09-22 audit security and browser regressions.
+!scripts/test_audit_security_release_batch.mjs
+!scripts/check_finance_ui_interaction_browser.cjs
+!scripts/check_audit_export_integrity.cjs
+!scripts/test_finance_document_access_v1.cjs
+!scripts/fixtures/finance_attachment_claim_dependencies_20260922.json
+!scripts/fixtures/finance_attachment_write_scope_20260922.json
+!scripts/fixtures/finance_document_access_baseline_20260922.json
+!scripts/check_audit_release_pin_compatibility.cjs
+!scripts/check_income_submission_recovery.cjs
+!scripts/check_receipt_result_recovery.cjs
+!docs/finance-audit-security-release-20260922.md
+!docs/audits
+!docs/audits/2026-09-22-document-access-remediation.md
+!docs/FINANCE_AUDIT_REMEDIATION_20260922.md
+!scripts/finance_audit_security_fingerprint.sql
+!scripts/finance_audit_security_postflight.sql
+!scripts/finance_audit_security_canary.sql

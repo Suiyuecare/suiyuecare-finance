@@ -76,5 +76,5 @@ begin
  if not exists(select 1 from pg_trigger where tgrelid='private.finance_legacy_attachment_links_v1'::regclass and tgname='immutable' and tgenabled='O' and tgtype=27 and tgfoid='private.finance_legacy_attachment_links_immutable_v1()'::regprocedure) then raise exception 'Legacy attachment map immutability changed';end if;
  if not exists(select 1 from pg_index i join pg_class c on c.oid=i.indexrelid
   where c.relname='finance_attachment_source_identity_lookup_v1' and i.indrelid='private.finance_legacy_attachment_links_v1'::regclass
-    and i.indisvalid and i.indisready and pg_get_indexdef(i.indexrelid)='CREATE INDEX finance_attachment_source_identity_lookup_v1 ON private.finance_legacy_attachment_links_v1 USING btree (record_type, parent_key)') then raise exception 'Attachment source identity lookup index changed';end if;
+    and i.indisvalid and i.indisready and md5(pg_get_indexdef(i.indexrelid))='863088cb5edbdaebf88aa774093c69a3') then raise exception 'Attachment source identity lookup index changed';end if;
 end $audit_security_catalog$;
