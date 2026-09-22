@@ -34,6 +34,7 @@
 - `node scripts/check_finance_ui_interaction_browser.cjs`：原生 Playwright，70 項輸入、選單、對話框、排序及導航驗證。
 - `node scripts/check_income_submission_recovery.cjs`：97 項單張／批次發票、繳費單、原交易恢復與 PostgreSQL 去重驗證。
 - `node scripts/check_receipt_result_recovery.cjs`：17 項收款呼叫端、回應遺失、期限及重新載入恢復驗證。
+- `node scripts/test_finance_document_access_v1.cjs`：78 項實際資料庫權限、附件歸屬、正常上傳、批次共用、薪資隔離及主管任職驗證。
 - `node scripts/test_html_render_security.cjs`：實際傳票清單與詳情函式的文字／操作 ID 安全回歸。
 - `pnpm release:preflight`：版本化來源、migration lineage、受保護發行、既有財務／簽核／收款／人資與本次新增回歸。
 
@@ -44,3 +45,5 @@
 本批新增資料庫 migration 及受保護發行階段；禁止只發前端後宣稱權限問題已在正式環境修復。GitHub 的提交、PR／CI 通過與正式部署是不同狀態。正式套用須按 `docs/FINANCE_PRODUCTION_RELEASE.md`，包含原子 migration／ledger、相容性檢查、唯讀 canary 及回滾演練。
 
 無法追溯父單的歷史附件不能用放寬全員權限修補；本批不改寫正式金額、補造附件，或將尚未核對的應收差額視為零。
+
+唯讀歷史檢查另找到 56 筆附件中繼資料（45 筆支出、11 筆發票）無法由目前單號或所查的附件路徑確認來源，另有 5 筆 `storage_orphans`。這些資料未猜補、未刪除；不宣稱已恢復存取。另 35 筆發票附件有同批次路徑線索，但仍須通過公司／部門／申請人一致性檢查。正式套用時由唯讀驗收輸出實際已連結與待核對總數，詳見 [權限修正與歷史資料限制](audits/2026-09-22-document-access-remediation.md)。
