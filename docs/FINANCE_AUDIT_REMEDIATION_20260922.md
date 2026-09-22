@@ -32,6 +32,9 @@
 - `node scripts/check_attachment_download_names.cjs`：原始下載命名、正式簽章、拒絕回退舊連結，以及身份變更後的延遲回應。
 - `node scripts/check_voucher_pagination_browser.cjs`：桌機 1440／手機 390，26 項清單、月份、跨頁搜尋與 HTML 安全驗證。
 - `node scripts/check_finance_ui_interaction_browser.cjs`：原生 Playwright，70 項輸入、選單、對話框、排序及導航驗證。
+- `node scripts/check_income_submission_recovery.cjs`：97 項單張／批次發票、繳費單、原交易恢復與 PostgreSQL 去重驗證。
+- `node scripts/check_receipt_result_recovery.cjs`：17 項收款呼叫端、回應遺失、期限及重新載入恢復驗證。
+- `node scripts/test_html_render_security.cjs`：實際傳票清單與詳情函式的文字／操作 ID 安全回歸。
 - `pnpm release:preflight`：版本化來源、migration lineage、受保護發行、既有財務／簽核／收款／人資與本次新增回歸。
 
 所有測試使用隔離資料或虛構使用者。資料庫測試使用 PostgreSQL 相容執行環境及實際 SQL；瀏覽器測試沒有代表每位員工實際通過 Google OAuth，也不代表正式環境所有請求小於 3 秒。
