@@ -3,14 +3,14 @@
   var runtime=null,profiles=new Map(),pending=new Map(),readVersions=new Map(),receivables=new Map(),taxReads=new Map(),session='',epoch=0,dialogOperation=0;
   var state={tab:'bs',department:'all',comparison:'previous',arBucket:'all',arQuery:'',arPage:0,arDepartment:'all',arAsOf:'',managementMode:'direct'};
   var PAGE_SIZE=25,READ_TIMEOUT_MS=12000,PROFILE_READ_CONCURRENCY=4;
-  var readControllers=new Set(),profileQueue=[],profileActive=0,profilePaint=null;
+  var readControllers=new Set(),receivableControllers=new Map(),profileQueue=[],profileActive=0,profilePaint=null;
   function h(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
   function n(v){return Number.isFinite(Number(v))?Number(v):0;}
   function money(v){return v==null?'待確認':new Intl.NumberFormat('zh-TW',{maximumFractionDigits:2}).format(n(v));}
   function clone(v){return JSON.parse(JSON.stringify(v));}
   function el(id){return global.document.getElementById(id);}
   function identity(){if(!runtime)return '';var u=runtime.user()||{};return [runtime.tenant(),runtime.environment(),u.id||'',u.authUserId||u.auth_user_id||'',runtime.role(),runtime.identityBlocked?runtime.identityBlocked():false,runtime.permissionIdentity?runtime.permissionIdentity():''].map(String).join('|');}
-  function syncSession(){var next=identity();if(next!==session){session=next;epoch++;readControllers.forEach(function(c){c.abort();});readControllers.clear();if(profilePaint){global.clearTimeout(profilePaint.timer);profilePaint=null;}profiles.clear();pending.clear();readVersions.clear();receivables.clear();taxReads.clear();state.arPage=0;}}
+  function syncSession(){var next=identity();if(next!==session){session=next;epoch++;readControllers.forEach(function(c){c.abort();});readControllers.clear();receivableControllers.clear();if(profilePaint){global.clearTimeout(profilePaint.timer);profilePaint=null;}profiles.clear();pending.clear();readVersions.clear();receivables.clear();taxReads.clear();state.arPage=0;}}
   function profileKey(eid){syncSession();return session+'|'+eid;}
   function profileFor(eid){var row=profiles.get(profileKey(eid));return row&&row.profile||null;}
   function profileRecord(eid){return profiles.get(profileKey(eid))||null;}
@@ -213,8 +213,39 @@
   function renderEliminations(scope,model){if(scope.eid!=='all')return '';var bounds=model.current.bounds,result=global.FinanceManagementReportEngine.eliminationLedger({profiles:allProfiles(),entityId:'all',start:bounds.start,end:bounds.end}),direct=model.current.pl.netProfit,after=null;if(result.rows.length){var adjusted=runtime.modelFromLedger(runtime.ledger().concat(result.rows),scope.period,allProfiles());after=adjusted.current.pl.netProfit;}return '<details class="rw-details"><summary>公司間消除底稿（'+result.applied.length+' 筆已覆核）</summary><div>'+notice('這是有來源的消除試算；各法人原帳保持原值，尚不代表已完成法定合併報表。')+'<div class="rw-kpis">'+kpi('消除前加總淨利',direct)+kpi('消除後試算淨利',after,result.rows.length?'已套用覆核底稿':'尚無可套用底稿')+'</div>'+result.warnings.map(function(w){return notice(w.message,true);}).join('')+'</div></details>';}
   function arScope(){var s=runtime.state(),entity=s.recvEntity||'all';if(state.lastArEntity!==entity){state.arDepartment='all';state.arPage=0;state.lastArEntity=entity;}return {entity:entity,department:state.arDepartment,asOf:state.arAsOf||runtime.today()};}
   function arKey(scope){syncSession();return session+'|ar|'+scope.entity+'|'+scope.department+'|'+scope.asOf;}
-  async function loadReceivables(force,explicitScope){var scope=explicitScope||arScope(),key=arKey(scope),requestEpoch=epoch;if(!force&&receivables.has(key))return receivables.get(key);if(!force&&pending.has(key))return pending.get(key);var requestIdentity=identity(),version=(readVersions.get(key)||0)+1;readVersions.set(key,version);
-    var promise=(async function(){try{var data=await rpc('finance_receivables_v1',{p_as_of:scope.asOf,p_entity_id:scope.entity==='all'?null:scope.entity,p_department_code:scope.department==='all'?null:scope.department,p_data_environment:runtime.environment()});if(identity()!==requestIdentity||requestEpoch!==epoch||readVersions.get(key)!==version)return null;if(!data||data.complete!==true||!Array.isArray(data.items))throw new Error('應收回應不完整，請重試。');receivables.set(key,{data:data});if(runtime.refreshReceivables)runtime.refreshReceivables();return data;}catch(e){if(identity()===requestIdentity&&requestEpoch===epoch&&readVersions.get(key)===version)receivables.set(key,{error:errorText(e)});return null;}finally{if(readVersions.get(key)===version)pending.delete(key);}})();pending.set(key,promise);return promise;}
+  function invalidateReceivables(){
+    syncSession();
+    var keys=new Set(Array.from(receivables.keys()).concat(Array.from(receivableControllers.keys())));
+    keys.forEach(function(key){readVersions.set(key,(readVersions.get(key)||0)+1);pending.delete(key);});
+    receivables.clear();
+    receivableControllers.forEach(function(controller){if(controller)controller.abort();});
+    receivableControllers.clear();
+  }
+  async function loadReceivables(force,explicitScope){
+    var scope=explicitScope||arScope(),key=arKey(scope),requestEpoch=epoch;
+    if(!force&&pending.has(key))return pending.get(key);
+    if(!force&&receivables.has(key))return receivables.get(key);
+    var requestIdentity=identity(),version=(readVersions.get(key)||0)+1,previousController=receivableControllers.get(key),controller=typeof global.AbortController==='function'?new global.AbortController():null;
+    readVersions.set(key,version);receivables.delete(key);if(previousController)previousController.abort();receivableControllers.set(key,controller);
+    function current(){return identity()===requestIdentity&&requestEpoch===epoch&&readVersions.get(key)===version;}
+    var promise=(async function(){
+      try{
+        var data=await rpc('finance_receivables_v1',{p_as_of:scope.asOf,p_entity_id:scope.entity==='all'?null:scope.entity,p_department_code:scope.department==='all'?null:scope.department,p_data_environment:runtime.environment()},controller);
+        if(!current())return null;
+        if(!data||data.complete!==true||!Array.isArray(data.items))throw new Error('應收回應不完整，請重試。');
+        receivables.set(key,{data:data});return data;
+      }catch(e){if(current())receivables.set(key,{error:errorText(e)});return null;}
+      finally{
+        if(current()){
+          pending.delete(key);receivableControllers.delete(key);
+          // A legacy summary may have started this read before the workspace
+          // mounted. Both success and failure must settle its loading state.
+          try{if(runtime.refreshReceivables)runtime.refreshReceivables();else if(runtime.state().page==='recv')renderReceivables();}catch(error){if(global.console)global.console.warn('Receivables view refresh failed',error);}
+        }
+      }
+    })();pending.set(key,promise);return promise;
+  }
+  async function retryReceivables(scope){var key=arKey(scope);return pending.has(key)?pending.get(key):loadReceivables(true,scope);}
   function receivablesForScope(scope){var record=receivables.get(arKey(scope));return record&&record.data||null;}
   function arItems(){var record=receivables.get(arKey(arScope()));return record&&record.data&&record.data.items||[];}
   function arSummary(rows){var result={outstanding:0,received:0,pending:0,overdue:0,unknown:0,credit:0};rows.forEach(function(r){result.outstanding+=Math.max(0,n(r.outstandingAmount));result.received+=n(r.receivedAmount);result.pending+=n(r.pendingReceiptAmount);if(n(r.overdueDays)>0)result.overdue+=Math.max(0,n(r.outstandingAmount));if(!r.dueDate)result.unknown+=Math.max(0,n(r.outstandingAmount));result.credit+=Math.max(0,-n(r.outstandingAmount));});return result;}
@@ -233,8 +264,8 @@
   var AR_BUCKETS=[['all','全部'],['open','未結清'],['pending','收款待確認'],['not_due','未到期'],['d1','逾期1–30天'],['d31','31–60天'],['d61','61–90天'],['d90','91天以上'],['unknown','缺到期日']];
   function arBucketLabel(){var found=AR_BUCKETS.find(function(b){return b[0]===state.arBucket;});return found?found[1]:'全部';}
   function arFilteredItems(items){return (items||[]).filter(function(r){if(!arMatchesQuery(r,state.arQuery))return false;var key=state.arBucket;if(key==='all')return true;if(key==='open')return n(r.outstandingAmount)>.005;if(key==='pending')return n(r.pendingReceiptAmount)>.005;return r.agingBucket===key&&n(r.outstandingAmount)>.005;}).sort(function(a,b){return String(a.entityId).localeCompare(String(b.entityId))||String(a.departmentCode).localeCompare(String(b.departmentCode))||String(a.buyer).localeCompare(String(b.buyer))||n(b.outstandingAmount)-n(a.outstandingAmount);});}
-  function renderReceivables(){syncSession();var box=el('finance-receivable-workspace');if(!box||!runtime)return;var scope=arScope(),key=arKey(scope),record=receivables.get(key);
-    var header='<div class="rw-toolbar"><div><h2>應收追蹤</h2><p>'+h(entityName(scope.entity))+' · 截至 '+h(scope.asOf)+'</p></div><div class="rw-actions">'+button('重新核對','reload-receivables')+button('匯出應收 Excel','export-receivables')+'</div></div><div class="rw-form" style="margin-bottom:16px">'+field('資料截止日','rw-ar-asof',scope.asOf,'date')+select('部門','rw-ar-department',scope.department,[['all','全部授權部門']].concat(departmentsFor(scope.entity,true).map(function(d){return[d.c,d.n];})))+field('搜尋客戶／單號／金額','rw-ar-query',state.arQuery,'search','placeholder="輸入客戶、單號或金額"')+'</div>';
+  function renderReceivables(){syncSession();var box=el('finance-receivable-workspace');if(!box||!runtime)return;var scope=arScope(),key=arKey(scope),record=receivables.get(key),busy=pending.has(key)||!record;
+    var header='<div class="rw-toolbar"><div><h2>應收追蹤</h2><p>'+h(entityName(scope.entity))+' · 截至 '+h(scope.asOf)+'</p></div><div class="rw-actions">'+button(busy?'核對中…':'重新核對','reload-receivables',busy?'disabled aria-busy="true"':'')+button('匯出應收 Excel','export-receivables',busy||!record||record.error?'disabled':'')+'</div></div><div class="rw-form" style="margin-bottom:16px">'+field('資料截止日','rw-ar-asof',scope.asOf,'date')+select('部門','rw-ar-department',scope.department,[['all','全部授權部門']].concat(departmentsFor(scope.entity,true).map(function(d){return[d.c,d.n];})))+field('搜尋客戶／單號／金額','rw-ar-query',state.arQuery,'search','placeholder="輸入客戶、單號或金額"')+'</div>';
     if(!record){box.innerHTML=header+notice('正在核對發票、折讓與正式收款分錄…');if(!pending.has(key))loadReceivables().then(function(){if(arKey(arScope())===key)renderReceivables();});return;}
     if(record.error){box.innerHTML=header+notice('應收資料讀取失敗：'+record.error+'。讀取成功前不顯示估算餘額。',true);return;}
     var data=record.data,filtered=arFilteredItems(data.items),summary=arSummary(filtered),buckets=AR_BUCKETS;
@@ -325,13 +356,13 @@
     else if(action==='tax-document')await openTaxDocument(node.dataset.document);
     else if(action==='tax-adjustments')openTaxAdjustments();
     else if(action==='mapping-settings')openMappings();
-    else if(action==='management-reload-ar'){await loadReceivables(true,managementArScope(reportScope()));renderReports();}
+    else if(action==='management-reload-ar'){await retryReceivables(managementArScope(reportScope()));if(requestIdentity===identity())renderReports();}
     else if(action==='management-settings')return openManagementSettings(node.dataset.entity);
     else if(action==='management-row')openManagementRow(node.dataset.kind,node.dataset.index);
     else if(action==='profile-history'){var eid=editEntity(),data=await rpc('finance_reporting_profile_history_v1',{p_entity_id:eid,p_data_environment:runtime.environment()}),rows=Array.isArray(data)?data:data.rows||data.history||[];if(requestIdentity!==identity()||operation!==dialogOperation)return;dialog('設定歷程',table(['版本','時間','修改人','原因'],rows.map(function(r){return{cells:[r.revision,r.createdAt,r.actorId,r.reason]};})));}
     else if(action==='statement-source')openStatementSource(node.dataset.account);
     else if(action==='department-source')openDepartmentSource(node.dataset.entity,node.dataset.department);
-    else if(action==='reload-receivables'){await loadReceivables(true);renderReceivables();}
+    else if(action==='reload-receivables'){var reloadScope=arScope(),reloadKey=arKey(reloadScope),reloading=retryReceivables(reloadScope);renderReceivables();await reloading;if(requestIdentity===identity()&&arKey(arScope())===reloadKey)renderReceivables();}
     else if(action==='ar-bucket'){state.arBucket=node.dataset.bucket;state.arPage=0;renderReceivables();}
     else if(action==='ar-page'){state.arPage+=Number(node.dataset.delta);renderReceivables();}
     else if(action==='receivable-detail')openReceivable(node.dataset.invoice);
@@ -353,9 +384,9 @@
   function openStatementSource(account){var scope=reportScope();showSourceRows(sourceRows(scope,account,state.tab==='pl'&&state.department!=='all'?state.department:null),0,'科目 '+account+' · '+scope.period);}
   function openDepartmentSource(eid,dc){var scope=reportScope();scope.eid=eid;showSourceRows(sourceRows(scope,null,dc),0,entityName(eid)+' / '+deptName(dc)+' · '+scope.period);}
   function showSourceRows(rows,page,title){page=Math.max(0,Math.min(page,Math.ceil(rows.length/PAGE_SIZE)-1));var subset=rows.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE),d=dialog(title,table(['日期','科目','摘要／來源','借方','貸方','憑證'],subset.map(function(r,i){return {cells:[r.date||r.entry_date,(r.ac||r.account_code)+' '+(r.an||r.account_name||''),{html:h(r.desc||r.description||'')+'<small>'+h(r.ref||r.sourceNo||r.voucherNo||'來源待補')+'</small>'},{text:money(r.dr==null?r.debit:r.dr),money:true},{text:money(r.cr==null?r.credit:r.cr),money:true},{html:button('查看','ledger-source','data-index="'+(page*PAGE_SIZE+i)+'"')}]};}))+'<div class="rw-pager"><span>共 '+rows.length+' 筆 · 第 '+(page+1)+' 頁</span><div class="rw-actions">'+button('上一頁','source-page','data-delta="-1" '+(page===0?'disabled':''))+button('下一頁','source-page','data-delta="1" '+((page+1)*PAGE_SIZE>=rows.length?'disabled':''))+'</div></div>');d.__sourceRows=rows;d.__sourceTitle=title;d.dataset.sourcePage=String(page);}
-  async function afterReceipt(result,expectedIdentity,operation){function current(){return expectedIdentity===identity()&&operation===dialogOperation;}if(!current())return;if(result&&result.refreshRequired){var status=el('rw-form-status');if(status)status.textContent='收款已保存，最新狀態待同步。請重新整理確認，勿重複送出。';return;}await runtime.reload();if(!current())return;receivables.clear();await loadReceivables(true);if(!current())return;closeDialog();renderReceivables();runtime.refreshViews();}
+  async function afterReceipt(result,expectedIdentity,operation){function current(){return expectedIdentity===identity()&&operation===dialogOperation;}if(!current())return;if(result&&result.refreshRequired){var status=el('rw-form-status');if(status)status.textContent='收款已保存，最新狀態待同步。請重新整理確認，勿重複送出。';return;}await runtime.reload();if(!current())return;invalidateReceivables();await loadReceivables(true);if(!current())return;closeDialog();renderReceivables();runtime.refreshViews();}
   async function onSubmit(event){var requestIdentity=identity(),operation=dialogOperation;function current(){return requestIdentity===identity()&&operation===dialogOperation;}var form=event.target.closest('[data-rw-form]');if(!form)return;event.preventDefault();var formDialog=form.closest('dialog');if(formDialog&&formDialog.dataset.scopeIdentity!==identity())throw new Error('登入身分或工作區已變更，這份表單尚未儲存，請重新開啟。');if(form.dataset.running==='true')return;form.dataset.running='true';var buttons=Array.from(form.querySelectorAll('button[type=submit]')).map(function(b){return{node:b,disabled:b.disabled};}),status=form.querySelector('[role=status]');buttons.forEach(function(b){b.node.disabled=true;});try{var kind=form.dataset.rwForm,values=formValues(form);if(kind==='receivable-terms'){var patch={dueDate:nullable(values.dueDate),ownerId:nullable(values.ownerId),lastContact:values.lastContact?new Date(values.lastContact+':00+08:00').toISOString():null,nextActionDate:nullable(values.nextActionDate),notes:values.notes,reason:values.reason};if(!form.dataset.operationKey)form.dataset.operationKey=global.crypto.randomUUID();await rpc('finance_update_receivable_terms_v1',{p_invoice_id:form.dataset.invoice,p_patch:patch,p_expected_version:Number(form.dataset.version),p_idempotency_key:form.dataset.operationKey,p_data_environment:runtime.environment()});if(!current())return;await loadReceivables(true);if(!current())return;closeDialog();renderReceivables();}
-      else if(kind==='receivable-refund'){if(!form.dataset.operationKey)form.dataset.operationKey=global.crypto.randomUUID();await rpc('refund_invoice_receipt_v2',{p_lifecycle_event_id:form.dataset.event,p_refund_amount:nullableNumber(values.amount),p_reason:values.reason,p_refund_date:values.date,p_bank_transaction_id:nullable(values.bankTransactionId),p_idempotency_key:form.dataset.operationKey,p_expected_refund_amount:Number(form.dataset.refunded)});if(!current())return;await runtime.reload();if(!current())return;receivables.clear();await loadReceivables(true);if(!current())return;closeDialog();renderReceivables();runtime.refreshViews();}
+      else if(kind==='receivable-refund'){if(!form.dataset.operationKey)form.dataset.operationKey=global.crypto.randomUUID();await rpc('refund_invoice_receipt_v2',{p_lifecycle_event_id:form.dataset.event,p_refund_amount:nullableNumber(values.amount),p_reason:values.reason,p_refund_date:values.date,p_bank_transaction_id:nullable(values.bankTransactionId),p_idempotency_key:form.dataset.operationKey,p_expected_refund_amount:Number(form.dataset.refunded)});if(!current())return;await runtime.reload();if(!current())return;invalidateReceivables();await loadReceivables(true);if(!current())return;closeDialog();renderReceivables();runtime.refreshViews();}
       else if(kind==='receipt-submit'){var amount=Number(values.receiptAmount);if(!Number.isFinite(amount)||amount<=0)throw new Error('請填寫本次實收金額。');var input=form.querySelector('[name=receiptFiles]');if(!input.files.length)throw new Error('請上傳收款證明。');var payloadKey=JSON.stringify({amount:amount,date:values.receivedDate,note:values.receiptNote,files:Array.from(input.files).map(function(f){return[f.name,f.size,f.lastModified];})});if(form.__receiptPayloadKey&&form.__receiptPayloadKey!==payloadKey)throw new Error('上一筆收款結果待確認，請先重新讀取，勿變更金額重送。');form.__receiptPayloadKey=payloadKey;form.__receiptOptions=form.__receiptOptions||{};Object.assign(form.__receiptOptions,{amount:amount,receivedDate:values.receivedDate,files:Array.from(input.files),note:values.receiptNote});var result=await runtime.submitReceipt(form.dataset.invoice,Number(form.dataset.version),form.__receiptOptions);await afterReceipt(result,requestIdentity,operation);}
       else await submitProfileForm(form);
     }catch(error){if(status)status.textContent=errorText(error);else throw error;}finally{delete form.dataset.running;buttons.forEach(function(b){b.node.disabled=b.disabled;});}}
@@ -366,7 +397,7 @@
     global.document.addEventListener('change',onChange);
     global.document.addEventListener('keydown',function(e){var tab=e.target.closest('.rw-tabs [role=tab]');if(!tab||!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;var tabs=Array.from(tab.parentElement.querySelectorAll('[role=tab]')),i=tabs.indexOf(tab);e.preventDefault();var next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[next].click();});
   }
-  var api={install:install,renderReports:renderReports,renderReceivables:renderReceivables,profileFor:profileFor,profileRecord:profileRecord,loadProfile:loadProfile,loadReceivables:loadReceivables,openReceivable:openReceivable,arItems:arItems,receivablesForScope:receivablesForScope,state:state,warmProfiles:function(ids){return warmProfiles(ids,false);},retryProfiles:function(ids){return warmProfiles(ids,true);},openSourceRows:showSourceRows,invalidate:function(){syncSession();receivables.clear();taxReads.clear();}};
+  var api={install:install,renderReports:renderReports,renderReceivables:renderReceivables,profileFor:profileFor,profileRecord:profileRecord,loadProfile:loadProfile,loadReceivables:loadReceivables,openReceivable:openReceivable,arItems:arItems,receivablesForScope:receivablesForScope,state:state,warmProfiles:function(ids){return warmProfiles(ids,false);},retryProfiles:function(ids){return warmProfiles(ids,true);},openSourceRows:showSourceRows,invalidate:function(){invalidateReceivables();taxReads.clear();}};
   global.FinanceReportingWorkspace=api;
   if(typeof module!=='undefined'&&module.exports)module.exports={escapeHtml:h,money:money,table:table};
 })(typeof window!=='undefined'?window:globalThis);

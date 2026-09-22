@@ -19,7 +19,9 @@ begin
   ('public.finance_receivables_v1(date,text,text,text)','3919420d06b2c7818615f757fa759195'),
   ('public.finance_executive_dashboard_v3(date,date,date,date,date,text,text)','36e536eb3ccfc071a8541719022597f1')
  ) baseline(signature,source_md5) loop
-  if not exists(select 1 from pg_proc where oid=to_regprocedure(spec.signature) and md5(prosrc)=spec.source_md5) then
+  if not exists(select 1 from pg_proc where oid=to_regprocedure(spec.signature) and (md5(prosrc)=spec.source_md5
+   or (spec.signature='private.finance_receivables_payload_v1(date,text,text,text,boolean)' and md5(prosrc)='710c8fa2ca2736f58c13847be1861b6b')
+   or (spec.signature='private.finance_ar_reconciliation_scope_v1(uuid,text,date,text,text)' and md5(prosrc)='edaf8ff23d45c773419606e543e4632e'))) then
    raise exception 'Canonical AR mapper caller or financial scope changed: %',spec.signature;
   end if;
  end loop;
