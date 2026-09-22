@@ -306,6 +306,18 @@ supabase/.temp
 !scripts/test_invoice_read_scope_release_batch.mjs
 !scripts/finance_invoice_select_initplan_postflight.sql
 !scripts/finance_invoice_select_initplan_canary.sql
+
+# Confidential HR bridge release checks and schema seals.
+!scripts/test_hr_private_bridge.mjs
+!scripts/test_hr_bridge_release_batch.mjs
+!scripts/finance_hr_bridge_postflight.sql
+!scripts/finance_hr_bridge_fingerprint.sql
+!scripts/test_hr_voucher_posting.mjs
+!scripts/fixtures/finance_hr_voucher_baseline_20260922.json
+!scripts/check_hr_accounting_read_privacy.cjs
+!scripts/test_hr_voucher_posting_concurrency.mjs
+!scripts/check_hr_accounting_read_privacy_browser.mjs
+!docs/FINANCE_HR_ACCOUNTING_READ_PRIVACY.md
 !scripts/check_ar_verified_accounting_scope.cjs
 !scripts/test_ar_read_scope_release_batch.mjs
 !scripts/finance_ar_verified_accounting_scope_postflight.sql

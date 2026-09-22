@@ -1,8 +1,12 @@
 \set ON_ERROR_STOP on
 -- Read-only exact catalog, authority and absent-identity validation.
 do $ar_verified_accounting_installed$
-declare expected record;proc record;
+declare hr_bridge_installed boolean:=false;ar_scope_installed boolean:=false;expected record;proc record;
 begin
+ if to_regclass('supabase_migrations.schema_migrations') is not null then
+  execute $hr_ledger$select count(*)=3 from supabase_migrations.schema_migrations where version in ('20260922072109','20260922072737','20260922075604')$hr_ledger$ into hr_bridge_installed;
+  execute $ar_ledger$select exists(select 1 from supabase_migrations.schema_migrations where version='20260922072737')$ar_ledger$ into ar_scope_installed;
+ end if;
  for expected in select * from (values
   ('public.can_read_invoice(public.invoices)','d761ec0bbd1544410ae52bd860ec78b6',false,'search_path=""'),
   ('public.current_finance_role()','21dee4f613511ba49f259a8371005e9d',false,'search_path=public'),
@@ -14,7 +18,7 @@ begin
   ('public.is_finance_accounting()','b615fdf7d194eab2ef2003874db09318',false,'search_path=public'),
   ('private.finance_correction_actor_v1()','e61d45d9aa0e001b0ae212678b0a196a',true,'search_path=""'),
   ('private.finance_receivables_payload_v1(date,text,text,text,boolean)','710c8fa2ca2736f58c13847be1861b6b',true,'search_path=""'),
-  ('private.finance_ar_reconciliation_scope_v1(uuid,text,date,text,text)','edaf8ff23d45c773419606e543e4632e',true,'search_path=""')
+  ('private.finance_ar_reconciliation_scope_v1(uuid,text,date,text,text)',(case when hr_bridge_installed then '3bcf8e913c31899d80f77d01fff08996' else 'edaf8ff23d45c773419606e543e4632e' end),true,'search_path=""')
  ) pins(signature,body_md5,is_definer,path_setting) loop
   select * into proc from pg_proc where oid=to_regprocedure(expected.signature);
   if proc.oid is null or md5(proc.prosrc)<>expected.body_md5 or proc.provolatile<>'s'

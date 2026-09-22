@@ -24,20 +24,21 @@ Environment `finance-production` 必須設定：
 
 Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權該 team/project 的 pull、build、candidate deploy、inspect/API/curl 與 promote；資料庫帳號只授權目標 Supabase project 的 migration 權限。
 
-## 目前兩個受控入口：發票讀取權限效能修正、後續前台發布
+## 目前三個受控入口：應收讀取修正、人資付款交接、後續前台發布
 
-此版本只接受以下兩組輸入，`release_phase` 與 `migration_versions` 任何不相符都在建置或資料庫連線前立即拒絕：
+此版本只接受以下三組輸入，`release_phase` 與 `migration_versions` 任何不相符都在建置或資料庫連線前立即拒絕：
 
 | 順序 | `release_phase` | `migration_versions` | 允許的動作 |
 |---|---|---|---|
-| 1 | `frontend_compat` | `none` | 日常前台發布：建立、驗證並提升新前台；資料庫不得提交變更，只能做唯讀 gate 與整筆回滾 canary |
+| 1 | `frontend_compat` | `none` | 日常前台發布：先確認應收與人資三個版本完整，才建立、驗證並提升新前台；資料庫不得提交變更，只能做唯讀 gate 與整筆回滾 canary |
 | 2 | `database_ar_read_scope_20260922` | `20260922072737` | 全部既有版本（含發票 SELECT policy `20260915080928`）成立後，演練並原子提交應收讀取優化、ledger 及全部 21 份 postflight，再提升相同封存候選 |
+| 3 | `database_hr_bridge_20260922` | `20260922072109,20260922072737,20260922075604` | 應收尚未安裝時原子套三版；已安裝應收時只補兩版人資；完整 22 份 postflight 與六份唯讀 canary 通過後提升相同封存候選 |
 
 正式資料庫目前受控 lineage 為 v1 `20260826070814`、v2 `20260826155840`、v3 `20260827052447`，以及已採納回版本庫的修復 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`、`20260831042040_top_level_ceo_self_route`、`20260831043517_expense_submit_derived_status`、`20260901024020_final_accountant_self_post`、`20260901073241_assign_ceo_cashier_and_reassign_pending_cashier`、`20260901081807_allow_formal_cashier_self_disbursement`。其中正式出納固定為李佳泰、總務備援已移除，且三張待放款單保留稽核轉派紀錄。任何其他未審查的 post-baseline migration 仍會 fail closed；採納既有版次不代表流程會再次執行其 SQL。
 
 舊的 audit、cases、utility、reports、amount search、reporting integrity phase 只保留歷史 gate／前置相容驗證；此候選不得用它們 dispatch 或 promotion。
 
-本次資料庫修正只將會計角色的既有身分條件改為每次查詢計算一次；一般員工及主管仍走原有逐筆可見性判斷。既有 identity、來源 RPC、權限函式及讀寫 ACL 不變。演練在同一交易內執行完整 migration、20 份 postflight 與 5 份唯讀 canary，再回滾並比對含所有 policy 的指紋。正式提交與 ledger 為同一交易；後續前台相容發布必須確認此版本已存在。
+應收版本將會計角色的既有身分條件改為每次查詢計算一次，保留一般員工逐筆可見性。人資版本新增獨立薪資授權、私有交接、原子傳票及完整帳簿的薪資保護。兩者依 ledger 的未安裝／應收已安裝／全部已安裝狀態核對精確函式內容，不能用人資變更覆蓋應收最佳化。演練、apply 與 promotion 均沿用同一封存候選；正式提交與 ledger 同一交易，部分人資安裝會拒絕。
 
 ### Phase 1：`frontend_compat`
 
@@ -206,10 +207,16 @@ canary 的唯一結果必須是 `audit_readiness_canary_result`，內容精確�
 
 ## 2026-09-22 應收讀取逾時修正
 
-此候選只允許 `database_ar_read_scope_20260922=20260922072737` 或已套用該版的 `frontend_compat=none`。新 migration 僅更新兩個 private 應收讀取函式；前置函式與身份判斷皆固定來源雜湊，交易金額、一般員工逐筆權限及已安裝 migration 保持不變。
+應收修正可獨立以 `database_ar_read_scope_20260922=20260922072737` 套用，也可納入本頁人資三版原子批次。應收 migration 僅更新兩個 private 應收讀取函式；前置函式與身份判斷皆固定來源雜湊，交易金額及一般員工逐筆權限保持不變。人資版本於其後追加薪資保護；後續 `frontend_compat=none` 要求三版完整。
 
 1. 以完整且精確的 migration ledger 驗證前置條件，執行既有 20 份 postflight；拒絕缺版、未知版次、部分安裝、重複或未排序 ledger。
 2. 在同一受鎖定的交易內執行新 SQL、全部 21 份 postflight 及六項只讀 canary（dashboard、Google、search、history summary、invoice scope、AR scope）。回滾至 savepoint 後比較完整 schema、RLS、函式、業務資料及 ledger 指紋，再回滾整筆演練。新 canary 不注入員工 claims、不變更業務資料。
 3. Apply 重新比對捕獲的 ledger，以單一交易套入精確 SQL、記錄 ledger 並通過全部 21 份 postflight，最後才 commit；任一檢查失敗都回滾 schema 與 ledger。
 4. 已套用版次的重試只執行只讀 postflight/canary；promotion 必須驗證同一封存候選與全部契約，不能重建候選或重套 migration。後續 `frontend_compat` 必須包含此版。
 5. `pnpm test:ar-read-scope` 以虛構本機資料執行真實權限/應收函式，以及 release renderer 的故障注入、回滾、精確 SQL 封存與已套版恢復測試。
+
+## 2026-09-22 人資付款交接整合
+
+人資階段輸入固定為 `20260922072109,20260922072737,20260922075604`。已完整安裝應收版時不重跑應收 SQL，只提交缺少的兩個人資版本；兩個人資版本只存在其中一版時，必須停止並查核，不可補寫 ledger 假裝完整。前置演練與正式提交均包含既有檢查、薪資資料 ACL／RLS／不可變來源／原子入帳檢查，共 22 份 postflight。六項 canary 都是只讀，不建立正式員工或薪資交易。
+
+正式啟用另需逐筆核對雇主、原申請人、會計四階段承辦及薪資查看授權；部署不會自動建立映射，也不代表銀行已付款。詳見 `FINANCE_HR_PRIVATE_BRIDGE.md`。

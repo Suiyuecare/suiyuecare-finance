@@ -70,6 +70,9 @@ const HISTORY_SUMMARY_POSTFLIGHT_FILES = Object.freeze(['finance_approval_histor
 const INVOICE_READ_SCOPE_MIGRATIONS = Object.freeze(['20260915080928']);
 const RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE = 'database_invoice_read_scope_20260915';
 const INVOICE_READ_SCOPE_POSTFLIGHT_FILES = Object.freeze(['finance_invoice_select_initplan_postflight.sql']);
+const HR_BRIDGE_MIGRATIONS = Object.freeze(['20260922072109','20260922072737','20260922075604']);
+const RELEASE_PHASE_DATABASE_HR_BRIDGE = 'database_hr_bridge_20260922';
+const HR_BRIDGE_POSTFLIGHT_FILES = Object.freeze(['finance_hr_bridge_postflight.sql']);
 const AR_READ_SCOPE_MIGRATIONS = Object.freeze(['20260922072737']);
 const RELEASE_PHASE_DATABASE_AR_READ_SCOPE = 'database_ar_read_scope_20260922';
 const AR_READ_SCOPE_POSTFLIGHT_FILES = Object.freeze(['finance_ar_verified_accounting_scope_postflight.sql']);
@@ -104,7 +107,7 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...APPROVAL_SEARCH_MIGRATIONS,
   ...HISTORY_SUMMARY_MIGRATIONS,
   ...INVOICE_READ_SCOPE_MIGRATIONS,
-  ...AR_READ_SCOPE_MIGRATIONS
+  ...HR_BRIDGE_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -125,6 +128,7 @@ const RELEASE_PHASES = Object.freeze({
   [RELEASE_PHASE_DATABASE_APPROVAL_SEARCH]: APPROVAL_SEARCH_BATCH.join(','),
   [RELEASE_PHASE_DATABASE_HISTORY_SUMMARY]: HISTORY_SUMMARY_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE]: INVOICE_READ_SCOPE_MIGRATIONS.join(','),
+  [RELEASE_PHASE_DATABASE_HR_BRIDGE]: HR_BRIDGE_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_AR_READ_SCOPE]: AR_READ_SCOPE_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY]: EMPLOYEE_RELIABILITY_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_AUDIT_READINESS]: AUDIT_READINESS_MIGRATIONS.join(','),
@@ -160,7 +164,8 @@ const SUPPORTED_GATE_PHASES = Object.freeze([
   APPROVAL_SEARCH_BATCH,
   HISTORY_SUMMARY_MIGRATIONS,
   INVOICE_READ_SCOPE_MIGRATIONS,
-  AR_READ_SCOPE_MIGRATIONS
+  AR_READ_SCOPE_MIGRATIONS,
+  HR_BRIDGE_MIGRATIONS
 ]);
 const SUPPORTED_GATE_SUFFIXES = SUPPORTED_GATE_PHASES;
 
@@ -234,7 +239,7 @@ function deploymentHost(record) { return String(record.url || '').replace(/^http
 function validateTarget(env, candidate, releasePhase, versionsText, expectedRef) {
   canonicalSha(candidate);
   releasePlan(releasePhase, versionsText);
-  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AR_READ_SCOPE].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use the fixed AR read scope phase');
+  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_HR_BRIDGE].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use the fixed AR read scope phase');
   expectedRef = projectRef(expectedRef);
   if (expectedRef !== PRODUCTION_CATALOG.supabaseProjectRef) fail('Supabase project ref is not the immutable Finance production catalog target');
   for (const name of ['SUPABASE_ACCESS_TOKEN', 'FINANCE_SUPABASE_URL', 'FINANCE_SUPABASE_ANON_KEY', 'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']) {
@@ -320,8 +325,21 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
   const remote = readLedgerVersions(ledgerPath);
   assertProductionLedgerBaseline(remote, baseline);
   const missing = MIGRATION_CHAIN.filter((version) => !remote.includes(version));
+  if (plan.releasePhase === RELEASE_PHASE_DATABASE_HR_BRIDGE) {
+    const prerequisites = REVIEWED_MIGRATION_CATALOG.filter(version => version < HR_BRIDGE_MIGRATIONS[0]);
+    if (prerequisites.some(version => !remote.includes(version))) fail('HR bridge phase requires every reviewed prerequisite migration');
+    if (HR_BRIDGE_MIGRATIONS.some(version => !local.some(name => name.startsWith(version + '_')))) fail('HR bridge migration file is missing');
+    const own = HR_BRIDGE_MIGRATIONS.filter(version => !AR_READ_SCOPE_MIGRATIONS.includes(version));
+    const present = own.filter(version => remote.includes(version)).length;
+    if (present !== 0 && present !== own.length) fail('HR bridge ledger has a partial atomic migration batch');
+    if (present === own.length && AR_READ_SCOPE_MIGRATIONS.some(version => !remote.includes(version))) fail('HR bridge requires its reviewed AR dependency');
+    return present === own.length ? 'applied' : 'pending';
+  }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_AR_READ_SCOPE) {
-    const prerequisites = REVIEWED_MIGRATION_CATALOG.filter(version => version < AR_READ_SCOPE_MIGRATIONS[0]);
+    const hrOwn = HR_BRIDGE_MIGRATIONS.filter(version => !AR_READ_SCOPE_MIGRATIONS.includes(version));
+    const hrInstalled = hrOwn.filter(version => remote.includes(version));
+    if (hrInstalled.length && (hrInstalled.length !== hrOwn.length || AR_READ_SCOPE_MIGRATIONS.some(version => !remote.includes(version)))) fail('HR bridge ledger has a partial atomic migration batch');
+    const prerequisites = REVIEWED_MIGRATION_CATALOG.filter(version => version < AR_READ_SCOPE_MIGRATIONS[0] && !HR_BRIDGE_MIGRATIONS.includes(version));
     if (prerequisites.some(version => !remote.includes(version))) fail('AR read scope phase requires every reviewed prerequisite migration');
     if (AR_READ_SCOPE_MIGRATIONS.some(version => !local.some(name => name.startsWith(version + '_')))) fail('AR read scope migration file is missing');
     const installed = AR_READ_SCOPE_MIGRATIONS.filter(version => remote.includes(version));
@@ -458,6 +476,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(HISTORY_SUMMARY_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete history summary migration batch');
     if(INVOICE_READ_SCOPE_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete invoice read scope migration batch');
     if(AR_READ_SCOPE_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete AR read scope migration batch');
+    if(HR_BRIDGE_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete HR bridge migration batch');
     return 'compat';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
@@ -568,7 +587,7 @@ function prepareRehearsal(sourcePath, outputPath, target, fingerprintPath, canar
 
 function sqlLiteral(value) { return `'${String(value).replace(/'/g, "''")}'`; }
 function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATABASE_AUDIT) {
-  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE].includes(releasePhase))fail('unsupported fixed database batch');
+  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_HR_BRIDGE].includes(releasePhase))fail('unsupported fixed database batch');
   releasePlan(releasePhase,versionsText);
   const files=migrationFiles(directory);
   return migrationPhase(versionsText).map(version=>{
@@ -610,10 +629,10 @@ function reportsRehearsalRollbackCheck(source) {
   if(!opening.test(source))fail('reports rollback check must preserve its reviewed declaration-free DO block');
   return source.replace(opening,(_,prefix)=>`${prefix}declare\n${declarations.join('\n')}\nbegin\n${reads.join('\n')}\n`);
 }
-function reportsPostflightChain(postflightPath,profilePostflightPath,includeAmountSearch=false,includeIntegrity=false,includeAuditReadiness=false,includeEmployeeReliability=false,includeHistoryPerformance=false,includeReadLatency=false,includeArMapping=false,includeAuditRemediation=false,includeApprovalSearch=false,includeHistorySummary=false,includeInvoiceReadScope=false,includeArReadScope=false) {
+function reportsPostflightChain(postflightPath,profilePostflightPath,includeAmountSearch=false,includeIntegrity=false,includeAuditReadiness=false,includeEmployeeReliability=false,includeHistoryPerformance=false,includeReadLatency=false,includeArMapping=false,includeAuditRemediation=false,includeApprovalSearch=false,includeHistorySummary=false,includeInvoiceReadScope=false,includeArReadScope=false,includeHrBridge=false) {
   const directory=path.dirname(postflightPath);
   if(path.resolve(path.dirname(profilePostflightPath))!==path.resolve(directory))fail('reports postflights must use the same sealed source directory');
-  return REPORT_POSTFLIGHT_FILES.concat(includeAmountSearch?['finance_amount_search_postflight.sql']:[],includeIntegrity?REPORTING_INTEGRITY_POSTFLIGHT_FILES:[],includeAuditReadiness?AUDIT_READINESS_POSTFLIGHT_FILES:[],includeEmployeeReliability?EMPLOYEE_RELIABILITY_POSTFLIGHT_FILES:[],includeHistoryPerformance?HISTORY_PERFORMANCE_POSTFLIGHT_FILES:[],includeReadLatency?READ_LATENCY_POSTFLIGHT_FILES:[],includeArMapping?AR_MAPPING_POSTFLIGHT_FILES:[],includeAuditRemediation?AUDIT_REMEDIATION_POSTFLIGHT_FILES:[],includeApprovalSearch?APPROVAL_SEARCH_POSTFLIGHT_FILES:[],includeHistorySummary?HISTORY_SUMMARY_POSTFLIGHT_FILES:[],includeInvoiceReadScope?INVOICE_READ_SCOPE_POSTFLIGHT_FILES:[],includeArReadScope?AR_READ_SCOPE_POSTFLIGHT_FILES:[]).map(name=>{
+  return REPORT_POSTFLIGHT_FILES.concat(includeAmountSearch?['finance_amount_search_postflight.sql']:[],includeIntegrity?REPORTING_INTEGRITY_POSTFLIGHT_FILES:[],includeAuditReadiness?AUDIT_READINESS_POSTFLIGHT_FILES:[],includeEmployeeReliability?EMPLOYEE_RELIABILITY_POSTFLIGHT_FILES:[],includeHistoryPerformance?HISTORY_PERFORMANCE_POSTFLIGHT_FILES:[],includeReadLatency?READ_LATENCY_POSTFLIGHT_FILES:[],includeArMapping?AR_MAPPING_POSTFLIGHT_FILES:[],includeAuditRemediation?AUDIT_REMEDIATION_POSTFLIGHT_FILES:[],includeApprovalSearch?APPROVAL_SEARCH_POSTFLIGHT_FILES:[],includeHistorySummary?HISTORY_SUMMARY_POSTFLIGHT_FILES:[],includeInvoiceReadScope?INVOICE_READ_SCOPE_POSTFLIGHT_FILES:[],includeArReadScope?AR_READ_SCOPE_POSTFLIGHT_FILES:[],includeHrBridge?HR_BRIDGE_POSTFLIGHT_FILES:[]).map(name=>{
     const sourcePath=name==='finance_canonical_receivables_postflight.sql'?postflightPath:name==='finance_reporting_profiles_postflight.sql'?profilePostflightPath:path.join(directory,name);
     let source=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),name);
     if(name==='finance_production_db_postflight.sql'){
@@ -987,6 +1006,12 @@ function prepareArReadScopeRehearsal(directory,outputPath,versionsText,ledgerPat
   if(!/^with\b/i.test(fingerprint)||/\b(?:insert\s+into|update\s+\S+\s+set|delete\s+from|alter\s+table|create\s+(?:table|index|schema|function|policy)|drop\s+(?:table|index|schema|function|policy)|truncate\s+|vacuum\b|call\s+|copy\s+)\b/i.test(fingerprint))fail('AR read scope fingerprint must be a pure read-only CTE query');
   const postflight=reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true,true);
   const sources=batch.map(item=>item.source.trimEnd()).join('\n'),tag='$finance_ar_read_scope_rollback_assert$',ledgerTag='$finance_ar_read_scope_ledger_guard$';
+  const ledgerRows=batch.map(item=>{
+    const quote=`$finance_ar_scope_rehearsal_migration_${item.version}$`;
+    if(item.source.includes(quote))fail('AR read scope source collides with protected rehearsal ledger tag');
+    const name=item.filename.replace(/^\d{14}_/,'').replace(/\.sql$/,'');
+    return `insert into supabase_migrations.schema_migrations(version,statements,name,created_by) values (${sqlLiteral(item.version)},array[${quote}${item.source.trimEnd()}${quote}]::text[],${sqlLiteral(name)},'github-actions');`;
+  }).join('\n');
   if([sources,fingerprint,postflight,...sections.flatMap(x=>[x.core,x.rollbackCheck])].some(value=>value.includes(tag)||value.includes(ledgerTag)))fail('AR read scope rehearsal assertion tag collision');
   writeExclusive(outputPath,`begin isolation level repeatable read;
 set local lock_timeout = '5s';
@@ -1004,6 +1029,7 @@ create temporary table finance_release_fingerprint_before on commit drop as
 ${fingerprint}
 savepoint finance_release_migration;
 ${sources}
+${ledgerRows}
 ${postflight}
 ${sections.map(x=>x.core).join('\n')}
 rollback to savepoint finance_release_migration;
@@ -1021,10 +1047,68 @@ rollback;
 `);
   return true;
 }
+function pendingHrBridgeBatch(directory,versionsText,ledgerPath,baseline=PRODUCTION_BASELINE_LEDGER) {
+  verifyLedger('pre',ledgerPath,directory,RELEASE_PHASE_DATABASE_HR_BRIDGE,versionsText,baseline);
+  const remote=readLedgerVersions(ledgerPath);
+  return readAuditBatch(directory,versionsText,RELEASE_PHASE_DATABASE_HR_BRIDGE).filter(item=>!remote.includes(item.version));
+}
+function prepareHrBridgePrerequisiteQuery(sourcePath,outputPath,directory,versionsText,ledgerPath,baseline=PRODUCTION_BASELINE_LEDGER) {
+  pendingHrBridgeBatch(directory,versionsText,ledgerPath,baseline);
+  const hasAr=AR_READ_SCOPE_MIGRATIONS.every(version=>readLedgerVersions(ledgerPath).includes(version));
+  return preparePhaseQuery(sourcePath,outputPath,hasAr?RELEASE_PHASE_DATABASE_AR_READ_SCOPE:RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,(hasAr?AR_READ_SCOPE_MIGRATIONS:INVOICE_READ_SCOPE_MIGRATIONS).join(','));
+}
+function prepareHrBridgeRehearsal(directory,outputPath,versionsText,ledgerPath,fingerprintPath,dashboardCanaryPath,googleCanaryPath,searchCanaryPath,summaryCanaryPath,invoiceReadScopeCanaryPath,arReadScopeCanaryPath,postflightPath,profilePostflightPath,baseline=PRODUCTION_BASELINE_LEDGER) {
+  const batch=pendingHrBridgeBatch(directory,versionsText,ledgerPath,baseline),remote=readLedgerVersions(ledgerPath);
+  const sections=[dashboardCanaryPath,googleCanaryPath,searchCanaryPath,summaryCanaryPath,invoiceReadScopeCanaryPath,arReadScopeCanaryPath].map(readonlyAuditRemediationCanarySections);
+  const fingerprint=stripPsqlDirectives(fs.readFileSync(fingerprintPath,'utf8'),path.basename(fingerprintPath)).trim();
+  if(!/^with\b/i.test(fingerprint)||/\b(?:insert\s+into|update\s+\S+\s+set|delete\s+from|alter\s+table|create\s+(?:table|index|schema|function|policy)|drop\s+(?:table|index|schema|function|policy)|truncate\s+|vacuum\b|call\s+|copy\s+)\b/i.test(fingerprint))fail('HR bridge fingerprint must be a pure read-only CTE query');
+  const postflight=reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true,true,true);
+  const sources=batch.map(item=>item.source.trimEnd()).join('\n'),tag='$finance_hr_bridge_rollback_assert$',ledgerTag='$finance_hr_bridge_ledger_guard$';
+  const ledgerRows=batch.map(item=>{
+    const quote=`$finance_hr_rehearsal_migration_${item.version}$`;
+    if(item.source.includes(quote))fail('HR bridge source collides with protected rehearsal ledger tag');
+    const name=item.filename.replace(/^\d{14}_/,'').replace(/\.sql$/,'');
+    return `insert into supabase_migrations.schema_migrations(version,statements,name,created_by) values (${sqlLiteral(item.version)},array[${quote}${item.source.trimEnd()}${quote}]::text[],${sqlLiteral(name)},'github-actions');`;
+  }).join('\n');
+  if([sources,fingerprint,postflight,...sections.flatMap(x=>[x.core,x.rollbackCheck])].some(value=>value.includes(tag)||value.includes(ledgerTag)))fail('HR bridge rehearsal assertion tag collision');
+  writeExclusive(outputPath,`begin isolation level repeatable read;
+set local lock_timeout = '5s';
+set local statement_timeout = '180s';
+select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('finance-production-release-v1',0));
+lock table supabase_migrations.schema_migrations in share row exclusive mode;
+do ${ledgerTag}
+begin
+  if (select pg_catalog.array_agg(version order by version) from supabase_migrations.schema_migrations) is distinct from array[${remote.map(sqlLiteral).join(',')}]::text[] then
+    raise exception 'formal migration ledger changed after the reviewed release gate';
+  end if;
+end;
+${ledgerTag};
+create temporary table finance_release_fingerprint_before on commit drop as
+${fingerprint}
+savepoint finance_release_migration;
+${sources}
+${ledgerRows}
+${postflight}
+${sections.map(x=>x.core).join('\n')}
+rollback to savepoint finance_release_migration;
+${sections.map(x=>x.rollbackCheck).join('\n')}
+create temporary table finance_release_fingerprint_after on commit drop as
+${fingerprint}
+do ${tag}
+begin
+  if (select fingerprint from finance_release_fingerprint_before) is distinct from (select fingerprint from finance_release_fingerprint_after) then
+    raise exception 'HR bridge rollback rehearsal changed the reviewed database fingerprint';
+  end if;
+end;
+${tag};
+rollback;
+`);
+  return true;
+}
 function prepareAuditBatchApply(directory,outputPath,versionsText,ledgerPath,postflightPath,baseline=PRODUCTION_BASELINE_LEDGER,releasePhase=RELEASE_PHASE_DATABASE_AUDIT,profilePostflightPath=null) {
-  const postflight=releasePhase===RELEASE_PHASE_DATABASE_AR_READ_SCOPE?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_HISTORY_SUMMARY?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_APPROVAL_SEARCH?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true):[RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase)?reportsPostflightChain(postflightPath,profilePostflightPath,[RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),releasePhase===RELEASE_PHASE_DATABASE_AR_MAPPING):stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
+  const postflight=releasePhase===RELEASE_PHASE_DATABASE_HR_BRIDGE?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_AR_READ_SCOPE?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_HISTORY_SUMMARY?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_APPROVAL_SEARCH?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true):[RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase)?reportsPostflightChain(postflightPath,profilePostflightPath,[RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),releasePhase===RELEASE_PHASE_DATABASE_AR_MAPPING):stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
   assertCliAtomicMigration(postflight,'audit postflight');
-  const batch=releasePhase===RELEASE_PHASE_DATABASE_AR_READ_SCOPE?pendingArReadScopeBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE?pendingInvoiceReadScopeBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_HISTORY_SUMMARY?pendingHistorySummaryBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_APPROVAL_SEARCH?pendingApprovalSearchBatch(directory,versionsText,ledgerPath,baseline):readAuditBatch(directory,versionsText,releasePhase);
+  const batch=releasePhase===RELEASE_PHASE_DATABASE_HR_BRIDGE?pendingHrBridgeBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_AR_READ_SCOPE?pendingArReadScopeBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE?pendingInvoiceReadScopeBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_HISTORY_SUMMARY?pendingHistorySummaryBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_APPROVAL_SEARCH?pendingApprovalSearchBatch(directory,versionsText,ledgerPath,baseline):readAuditBatch(directory,versionsText,releasePhase);
   verifyLedger('pre',ledgerPath,directory,releasePhase,versionsText,baseline);
   const remote=readLedgerVersions(ledgerPath);
   const tag='$finance_audit_ledger_guard$';
@@ -1072,9 +1156,9 @@ function prepareGateQuery(sourcePath, outputPath, versionsText) {
 function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
   const plan = releasePlan(releasePhase, versionsText);
   const sourceName = path.basename(sourcePath);
-  if([RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)){
+  if([RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)){
     if(sourceName!=='finance_production_db_postflight.sql')fail('audit remediation compatibility requires the reviewed existing-v3 postflight');
-    const directory=path.dirname(sourcePath),postflight=reportsPostflightChain(path.join(directory,'finance_canonical_receivables_postflight.sql'),path.join(directory,'finance_reporting_profiles_postflight.sql'),true,true,true,true,true,true,true,true,plan.releasePhase!==RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,[RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase),[RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase),[RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase));
+    const directory=path.dirname(sourcePath),postflight=reportsPostflightChain(path.join(directory,'finance_canonical_receivables_postflight.sql'),path.join(directory,'finance_reporting_profiles_postflight.sql'),true,true,true,true,true,true,true,true,plan.releasePhase!==RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,[RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase),[RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase),[RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase),[RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase));
     writeExclusive(outputPath,`begin read only;\nset local statement_timeout = '60s';\n${postflight}\nrollback;\n`);
     return true;
   }
@@ -1430,6 +1514,7 @@ function verifyReceipt(receiptPath, deploymentPath, manifestPath, indexPath, can
 function manifestSha(file) { return sha256File(file); }
 
 const api = {
+  HR_BRIDGE_MIGRATIONS, RELEASE_PHASE_DATABASE_HR_BRIDGE, HR_BRIDGE_POSTFLIGHT_FILES, pendingHrBridgeBatch, prepareHrBridgePrerequisiteQuery, prepareHrBridgeRehearsal,
   INVOICE_READ_SCOPE_MIGRATIONS, RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE, INVOICE_READ_SCOPE_POSTFLIGHT_FILES, pendingInvoiceReadScopeBatch, prepareInvoiceReadScopePrerequisiteQuery, prepareInvoiceReadScopeRehearsal,
   AR_READ_SCOPE_MIGRATIONS, RELEASE_PHASE_DATABASE_AR_READ_SCOPE, AR_READ_SCOPE_POSTFLIGHT_FILES, pendingArReadScopeBatch, prepareArReadScopePrerequisiteQuery, prepareArReadScopeRehearsal,
   HISTORY_SUMMARY_MIGRATIONS, RELEASE_PHASE_DATABASE_HISTORY_SUMMARY, HISTORY_SUMMARY_POSTFLIGHT_FILES, pendingHistorySummaryBatch, prepareHistorySummaryPrerequisiteQuery, prepareHistorySummaryRehearsal,
@@ -1475,6 +1560,9 @@ if (require.main === module) {
     else if (command === 'prepare-reports-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('authenticated-canary'),arg('receivables-postflight'),RELEASE_PHASE_DATABASE_REPORTS,arg('case-canary'),arg('utility-canary'),[arg('receivables-canary'),arg('profiles-canary')],arg('profiles-postflight'));
     else if (command === 'prepare-reports-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('receivables-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_REPORTS,arg('profiles-postflight'));
     else if (command === 'prepare-read-latency-rehearsal') prepareReadLatencyRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('statement-source-canary'),arg('receivables-postflight'),arg('profiles-postflight'));
+    else if (command === 'prepare-hr-bridge-prerequisite-query') prepareHrBridgePrerequisiteQuery(arg('input'),arg('output'),arg('migration-dir'),arg('migration-versions'),arg('ledger'));
+    else if (command === 'prepare-hr-bridge-rehearsal') prepareHrBridgeRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('dashboard-scope-canary'),arg('google-projection-canary'),arg('approval-search-canary'),arg('history-summary-canary'),arg('invoice-read-scope-canary'),arg('ar-read-scope-canary'),arg('receivables-postflight'),arg('profiles-postflight'));
+    else if (command === 'prepare-hr-bridge-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('receivables-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_HR_BRIDGE,arg('profiles-postflight'));
     else if (command === 'prepare-ar-read-scope-prerequisite-query') prepareArReadScopePrerequisiteQuery(arg('input'),arg('output'),arg('migration-dir'),arg('migration-versions'),arg('ledger'));
     else if (command === 'prepare-ar-read-scope-rehearsal') prepareArReadScopeRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('dashboard-scope-canary'),arg('google-projection-canary'),arg('approval-search-canary'),arg('history-summary-canary'),arg('invoice-read-scope-canary'),arg('ar-read-scope-canary'),arg('receivables-postflight'),arg('profiles-postflight'));
     else if (command === 'prepare-ar-read-scope-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('receivables-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,arg('profiles-postflight'));

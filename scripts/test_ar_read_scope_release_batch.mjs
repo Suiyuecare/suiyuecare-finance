@@ -14,7 +14,7 @@ const repo=fileURLToPath(new URL('..',import.meta.url));
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'finance-ar-read-scope-release-'));
 const migrationDir=path.join(dir,'migrations');fs.mkdirSync(migrationDir);
 const phase=guard.RELEASE_PHASE_DATABASE_AR_READ_SCOPE,batch=guard.AR_READ_SCOPE_MIGRATIONS,versions=batch.join(',');
-const prerequisites=['20260820000000',...guard.REVIEWED_MIGRATION_CATALOG.filter(v=>v<batch[0])];
+const prerequisites=['20260820000000',...guard.REVIEWED_MIGRATION_CATALOG.filter(v=>v<batch[0]&&!guard.HR_BRIDGE_MIGRATIONS.includes(v))];
 const baseline={count:1,lastVersion:prerequisites[0],sha256:guard.ledgerSha256([prerequisites[0]])};
 const write=(name,body)=>{const file=path.join(dir,name);fs.writeFileSync(file,body);return file;};
 const ledger=write('ledger.txt','');const writeLedger=rows=>fs.writeFileSync(ledger,rows.join('\n')+'\n');
@@ -95,8 +95,8 @@ try{
  await db.query('delete from supabase_migrations.schema_migrations where version=$1',['20260922072738']);assert.equal(await fp(),original);
  await db.exec(atomic);const applied=await fp();assert.notEqual(applied,original);assert.deepEqual((await db.query('select statements from supabase_migrations.schema_migrations where version=$1',[batch[0]])).rows[0].statements,[source.trimEnd()]);check();
  await assert.rejects(()=>db.exec(atomic),/ledger changed/);await db.exec('rollback');assert.equal(await fp(),applied);check();
- writeLedger([...prerequisites,...batch]);assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'applied');assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');assert.throws(()=>rehearsal(),/pending/);assert.throws(()=>apply(),/pending/);check();
- for(const p of [phase,'frontend_compat']){const file=output('recovery');guard.preparePhaseQuery(path.join(dir,posts[0]),file,p,p===phase?versions:'none');const raw=fs.readFileSync(file,'utf8');assert.match(raw,/^begin read only;/);assert.equal((raw.match(/-- Reviewed reports postflight:/g)||[]).length,21);assert.doesNotMatch(raw,/insert into supabase_migrations|create or replace function/);await db.exec(raw);assert.equal(await fp(),applied);check();}
+ writeLedger([...prerequisites,...batch]);assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'applied');assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/HR bridge migration batch/);assert.throws(()=>rehearsal(),/pending/);assert.throws(()=>apply(),/pending/);check();
+ for(const p of [phase]){const file=output('recovery');guard.preparePhaseQuery(path.join(dir,posts[0]),file,p,p===phase?versions:'none');const raw=fs.readFileSync(file,'utf8');assert.match(raw,/^begin read only;/);assert.equal((raw.match(/-- Reviewed reports postflight:/g)||[]).length,21);assert.doesNotMatch(raw,/insert into supabase_migrations|create or replace function/);await db.exec(raw);assert.equal(await fp(),applied);check();}
  const marker='ar_verified_accounting_scope_canary_result',result={canary:'readonly_ar_verified_accounting_scope_v1',ok:true,rolled_back:true,ordinary_scope_preserved:true},json=write('marker.json','[]');
  for(const payload of [[{[marker]:result}],{rows:[{[marker]:JSON.stringify(result)}]},{results:[{rows:[{[marker]:result}]}]}]){fs.writeFileSync(json,JSON.stringify(payload));assert.equal(guard.verifyReportsCanary(json,'ar_read_scope'),true);check();}
  for(const payload of [[],[{[marker]:result},{[marker]:result}],...Object.keys(result).flatMap(k=>[{[marker]:{...result,[k]:false}},{[marker]:Object.fromEntries(Object.entries(result).filter(([key])=>key!==k))}]),{[marker]:{...result,extra:true}}]){fs.writeFileSync(json,JSON.stringify(payload));assert.throws(()=>guard.verifyReportsCanary(json,'ar_read_scope'));check();}
@@ -133,7 +133,7 @@ try{
   await realDb.exec(fs.readFileSync(realApply,'utf8'));const realAfter=await realFp();assert.notEqual(realAfter,realBefore);assert.equal((await realDb.query('select count(*)::int as count from supabase_migrations.schema_migrations where version=$1',[batch[0]])).rows[0].count,1);check();
   await realDb.exec(fs.readFileSync(path.join(scripts,'finance_ar_verified_accounting_scope_canary.sql'),'utf8'));assert.equal(await realFp(),realAfter);check();
   await assert.rejects(()=>realDb.exec(fs.readFileSync(realApply,'utf8')),/ledger changed/);await realDb.exec('rollback');assert.equal(await realFp(),realAfter);check();
-  for(const p of [phase,'frontend_compat']){const file=output('true-reader-recovery');guard.preparePhaseQuery(path.join(realDir,posts[0]),file,p,p===phase?versions:'none');await realDb.exec(fs.readFileSync(file,'utf8'));assert.equal(await realFp(),realAfter);check();}
+  for(const p of [phase]){const file=output('true-reader-recovery');guard.preparePhaseQuery(path.join(realDir,posts[0]),file,p,p===phase?versions:'none');await realDb.exec(fs.readFileSync(file,'utf8'));assert.equal(await realFp(),realAfter);check();}
  }finally{await realDb.close();}
  console.log(`PASS AR read scope protected release: ${checks} atomic-state and sealed-source checks`);
 }finally{await db.close();fs.rmSync(dir,{recursive:true,force:true});}
