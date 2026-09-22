@@ -19,7 +19,7 @@ function check(name,value){assert.ok(value,name);evidence.checks.push(name);cons
 let browser;
 (async()=>{
  fs.mkdirSync(out,{recursive:true});await new Promise(r=>server.listen(0,'127.0.0.1',r));
- const origin='http://127.0.0.1:'+server.address().port;browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||'chrome'});
+ const origin='http://127.0.0.1:'+server.address().port;browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||process.env.FINANCE_BROWSER_CHANNEL||'chrome'});
  for(const width of [1440,390]){
   const context=await browser.newContext({viewport:{width,height:1000}});
   await context.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());

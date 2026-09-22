@@ -1,11 +1,14 @@
 \set ON_ERROR_STOP on
 -- Pure catalog checks. No claims, source writes, grants, or policy mutations.
 do $invoice_select_postflight$
-declare expected record;proc record;policy record;old_path text:=current_setting('search_path');
+declare audit_security_installed boolean:=false;expected record;proc record;policy record;old_path text:=current_setting('search_path');
 begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute $audit_ledger$select exists(select 1 from supabase_migrations.schema_migrations where version='20260922133752')$audit_ledger$ into audit_security_installed;
+  end if;
   perform set_config('search_path','public, pg_catalog',true);
   for expected in select * from (values
-    ('public.can_read_invoice(public.invoices)','d761ec0bbd1544410ae52bd860ec78b6',false,'search_path=""'),
+    ('public.can_read_invoice(public.invoices)',(case when audit_security_installed then '5ccbaefe4040cdb85ceb123d05aef6db' else 'd761ec0bbd1544410ae52bd860ec78b6' end),false,'search_path=""'),
     ('public.current_finance_role()','21dee4f613511ba49f259a8371005e9d',false,'search_path=public'),
     ('public.current_finance_user()','5fc4f077185c7e351c730378e4d0eca4',true,'search_path=""'),
     ('public.current_finance_user_id()','14764ed0aa1758b0d159b8506b0f8c26',false,'search_path=public'),

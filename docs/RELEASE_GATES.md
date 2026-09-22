@@ -197,3 +197,14 @@ they do not constitute a production migration or successful production rehearsal
 ## 2026-09-13 approval history and startup performance
 
 Current dispatch accepts only `database_history_performance_20260913=20260912164807` or `frontend_compat=none`. Every prior migration, including employee reliability, is required. The exact history SQL must pass its pinned predecessor body/ACL checks, the full protected rollback rehearsal, all previous canaries plus the history canary, and every chained postflight before commit or promotion. Frontend-only promotion requires the history migration already applied. See [the scoped release contract](finance-approval-performance.md).
+
+
+## 2026-09-22 audit security candidate
+
+Current candidate dispatch is restricted to `frontend_compat=none` and
+`database_audit_security_20260922=20260922133752`. Both require the complete HR
+predecessor batch. Frontend compatibility additionally requires the new security
+version; archived phases cannot promote this candidate. See
+[the exact release and rollback contract](finance-audit-security-release-20260922.md)
+for the 23 atomic postflights, seven read-only canaries, and Storage/legacy-link
+fingerprint coverage. Local fixture passes are not production deployment proof.
