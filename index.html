@@ -26751,14 +26751,16 @@ async function expenseActiveStepTransaction(rows,action,comment,files,addUid,pat
 async function reloadBillsByIds(ids){
   ids=Array.from(new Set((ids||[]).filter(Boolean)));
   if(!ids.length||S.demoLogin||!hasSupabase())return true;
+  var identity=incomeSubmissionIdentity();if(!identity)return false;
   var loaded=await loadRowsByIdsForApprovalFallback(getSb(),'bills',ids);
-  if(!loaded)return false;
+  if(!incomeSubmissionIdentityCurrent(identity)||!loaded)return false;
   var tenantId=currentTenantId(),environment=activeDataEnvironment();
   var mapped=(loaded||[]).filter(function(row){
     return String(row&&row.tenant_id||'')===String(tenantId||'')&&String(row&&row.data_environment||'production')===String(environment||'production');
   }).map(mapBill),byId={};
   mapped.forEach(function(row){byId[row.id]=row;});
-  BILLS=BILLS.map(function(row){return byId[row.id]||row;});
+  var present=new Set(BILLS.map(function(row){return row.id;}));
+  BILLS=BILLS.map(function(row){return byId[row.id]||row;}).concat(mapped.filter(function(row){return !present.has(row.id);}));
   approvalRowsMarkVerified('bills',mapped);
   var missing=ids.filter(function(id){return !byId[id];});
   if(missing.length)approvalRowsMarkUnavailable('bills',missing,'exact_read_failed');
@@ -26767,14 +26769,16 @@ async function reloadBillsByIds(ids){
 async function reloadInvoicesByIds(ids){
   ids=Array.from(new Set((ids||[]).filter(Boolean)));
   if(!ids.length||S.demoLogin||!hasSupabase())return true;
+  var identity=incomeSubmissionIdentity();if(!identity)return false;
   var loaded=await loadRowsByIdsForApprovalFallback(getSb(),'invoices',ids);
-  if(!loaded)return false;
+  if(!incomeSubmissionIdentityCurrent(identity)||!loaded)return false;
   var tenantId=currentTenantId(),environment=activeDataEnvironment();
   var mapped=(loaded||[]).filter(function(row){
     return String(row&&row.tenant_id||'')===String(tenantId||'')&&String(row&&row.data_environment||'production')===String(environment||'production');
   }).map(mapInv),byId={};
   mapped.forEach(function(row){byId[row.id]=row;});
-  INVS=INVS.map(function(row){return byId[row.id]||row;});
+  var present=new Set(INVS.map(function(row){return row.id;}));
+  INVS=INVS.map(function(row){return byId[row.id]||row;}).concat(mapped.filter(function(row){return !present.has(row.id);}));
   approvalRowsMarkVerified('invoices',mapped);
   var missing=ids.filter(function(id){return !byId[id];});
   if(missing.length)approvalRowsMarkUnavailable('invoices',missing,'exact_read_failed');
@@ -27511,7 +27515,28 @@ function receiptReviewedVersions(inv,rows){
   if(Object.keys(saved).length!==rows.length||rows.some(function(row){return !saved[row.id];}))return {};
   var out={};rows.forEach(function(row){out[row.id]=saved[row.id];});return out;
 }
+function renderFinanceReceiptRecovery(){
+  var root=el('pg-recv');if(!root||!root.insertBefore||typeof financeReceiptPendingActions!=='function')return;
+  var box=el('receipt-operation-recovery'),entries=[],readError=null;
+  try{entries=financeReceiptPendingActions();}catch(error){readError=error;}
+  if(!entries.length&&!readError){if(box)box.remove();return;}
+  if(!box){box=document.createElement('div');box.id='receipt-operation-recovery';box.className='card';box.style.padding='14px';root.insertBefore(box,root.firstChild);}
+  if(readError){box.textContent='原收款操作記錄無法讀取，請保留此頁並聯絡系統管理員，勿另行重送。';return;}
+  box.textContent='有 '+entries.length+' 筆收款處理結果待核對；請先確認原操作，勿另行重送。';
+  entries.forEach(function(entry){var button=document.createElement('button');button.type='button';button.className='btn-s';button.textContent='確認原處理結果（'+entry.args.p_invoice_ids.length+' 張）';button.onclick=async function(){button.disabled=true;try{await retryPendingFinanceReceipt(entry.key);}finally{button.disabled=false;}};box.appendChild(button);});
+}
+async function retryPendingFinanceReceipt(key){
+  var identity=incomeSubmissionIdentity();
+  try{var result=await financeRetryReceiptAction(key);if(!incomeSubmissionIdentityCurrent(identity)||result.identityChanged)return;
+    if(result.refreshRequired)alert('收款已正式保存，最新狀態待同步；請再確認原處理結果。');
+    if(window.FinanceReportingWorkspace)window.FinanceReportingWorkspace.invalidate();
+    buildRecv();buildApprovals();
+  }catch(error){if(incomeSubmissionIdentityCurrent(identity))alert(error.message||'原收款結果待確認。');}
+  if(incomeSubmissionIdentityCurrent(identity))renderFinanceReceiptRecovery();
+}
+window.retryPendingFinanceReceipt=retryPendingFinanceReceipt;
 async function receiptGroupActionCore(inv,action,note,files,expectedVersions){
+  var operationIdentity=incomeSubmissionIdentity();
   var authority=approvalRecordsActionAvailability('invoices',invoiceGroupRows(inv).filter(receiptTaskCandidate),{kind:'recv'});
   if(!authority.ok){alert(authority.message||'收款權限仍在確認');return 0;}
   try{
@@ -27520,7 +27545,9 @@ async function receiptGroupActionCore(inv,action,note,files,expectedVersions){
     if(result.refreshRequired)alert('收款已正式保存，但最新畫面尚未同步。請重新整理後再繼續；系統不會把已保存的結果當成失敗回復。');
     return result.count;
   }catch(error){
+    if(!incomeSubmissionIdentityCurrent(operationIdentity)||error.identityChanged)return 0;
     var unknown=error&&error.code==='FINANCE_MUTATION_RESULT_UNKNOWN';
+    if(unknown)renderFinanceReceiptRecovery();
     alert((unknown?'收款結果待確認：':'收款未完成：')+(error.message||'請重新開啟核對。'));
     var uploaded=Array.isArray(files)?files:Object.keys(files||{}).reduce(function(all,key){return all.concat(files[key]||[]);},[]);
     if(!unknown&&uploaded.length)await cleanupApprovalFilesAfterDefiniteFailure(uploaded,'收款證明交易失敗清理');
@@ -29660,6 +29687,7 @@ window.syncSingleInvoiceIdentifierPlaceholder=function(){
   input.placeholder=(t==='電子發票'||t==='領據')?'選填':(t==='電子發票（載具）'?'請填載具號碼':'請填統一編號');
 };
 window.buildInvoices=function buildInvoices(){
+  renderIncomeSubmissionRecovery('invoice');
   var visibleInvs=visibleInvoicesForCurrentUser();
   var ready=visibleInvs.filter(invoiceIsReceivable),pending=visibleInvs.filter(function(i){return !invoiceIsReceivable(i);});
   var invStats=el('inv-stats');
@@ -30128,7 +30156,11 @@ async function invoiceInitialStepFiles(rawFiles,rows,ctx){
   return uploadAttachmentsToSupabase(files,{recordType:'invoices',recordNo:ctx.recordNo||'invoice',kind:'invoice_initial',date:ctx.date||todayIso(),entityId:ctx.eid,departmentCode:ctx.dc});
 }
 async function issueInvCore(){
-  if(!await guardSubmissionIdentityDirectory('開立發票'))return;
+  var submissionIdentity=incomeSubmissionIdentity();
+  if(!await guardSubmissionIdentityDirectory('開立發票')||!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
+  if(!S.demoLogin&&await recoverPendingIncomeSubmission('invoice'))return false;
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
+  var submissionFormUi=incomeSubmissionFormUi('single');
   var buyer=(el('inv-buyer')||{}).value||'';var amt=parseFloat((el('inv-amt')||{}).value||'0');
   var reasonMeta=invoiceReasonMeta('inv');
   var identifier=invoiceIdentifierType((el('inv-identifier-type')||{}).value),identifierCode=String((el('inv-taxid')||{}).value||'').trim();
@@ -30160,39 +30192,45 @@ async function issueInvCore(){
   var routeOpts={amount:invoiceTotalForRoute,departmentCode:meta.dc,category:invoiceWorkflowCategory,itemCategory:invoiceWorkflowCategory,requiresAccountingReview:true,requires_accounting_review:true};
   var routeSteps=[applicantSubmitStep(appUser,meta.name)].concat(buildInvoiceApprovalSteps(appUser,meta.dc,routeOpts));
   var routeReady=await prepareApprovalRouteForSubmit(appUser,'invoice_request',meta.dc,routeOpts,routeSteps,{label:'開立發票'});
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!routeReady.ok)return;
   var steps=routeReady.steps;
   var nextStep=steps.find(function(s){return !s.a;})||null;
   var invDate=((el('inv-date')||{}).value||todayIso()).replace(/-/g,'/');
   var rowData={no:no,buyer:buyer,identifierType:identifier,taxId:identifierCode,itemType:itemType,amt:amt,tax:tax,total:amt+tax,date:invDate,status:'unpaid',desc:itemDesc};
   var p1=await p1SubmissionPreflight('invoice',{label:'開立發票',steps:steps,hasAttachments:!!S.invOcrFile});
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!p1.ok)return;
   try{
     var initFiles=await invoiceInitialStepFiles(S.invOcrFile?[S.invOcrFile]:[],[rowData],{recordNo:no,title:'發票申請',app:meta.name,entity:gE(eid).full||gE(eid).s,department:meta.dc+' '+(gD(meta.dc).n||''),date:invDate,eid:eid,dc:meta.dc,reason:reasonMeta.reason,note:reasonMeta.note});
+    if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
     if(initFiles.length)steps[0].files=normalizeFiles(initFiles);
   }catch(uploadErr){
+    if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
     console.error(uploadErr);
     alert('發票附件上傳失敗：\n\n'+formatStorageUploadError(uploadErr)+'\n\n這張發票單尚未送出，後續簽核人不會看到缺附件的資料。請依上方提示修正後再送出。');
     return;
   }
   var inv={id:'i_'+Date.now(),no:no,eid:eid,en:gE(eid).s,dc:meta.dc,buyer:buyer,identifierType:identifier,taxId:identifierCode,itemType:itemType,suggestedRevenueAccount:invoiceSuggestedRevenueAccount(rowData),applicant:meta.name,applicantId:appUser.id,amt:amt,tax:tax,total:amt+tax,date:invDate,status:'unpaid',approvalStatus:nextStep?nextStep.status:'completed',approvalStep:nextStep?2:(steps.length||1),steps:steps,desc:invoiceDescriptionWithReason(invoiceEmployeeDescription(rowData),reasonMeta),receiptFiles:[],dataEnv:activeDataEnvironment()};
+  inv.submissionFormUi=submissionFormUi;
   var insert=await insertMembershipOrgSubmittedRecord('invoice','invoices',inv,invoiceDbRow(inv));
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!settingsWriteResultOk(insert)){
-    await cleanupUploadedSupabaseAttachments([initFiles||[]],'發票主表寫入失敗清理');
+    if(!insert.unknown)await cleanupUploadedSupabaseAttachments([initFiles||[]],'發票主表寫入失敗清理');
+    if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
+    if(insert.unknown){alert(insert.error.message);return;}
     return recordInvoiceWriteFailure('建立發票申請',inv,insert,{insertedCount:0,totalCount:1});
   }
   applyMembershipOrgActorsToSteps(inv.steps,insert.orgStamp);
   INVS.unshift(inv);
   saveLocalAppStateSoon();
-  await notifyInvoiceReceivable(inv);
-  renderInvTable();['inv-buyer','inv-amt','inv-desc','inv-total','inv-reason','inv-note'].forEach(function(id){var e=el(id);if(e)e.value='';});
-  S.invOcrFile=null;var invFile=el('inv-ocr-file');if(invFile)invFile.value='';
-  var tx=el('inv-taxid');if(tx)tx.value='';
-  var it=el('inv-identifier-type');if(it)it.value='統一編號';
+  try{await withOperationTimeout(notifyInvoiceReceivable(inv),'更新發票通知',10000);}catch(error){console.warn('發票已送單，通知更新未完成',error);}
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
+  renderInvTable();clearIncomeSubmissionFormIfUnchanged(insert.attempt||{formUi:submissionFormUi});
   var t=el('inv-ft');if(t){t.textContent='發票簽核已送出';setTimeout(function(){t.textContent='開立新發票';},2500);}
   if(el('inv-cnt'))el('inv-cnt').textContent='共 '+visibleInvoicesForCurrentUser().length+' 張';
-  markIncomeDocClean('invoices');
   buildRecv();buildApprovals();buildDash();
+  clearIncomeSubmissionPending(insert.attempt);
 };
 window.issueInv=async function(){
   var lockKey='invoiceSubmit';
@@ -30453,8 +30491,12 @@ function invoiceBatchValidationError(filled){
   return '';
 }
 async function issueBatchCore(){
-  if(!await guardSubmissionIdentityDirectory('批次開立發票'))return;
+  var submissionIdentity=incomeSubmissionIdentity();
+  if(!await guardSubmissionIdentityDirectory('批次開立發票')||!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
+  if(!S.demoLogin&&await recoverPendingIncomeSubmission('invoice'))return false;
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   syncBatchRowsFromDom();
+  var submissionFormUi=incomeSubmissionFormUi('batch');
   var filled=(S.bRows||[]).map(function(r,i){return {r:r,i:i};}).filter(function(x){return x.r.buyer&&num(x.r.total)>0;});
   var v=filled.map(function(x){return x.r;});
   if(!v.length){alert('請至少填寫一列');return;}
@@ -30494,6 +30536,7 @@ async function issueBatchCore(){
   var routeOpts={amount:batchTotalForRoute,departmentCode:meta.dc,category:invoiceBatchWorkflowCategory,itemCategory:invoiceBatchWorkflowCategory,requiresAccountingReview:true,requires_accounting_review:true};
   var routeSteps=[applicantSubmitStep(appUser,meta.name)].concat(buildInvoiceApprovalSteps(appUser,meta.dc,routeOpts));
   var routeReady=await prepareApprovalRouteForSubmit(appUser,'invoice_request',meta.dc,routeOpts,routeSteps,{label:'批次開立發票'});
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!routeReady.ok)return;
   var batchStepsTemplate=routeReady.steps;
   var batchId=v.length>1?'batch_'+Date.now():'';
@@ -30506,36 +30549,42 @@ async function issueBatchCore(){
     return{id:'i_'+Date.now()+'_'+Math.random().toString(36).slice(2),no:no,eid:eid,en:en,dc:meta.dc,buyer:r.buyer,identifierType:invoiceIdentifierType(r.identifierType),applicant:meta.name,applicantId:appUser.id,batchId:batchId,taxId:r.taxid,itemType:invoiceItemTypeByKey(r.itemType).k,suggestedRevenueAccount:invoiceSuggestedRevenueAccount(r),amt:calc.amount,tax:calc.tax,total:calc.total,date:today,status:'unpaid',approvalStatus:nextStep?nextStep.status:'completed',approvalStep:nextStep?2:(steps.length||1),steps:steps,desc:invoiceDescriptionWithReason(invoiceEmployeeDescription(r),reasonMeta),receiptFiles:[],dataEnv:activeDataEnvironment()};
   });
   var p1=await p1SubmissionPreflight('invoice',{label:'批次開立發票',steps:rows[0]&&rows[0].steps,hasAttachments:!!S.bUploadFile});
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!p1.ok)return;
   try{
     var groupRecordNo=invoiceGroupNo(rows[0])||batchId;
     var initFiles=await invoiceInitialStepFiles(S.bUploadFile?[S.bUploadFile]:[],rows,{recordNo:groupRecordNo,title:'發票申請',app:meta.name,entity:gE(eid).full||gE(eid).s,department:meta.dc+' '+(gD(meta.dc).n||''),date:today,eid:eid,dc:meta.dc,reason:reasonMeta.reason,note:reasonMeta.note});
+    if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
     if(initFiles.length)rows.forEach(function(inv){inv.steps[0].files=normalizeFiles(initFiles);});
   }catch(uploadErr){
+    if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
     console.error(uploadErr);
     alert('發票附件上傳失敗：\n\n'+formatStorageUploadError(uploadErr)+'\n\n本次發票尚未送出，後續簽核人不會看到缺附件的資料。請依上方提示修正後再送出。');
     return;
   }
+  rows[0].submissionFormUi=submissionFormUi;
   var runtimeInvoiceSource=rows[0];
   var batchWrite=await insertMembershipOrgSubmittedBatch(
     'invoice','invoices',rows,rows.map(invoiceDbRow),
     {sourceNo:invoiceGroupNo(runtimeInvoiceSource)||runtimeInvoiceSource.no,total:rows.reduce(function(s,i){return s+num(i.total);},0),batchId:batchId,requestType:'invoice_request'}
   );
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!settingsWriteResultOk(batchWrite)){
-    await cleanupUploadedSupabaseAttachments([initFiles||[]],'批次發票主表寫入失敗清理');
+    if(!batchWrite.unknown)await cleanupUploadedSupabaseAttachments([initFiles||[]],'批次發票主表寫入失敗清理');
+    if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
+    if(batchWrite.unknown){alert(batchWrite.error.message);return;}
     return recordInvoiceWriteFailure('建立批次發票申請',runtimeInvoiceSource,batchWrite,{insertedCount:0,totalCount:rows.length});
   }
   var invoiceStamps=batchWrite.orgStamps||batchWrite.data&&batchWrite.data.rows||[];
   rows.forEach(function(inv,index){applyMembershipOrgActorsToSteps(inv.steps,invoiceStamps[index]);});
   rows.forEach(function(inv){INVS.unshift(inv);});
   saveLocalAppStateSoon();
-  if(rows.length>1)await notifyBatchInvoiceReceivable(rows,batchId);
-  else await notifyInvoiceReceivable(rows[0]);
+  try{await withOperationTimeout(rows.length>1?notifyBatchInvoiceReceivable(rows,batchId):notifyInvoiceReceivable(rows[0]),'更新發票通知',10000);}catch(error){console.warn('發票已送單，通知更新未完成',error);}
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   alert('發票申請已送出，共 '+v.length+' 張；核准生成後會進入收款情形。');
-  renderBatchInvTable();S.bRows=[defaultInvoiceBatchRow()];renderBatchTable();
-  S.bUploadFile=null;var bf=el('bfile');if(bf)bf.value='';
-  ['b-reason','b-note'].forEach(function(id){var e=el(id);if(e)e.value='';});
-  el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled');buildInvoices();buildRecv();buildApprovals();buildDash();
+  renderBatchInvTable();clearIncomeSubmissionFormIfUnchanged(batchWrite.attempt||{formUi:submissionFormUi});
+  buildRecv();buildApprovals();buildDash();
+  clearIncomeSubmissionPending(batchWrite.attempt);
 };
 window.issueBatch=async function(){
   var lockKey='invoiceBatchSubmit';
@@ -30560,6 +30609,7 @@ function renderBillFlow(){
 }
 window.renderBillFlow=renderBillFlow;
 window.buildBills=function buildBills(){
+  renderIncomeSubmissionRecovery('bill');
   var app=el('b-app');if(app)app.value=S.user?(S.user.n||S.user.email||''):'';
   var ent=el('b-ent2');
   if(ent){
@@ -30789,8 +30839,12 @@ window.markBPaid=async function(id){
 window.autoFillBill=function(){};
 window.switchBillTab=function(){renderBillEntryTable();};
 async function submitBillCore(){
-  if(!await guardSubmissionIdentityDirectory('申請繳費單'))return;
+  var submissionIdentity=incomeSubmissionIdentity();
+  if(!await guardSubmissionIdentityDirectory('申請繳費單')||!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
+  if(!S.demoLogin&&await recoverPendingIncomeSubmission('bill'))return false;
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   syncBillRowsFromDom();
+  var submissionFormUi=incomeSubmissionFormUi('bill');
   var eid=(el('b-ent2')||{}).value||'E1';
   var appUser=S.user||USERS[0];
   var appName=appUser?(appUser.n||appUser.email||'申請人'):'申請人';
@@ -30823,9 +30877,11 @@ async function submitBillCore(){
   var billRouteOpts={amount:batchTotal,departmentCode:dc,category:billWorkflowCategory,itemCategory:billWorkflowCategory,requiresAccountingReview:true,requires_accounting_review:true};
   var billRouteSteps=[applicantSubmitStep(appUser,appName)].concat(buildBillApprovalSteps(appUser,billRouteOpts));
   var billRouteReady=await prepareApprovalRouteForSubmit(appUser,'bill_request',dc,billRouteOpts,billRouteSteps,{label:'申請繳費單',title:'繳費單簽核流程尚未設定完整，這張單尚未送出。'});
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!billRouteReady.ok)return;
   var billStepsForPreflight=billRouteReady.steps;
   var p1=await p1SubmissionPreflight('bill',{label:'申請繳費單',steps:billStepsForPreflight,hasAttachments:false});
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!p1.ok)return;
   var batchCreatedAt=new Date().toISOString();
   var batchId=valid.length>1?'bill_batch_'+Date.now():'';
@@ -30837,12 +30893,15 @@ async function submitBillCore(){
     var nextStep=steps.find(function(s){return !s.a;})||null;
     return{id:'b_'+Date.now()+'_'+Math.random().toString(36).slice(2),no:'BILL-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*9000+1000)),item:r.item,ik:billItemKey(r.item),eid:eid,entL:gE(eid).full,dc:dc,amt:num(r.amt),due:todaySlash(),method:'繳費單',note:displayNote,payer:r.payer,period:r.period,batchId:batchId,batchNo:batchNo,batchCount:valid.length,batchTotal:batchTotal,batchCreatedAt:batchCreatedAt,status:'unpaid',approvalStatus:nextStep?nextStep.status:'completed',approvalStep:nextStep?2:steps.length,steps:steps,applicant:appName,applicantId:appUser?appUser.id:'',applicantEmail:appUser?appUser.email:'',dataEnv:activeDataEnvironment()};
   });
+  rows[0].submissionFormUi=submissionFormUi;
   var runtimeBillSource=rows[0];
   var batchWrite=await insertMembershipOrgSubmittedBatch(
     'bill','bills',rows,rows.map(billDbRow),
     {sourceNo:runtimeBillSource.batchNo||runtimeBillSource.no,total:batchTotal,batchId:batchId,requestType:'bill_request'}
   );
+  if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!settingsWriteResultOk(batchWrite)){
+    if(batchWrite.unknown){alert(batchWrite.error.message);return;}
     return recordBillWriteFailure('建立批次繳費單',runtimeBillSource,batchWrite,{insertedCount:0,totalCount:rows.length});
   }
   var billStamps=batchWrite.orgStamps||batchWrite.data&&batchWrite.data.rows||[];
@@ -30850,11 +30909,10 @@ async function submitBillCore(){
   rows.forEach(function(b){BILLS.unshift(b);});
   saveLocalAppStateSoon();
   var modal=document.getElementById('m-add-bill');if(modal)modal.style.display='none';
-  BILL_ROWS=[defaultBillRow()];
-  ['bill-reason','bill-note'].forEach(function(id){var node=el(id);if(node)node.value='';});
-  renderBillEntryTable();
-  buildBills();buildApprovals();renderNotifs();
+  clearIncomeSubmissionFormIfUnchanged(batchWrite.attempt||{formUi:submissionFormUi});
+  renderBillList();buildApprovals();renderNotifs();
   alert('繳費單已建立並送出簽核，共 '+rows.length+' 張；簽核中心會合併成 1 筆整批處理。');
+  clearIncomeSubmissionPending(batchWrite.attempt);
 };
 window.submitBill=async function(){
   var lockKey='billSubmit';
@@ -30885,6 +30943,7 @@ function recvCanonicalMonthGroups(rows,data){
   return window.FinanceReceivablesEngine.group(items,function(row){var d=String(row.invoiceDate||'');return /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(d)?d.slice(0,7):'unknown';});
 }
 window.buildRecv=function buildRecv(){
+  renderFinanceReceiptRecovery();
   var all=recvBaseInvoices();
   normalizeRecvEntity(all);
   var rangedAll=recvInvoicesForMonthRange(all);
@@ -31774,6 +31833,9 @@ window.openRecvBatch=function(batchId){
   el('recv-detail').innerHTML='<div style="padding:7px 12px;border-bottom:1px solid #f0e6d6"><button class="btn-g" onclick="renderRecvDetail()">← 返回整批列表</button></div>'+items.map(function(i){return recvInvoiceRowHtml(i,RECV);}).join('');
 };
 window.submitReceiptReview=async function(id,inp,noteId){
+  var receiptCallerIdentity=incomeSubmissionIdentity();
+  var pendingReceipt=typeof financeReceiptPendingForRows==='function'?financeReceiptPendingForRows(INVS.filter(function(row){return row.id===id;})):null;
+  if(pendingReceipt){await retryPendingFinanceReceipt(pendingReceipt.key);return false;}
   var submissionIdentity=approvalFastBootstrapIdentity()+'|'+activeDataEnvironment();
   var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;
   if(!S.user||currentRoleKey()!=='accountant'){alert('只有會計可以送出收款確認');return;}
@@ -31781,36 +31843,43 @@ window.submitReceiptReview=async function(id,inp,noteId){
   var receiptAuthority=requireApprovalRecordsActionAvailability('invoices',invoiceGroupRows(inv).filter(receiptTaskCandidate),{kind:'recv'});if(!receiptAuthority)return;
   var receiptVersions=receiptReviewedVersions(inv,receiptAuthority.rows);
   var files=[];if(typeof inp==='string')files=await readStepFiles(inp);else if(inp&&inp.files&&inp.files.length)files=await Promise.all(Array.from(inp.files).map(fileToAttachment));
+  if(!incomeSubmissionIdentityCurrent(receiptCallerIdentity))return false;
   if(!files.length){alert('請先上傳收款證明');return;}
   if(submissionIdentity!==approvalFastBootstrapIdentity()+'|'+activeDataEnvironment()){alert('登入身分已變更，請重新選擇收款證明。');return;}
   try{
     if(!inv.batchId&&receiptAuthority.rows.length>1){
       var receiptSourceFiles=files,receiptFilesById={};files=receiptFilesById;
-      for(var receiptRow of receiptAuthority.rows){receiptFilesById[receiptRow.id]=await uploadAttachmentsToSupabase(cloneSettingValue(receiptSourceFiles),{recordType:'invoices',recordNo:receiptRow.no,kind:'receipt_proof',date:todayIso(),entityId:receiptRow.eid,departmentCode:receiptRow.dc});}
+      for(var receiptRow of receiptAuthority.rows){receiptFilesById[receiptRow.id]=await uploadAttachmentsToSupabase(cloneSettingValue(receiptSourceFiles),{recordType:'invoices',recordNo:receiptRow.no,kind:'receipt_proof',date:todayIso(),entityId:receiptRow.eid,departmentCode:receiptRow.dc});if(!incomeSubmissionIdentityCurrent(receiptCallerIdentity))return false;}
     }else files=await uploadAttachmentsToSupabase(files,{recordType:'invoices',recordNo:inv.batchId?invoiceGroupNo(inv):inv.no,kind:'receipt_proof',date:todayIso(),entityId:inv.eid,departmentCode:inv.dc});
   }
   catch(uploadErr){
+    if(!incomeSubmissionIdentityCurrent(receiptCallerIdentity))return false;
     var partialReceiptFiles=Array.isArray(files)?[]:Object.keys(files||{}).reduce(function(all,key){return all.concat(files[key]||[]);},[]);
     if(partialReceiptFiles.length)await cleanupApprovalFilesAfterDefiniteFailure(partialReceiptFiles,'收款證明上傳未完成清理');
     console.error(uploadErr);alert('收款證明上傳失敗：\n\n'+formatStorageUploadError(uploadErr)+'\n\n這次收款確認尚未送出，請依提示修正後再試。');return;}
+  if(!incomeSubmissionIdentityCurrent(receiptCallerIdentity))return false;
   if(submissionIdentity!==approvalFastBootstrapIdentity()+'|'+activeDataEnvironment()){alert('登入身分已變更，收款尚未送出，請使用原身分重新核對附件。');return;}
   var note=noteId&&el(noteId)?el(noteId).value:'';
   var done=await receiptGroupActionCore(inv,'submit',note,files,receiptVersions);
+  if(!incomeSubmissionIdentityCurrent(receiptCallerIdentity))return false;
   if(!done)return;
   buildRecv();buildApprovals();closeAppr();
 };
 window.approveReceiptReview=async function(id){
+  var receiptCallerIdentity=incomeSubmissionIdentity();
   var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;
   if(!S.user||currentRoleKey()!=='ceo'){alert('只有執行長可以確認收款');return;}
   if(!canActReceipt(inv)){alert('這筆收款目前不可操作，請重新整理後確認狀態。');return;}
   if(!requireApprovalRecordsActionAvailability('invoices',invoiceGroupRows(inv).filter(receiptTaskCandidate),{kind:'recv'}))return;
   var note=(el('receipt-review-note')||{}).value||'';
   var done=await approveReceiptGroupCore(inv,note);
+  if(!incomeSubmissionIdentityCurrent(receiptCallerIdentity))return false;
   if(done===false)return;
   if(!done){alert('沒有可複核入帳的收款資料，或此筆已入帳。');return;}
   buildRecv();buildDash();buildReports();buildApprovals();closeAppr();
 };
 window.returnReceiptReview=async function(id){
+  var receiptCallerIdentity=incomeSubmissionIdentity();
   var inv=INVS.find(function(i){return i.id===id;});if(!inv)return;
   if(!S.user||currentRoleKey()!=='ceo'){alert('只有執行長可以退回收款確認');return;}
   if(!canActReceipt(inv)){alert('這筆收款目前不可操作，請重新整理後確認狀態。');return;}
@@ -31820,6 +31889,7 @@ window.returnReceiptReview=async function(id){
   var note=String((el('receipt-review-note')||{}).value||'').trim();
   if(note.length<3){note=String(prompt('請填寫退回會計補件的具體原因（至少3字）')||'').trim();if(note.length<3)return;}
   var done=await returnReceiptGroupCore(inv,note);
+  if(!incomeSubmissionIdentityCurrent(receiptCallerIdentity))return false;
   if(done===false)return;
   buildRecv();buildApprovals();closeAppr();
   if(inv.batchId)alert('已退回整批收款確認 '+done+' 張。');
@@ -38065,69 +38135,168 @@ function incomeSubmissionFingerprint(formType,records){
   });
   return JSON.stringify(stableSnapshotValue(values));
 }
-function incomeSubmissionContext(formType,records){
-  records=(records||[]).filter(Boolean);
-  var fingerprint=incomeSubmissionFingerprint(formType,records);
-  var state=INCOME_SUBMISSION_RETRY_STATE[formType];
-  if(!state||state.fingerprint!==fingerprint||state.itemKeys.length!==records.length){
-    state={
-      fingerprint:fingerprint,
-      key:[formType,'submit',Date.now(),Math.random().toString(36).slice(2,12)].join('_'),
-      itemKeys:records.map(function(record,index){
-        return [formType,'item',index+1,Date.now(),Math.random().toString(36).slice(2,10)].join('_');
-      })
-    };
-    INCOME_SUBMISSION_RETRY_STATE[formType]=state;
-  }
-  records.forEach(function(record,index){
-    record.submissionIdempotencyKey=state.key;
-    record.submissionClientItemKey=state.itemKeys[index];
+// A lost response is not a rollback. Keep the exact actor-scoped payload and
+// operation key across retry/reload; only verified completion unlocks a new form.
+var INCOME_SUBMISSION_PENDING={};
+var INCOME_SUBMISSION_RUNNING={};
+function incomeSubmissionOwner(){
+  return JSON.stringify([currentFinanceAuthUserId(),S.user&&S.user.id||'',currentTenantId(),activeDataEnvironment()]);
+}
+function incomeSubmissionIdentity(){
+  if(financeLogoutInProgress||financeGoogleAccountSwitchInProgress)return '';
+  var identity=expenseSubmissionOperationIdentity();
+  return identity?JSON.stringify([identity,FINANCE_DRAFT_IDENTITY_EPOCH,financeAuthIdentityEpoch,CURRENT_PERMISSION_SNAPSHOT]):'';
+}
+function incomeSubmissionIdentityCurrent(identity){return !!identity&&identity===incomeSubmissionIdentity();}
+function incomeSubmissionStorageKey(formType){return 'finance_income_submission_pending_v2:'+incomeSubmissionOwner()+':'+formType;}
+function incomeSubmissionFormUi(mode){return {mode:mode,snapshot:incomeDirtySnapshot(mode==='bill'?'bills':'invoices')};}
+function clearIncomeSubmissionFormIfUnchanged(entry){
+  var ui=entry&&entry.formUi,page=ui&&ui.mode==='bill'?'bills':'invoices';
+  if(!ui||ui.snapshot!==incomeDirtySnapshot(page))return false;
+  var ids=[];
+  if(ui.mode==='single'){
+    ids=['inv-buyer','inv-amt','inv-desc','inv-total','inv-reason','inv-note','inv-taxid','inv-ocr-file'];S.invOcrFile=null;
+    var identifier=el('inv-identifier-type');if(identifier)identifier.value='統一編號';
+  }else if(ui.mode==='batch'){
+    S.bRows=[defaultInvoiceBatchRow()];S.bUploadFile=null;ids=['bfile','b-reason','b-note'];renderBatchTable();
+    if(el('batch-pw'))el('batch-pw').style.display='none';if(el('batch-dz'))el('batch-dz').classList.remove('filled');
+  }else if(ui.mode==='bill'){
+    BILL_ROWS=[defaultBillRow()];ids=['bill-reason','bill-note'];renderBillEntryTable();
+  }else return false;
+  ids.forEach(function(id){var node=el(id);if(node)node.value='';});markIncomeDocClean(page);return true;
+}
+
+function loadIncomeSubmissionPending(formType){
+  var key=incomeSubmissionStorageKey(formType),entry=INCOME_SUBMISSION_PENDING[key];
+  if(!entry){try{entry=JSON.parse(sessionGetItem(key)||'null');}catch(_){throw new Error('原送單記錄無法讀取，為避免重複送單，請保留表單並聯絡系統管理員。');}}
+  if(!entry)return null;
+  if(entry.owner!==incomeSubmissionOwner()||entry.formType!==formType||!entry.args||!Array.isArray(entry.args.p_items)||!entry.args.p_items.length||!entry.args.p_idempotency_key||!Array.isArray(entry.records)||entry.records.length!==entry.args.p_items.length)throw new Error('原送單記錄不完整，請保留表單並聯絡系統管理員，勿另行重送。');
+  INCOME_SUBMISSION_PENDING[key]=entry;return entry;
+}
+function saveIncomeSubmissionPending(entry){
+  if(!entry||entry.owner!==incomeSubmissionOwner())return false;
+  var key=incomeSubmissionStorageKey(entry.formType);
+  if(!sessionSetItem(key,JSON.stringify(entry)))return false;
+  INCOME_SUBMISSION_PENDING[key]=entry;return true;
+}
+function clearIncomeSubmissionPending(entry){
+  if(!entry||entry.owner!==incomeSubmissionOwner())return;
+  var key=incomeSubmissionStorageKey(entry.formType),current=loadIncomeSubmissionPending(entry.formType);
+  if(current&&current.args.p_idempotency_key===entry.args.p_idempotency_key){sessionRemoveItem(key);delete INCOME_SUBMISSION_PENDING[key];delete INCOME_SUBMISSION_RETRY_STATE[entry.formType];}
+  renderIncomeSubmissionRecovery(entry.formType);
+}
+function incomeSubmissionUnknown(message,identityChanged){
+  var error=new Error(message||'送單結果待確認；原內容與附件已保留。請按「確認原送單結果」，系統會沿用原識別碼，不會另建一張。');
+  error.code='FINANCE_MUTATION_RESULT_UNKNOWN';
+  return {available:true,ok:false,unknown:true,uncertain:true,identityChanged:!!identityChanged,error:error};
+}
+function incomeSubmissionPayloadMatches(payload,entry){
+  if(!payload||payload.ok!==true||!Array.isArray(payload.rows)||payload.rows.length!==entry.args.p_items.length)return false;
+  var keys=new Set(),ids=new Set();
+  return payload.rows.every(function(row){
+    if(!row||!row.id||!row.no||keys.has(row.client_item_key)||ids.has(row.id)||!entry.args.p_items.some(function(item){return item.client_item_key===row.client_item_key;}))return false;
+    keys.add(row.client_item_key);ids.add(row.id);return true;
   });
-  return state;
+}
+async function readIncomeSubmissionCommit(entry,identity){
+  if(!incomeSubmissionIdentityCurrent(identity))return null;
+  try{
+    var response=await withOperationTimeout(getSb().from(entry.formType==='invoice'?'invoices':'bills').select('*')
+      .eq('tenant_id',currentTenantId()).eq('data_environment',entry.args.p_data_environment)
+      .eq('submission_idempotency_key',entry.args.p_idempotency_key).eq('submission_actor_finance_user_id',S.user.id)
+      .limit(entry.records.length+1),'確認原送單結果',12000);
+    if(!incomeSubmissionIdentityCurrent(identity)||response.error||!Array.isArray(response.data)||response.data.length!==entry.records.length)return null;
+    var payload={ok:true,idempotent_replay:true,rows:response.data.map(function(row){return {client_item_key:row.submission_item_key,id:row.id,no:row.no,batch_id:row.batch_id,approval_status:row.approval_status,approval_step:row.approval_step};})};
+    return incomeSubmissionPayloadMatches(payload,entry)?payload:null;
+  }catch(_){return null;}
+}
+async function runIncomeSubmissionAttempt(entry,identity){
+  var key=incomeSubmissionStorageKey(entry.formType);
+  if(INCOME_SUBMISSION_RUNNING[key])return incomeSubmissionUnknown('原送單正在確認中，請稍候，不要重複送出。');
+  INCOME_SUBMISSION_RUNNING[key]=entry;
+  try{
+    if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
+    if(entry.response&&incomeSubmissionPayloadMatches(entry.response,entry))return {available:true,ok:true,data:entry.response,attempt:entry};
+    var hadUnknown=entry.unknown===true;
+    entry.unknown=true;
+    if(!saveIncomeSubmissionPending(entry))return incomeSubmissionUnknown('瀏覽器無法保存原送單識別碼；尚未送出新交易，請保留表單並確認瀏覽器儲存空間。');
+    for(var attempt=0;attempt<2;attempt++){
+      if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
+      var response;
+      try{response=await withOperationTimeout(getSb().rpc(entry.rpcName,cloneSettingValue(entry.args)),'確認原送單交易',15000);}
+      catch(error){response={error:error};}
+      if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
+      if(response&&!response.error&&incomeSubmissionPayloadMatches(response.data,entry)){
+        entry.response=cloneSettingValue(response.data);saveIncomeSubmissionPending(entry);
+        return {available:true,ok:true,data:entry.response,attempt:entry};
+      }
+      if(attempt===0&&!hadUnknown&&response&&response.error&&!expenseApplicantRevisionRpcErrorIsAmbiguous(response.error)){
+        clearIncomeSubmissionPending(entry);return {available:true,ok:false,error:response.error};
+      }
+      hadUnknown=true;
+    }
+    var committed=await readIncomeSubmissionCommit(entry,identity);
+    if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
+    if(committed){entry.response=committed;saveIncomeSubmissionPending(entry);return {available:true,ok:true,data:committed,attempt:entry};}
+    renderIncomeSubmissionRecovery(entry.formType);
+    return incomeSubmissionUnknown();
+  }finally{if(INCOME_SUBMISSION_RUNNING[key]===entry)delete INCOME_SUBMISSION_RUNNING[key];}
+}
+function applyIncomeSubmissionResponse(records,result){
+  var payload=result.data,byKey={};payload.rows.forEach(function(row){byKey[row.client_item_key]=row;});
+  records.forEach(function(record,index){var row=byKey[result.attempt.args.p_items[index].client_item_key];record.id=row.id;record.no=row.no;record.batchId=row.batch_id||'';record.approvalStatus=row.approval_status||record.approvalStatus;record.approvalStep=row.approval_step==null?record.approvalStep:Number(row.approval_step);record.submissionIdempotentReplay=!!payload.idempotent_replay;});
+  result.orgStamps=records.map(function(record){return {ok:true,runtime:'income_transaction_rpc',form_id:record.id,idempotent_replay:!!payload.idempotent_replay};});
+  result.approvalRuntime={ok:true,runtime:'income_transaction_rpc'};return result;
+}
+async function recoverPendingIncomeSubmission(formType){
+  var identity=incomeSubmissionIdentity(),entry=loadIncomeSubmissionPending(formType);
+  if(!entry)return false;
+  var result=await runIncomeSubmissionAttempt(entry,identity);
+  if(!incomeSubmissionIdentityCurrent(identity))return true;
+  if(!result.ok){alert(result.error&&result.error.message||'原送單結果待確認');return true;}
+  var ids=result.data.rows.map(function(row){return row.id;}),reloaded=false;
+  try{reloaded=await withOperationTimeout(formType==='invoice'?reloadInvoicesByIds(ids):reloadBillsByIds(ids),'讀取原送單結果',12000);}catch(_){}
+  if(!incomeSubmissionIdentityCurrent(identity))return true;
+  if(reloaded){
+    var formCleared=clearIncomeSubmissionFormIfUnchanged(entry);
+    clearIncomeSubmissionPending(entry);
+    if(formType==='invoice'){renderInvTable();renderBatchInvTable();}else renderBillList();
+    buildApprovals();
+    alert('原送單已確認，共 '+ids.length+' 張，沒有重複建立。'+(formCleared?'原表單已清空，可以填寫新申請。':'目前修改過的表單內容仍保留，尚未作為新單送出。'));
+  }else{renderIncomeSubmissionRecovery(formType);alert('原送單已正式保存，共 '+ids.length+' 張；最新資料尚未同步，請再按「確認原送單結果」。目前表單沒有另行送出。');}
+  return true;
+}
+window.recoverPendingIncomeSubmission=recoverPendingIncomeSubmission;
+function renderIncomeSubmissionRecovery(formType){
+  var root=el(formType==='invoice'?'pg-invoices':'pg-bills');if(!root||!root.insertBefore)return;
+  var id='income-submission-recovery-'+formType,box=el(id),entry=null,readError=null;
+  try{entry=loadIncomeSubmissionPending(formType);}catch(error){readError=error;}
+  if(!entry&&!readError){if(box)box.remove();return;}
+  if(!box){box=document.createElement('div');box.id=id;box.className='card';box.style.padding='14px';root.insertBefore(box,root.firstChild);}
+  if(readError){box.textContent=readError.message;return;}
+  box.textContent=entry.response?'原送單已保存，最新資料待同步。':'有一筆送單結果待確認；原內容與附件已保留。';
+  var button=document.createElement('button');button.className='btn-s';button.textContent='確認原送單結果';button.type='button';
+  button.onclick=async function(){button.disabled=true;try{await recoverPendingIncomeSubmission(formType);}finally{button.disabled=false;}};box.appendChild(button);
 }
 async function submitIncomeDocumentTransaction(formType,records){
   if(S.demoLogin||!hasSupabase())return{available:false};
   if(['invoice','bill'].indexOf(formType)<0)return{available:false};
+  var identity=incomeSubmissionIdentity();
+  if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入驗證尚未完成，尚未送出任何交易。',true);
   records=(records||[]).filter(Boolean);
-  if(formType==='bill'){
-    var batchLimitError=billBatchLimitError(records.length,'submit');
-    if(batchLimitError)return{available:true,ok:false,clientValidation:true,error:batchLimitError};
-  }
-  var fn=formType==='invoice'?'finance_submit_invoice_batch':'finance_submit_bill_batch';
-  var submission=incomeSubmissionContext(formType,records);
-  var items=records.map(function(record,index){return incomeSubmissionRpcItem(formType,record,index);});
-  var response=await getSb().rpc(fn,{
-    p_idempotency_key:submission.key,
-    p_items:items,
-    p_data_environment:activeDataEnvironment()
-  });
-  if(response.error){
-    if(isRpcMissing(response.error))return{available:false,error:response.error};
-    return{available:true,ok:false,error:response.error};
-  }
-  var payload=normalizeSettingValue(response.data||{});
-  if(!payload.ok||!Array.isArray(payload.rows)||payload.rows.length!==records.length){
-    return{available:true,ok:false,error:new Error('交易式送單回傳筆數不一致，前台未加入任何單據')};
-  }
-  var byKey={};
-  payload.rows.forEach(function(row){byKey[String(row.client_item_key||'')]=row;});
-  records.forEach(function(record,index){
-    var result=byKey[items[index].client_item_key]||payload.rows[index]||{};
-    record.id=result.id||record.id;
-    record.no=result.no||record.no;
-    record.batchId=result.batch_id||'';
-    record.approvalStatus=result.approval_status||record.approvalStatus;
-    record.approvalStep=num(result.approval_step)||record.approvalStep;
-    record.submissionIdempotentReplay=!!payload.idempotent_replay;
-  });
-  if(INCOME_SUBMISSION_RETRY_STATE[formType]&&INCOME_SUBMISSION_RETRY_STATE[formType].key===submission.key){
-    delete INCOME_SUBMISSION_RETRY_STATE[formType];
-  }
-  var stamps=records.map(function(record){
-    return{ok:true,runtime:'income_transaction_rpc',form_id:record.id,idempotent_replay:!!payload.idempotent_replay};
-  });
-  return{available:true,ok:true,data:payload,orgStamps:stamps,approvalRuntime:{ok:true,runtime:'income_transaction_rpc'}};
+  if(!records.length)return {available:true,ok:false,error:new Error('沒有可送出的單據')};
+  if(formType==='bill'){var limit=billBatchLimitError(records.length,'submit');if(limit)return {available:true,ok:false,error:new Error(limit)};}
+  var entry=loadIncomeSubmissionPending(formType);
+  if(entry){return incomeSubmissionUnknown('先前送單結果尚未完成核對，請先按「確認原送單結果」。目前變更的內容尚未另行送出。');}
+  var operationKey=formType+'_submit_'+crypto.randomUUID();
+  records.forEach(function(record,index){record.submissionIdempotencyKey=operationKey;record.submissionClientItemKey=formType+'_item_'+index+'_'+crypto.randomUUID();});
+  entry={owner:incomeSubmissionOwner(),formType:formType,rpcName:formType==='invoice'?'finance_submit_invoice_batch':'finance_submit_bill_batch',records:cloneSettingValue(records),formUi:cloneSettingValue(records[0].submissionFormUi||null),unknown:false,createdAt:new Date().toISOString(),args:{p_idempotency_key:operationKey,p_items:records.map(function(record,index){return incomeSubmissionRpcItem(formType,record,index);}),p_data_environment:activeDataEnvironment()}};
+  if(!saveIncomeSubmissionPending(entry))return {available:true,ok:false,error:new Error('無法安全保存本次送單識別碼，尚未送出任何交易；請保留表單並確認瀏覽器儲存空間。')};
+  var result=await runIncomeSubmissionAttempt(entry,identity);
+  if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
+  return result.ok?applyIncomeSubmissionResponse(records,result):result;
 }
+
 async function insertMembershipOrgSubmittedRecord(formType,table,record,row){
   if(S.demoLogin||!hasSupabase()){
     var localInsert=await dbInsert(table,row);
@@ -39864,7 +40033,12 @@ function createFinanceApprovalRuntime(){
     get INVS(){return INVS;},set INVS(rows){INVS=rows;},
     get BILLS(){return BILLS;},set BILLS(rows){BILLS=rows;},
     get NOTIFS(){return NOTIFS;},set NOTIFS(rows){NOTIFS=rows;},
-    isIdentityBlocked:function(){return financeWorkspaceIdentityBlocked;},
+    isIdentityBlocked:function(){return financeWorkspaceIdentityBlocked||financeLogoutInProgress||financeGoogleAccountSwitchInProgress;},
+    identityEpoch:function(){return FINANCE_DRAFT_IDENTITY_EPOCH+'|'+financeAuthIdentityEpoch;},
+    currentFinanceAuthUserId:function(){return currentFinanceAuthUserId();},
+    sessionGetItem:function(){return sessionGetItem.apply(null,arguments);},
+    sessionSetItem:function(){return sessionSetItem.apply(null,arguments);},
+    withOperationTimeout:function(){return withOperationTimeout.apply(null,arguments);},
     permissionIdentity:function(){return JSON.stringify(CURRENT_PERMISSION_SNAPSHOT);},
     currentTenantId:function(){return currentTenantId.apply(null,arguments);},
     activeDataEnvironment:function(){return activeDataEnvironment.apply(null,arguments);},

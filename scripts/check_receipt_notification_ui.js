@@ -7,8 +7,10 @@ const index=read('index.html');
 for(const match of index.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g))if(!/\bsrc\s*=|application\/ld\+json/.test(match[1]))new vm.Script(match[2]);
 check('Every production inline script parses',true);
 function receipt(extra={}){
+ const storage=new Map();
  const calls=[],flags=[],rows=[{id:'one',status:'pending_receipt_review',total:105,rowVersion:2}],runtime={
   S:{user:{id:'ceo',authUserId:'auth-ceo'}},isIdentityBlocked:()=>false,currentTenantId:()=> 'tenant',activeDataEnvironment:()=> 'test',
+  sessionGetItem:key=>storage.get(key),sessionSetItem:(key,value)=>{storage.set(key,value);return true;},withOperationTimeout:promise=>promise,identityEpoch:()=>0,
   ensureSupabaseWriteReady:async()=>({ok:true}),getSb:()=>({rpc:async(name,args)=>{calls.push(JSON.parse(JSON.stringify(args)));return {data:{ok:true,count:1}};}}),
   expenseApplicantRevisionRpcErrorIsAmbiguous:e=>e.code==='NETWORK',reloadInvoicesByIds:async()=>true,
   approvalSetReconcilePending:(kind,ids,flag)=>flags.push(flag),setTopSyncStatus:()=>{},refreshApprovalAfterCommittedAction:async()=>{},...extra};
@@ -90,7 +92,7 @@ async function rejects(name,fn,code){let e;try{await fn();}catch(error){e=error;
  check('Final amount edit opens independent correction before serial/upload',finalCalls.correction===1&&finalCalls.serial===0&&finalCalls.upload===0&&finalCtx.REQS[0].amt===100&&finalCalls.draft===1);
  finalCtx.approvalActionPayload=async()=>({addUid:'extra-reviewer'});await finalCtx.doConfirmVoucher('expense');check('Countersign cannot bypass paid-principal correction',finalCalls.correction===2&&finalCalls.serial===0&&finalCalls.upload===0);
  const snapshotSource=index.slice(index.indexOf("var RECEIPT_REVIEW_SNAPSHOTS="),index.indexOf('async function receiptGroupActionCore('));
- const sr={approvalFastBootstrapIdentity:()=> 'actor',activeDataEnvironment:()=> 'test',invoiceGroupKey:()=> 'group',invoiceGroupRows:row=>row.rows,receiptTaskCandidate:()=>true,approvalRowVersion:row=>row.rowVersion};vm.runInNewContext(snapshotSource,sr);
+ const sr={window:{},approvalFastBootstrapIdentity:()=> 'actor',activeDataEnvironment:()=> 'test',invoiceGroupKey:()=> 'group',invoiceGroupRows:row=>row.rows,receiptTaskCandidate:()=>true,approvalRowVersion:row=>row.rowVersion};vm.runInNewContext(snapshotSource,sr);
  const viewed={rows:[{id:'one',rowVersion:2},{id:'two',rowVersion:3}]};sr.captureReceiptReviewVersions(viewed,'modal');
  sr.captureReceiptReviewVersions({rows:[{id:'one',rowVersion:9},{id:'two',rowVersion:10}]});
  check('Background list render cannot replace reviewed modal versions',sr.receiptReviewedVersions(viewed,viewed.rows).one===2);
