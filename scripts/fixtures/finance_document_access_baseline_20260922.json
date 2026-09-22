@@ -1,0 +1,182 @@
+[
+  {
+    "schema": "private",
+    "name": "finance_claim_attachment_metadata_v2",
+    "args": "",
+    "definition": "CREATE OR REPLACE FUNCTION private.finance_claim_attachment_metadata_v2()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_document jsonb := pg_catalog.to_jsonb(new);\n  v_old_document jsonb := '{}'::jsonb;\n  v_tenant_id uuid;\n  v_record_type text;\n  v_environment text;\n  v_primary_identifier text;\n  v_batch_identifier text;\n  v_batch_display_no text;\n  v_note jsonb;\n  v_actor_finance_user_id text;\n  v_actor_auth_user_id uuid;\nbegin\n  if tg_op = 'UPDATE' then\n    v_old_document := pg_catalog.to_jsonb(old);\n  end if;\n\n  v_tenant_id := nullif(v_document ->> 'tenant_id', '')::uuid;\n  v_environment := coalesce(\n    nullif(v_document ->> 'data_environment', ''),\n    'production'\n  );\n\n  -- Staged metadata can only be promoted by the same verified signed-in user\n  -- who uploaded the corresponding Storage object.  Document actor fields are\n  -- deliberately not accepted as a substitute for the live OAuth identity.\n  v_actor_auth_user_id := auth.uid();\n  v_actor_finance_user_id := nullif(\n    public.current_finance_user_id(),\n    ''\n  );\n\n  case tg_table_name\n    when 'expense_requests' then\n      v_record_type := 'expense_requests';\n      v_primary_identifier := coalesce(\n        nullif(v_document ->> 'no', ''),\n        nullif(v_document ->> 'id', '')\n      );\n    when 'invoices' then\n      v_record_type := 'invoices';\n      v_batch_identifier := nullif(v_document ->> 'batch_id', '');\n      v_primary_identifier := coalesce(\n        v_batch_identifier,\n        nullif(v_document ->> 'no', ''),\n        nullif(v_document ->> 'id', '')\n      );\n    when 'bills' then\n      v_record_type := 'bills';\n      v_batch_identifier := nullif(v_document ->> 'batch_id', '');\n      begin\n        v_note := coalesce(\n          nullif(v_document ->> 'note', '')::jsonb,\n          '{}'::jsonb\n        );\n      exception\n        when invalid_text_representation then\n          v_note := '{}'::jsonb;\n      end;\n      v_batch_display_no := coalesce(\n        nullif(v_note ->> 'batchNo', ''),\n        nullif(v_note ->> 'batch_no', '')\n      );\n      v_primary_identifier := coalesce(\n        v_batch_display_no,\n        v_batch_identifier,\n        nullif(v_document ->> 'no', ''),\n        nullif(v_document ->> 'id', '')\n      );\n    when 'vouchers' then\n      v_record_type := 'vouchers';\n      v_primary_identifier := coalesce(\n        nullif(v_document ->> 'no', ''),\n        nullif(v_document ->> 'id', ''),\n        nullif(v_document ->> 'request_id', '')\n      );\n    else\n      return new;\n  end case;\n\n  if v_tenant_id is null\n     or v_primary_identifier is null then\n    return new;\n  end if;\n\n  -- Exact path membership replaces provisional record-number equality.  Every\n  -- other trust boundary remains mandatory, including the live OAuth actor and\n  -- storage.objects.owner_id.  On UPDATE, only newly added paths are eligible;\n  -- this prevents a harmless edit from mutating historical attachment rows.\n  if v_actor_finance_user_id is not null\n     and v_actor_auth_user_id is not null then\n    update public.file_attachments attachment\n    set\n      record_no = v_primary_identifier,\n      attachment_state = 'claimed',\n      claimed_at = coalesce(\n        attachment.claimed_at,\n        pg_catalog.clock_timestamp()\n      ),\n      claim_key = v_record_type || ':' || v_primary_identifier\n    from storage.objects object_row,\n         public.finance_users uploader\n    where attachment.tenant_id = v_tenant_id\n      and attachment.bucket_id = 'finance-attachments'\n      and attachment.record_type = v_record_type\n      and attachment.data_environment = v_environment\n      and attachment.attachment_state = 'staged'\n      and attachment.uploaded_by = v_actor_finance_user_id\n      and private.finance_is_current_document_attachment_path_v3(\n        attachment.storage_path,\n        v_tenant_id,\n        v_record_type,\n        v_environment\n      )\n      and private.finance_json_contains_attachment_path_v2(\n        v_document,\n        attachment.storage_path\n      )\n      and (\n        tg_op = 'INSERT'\n        or not private.finance_json_contains_attachment_path_v2(\n          v_old_document,\n          attachment.storage_path\n        )\n      )\n      and object_row.bucket_id = attachment.bucket_id\n      and object_row.name = attachment.storage_path\n      and object_row.owner_id = v_actor_auth_user_id::text\n      and uploader.tenant_id = attachment.tenant_id\n      and uploader.id = attachment.uploaded_by\n      and uploader.auth_user_id = v_actor_auth_user_id;\n  end if;\n\n  -- INSERT is strict for every new-format Finance Storage reference.  UPDATE is\n  -- strict only for paths absent from OLD, so a historical missing object does\n  -- not block unrelated workflow or accounting changes.\n  if exists (\n    select 1\n    from private.finance_attachment_paths_in_document_v2(v_document)\n      referenced_path(storage_path)\n    where private.finance_is_current_finance_attachment_path_v3(\n      referenced_path.storage_path\n    )\n      and (\n        tg_op = 'INSERT'\n        or not private.finance_json_contains_attachment_path_v2(\n          v_old_document,\n          referenced_path.storage_path\n        )\n      )\n      and not exists (\n        select 1\n        from public.file_attachments attachment\n        join storage.objects object_row\n          on object_row.bucket_id = attachment.bucket_id\n         and object_row.name = attachment.storage_path\n        join public.finance_users uploader\n          on uploader.tenant_id = attachment.tenant_id\n         and uploader.id = attachment.uploaded_by\n         and uploader.auth_user_id::text = object_row.owner_id\n        where attachment.tenant_id = v_tenant_id\n          and attachment.bucket_id = 'finance-attachments'\n          and attachment.storage_path = referenced_path.storage_path\n          and attachment.record_type = v_record_type\n          and attachment.record_no = v_primary_identifier\n          and attachment.data_environment = v_environment\n          and attachment.attachment_state = 'claimed'\n          and attachment.claimed_at is not null\n          and attachment.uploaded_by = v_actor_finance_user_id\n          and uploader.auth_user_id = v_actor_auth_user_id\n      )\n  ) then\n    raise exception\n      '附件尚未依正式單號完成綁定，系統已取消本次寫入，請重新整理後再試'\n      using errcode = '55000';\n  end if;\n\n  return new;\nend\n$function$\n",
+    "body_md5": "eb4b26ea5e72f766c53ffd03e97ae325",
+    "prosecdef": true,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "schema": "private",
+    "name": "finance_json_contains_attachment_path_v2",
+    "args": "p_document jsonb, p_storage_path text",
+    "definition": "CREATE OR REPLACE FUNCTION private.finance_json_contains_attachment_path_v2(p_document jsonb, p_storage_path text)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\n  select\n    p_document is not null\n    and nullif(p_storage_path, '') is not null\n    and pg_catalog.jsonb_path_exists(\n      p_document,\n      '$.** ? (@.path == $path || @.storagePath == $path || @.storage_path == $path)'::pg_catalog.jsonpath,\n      pg_catalog.jsonb_build_object('path', p_storage_path),\n      true\n    )\n$function$\n",
+    "body_md5": "0b7677bb099c9baf47df1fdecf47be9e",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "schema": "private",
+    "name": "finance_membership_org_departments_v1",
+    "args": "p_tenant_id uuid, p_snapshot jsonb",
+    "definition": "CREATE OR REPLACE FUNCTION private.finance_membership_org_departments_v1(p_tenant_id uuid, p_snapshot jsonb)\n RETURNS jsonb\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n  with recursive\n  units as (\n    select\n      item ->> 'id' id,\n      upper(btrim(item ->> 'code')) code,\n      btrim(item ->> 'name') name,\n      lower(btrim(item ->> 'unit_type')) unit_type,\n      nullif(item ->> 'parent_org_unit_id', '') parent_id,\n      coalesce((item ->> 'sort_order')::integer, 0) sort_order,\n      coalesce((item ->> 'is_posting_unit')::boolean, false) is_posting_unit,\n      lower(btrim(coalesce(item ->> 'entity_scope_mode', 'inherit'))) scope_mode,\n      coalesce(item -> 'entity_codes', '[]'::jsonb) entity_codes,\n      coalesce((item ->> 'active')::boolean, true) active,\n      item\n    from jsonb_array_elements(coalesce(p_snapshot -> 'units', '[]'::jsonb)) item\n  ),\n  entity_settings as (\n    select entity ->> 'id' entity_code\n    from public.system_settings setting_row\n    cross join lateral jsonb_array_elements(setting_row.value) entity\n    where setting_row.tenant_id = p_tenant_id and setting_row.key = 'entities'\n  ),\n  ancestor_chain as (\n    select u.id root_id, u.id current_id, u.parent_id, u.scope_mode, u.entity_codes, 0 depth\n    from units u\n    union all\n    select chain.root_id, parent.id, parent.parent_id, parent.scope_mode, parent.entity_codes, chain.depth + 1\n    from ancestor_chain chain\n    join units parent on parent.id = chain.parent_id\n    where chain.depth < 32\n  ),\n  effective_scopes as (\n    select root.id,\n      coalesce((\n        select case\n          when chain.scope_mode = 'all' then (\n            select coalesce(jsonb_agg(entity_code order by entity_code), '[]'::jsonb)\n            from entity_settings\n          )\n          else chain.entity_codes\n        end\n        from ancestor_chain chain\n        where chain.root_id = root.id\n          and chain.scope_mode in ('all', 'explicit')\n        order by chain.depth\n        limit 1\n      ), '[]'::jsonb) entity_codes\n    from units root\n  ),\n  parent_chain as (\n    select u.id root_id, u.parent_id current_id, 1 depth\n    from units u\n    union all\n    select chain.root_id, parent.parent_id, chain.depth + 1\n    from parent_chain chain\n    join units parent on parent.id = chain.current_id\n    where chain.depth < 32\n  ),\n  projected as (\n    select\n      u.*,\n      case u.unit_type when 'department' then 3 when 'section' then 4 when 'team' then 5 end level_no,\n      scope.entity_codes effective_entities,\n      (\n        select parent.code\n        from parent_chain chain\n        join units parent on parent.id = chain.current_id\n        where chain.root_id = u.id\n          and parent.active\n          and parent.unit_type in ('department', 'section', 'team')\n        order by chain.depth\n        limit 1\n      ) parent_code\n    from units u\n    join effective_scopes scope on scope.id = u.id\n    where u.active and u.unit_type in ('department', 'section', 'team')\n  ),\n  rows as (\n    select jsonb_build_object(\n      'c', p.code,\n      'n', p.name,\n      'lv', p.level_no,\n      'eid', coalesce((select value #>> '{}' from jsonb_array_elements(p.effective_entities) with ordinality e(value, ord) order by ord limit 1), ''),\n      'sort', p.sort_order,\n      'active', true,\n      'parent', coalesce(p.parent_code, ''),\n      'parentCode', p.parent_code,\n      'parent_department_code', p.parent_code,\n      'shared', jsonb_array_length(p.effective_entities) > 1,\n      'unitType', p.unit_type,\n      'entityCodes', p.effective_entities,\n      'newFormEntityCodes', p.effective_entities,\n      'isPostingUnit', p.is_posting_unit,\n      'managerId', (\n        select assignment ->> 'finance_user_id'\n        from jsonb_array_elements(coalesce(p_snapshot -> 'assignments', '[]'::jsonb)) assignment\n        where assignment ->> 'org_unit_id' = p.id\n          and private.finance_org_effective_now_v2(assignment)\n          and exists(select 1 from public.finance_users signer where signer.tenant_id=p_tenant_id and signer.id=assignment->>'finance_user_id' and signer.active=true)\n          and public.finance_org_signer_is_runtime_ready(p_tenant_id,assignment->>'finance_user_id')\n          and assignment ->> 'head_kind' in ('permanent', 'acting')\n        order by case assignment ->> 'head_kind' when 'permanent' then 0 else 1 end\n        limit 1\n      ),\n      'directorId', (\n        select assignment ->> 'finance_user_id'\n        from parent_chain chain\n        join units parent on parent.id = chain.current_id\n        cross join lateral jsonb_array_elements(coalesce(p_snapshot -> 'assignments', '[]'::jsonb)) assignment\n        where chain.root_id = p.id\n          and assignment ->> 'org_unit_id' = parent.id\n          and private.finance_org_effective_now_v2(assignment)\n          and exists(select 1 from public.finance_users signer where signer.tenant_id=p_tenant_id and signer.id=assignment->>'finance_user_id' and signer.active=true)\n          and public.finance_org_signer_is_runtime_ready(p_tenant_id,assignment->>'finance_user_id')\n          and assignment ->> 'head_kind' in ('permanent', 'acting')\n        order by chain.depth, case assignment ->> 'head_kind' when 'permanent' then 0 else 1 end\n        limit 1\n      )\n    ) row_value,\n    p.level_no,\n    p.sort_order,\n    p.code\n    from projected p\n  )\n  select coalesce(jsonb_agg(row_value order by level_no, sort_order, code), '[]'::jsonb)\n  from rows\n$function$\n",
+    "body_md5": "717a04b8c8df8229ca19942ccb9587a5",
+    "prosecdef": true,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "can_read_bill",
+    "args": "p_bill bills",
+    "definition": "CREATE OR REPLACE FUNCTION public.can_read_bill(p_bill bills)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n  select\n    nullif(public.current_finance_user_id(), '') is not null\n    and nullif(public.finance_current_verified_google_email_v2(), '') is not null\n    and p_bill.tenant_id = public.current_tenant_id()\n    and (\n      public.is_finance_accounting()\n      or public.is_bill_owner(p_bill)\n      or public.json_steps_include_current_user(p_bill.steps)\n      or public.json_steps_role_matches(p_bill.steps)\n      or (\n        public.current_finance_role() in ('section_chief', 'dept_manager')\n        and p_bill.department_code = public.current_finance_department()\n      )\n    )\n$function$\n",
+    "body_md5": "d3edce0bf795e39536362a2637b20568",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "can_read_expense_request",
+    "args": "p_request expense_requests",
+    "definition": "CREATE OR REPLACE FUNCTION public.can_read_expense_request(p_request expense_requests)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n  select\n    nullif(public.current_finance_user_id(), '') is not null\n    and nullif(public.finance_current_verified_google_email_v2(), '') is not null\n    and p_request.tenant_id = public.current_tenant_id()\n    and (\n      public.is_finance_accounting()\n      or p_request.applicant = public.current_finance_user_name()\n      or p_request.form_payload -> 'applicantProfile' ->> 'id' =\n         public.current_finance_user_id()\n      or lower(nullif(\n           p_request.form_payload -> 'applicantProfile' ->> 'email',\n           ''\n         )) = public.finance_current_verified_google_email_v2()\n      or public.json_steps_include_current_user(p_request.steps)\n      or public.json_steps_role_matches(p_request.steps)\n      or (\n        public.current_finance_role() in ('section_chief', 'dept_manager')\n        and p_request.department_code = public.current_finance_department()\n      )\n      or (\n        public.current_finance_role() = 'hr'\n        and p_request.type = 'welfare_request'\n      )\n      or (\n        public.current_finance_role() = 'general_affairs'\n        and p_request.type = 'purchase_request'\n      )\n    )\n$function$\n",
+    "body_md5": "5697a0a0f61f6832176680b67fa39084",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "can_read_finance_attachment",
+    "args": "p_attachment file_attachments",
+    "definition": "CREATE OR REPLACE FUNCTION public.can_read_finance_attachment(p_attachment file_attachments)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n  select\n    p_attachment.id is not null\n    and p_attachment.bucket_id = 'finance-attachments'\n    and auth.uid() is not null\n    and nullif(public.current_finance_user_id(), '') is not null\n    and nullif(public.finance_current_verified_google_email_v2(), '')\n          is not null\n    and p_attachment.tenant_id = public.current_tenant_id()\n    and (\n      p_attachment.attachment_state = 'claimed'\n      or (\n        p_attachment.attachment_state = 'staged'\n        and p_attachment.uploaded_by = public.current_finance_user_id()\n      )\n    )\n$function$\n",
+    "body_md5": "275203331d2c70000a4cf930371ef49b",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "can_read_invoice",
+    "args": "p_invoice invoices",
+    "definition": "CREATE OR REPLACE FUNCTION public.can_read_invoice(p_invoice invoices)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n  select\n    nullif(public.current_finance_user_id(), '') is not null\n    and nullif(public.finance_current_verified_google_email_v2(), '') is not null\n    and p_invoice.tenant_id = public.current_tenant_id()\n    and (\n      public.is_finance_accounting()\n      or p_invoice.applicant = public.current_finance_user_name()\n      or p_invoice.applicant_id = public.current_finance_user_id()\n      or public.json_steps_include_current_user(p_invoice.steps)\n      or public.json_steps_role_matches(p_invoice.steps)\n      or (\n        public.current_finance_role() in ('section_chief', 'dept_manager')\n        and p_invoice.department_code = public.current_finance_department()\n      )\n    )\n$function$\n",
+    "body_md5": "d761ec0bbd1544410ae52bd860ec78b6",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "can_update_bill",
+    "args": "p_bill bills",
+    "definition": "CREATE OR REPLACE FUNCTION public.can_update_bill(p_bill bills)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n  select\n    nullif(public.current_finance_user_id(), '') is not null\n    and nullif(public.finance_current_verified_google_email_v2(), '') is not null\n    and p_bill.tenant_id = public.current_tenant_id()\n    and (\n      public.is_finance_accounting()\n      or public.is_bill_owner(p_bill)\n    )\n$function$\n",
+    "body_md5": "df0a3bdf68319d93105fab6aafe9a1b8",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "can_update_expense_request",
+    "args": "p_request expense_requests",
+    "definition": "CREATE OR REPLACE FUNCTION public.can_update_expense_request(p_request expense_requests)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n  select\n    nullif(public.current_finance_user_id(), '') is not null\n    and nullif(public.finance_current_verified_google_email_v2(), '') is not null\n    and p_request.tenant_id = public.current_tenant_id()\n    and (\n      public.is_finance_accounting()\n      or public.json_steps_include_current_user(p_request.steps)\n      or public.json_steps_role_matches(p_request.steps)\n      or (\n        p_request.applicant = public.current_finance_user_name()\n        and p_request.status in ('pending_applicant_confirm', 'returned')\n      )\n      or (\n        public.current_finance_role() = 'general_affairs'\n        and p_request.type = 'purchase_request'\n        and p_request.status = 'pending_procurement'\n      )\n    )\n$function$\n",
+    "body_md5": "8cb0219a3184c025cf2cf46d3bd25e23",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "can_update_invoice",
+    "args": "p_invoice invoices",
+    "definition": "CREATE OR REPLACE FUNCTION public.can_update_invoice(p_invoice invoices)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n  select\n    nullif(public.current_finance_user_id(), '') is not null\n    and nullif(public.finance_current_verified_google_email_v2(), '') is not null\n    and p_invoice.tenant_id = public.current_tenant_id()\n    and (\n      public.is_finance_accounting()\n      or public.json_steps_include_current_user(p_invoice.steps)\n      or public.json_steps_role_matches(p_invoice.steps)\n      or p_invoice.applicant_id = public.current_finance_user_id()\n    )\n$function$\n",
+    "body_md5": "fa132a77bd4f0220279d56d9452d6297",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "finance_org_signer_is_runtime_ready",
+    "args": "p_tenant_id uuid, p_finance_user_id text",
+    "definition": "CREATE OR REPLACE FUNCTION public.finance_org_signer_is_runtime_ready(p_tenant_id uuid, p_finance_user_id text)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'auth', 'pg_temp'\nAS $function$\n  select coalesce(\n    exists (\n      select 1\n      from public.finance_users fu\n      where fu.tenant_id = p_tenant_id\n        and fu.id = p_finance_user_id\n        and fu.active = true\n        and public.finance_user_is_approval_identity_ready(\n          fu.tenant_id,\n          fu.id\n        )\n        and exists (\n          select 1\n          from public.employee_department_roles capability\n          where capability.tenant_id = fu.tenant_id\n            and capability.finance_user_id = fu.id\n            and capability.active = true\n            and capability.can_approve = true\n            and (\n              capability.effective_from is null\n              or capability.effective_from <= current_date\n            )\n            and (\n              capability.effective_to is null\n              or capability.effective_to >= current_date\n            )\n        )\n    ),\n    false\n  );\n$function$\n",
+    "body_md5": "19164457b8f01243557d6f6998b029f1",
+    "prosecdef": true,
+    "proconfig": [
+      "search_path=public, auth, pg_temp"
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "finance_user_is_approval_identity_ready",
+    "args": "p_tenant_id uuid, p_finance_user_id text",
+    "definition": "CREATE OR REPLACE FUNCTION public.finance_user_is_approval_identity_ready(p_tenant_id uuid, p_finance_user_id text)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'auth', 'pg_temp'\nAS $function$\n  select coalesce((\n    select\n      fu.active = true\n      and case\n        when coalesce(fu.org_source, '') in (\n          'pptx_org_chart_20260728',\n          'personnel_management'\n        )\n          then public.finance_user_has_verified_google_identity(\n            fu.tenant_id,\n            fu.id\n          )\n        else fu.auth_user_id is not null\n      end\n    from public.finance_users fu\n    where fu.tenant_id = p_tenant_id\n      and fu.id = p_finance_user_id\n  ), false);\n$function$\n",
+    "body_md5": "7a39e7ac8ac007f0bc15686d7a7cb5ea",
+    "prosecdef": true,
+    "proconfig": [
+      "search_path=public, auth, pg_temp"
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "is_bill_owner",
+    "args": "p_bill bills",
+    "definition": "CREATE OR REPLACE FUNCTION public.is_bill_owner(p_bill bills)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n  select\n    nullif(public.current_finance_user_id(), '') is not null\n    and nullif(public.finance_current_verified_google_email_v2(), '') is not null\n    and p_bill.tenant_id = public.current_tenant_id()\n    and (\n      p_bill.applicant = public.current_finance_user_name()\n      or p_bill.applicant_id = public.current_finance_user_id()\n      or lower(nullif(p_bill.applicant_email, '')) =\n         public.finance_current_verified_google_email_v2()\n    )\n$function$\n",
+    "body_md5": "954ae726cc6dc32b6795ad778f35ec37",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "json_steps_include_current_user",
+    "args": "steps jsonb",
+    "definition": "CREATE OR REPLACE FUNCTION public.json_steps_include_current_user(steps jsonb)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n  with caller as (\n    select\n      nullif(public.current_finance_user_id(), '') as viewer_id,\n      nullif(public.finance_current_verified_google_email_v2(), '') as viewer_email,\n      nullif(public.current_finance_user_name(), '') as viewer_name\n  ),\n  step_rows as (\n    select step_value as step\n    from pg_catalog.jsonb_array_elements(\n      case\n        when pg_catalog.jsonb_typeof(steps) = 'array' then steps\n        else '[]'::jsonb\n      end\n    ) as step_values(step_value)\n  ),\n  action_rows as (\n    select action_value as action\n    from step_rows\n    cross join lateral pg_catalog.jsonb_array_elements(\n      (\n        case\n          when pg_catalog.jsonb_typeof(step -> 'actionLog') = 'array'\n            then step -> 'actionLog'\n          else '[]'::jsonb\n        end\n      ) || (\n        case\n          when pg_catalog.jsonb_typeof(step -> 'action_log') = 'array'\n            then step -> 'action_log'\n          else '[]'::jsonb\n        end\n      ) || (\n        case\n          when pg_catalog.jsonb_typeof(step -> 'actions') = 'array'\n            then step -> 'actions'\n          else '[]'::jsonb\n        end\n      )\n    ) as action_values(action_value)\n  )\n  select\n    caller.viewer_id is not null\n    and caller.viewer_email is not null\n    and (\n      exists (\n        select 1\n        from step_rows\n        where caller.viewer_id = any (array[\n          step ->> 'uid', step ->> 'userId', step ->> 'user_id',\n          step ->> 'approverId', step ->> 'approver_id',\n          step ->> 'actorId', step ->> 'actor_id',\n          step ->> 'financeUserId', step ->> 'finance_user_id',\n          step ->> 'byId', step ->> 'by_id'\n        ])\n        or caller.viewer_email = any (array[\n          lower(nullif(step ->> 'email', '')),\n          lower(nullif(step ->> 'userEmail', '')),\n          lower(nullif(step ->> 'user_email', '')),\n          lower(nullif(step ->> 'approverEmail', '')),\n          lower(nullif(step ->> 'approver_email', '')),\n          lower(nullif(step ->> 'actorEmail', '')),\n          lower(nullif(step ->> 'actor_email', '')),\n          lower(nullif(step ->> 'byEmail', '')),\n          lower(nullif(step ->> 'by_email', ''))\n        ])\n        or (\n          caller.viewer_name is not null\n          and (\n            step ->> 'n' = caller.viewer_name\n            or step ->> 'name' = caller.viewer_name\n            or step ->> 'approver' = caller.viewer_name\n            or step ->> 'approverName' = caller.viewer_name\n            or step ->> 'approver_name' = caller.viewer_name\n            or step ->> 'actor' = caller.viewer_name\n            or step ->> 'actorName' = caller.viewer_name\n            or step ->> 'actor_name' = caller.viewer_name\n            or step ->> 'by' = caller.viewer_name\n            or coalesce(step ->> 'r', '') like '%' || caller.viewer_name || '%'\n            or coalesce(step ->> 'label', '') like '%' || caller.viewer_name || '%'\n            or coalesce(step ->> 'title', '') like '%' || caller.viewer_name || '%'\n          )\n        )\n      )\n      or exists (\n        select 1\n        from action_rows\n        where case\n          when coalesce(\n            nullif(action ->> 'byId', ''),\n            nullif(action ->> 'by_id', ''),\n            nullif(action ->> 'actorFinanceUserId', ''),\n            nullif(action ->> 'actor_finance_user_id', ''),\n            nullif(action ->> 'actorId', ''),\n            nullif(action ->> 'actor_id', ''),\n            nullif(action ->> 'financeUserId', ''),\n            nullif(action ->> 'finance_user_id', ''),\n            nullif(action ->> 'userId', ''),\n            nullif(action ->> 'user_id', '')\n          ) is not null then caller.viewer_id = any (array[\n            action ->> 'byId', action ->> 'by_id',\n            action ->> 'actorFinanceUserId', action ->> 'actor_finance_user_id',\n            action ->> 'actorId', action ->> 'actor_id',\n            action ->> 'financeUserId', action ->> 'finance_user_id',\n            action ->> 'userId', action ->> 'user_id'\n          ])\n          when coalesce(\n            nullif(action ->> 'byEmail', ''),\n            nullif(action ->> 'by_email', ''),\n            nullif(action ->> 'actorEmail', ''),\n            nullif(action ->> 'actor_email', ''),\n            nullif(action ->> 'userEmail', ''),\n            nullif(action ->> 'user_email', ''),\n            nullif(action ->> 'email', '')\n          ) is not null then caller.viewer_email = any (array[\n            lower(nullif(action ->> 'byEmail', '')),\n            lower(nullif(action ->> 'by_email', '')),\n            lower(nullif(action ->> 'actorEmail', '')),\n            lower(nullif(action ->> 'actor_email', '')),\n            lower(nullif(action ->> 'userEmail', '')),\n            lower(nullif(action ->> 'user_email', '')),\n            lower(nullif(action ->> 'email', ''))\n          ])\n          else caller.viewer_name is not null and (\n            action ->> 'by' = caller.viewer_name\n            or action ->> 'actor' = caller.viewer_name\n            or action ->> 'actorName' = caller.viewer_name\n            or action ->> 'actor_name' = caller.viewer_name\n            or action ->> 'reviewer' = caller.viewer_name\n            or action ->> 'reviewerName' = caller.viewer_name\n            or action ->> 'reviewer_name' = caller.viewer_name\n            or action ->> 'name' = caller.viewer_name\n          )\n        end\n      )\n    )\n  from caller\n$function$\n",
+    "body_md5": "0ead7350fbf4cad04b46f33374f05ef1",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+  },
+  {
+    "schema": "public",
+    "name": "json_steps_role_matches",
+    "args": "steps jsonb",
+    "definition": "CREATE OR REPLACE FUNCTION public.json_steps_role_matches(steps jsonb)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO 'public'\nAS $function$\n  select exists (\n    select 1\n    from jsonb_array_elements(coalesce(steps, '[]'::jsonb)) s\n    where s ->> 'rk' = public.current_finance_role()\n       or s ->> 'role' = public.current_finance_role()\n       or s ->> 'approver_role' = public.current_finance_role()\n       or s ->> 'approverRole' = public.current_finance_role()\n       or s ->> 'role_key' = public.current_finance_role()\n       or s ->> 'roleKey' = public.current_finance_role()\n       or s ->> 'key' = public.current_finance_role()\n  )\n$function$\n",
+    "body_md5": "7df078bc30330ef9888a69dd11a53328",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=public"
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+  }
+]

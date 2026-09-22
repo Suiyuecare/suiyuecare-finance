@@ -1,0 +1,38 @@
+[
+  {
+    "schema": "private",
+    "name": "finance_attachment_paths_in_document_v2",
+    "definition": "CREATE OR REPLACE FUNCTION private.finance_attachment_paths_in_document_v2(p_document jsonb)\n RETURNS SETOF text\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\n  select distinct path_value #>> '{}'\n  from (\n    select pg_catalog.jsonb_path_query(\n      coalesce(p_document, '{}'::jsonb),\n      '$.**.path'::pg_catalog.jsonpath\n    ) as path_value\n    union all\n    select pg_catalog.jsonb_path_query(\n      coalesce(p_document, '{}'::jsonb),\n      '$.**.storagePath'::pg_catalog.jsonpath\n    ) as path_value\n    union all\n    select pg_catalog.jsonb_path_query(\n      coalesce(p_document, '{}'::jsonb),\n      '$.**.storage_path'::pg_catalog.jsonpath\n    ) as path_value\n  ) referenced_path\n  where pg_catalog.jsonb_typeof(path_value) = 'string'\n    and nullif(path_value #>> '{}', '') is not null\n$function$\n",
+    "body_md5": "f223f7246b1e1b77b77d81b3f5359654",
+    "args": "p_document jsonb",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "schema": "private",
+    "name": "finance_is_current_document_attachment_path_v3",
+    "definition": "CREATE OR REPLACE FUNCTION private.finance_is_current_document_attachment_path_v3(p_storage_path text, p_tenant_id uuid, p_record_type text, p_environment text)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\n  select coalesce(\n    (\n      (path_parts.parts)[1] = p_record_type\n      and (path_parts.parts)[2] = p_environment\n      and pg_catalog.cardinality(path_parts.parts) >= 8\n      and nullif((path_parts.parts)[7], '') is not null\n    )\n    or (\n      (path_parts.parts)[1] = p_tenant_id::text\n      and (path_parts.parts)[2] = p_record_type\n      and (path_parts.parts)[3] = p_environment\n      and pg_catalog.cardinality(path_parts.parts) >= 9\n      and nullif((path_parts.parts)[8], '') is not null\n    ),\n    false\n  )\n  from (\n    select storage.foldername(p_storage_path) as parts\n  ) path_parts\n$function$\n",
+    "body_md5": "f996c3d16878b9095f66d901aff8cbd1",
+    "args": "p_storage_path text, p_tenant_id uuid, p_record_type text, p_environment text",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "schema": "private",
+    "name": "finance_is_current_finance_attachment_path_v3",
+    "definition": "CREATE OR REPLACE FUNCTION private.finance_is_current_finance_attachment_path_v3(p_storage_path text)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\n  select coalesce(\n    (\n      (path_parts.parts)[1] in (\n        'expense_requests',\n        'invoices',\n        'bills',\n        'vouchers'\n      )\n      and (path_parts.parts)[2] in ('production', 'test')\n      and pg_catalog.cardinality(path_parts.parts) >= 8\n      and nullif((path_parts.parts)[7], '') is not null\n    )\n    or (\n      (path_parts.parts)[2] in (\n        'expense_requests',\n        'invoices',\n        'bills',\n        'vouchers'\n      )\n      and (path_parts.parts)[3] in ('production', 'test')\n      and pg_catalog.cardinality(path_parts.parts) >= 9\n      and nullif((path_parts.parts)[1], '') is not null\n      and nullif((path_parts.parts)[8], '') is not null\n    ),\n    false\n  )\n  from (\n    select storage.foldername(p_storage_path) as parts\n  ) path_parts\n$function$\n",
+    "body_md5": "57c565fe66445c937c14569f2b559ce0",
+    "args": "p_storage_path text",
+    "prosecdef": false,
+    "proconfig": [
+      "search_path=\"\""
+    ],
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+  }
+]
