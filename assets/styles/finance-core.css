@@ -4615,3 +4615,11 @@ input:focus,select:focus,textarea:focus{
 #pg-approvals .approval-history-summary-table .summary-cell{display:-webkit-box!important;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden!important;max-height:4.5em!important}
 
 #pg-approvals #appr-list .card>.approval-history-summary-scroll{overflow-x:auto!important;overflow-y:hidden!important}
+
+/* Keyboard-safe leave prompts and sortable approval headings. */
+.finance-leave-dialog{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border:0;padding:16px;background:transparent!important;box-sizing:border-box}
+.finance-leave-dialog::backdrop{background:rgba(61,33,13,.48)}
+.finance-leave-dialog .modal{width:100%;max-height:calc(100dvh - 32px);overflow:auto}
+.finance-leave-dialog button{min-width:44px;min-height:44px}
+.approval-table .approval-sort-button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;width:100%;border:0;background:transparent;color:inherit;font:inherit;text-align:inherit;padding:2px 4px;cursor:pointer}
+.approval-table .approval-sort-button:focus-visible,.finance-leave-dialog button:focus-visible{outline:3px solid var(--br);outline-offset:2px}

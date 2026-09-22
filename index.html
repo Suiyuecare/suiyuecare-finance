@@ -2531,6 +2531,7 @@ function commitComboInput(sel){
   if(!sel||!sel._combo)return false;
   var input=sel._combo.querySelector('.combo-input');
   var q=String((input&&input.value)||'').trim();
+  if(input&&input.dataset.composing==='true')return false;
   if(!q||comboQueryHasCurrentValue(sel,q))return false;
   var norm=q.toLowerCase();
   var rows=comboRows(sel,q).filter(function(o){return !o.disabled;});
@@ -2550,11 +2551,18 @@ function renderComboMenu(sel,q){
   var rows=comboRows(sel,q).filter(function(o){return !o.disabled;});
   if(!rows.length){
     menu.innerHTML='<div class="combo-empty">沒有符合的選項</div>';
+    syncComboActive(sel);
     return;
   }
   menu.innerHTML=rows.map(function(o,i){
-    return '<div class="combo-option'+(o.value===sel.value?' selected':'')+(i===0?' active':'')+'" role="option" data-value="'+escAttr(o.value)+'">'+escAttr(o.text)+'</div>';
+    return '<div id="'+escAttr(sel.id)+'-option-'+i+'" class="combo-option'+(o.value===sel.value?' selected':'')+(i===0?' active':'')+'" role="option" aria-selected="'+(o.value===sel.value)+'" data-value="'+escAttr(o.value)+'">'+escAttr(o.text)+'</div>';
   }).join('');
+  syncComboActive(sel);
+}
+function syncComboActive(sel){
+  if(!sel||!sel._combo)return;
+  var input=sel._combo.querySelector('.combo-input'),active=sel._combo.querySelector('.combo-option.active');
+  if(input){if(active)input.setAttribute('aria-activedescendant',active.id);else input.removeAttribute('aria-activedescendant');}
 }
 function openCombo(sel,q){
   if(!sel||!sel._combo)return;
@@ -2562,16 +2570,21 @@ function openCombo(sel,q){
   refreshSearchableOptions(sel);
   renderComboMenu(sel,q);
   sel._combo.classList.add('open');
+  sel._combo.querySelector('.combo-input').setAttribute('aria-expanded','true');
 }
 function closeCombo(sel){
-  if(sel&&sel._combo)sel._combo.classList.remove('open');
+  if(sel&&sel._combo){
+    sel._combo.classList.remove('open');
+    var input=sel._combo.querySelector('.combo-input');
+    input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');
+  }
 }
 function closeAllCombos(except){
   document.querySelectorAll('.combo-select.open').forEach(function(box){
     if(box!==except){
       var sel=document.getElementById(box.dataset.forSelect||'');
       if(!commitComboInput(sel))syncComboValue(sel);
-      box.classList.remove('open');
+      closeCombo(sel);
     }
   });
 }
@@ -2591,6 +2604,7 @@ function moveComboActive(sel,dir){
   opts[idx].classList.remove('active');
   idx=(idx+dir+opts.length)%opts.length;
   opts[idx].classList.add('active');
+  syncComboActive(sel);
   opts[idx].scrollIntoView({block:'nearest'});
 }
 function enhanceLongSelects(root){
@@ -2611,9 +2625,15 @@ function enhanceLongSelects(root){
     inp.placeholder='搜尋或選擇...';
     inp.setAttribute('aria-label','搜尋或選擇 '+(sel.getAttribute('aria-label')||sel.id||'選項'));
     inp.autocomplete='off';
+    inp.setAttribute('role','combobox');
+    inp.setAttribute('aria-autocomplete','list');
+    inp.setAttribute('aria-expanded','false');
+    inp.setAttribute('aria-controls',sel.id+'-options');
+    sel.tabIndex=-1;
     inp.value=selectComboLabel(sel);
     var menu=document.createElement('div');
     menu.className='combo-menu';
+    menu.id=sel.id+'-options';
     menu.setAttribute('role','listbox');
     box.appendChild(inp);
     box.appendChild(menu);
@@ -2622,10 +2642,12 @@ function enhanceLongSelects(root){
     syncComboDisabled(sel);
     inp.addEventListener('focus',function(){inp.select();openCombo(sel,'');});
     inp.addEventListener('click',function(){openCombo(sel,inp.value===selectComboLabel(sel)?'':inp.value);});
-    inp.addEventListener('input',function(){openCombo(sel,inp.value);});
+    inp.addEventListener('compositionstart',function(){inp.dataset.composing='true';});
+    inp.addEventListener('compositionend',function(){delete inp.dataset.composing;openCombo(sel,inp.value);});
+    inp.addEventListener('input',function(e){if(!e.isComposing&&inp.dataset.composing!=='true')openCombo(sel,inp.value);});
     inp.addEventListener('keydown',function(e){
-      if(e.key==='ArrowDown'){e.preventDefault();openCombo(sel,inp.value===selectComboLabel(sel)?'':inp.value);moveComboActive(sel,1);return;}
-      if(e.key==='ArrowUp'){e.preventDefault();openCombo(sel,inp.value===selectComboLabel(sel)?'':inp.value);moveComboActive(sel,-1);return;}
+      if(e.isComposing||e.keyCode===229||inp.dataset.composing==='true')return;
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(!box.classList.contains('open'))openCombo(sel,inp.value===selectComboLabel(sel)?'':inp.value);moveComboActive(sel,e.key==='ArrowDown'?1:-1);return;}
       if(e.key==='Enter'){
         var active=box.querySelector('.combo-option.active')||box.querySelector('.combo-option');
         if(active){e.preventDefault();chooseComboOption(sel,active.dataset.value);}
@@ -2633,7 +2655,7 @@ function enhanceLongSelects(root){
         return;
       }
       if(e.key==='Tab')commitComboInput(sel);
-      if(e.key==='Escape'){closeCombo(sel);syncComboValue(sel);}
+      if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeCombo(sel);syncComboValue(sel);}
     });
     inp.addEventListener('blur',function(){setTimeout(function(){if(!box.classList.contains('open'))return;if(!commitComboInput(sel))syncComboValue(sel);closeCombo(sel);},120);});
     menu.addEventListener('mousedown',function(e){e.preventDefault();});
@@ -15510,26 +15532,29 @@ window.nav=function(id,btn){
   return guardedNav(id,btn);
 };
 async function guardedNav(id,btn){
-  financeWorkspaceNavigationRevision++;
+  var navigationRevision=++financeWorkspaceNavigationRevision,identity=financeReauthenticationIdentity(),identityEpoch=financeAuthIdentityEpoch;
+  function currentNavigation(){return navigationRevision===financeWorkspaceNavigationRevision&&identity===financeReauthenticationIdentity()&&identityEpoch===financeAuthIdentityEpoch&&!financeWorkspaceIdentityBlocked;}
   var leavingApplicantRevision=S.page==='newreq'&&isExpenseApplicantRevisionMode()&&id!=='newreq';
   if(shouldPromptUnsavedNewReq(id)){
     var choice=await confirmLeaveNewReq();
-    if(choice==='stay')return;
+    if(!currentNavigation()||choice==='stay')return;
     if(choice==='save'){
       var saved=await nrSaveDraft();
-      if(!saved)return;
+      if(!currentNavigation()||!saved)return;
     }
   }
   if(leavingApplicantRevision){
     try{await discardExpenseApplicantRevisionMode('離開申請人補件編輯清理');}
     catch(cleanupErr){
+      if(!currentNavigation())return;
       alert('新上傳附件尚未能安全清理，因此暫不離開本頁。請確認網路後再試。\n\n'+friendlyErrorMessage(cleanupErr,{action:'清理補件附件'}));
       return;
     }
   }
+  if(!currentNavigation())return;
   if(shouldPromptUnsavedIncomeDoc(id)){
     var incomeChoice=await confirmLeaveIncomeDoc();
-    if(incomeChoice==='stay')return;
+    if(!currentNavigation()||incomeChoice==='stay')return;
     markIncomeDocClean(S.page);
   }
   if(!canAccessPage(id)){
@@ -15634,29 +15659,48 @@ function shouldPromptUnsavedIncomeDoc(nextId){
   if(['invoices','bills'].indexOf(S.page)<0||nextId===S.page)return false;
   return hasUnsavedIncomeDocChanges(S.page);
 }
+function installLeaveGuardDialog(dialog,resolver){
+  dialog.addEventListener('cancel',function(event){event.preventDefault();if(window[resolver])window[resolver]('stay');});
+  dialog.addEventListener('close',function(){if(!dialog.open&&window[resolver])window[resolver]('stay');});
+  dialog.addEventListener('keydown',function(event){
+    if(event.key!=='Tab')return;
+    var buttons=Array.from(dialog.querySelectorAll('button')).filter(function(button){return !button.disabled;}),first=buttons[0],last=buttons[buttons.length-1];
+    if(!first)return;
+    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+  });
+}
 function ensureIncomeLeaveGuardModal(){
   var id='m-income-leave-guard',m=el(id);
   if(m)return m;
-  m=document.createElement('div');
+  m=document.createElement('dialog');
   m.id=id;
-  m.className='modal-bg';
+  m.className='modal-bg finance-leave-dialog';
+  m.setAttribute('aria-labelledby','income-leave-title');
+  m.setAttribute('aria-modal','true');
   m.style.display='none';
-  m.innerHTML='<div class="modal" style="max-width:520px"><div class="chd" style="background:var(--brxxl)"><span class="cht" id="income-leave-title">離開前提醒</span><button onclick="resolveIncomeLeaveGuard(\'stay\')" style="background:none;border:none;cursor:pointer;font-size:22px;color:#c0a080;line-height:1;padding:0 4px">&#215;</button></div><div style="padding:15px"><div class="leave-guard-copy" id="income-leave-copy">這張表尚未送出，離開後目前填寫內容可能會消失。</div></div><div class="leave-guard-actions"><button class="btn-s" onclick="resolveIncomeLeaveGuard(\'leave\')">不保留，直接離開</button><button class="btn-p" onclick="resolveIncomeLeaveGuard(\'stay\')">留在本頁</button></div></div>';
+  m.innerHTML='<div class="modal" style="max-width:520px"><div class="chd" style="background:var(--brxxl)"><span class="cht" id="income-leave-title">離開前提醒</span><button type="button" aria-label="留在本頁並關閉提醒" onclick="resolveIncomeLeaveGuard(\'stay\')" style="background:none;border:none;cursor:pointer;font-size:22px;color:#c0a080;line-height:1;padding:0 4px">&#215;</button></div><div style="padding:15px"><div class="leave-guard-copy" id="income-leave-copy">這張表尚未送出，離開後目前填寫內容可能會消失。</div></div><div class="leave-guard-actions"><button type="button" class="btn-s" onclick="resolveIncomeLeaveGuard(\'leave\')">不保留，直接離開</button><button type="button" class="btn-p" onclick="resolveIncomeLeaveGuard(\'stay\')">留在本頁</button></div></div>';
+  installLeaveGuardDialog(m,'__incomeLeaveGuardResolve');
   document.body.appendChild(m);
   return m;
 }
 function confirmLeaveIncomeDoc(){
+  if(window.__incomeLeaveGuardResolve)window.__incomeLeaveGuardResolve('stay');
   return new Promise(function(resolve){
     var m=ensureIncomeLeaveGuardModal();
     var title=el('income-leave-title'),copy=el('income-leave-copy');
     if(title)title.textContent='離開「'+incomePageLabel(S.page)+'」前提醒';
     if(copy)copy.textContent='這張「'+incomePageLabel(S.page)+'」尚未送出。若現在切換頁面，目前填寫或匯入的內容可能會消失；請確認要直接離開，或留在本頁完成送出。';
     window.__incomeLeaveGuardResolve=function(choice){
-      m.style.display='none';
       window.__incomeLeaveGuardResolve=null;
+      if(m.open)m.close();
+      m.style.display='none';
       resolve(choice||'stay');
     };
     m.style.display='flex';
+    if(!m.open)m.showModal();
+    var safe=Array.from(m.querySelectorAll('button')).find(function(button){return button.textContent==='留在本頁';});
+    if(safe)safe.focus();
   });
 }
 window.resolveIncomeLeaveGuard=function(choice){
@@ -15665,23 +15709,31 @@ window.resolveIncomeLeaveGuard=function(choice){
 function ensureLeaveGuardModal(){
   var id='m-leave-guard',m=el(id);
   if(m)return m;
-  m=document.createElement('div');
+  m=document.createElement('dialog');
   m.id=id;
-  m.className='modal-bg';
+  m.className='modal-bg finance-leave-dialog';
+  m.setAttribute('aria-labelledby','expense-leave-title');
+  m.setAttribute('aria-modal','true');
   m.style.display='none';
-  m.innerHTML='<div class="modal" style="max-width:520px"><div class="chd" style="background:var(--brxxl)"><span class="cht">離開前是否暫存？</span><button onclick="resolveLeaveGuard(\'stay\')" style="background:none;border:none;cursor:pointer;font-size:22px;color:#c0a080;line-height:1;padding:0 4px">&#215;</button></div><div style="padding:15px"><div class="leave-guard-copy">如果轉到其他頁面，現在填寫中的申請內容可能會消失。建議先暫存，之後可到「簽核管理 → 暫存表單」或「放款申請 → 暫存欄位」繼續編輯。</div></div><div class="leave-guard-actions"><button class="btn-s" onclick="resolveLeaveGuard(\'leave\')">不暫存，直接離開</button><button class="btn-s" onclick="resolveLeaveGuard(\'stay\')">留在本頁</button><button class="btn-p" onclick="resolveLeaveGuard(\'save\')">是，暫存後離開</button></div></div>';
+  m.innerHTML='<div class="modal" style="max-width:520px"><div class="chd" style="background:var(--brxxl)"><span class="cht" id="expense-leave-title">離開前是否暫存？</span><button type="button" aria-label="留在本頁並關閉提醒" onclick="resolveLeaveGuard(\'stay\')" style="background:none;border:none;cursor:pointer;font-size:22px;color:#c0a080;line-height:1;padding:0 4px">&#215;</button></div><div style="padding:15px"><div class="leave-guard-copy">如果轉到其他頁面，現在填寫中的申請內容可能會消失。建議先暫存，之後可到「簽核管理 → 暫存表單」或「放款申請 → 暫存欄位」繼續編輯。</div></div><div class="leave-guard-actions"><button type="button" class="btn-s" onclick="resolveLeaveGuard(\'leave\')">不暫存，直接離開</button><button type="button" class="btn-s" onclick="resolveLeaveGuard(\'stay\')">留在本頁</button><button type="button" class="btn-p" onclick="resolveLeaveGuard(\'save\')">是，暫存後離開</button></div></div>';
+  installLeaveGuardDialog(m,'__leaveGuardResolve');
   document.body.appendChild(m);
   return m;
 }
 function confirmLeaveNewReq(){
+  if(window.__leaveGuardResolve)window.__leaveGuardResolve('stay');
   return new Promise(function(resolve){
     var m=ensureLeaveGuardModal();
     window.__leaveGuardResolve=function(choice){
-      m.style.display='none';
       window.__leaveGuardResolve=null;
+      if(m.open)m.close();
+      m.style.display='none';
       resolve(choice||'stay');
     };
     m.style.display='flex';
+    if(!m.open)m.showModal();
+    var safe=Array.from(m.querySelectorAll('button')).find(function(button){return button.textContent==='留在本頁';});
+    if(safe)safe.focus();
   });
 }
 window.resolveLeaveGuard=function(choice){
@@ -25986,7 +26038,7 @@ function approvalApplySearchSort(data){
 function approvalHeaderCell(field,label){
   if(S.aT==='h')return '<th class="appr-col-'+field+'">'+label+'</th>';
   var st=approvalSortState(),on=st.field===field;
-  return '<th class="sort-th appr-col-'+field+(on?' active':'')+'" aria-sort="'+(on?(st.dir==='desc'?'descending':'ascending'):'none')+'" onclick="apprSort(\''+field+'\')" title="點一下依'+label+'排序">'+label+'<span class="finance-visually-hidden">'+(on?(st.dir==='desc'?'，目前由大到小':'，目前由小到大'):'，可排序')+'</span></th>';
+  return '<th class="sort-th appr-col-'+field+(on?' active':'')+'" aria-sort="'+(on?(st.dir==='desc'?'descending':'ascending'):'none')+'"><button type="button" class="approval-sort-button" data-approval-sort="'+field+'" onclick="apprSort(\''+field+'\')" title="點一下依'+label+'排序">'+label+'<span class="finance-visually-hidden">'+(on?(st.dir==='desc'?'，目前由大到小':'，目前由小到大'):'，可排序')+'</span></button></th>';
 }
 function approvalTableHeaderHtml(){
   return '<thead><tr><th class="appr-col-select">選取</th>'
@@ -26050,11 +26102,14 @@ window.apprSearch=function(v,event){
 };
 window.apprSort=function(field){
   if(S.aT==='h')return;
+  var restoreFocus=document.activeElement&&document.activeElement.getAttribute('data-approval-sort')===field;
   var st=approvalSortState();
   if(st.field===field)st.dir=st.dir==='asc'?'desc':'asc';
   else {st.field=field;st.dir=(field==='amount'||field==='waitTime')?'desc':'asc';}
   S.apprPage=1;
   buildApprovals();
+  var button=restoreFocus&&document.querySelector('[data-approval-sort="'+field+'"]');
+  if(button)button.focus();
 };
 window.apprPage=function(page){
   S.apprPage=Math.max(1,Number(page)||1);
