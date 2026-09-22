@@ -31,7 +31,7 @@ Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權�
 | 順序 | `release_phase` | `migration_versions` | 允許的動作 |
 |---|---|---|---|
 | 1 | `frontend_compat` | `none` | 日常前台發布：建立、驗證並提升新前台；資料庫不得提交變更，只能做唯讀 gate 與整筆回滾 canary |
-| 2 | `database_invoice_read_scope_20260915` | `20260915080928` | 全部既有版本（含搜尋摘要 `20260915050313`）成立後，演練並原子提交發票 SELECT policy 優化、ledger 及全部 20 份 postflight，再提升相同封存候選 |
+| 2 | `database_ar_read_scope_20260922` | `20260922072737` | 全部既有版本（含發票 SELECT policy `20260915080928`）成立後，演練並原子提交應收讀取優化、ledger 及全部 21 份 postflight，再提升相同封存候選 |
 
 正式資料庫目前受控 lineage 為 v1 `20260826070814`、v2 `20260826155840`、v3 `20260827052447`，以及已採納回版本庫的修復 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`、`20260831042040_top_level_ceo_self_route`、`20260831043517_expense_submit_derived_status`、`20260901024020_final_accountant_self_post`、`20260901073241_assign_ceo_cashier_and_reassign_pending_cashier`、`20260901081807_allow_formal_cashier_self_disbursement`。其中正式出納固定為李佳泰、總務備援已移除，且三張待放款單保留稽核轉派紀錄。任何其他未審查的 post-baseline migration 仍會 fail closed；採納既有版次不代表流程會再次執行其 SQL。
 
@@ -202,3 +202,14 @@ canary 的唯一結果必須是 `audit_readiness_canary_result`，內容精確�
 此 phase 的 `finance_ar_mapping_canary.sql` 只以唯讀查詢核對新舊函式全部排序結果的筆數與雜湊，驗證私有函式 ACL 及未登入 public RPC 拒絕。它不建立測試員工、不設定員工 claims，也不執行既有需寫入／借用真人身分的 canary。提交後與 promotion 前皆須收到唯一且完全符合 `ar_mapping_canary_result` 的結果：`canary=readonly_ar_mapping_v1`、`ok=true`、`rolled_back=true`、`mapping_preserved=true`。既有全部唯讀 postflight 保留。
 
 若 migration 已套用，重跑僅驗證 ledger、完整 postflight 與唯讀 parity canary，不得重跑 migration。promotion 只能提升先前通過建置、來源封存、候選收據與相同 deployment 驗證的候選；不得重建或重新部署。
+
+
+## 2026-09-22 應收讀取逾時修正
+
+此候選只允許 `database_ar_read_scope_20260922=20260922072737` 或已套用該版的 `frontend_compat=none`。新 migration 僅更新兩個 private 應收讀取函式；前置函式與身份判斷皆固定來源雜湊，交易金額、一般員工逐筆權限及已安裝 migration 保持不變。
+
+1. 以完整且精確的 migration ledger 驗證前置條件，執行既有 20 份 postflight；拒絕缺版、未知版次、部分安裝、重複或未排序 ledger。
+2. 在同一受鎖定的交易內執行新 SQL、全部 21 份 postflight 及六項只讀 canary（dashboard、Google、search、history summary、invoice scope、AR scope）。回滾至 savepoint 後比較完整 schema、RLS、函式、業務資料及 ledger 指紋，再回滾整筆演練。新 canary 不注入員工 claims、不變更業務資料。
+3. Apply 重新比對捕獲的 ledger，以單一交易套入精確 SQL、記錄 ledger 並通過全部 21 份 postflight，最後才 commit；任一檢查失敗都回滾 schema 與 ledger。
+4. 已套用版次的重試只執行只讀 postflight/canary；promotion 必須驗證同一封存候選與全部契約，不能重建候選或重套 migration。後續 `frontend_compat` 必須包含此版。
+5. `pnpm test:ar-read-scope` 以虛構本機資料執行真實權限/應收函式，以及 release renderer 的故障注入、回滾、精確 SQL 封存與已套版恢復測試。
