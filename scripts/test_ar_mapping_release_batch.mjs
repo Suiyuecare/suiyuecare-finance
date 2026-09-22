@@ -119,10 +119,10 @@ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','no
 fs.appendFileSync(ledger,guard.HISTORY_SUMMARY_MIGRATIONS.join('\n')+'\n');
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/invoice read scope migration batch/);check();
 fs.appendFileSync(ledger,guard.INVOICE_READ_SCOPE_MIGRATIONS.join('\n')+'\n');
-assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/HR bridge migration batch/);
+assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/AR read scope migration batch/);
 fs.appendFileSync(ledger,guard.HR_BRIDGE_MIGRATIONS.join('\n')+'\n');
 assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');check();
- const futurePostflights=guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES.concat(guard.APPROVAL_SEARCH_POSTFLIGHT_FILES,guard.HISTORY_SUMMARY_POSTFLIGHT_FILES,guard.INVOICE_READ_SCOPE_POSTFLIGHT_FILES,guard.HR_BRIDGE_POSTFLIGHT_FILES);
+ const futurePostflights=guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES.concat(guard.APPROVAL_SEARCH_POSTFLIGHT_FILES,guard.HISTORY_SUMMARY_POSTFLIGHT_FILES,guard.INVOICE_READ_SCOPE_POSTFLIGHT_FILES,guard.AR_READ_SCOPE_POSTFLIGHT_FILES,guard.HR_BRIDGE_POSTFLIGHT_FILES);
  const frontendPostflights=postflights.concat(futurePostflights);
  futurePostflights.forEach(name=>write(name,'\\set ON_ERROR_STOP on\nselect 1;\n'));
  for(const p of [phase,'frontend_compat']){const out=path.join(dir,p+'_recovery.sql');guard.preparePhaseQuery(path.join(dir,postflights[0]),out,p,p===phase?versions:'none');const raw=fs.readFileSync(out,'utf8');assert.match(raw,/^begin read only;/);for(const name of p==='frontend_compat'?frontendPostflights:postflights)assert.ok(raw.includes('-- Reviewed reports postflight: '+name));if(p===phase)for(const name of futurePostflights)assert.ok(!raw.includes('-- Reviewed reports postflight: '+name),'historical AR phase does not require future contract '+name);await db.exec(raw);assert.equal(await fp(),applied);check();}

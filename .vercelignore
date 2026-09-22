@@ -318,3 +318,7 @@ supabase/.temp
 !scripts/test_hr_voucher_posting_concurrency.mjs
 !scripts/check_hr_accounting_read_privacy_browser.mjs
 !docs/FINANCE_HR_ACCOUNTING_READ_PRIVACY.md
+!scripts/check_ar_verified_accounting_scope.cjs
+!scripts/test_ar_read_scope_release_batch.mjs
+!scripts/finance_ar_verified_accounting_scope_postflight.sql
+!scripts/finance_ar_verified_accounting_scope_canary.sql

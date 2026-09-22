@@ -38,7 +38,7 @@ declare item record;def text;body text;begin_count integer; begin
  for item in select * from (values
  ('public.finance_executive_dashboard_v2(date,date,date,date,date,text,text)','84043dbdd33bd3e4152f61727e25b202',E'  perform finance_hr_private.finance_hr_accounting_scope((public.current_finance_user()).tenant_id,nullif(nullif(btrim(p_entity_id),\'\'),\'all\'),p_data_environment);\n'),
  ('public.finance_executive_dashboard_v3(date,date,date,date,date,text,text)','36e536eb3ccfc071a8541719022597f1',E' perform finance_hr_private.finance_hr_accounting_scope((public.current_finance_user()).tenant_id,nullif(nullif(btrim(p_entity_id),\'\'),\'all\'),p_data_environment);\n'),
- ('private.finance_ar_reconciliation_scope_v1(uuid,text,date,text,text)','481d1d0b1ec6a302b2a44f5a22996ea9',E' perform finance_hr_private.finance_hr_accounting_scope(p_tenant,nullif(p_entity,\'all\'),p_environment);\n'),
+ ('private.finance_ar_reconciliation_scope_v1(uuid,text,date,text,text)','edaf8ff23d45c773419606e543e4632e',E' perform finance_hr_private.finance_hr_accounting_scope(p_tenant,nullif(p_entity,\'all\'),p_environment);\n'),
  ('private.finance_audit_source_v1(uuid,text,text)','47626680b97580121d172b6b79feb806',E' perform finance_hr_private.finance_hr_accounting_scope(t,e,env);\n')
  ) p(signature,body_md5,guard) loop
   select pg_get_functiondef(oid),prosrc into def,body from pg_proc where oid=item.signature::regprocedure;

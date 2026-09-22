@@ -73,7 +73,7 @@ begin
   if not exists(select 1 from pg_trigger where tgrelid=to_regclass('public.'||t) and tgname='hr_atomic_posting' and tgenabled='O' and tgtype=7 and tgfoid='finance_hr_private.finance_hr_guard_book_insert()'::regprocedure) then raise exception 'HR atomic posting guard missing: %',t;end if;
  end loop;
  for expected in select * from (values
-  ('private.finance_ar_reconciliation_scope_v1','26608ab5d0e8aca1e74294f53b4c884f'),
+  ('private.finance_ar_reconciliation_scope_v1','3bcf8e913c31899d80f77d01fff08996'),
   ('private.finance_audit_source_v1','911ae3e16749621fe35b77667529ec16'),
   ('public.finance_can_read_voucher_attachment_v2','88217aa61c6b4b185c1fc2329e47cf34'),
   ('public.finance_executive_dashboard_v2','7734154b2b22e212c5dc0774cd4f7a06'),

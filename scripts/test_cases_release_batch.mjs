@@ -103,7 +103,7 @@ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','no
 fs.appendFileSync(ledger,guard.HISTORY_SUMMARY_MIGRATIONS.join('\n')+'\n');
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/invoice read scope migration batch/);
 fs.appendFileSync(ledger,guard.INVOICE_READ_SCOPE_MIGRATIONS.join('\n')+'\n');
-assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/HR bridge migration batch/);
+assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/AR read scope migration batch/);
 fs.appendFileSync(ledger,guard.HR_BRIDGE_MIGRATIONS.join('\n')+'\n');
 assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
  assert.throws(()=>guard.prepareAuditBatchApply(migrationDir,path.join(dir,'again.sql'),versions,ledger,postflight,baseline,phase),/must be pending/);

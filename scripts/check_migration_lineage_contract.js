@@ -23,7 +23,7 @@ const EXPENSE_STATUS_HOTFIX = '20260831043517_expense_submit_derived_status.sql'
 const FINAL_ACCOUNTANT_SELF_POST_HOTFIX = '20260901024020_final_accountant_self_post.sql';
 const FORMAL_CASHIER_REPAIR = '20260901073241_assign_ceo_cashier_and_reassign_pending_cashier.sql';
 const FORMAL_CASHIER_SELF_DISBURSEMENT = '20260901081807_allow_formal_cashier_self_disbursement.sql';
-const {AUDIT_MIGRATIONS,CASE_MIGRATIONS,UTILITY_MIGRATIONS,REPORT_MIGRATIONS,AMOUNT_SEARCH_MIGRATIONS,REPORTING_INTEGRITY_MIGRATIONS,AUDIT_READINESS_MIGRATIONS,EMPLOYEE_RELIABILITY_MIGRATIONS,HISTORY_PERFORMANCE_MIGRATIONS,READ_LATENCY_MIGRATIONS,AR_MAPPING_MIGRATIONS,AUDIT_REMEDIATION_MIGRATIONS,APPROVAL_SEARCH_MIGRATIONS,HISTORY_SUMMARY_MIGRATIONS,INVOICE_READ_SCOPE_MIGRATIONS,HR_BRIDGE_MIGRATIONS}=require('./finance_production_release_guard');
+const {AUDIT_MIGRATIONS,CASE_MIGRATIONS,UTILITY_MIGRATIONS,REPORT_MIGRATIONS,AMOUNT_SEARCH_MIGRATIONS,REPORTING_INTEGRITY_MIGRATIONS,AUDIT_READINESS_MIGRATIONS,EMPLOYEE_RELIABILITY_MIGRATIONS,HISTORY_PERFORMANCE_MIGRATIONS,READ_LATENCY_MIGRATIONS,AR_MAPPING_MIGRATIONS,AUDIT_REMEDIATION_MIGRATIONS,APPROVAL_SEARCH_MIGRATIONS,HISTORY_SUMMARY_MIGRATIONS,INVOICE_READ_SCOPE_MIGRATIONS,AR_READ_SCOPE_MIGRATIONS,HR_BRIDGE_MIGRATIONS}=require('./finance_production_release_guard');
 const HUMAN_ACCOUNTING_AUTHORITY = '20260902054834_preserve_human_accounting_authority_v1.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
@@ -277,6 +277,7 @@ check('release guide records the future baseline engineering requirement',
 check('approval search remains the exact reviewed predecessor',APPROVAL_SEARCH_MIGRATIONS.join(',')==='20260914091205' && migrations.slice(-3-HR_BRIDGE_MIGRATIONS.length,-2-HR_BRIDGE_MIGRATIONS.length).join(',')==='20260914091205_finance_approval_search_projection_v1.sql');
 check('history summary remains the exact reviewed predecessor',HISTORY_SUMMARY_MIGRATIONS.join(',')==='20260915050313' && migrations.slice(-2-HR_BRIDGE_MIGRATIONS.length,-1-HR_BRIDGE_MIGRATIONS.length).join(',')==='20260915050313_finance_approval_history_summary_v1.sql');
 check('invoice read scope is the exact predecessor of HR bridge',INVOICE_READ_SCOPE_MIGRATIONS.join(',')==='20260915080928' && migrations.slice(-1-HR_BRIDGE_MIGRATIONS.length,-HR_BRIDGE_MIGRATIONS.length).join(',')==='20260915080928_finance_invoice_select_accounting_initplan_v1.sql');
-check('HR bridge is the exact final suffix',HR_BRIDGE_MIGRATIONS.join(',')==='20260922072109,20260922075604' && migrations.slice(-HR_BRIDGE_MIGRATIONS.length).join(',')==='20260922072109_finance_hr_private_bridge_v1.sql,20260922075604_finance_hr_voucher_posting_v1.sql');
+check('AR read scope is the exact reviewed dependency',AR_READ_SCOPE_MIGRATIONS.join(',')==='20260922072737' && migrations.slice(-2,-1).join(',')==='20260922072737_finance_ar_verified_accounting_scope_v1.sql');
+check('HR bridge is the exact final suffix',HR_BRIDGE_MIGRATIONS.join(',')==='20260922072109,20260922072737,20260922075604' && migrations.slice(-HR_BRIDGE_MIGRATIONS.length).join(',')==='20260922072109_finance_hr_private_bridge_v1.sql,20260922072737_finance_ar_verified_accounting_scope_v1.sql,20260922075604_finance_hr_voucher_posting_v1.sql');
 process.stdout.write(`\nAdopted migration lineage: ${passed}/${passed + failed} passed.\n`);
 if (failed) process.exit(1);
