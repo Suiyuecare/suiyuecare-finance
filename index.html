@@ -369,7 +369,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
     </div>
     <div class="mobile-second-filter-shell voucher-filter-shell" style="display:flex;gap:7px;margin-bottom:10px;flex-wrap:wrap">
       <div class="mobile-second-filter-panel" data-mobile-page-panel="filter">
-        <select id="v-month" onchange="renderVouchers()" style="width:auto"><option value="">全部月份</option><option value="05">2026年5月</option><option value="04">2026年4月</option></select>
+        <select id="v-month" aria-label="傳票月份" onchange="renderVouchers()" style="width:auto"><option value="">全部月份</option></select>
         <select id="v-ent" onchange="renderVouchers()" style="width:auto"><option value="">全部法人</option></select>
       </div>
       <input type="search" id="v-q" class="mobile-second-primary-search" aria-label="搜尋傳票與金額" placeholder="搜尋傳票號、摘要、金額…" oninput="renderVouchers()" style="width:180px;flex:none">
@@ -5276,11 +5276,21 @@ function attachmentDownloadFileName(file,ctx,sourceFile){
     purpose:purpose,fileIndex:index+1,fileCount:files.length
   });
 }
+function attachmentDownloadIdentity(){
+  var user=S.user;
+  if(!user||user.active===false||financeWorkspaceIdentityBlocked||financeLogoutInProgress||financeGoogleAccountSwitchInProgress)return '';
+  var authId=currentFinanceAuthUserId();
+  if(!S.demoLogin&&!authId)return '';
+  return JSON.stringify([authId,user.id||'',user.email||'',user.role||'',currentTenantId(),activeDataEnvironment(),financeAuthIdentityEpoch,CURRENT_PERMISSION_SNAPSHOT]);
+}
 async function downloadFileMeta(f,ctx){
   f=normalizeFileMeta(f);
   var downloadContext=Object.assign({},findAttachmentOwner(f),ctx||{});
   if(!f||(!f.url&&!f.path&&!f.storagePath)){alert('這個附件只有檔名，沒有保存到原始檔案。請申請人重新上傳一次，後續簽核人就能下載。');return;}
   if(!canDownloadAttachment(f,ctx)){alert('請先使用公司 Google 帳號登入，再重新下載附件。若已登入仍無法下載，請重新整理頁面後再試一次。');return;}
+  var identity=attachmentDownloadIdentity();
+  if(!identity)return;
+  function current(){return identity===attachmentDownloadIdentity()&&canDownloadAttachment(f,downloadContext);}
   var auditFile=f;
   var downloadMeta=f;
   var href='';
@@ -5293,6 +5303,7 @@ async function downloadFileMeta(f,ctx){
         typeLabel:ctx.record.tL||ctx.record.typeLabel||ctx.record.type_label||'申請單',
         app:ctx.record.app||ctx.record.applicant||''
       });
+      if(!current()){if(rebuiltBundle&&/^blob:/i.test(rebuiltBundle.url||''))URL.revokeObjectURL(rebuiltBundle.url);return;}
       if(!rebuiltBundle)throw new Error('PDF 合併元件未能產生總檔');
       downloadMeta=rebuiltBundle;
       href=rebuiltBundle.url||'';
@@ -5303,6 +5314,7 @@ async function downloadFileMeta(f,ctx){
         pageCount:rebuiltBundle.pageCount||0
       });
     }catch(bundleErr){
+      if(!current())return;
       console.error('receipt bundle rebuild failed',bundleErr);
       recordAttachmentAccess(auditFile,'download_failed',{source:'receiptBundleRebuild',ownerType:(ctx&&ctx.type)||'',reason:rawErrorText(bundleErr)});
       alert('PDF 總檔重新合併失敗：'+friendlyErrorMessage(bundleErr,{area:'attachment-download',action:'合併 PDF'})+'\n\n原始附件仍完整保留，請稍後重新整理再試。');
@@ -5311,6 +5323,7 @@ async function downloadFileMeta(f,ctx){
   }
   var downloadName=attachmentDownloadFileName(downloadMeta,downloadContext,auditFile);
   try{if(!href)href=await signAttachmentUrl(f,60,downloadName);}catch(err){
+    if(!current())return;
     console.error(err);
     recordAttachmentAccess(auditFile,'download_failed',{source:'downloadFileMeta',ownerType:(ctx&&ctx.type)||'',reason:rawErrorText(err)});
     // path 型附件只能使用當次正式簽章；簽章失敗時不可退回舊 URL，
@@ -5324,6 +5337,7 @@ async function downloadFileMeta(f,ctx){
     href=f.url||'';
     if(!href){alert(attachmentDownloadFailureMessage(failureKind));return;}
   }
+  if(!current())return;
   if(!href){alert('附件紀錄不完整，沒有可下載的位置。請申請人重新上傳附件，或請管理員確認附件保存紀錄。');return;}
   recordAttachmentAccess(auditFile,'download_clicked',{source:'downloadFileMeta',ownerType:(ctx&&ctx.type)||'',rebuiltBundle:downloadMeta!==auditFile});
   var revokeUrl='';
@@ -5653,7 +5667,14 @@ async function auditLog(action,target,detail,meta){
   return {ok:true};
 }
 function csvCell(v){
-  return '"'+String(v==null?'':v).replace(/"/g,'""').replace(/\r?\n/g,' ')+'"';
+  var text=String(v==null?'':v);
+  if(typeof v!=='number'&&(/^[\s\u0000-\u001f\ufeff]*[=+\-@]/.test(text)||/^[\t\r\n]/.test(text)))text="'"+text;
+  return '"'+text.replace(/"/g,'""')+'"';
+}
+function csvNumericValue(v){
+  if(typeof v==='number')return Number.isFinite(v)?v:'';
+  var text=String(v==null?'':v).trim();
+  return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)&&Number.isFinite(Number(text))?Number(text):v;
 }
 async function sha256Text(text){
   if(window.crypto&&crypto.subtle){
@@ -16075,11 +16096,7 @@ function invoiceStatementBridgeDifferenceRows(s){
     {section:'同步檢核',item:'收入/收款同步異常',count:syncIssueCount,amount:syncIssueTotal,level:syncIssueCount?'error':'ok',note:'包含旗標與分類帳不同步、收入或收款分錄金額不符。'}
   ];
 }
-function csvCell(v){
-  v=String(v==null?'':v);
-  if(/[",\n\r]/.test(v))return '"'+v.replace(/"/g,'""')+'"';
-  return v;
-}
+// CSV exports share csvCell defined with the attachment/export helpers.
 function invoiceStatementBridgeRows(eid,period){
   var rows=INVS.filter(function(i){return invoiceInReportScope(i,eid,period);});
   var invoiceLedger=ledgerRows(eid,period).filter(function(r){return String(r.sourceType||'').toLowerCase()==='invoice';});
@@ -20118,8 +20135,7 @@ window.lazyAnalyze=async function(){
 function lazyCsvAttachment(){
   if(!S.lazyRows.length)return null;
   var head=['發票號碼','發票日期','買方統編','賣方統編','品項','數量','單位','單價','金額類型','未稅/費用','營業稅','含稅價格','來源檔案'];
-  var esc=function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';};
-  var csv='\ufeff'+[head].concat(S.lazyRows.map(function(r){return[r.no,r.date,r.buyerTaxId||r.buyerTax||'',r.sellerTaxId||r.sellerTax||'',r.item,r.qty,r.unitName||'',r.unitPrice||r.unit||0,{gross_inclusive:'含稅',net_exclusive:'未稅/費用',exempt:'免稅/不計稅'}[lazyTaxMode(r)]||'',lazyNetAmount(r),lazyTaxAmount(r),lazyRowTotal(r),r.file];})).map(function(row){return row.map(esc).join(',');}).join('\n');
+  var csv='\ufeff'+[head].concat(S.lazyRows.map(function(r){return[r.no,r.date,r.buyerTaxId||r.buyerTax||'',r.sellerTaxId||r.sellerTax||'',r.item,csvNumericValue(r.qty),r.unitName||'',csvNumericValue(r.unitPrice||r.unit||0),{gross_inclusive:'含稅',net_exclusive:'未稅/費用',exempt:'免稅/不計稅'}[lazyTaxMode(r)]||'',lazyNetAmount(r),lazyTaxAmount(r),lazyRowTotal(r),r.file];})).map(function(row){return row.map(csvCell).join(',');}).join('\n');
   return {n:'費用明細_'+todayIso()+'.csv',t:'csv',mime:'text/csv',size:csv.length,url:'data:text/csv;charset=utf-8,'+encodeURIComponent(csv),uploadedAt:new Date().toISOString()};
 }
 function lazyDetailExcelAttachment(meta){
@@ -28232,13 +28248,29 @@ window.apprRejectInv=async function(id){
 };
 
 // ══ FIX 1：傳票查詢 ══
-function voucherListPage(rows,options){
+function voucherMonthKey(value){
+  var match=String(value||'').match(/^(\d{4})[-/](\d{1,2})(?:[-/]|$)/);
+  return match&&Number(match[2])>=1&&Number(match[2])<=12?match[1]+'-'+match[2].padStart(2,'0'):'';
+}
+function voucherFilteredRows(rows,options){
   options=options||{};
-  var month=options.month||'',entity=options.entity||'',query=String(options.query||'').toLowerCase();
-  var data=(rows||[]).filter(function(v){
-    var mOk=!month||(month==='05'&&v.date.indexOf('2026/05')===0)||(month==='04'&&v.date.indexOf('2026/04')===0);
+  var month=String(options.month||''),entity=options.entity||'',query=String(options.query||'');
+  return (rows||[]).filter(function(v){
+    var key=voucherMonthKey(v.date),mOk=!month||(month.length===2?key.slice(-2)===month:key===month);
     return mOk&&(!entity||v.eid===entity)&&financeDocumentMatchesQuery(query,[v.no,v.desc],[v.total].concat((v.entries||[]).map(function(entry){return entry.amt;})));
   });
+}
+function refreshVoucherMonths(){
+  var select=el('v-month');if(!select)return;
+  var selected=select.value,months=Array.from(new Set(VOUCHERS.map(function(v){return voucherMonthKey(v.date);}).filter(Boolean)));
+  if(selected&&!months.includes(selected)&&/^\d{4}-\d{2}$/.test(selected))months.push(selected);
+  months.sort().reverse();
+  var html='<option value="">全部月份</option>'+months.map(function(month){return '<option value="'+month+'">'+month.slice(0,4)+'年'+Number(month.slice(5))+'月</option>';}).join('');
+  if(select.innerHTML!==html){select.innerHTML=html;select.value=selected;if(typeof refreshSearchableSelect==='function')refreshSearchableSelect(select);}
+}
+function voucherListPage(rows,options){
+  options=options||{};
+  var data=voucherFilteredRows(rows,options);
   var total=data.length,pages=Math.max(1,Math.ceil(total/50)),requested=Number(options.page)||1;
   var page=Math.max(1,Math.min(pages,Number.isFinite(requested)?Math.floor(requested):1));
   return {rows:data.slice((page-1)*50,page*50),page:page,total:total,pages:pages,start:total?(page-1)*50+1:0,end:Math.min(page*50,total)};
@@ -28255,21 +28287,23 @@ function voucherPagerHtml(result){
 window.setVoucherPage=function(page){S.voucherPage=page;renderVouchers();};
 window.renderVouchers=function(){
   if(typeof financeAccountingReadReady==='function'&&!financeAccountingReadReady()){paintFinanceAccountingUnavailable(['voucher-stats','voucher-list']);return;}
+  refreshVoucherMonths();
   var vm=(el('v-month')||{}).value||'';var ve=(el('v-ent')||{}).value||'';var vq=(el('v-q')||{}).value?el('v-q').value.toLowerCase():'';
   var signature=JSON.stringify([currentFinanceAuthUserId(),currentTenantId(),activeDataEnvironment(),vm,ve,vq]);
   if(S.voucherQuerySignature!==signature){S.voucherQuerySignature=signature;S.voucherPage=1;}
   var pageResult=voucherListPage(VOUCHERS,{month:vm,entity:ve,query:vq,page:S.voucherPage});
   S.voucherPage=pageResult.page;
-  el('voucher-stats').innerHTML=[{l:'傳票總數',v:VOUCHERS.length+' 張'},{l:'已過帳',v:VOUCHERS.filter(function(v){return v.posted;}).length+' 張'},{l:'傳票總額',v:fmt(VOUCHERS.reduce(function(s,v){return s+v.total;},0))},{l:'自動生成率',v:'100%'}].map(function(s){return'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:#1e293b">'+s.v+'</div></div>';}).join('');
+  var filtered=voucherFilteredRows(VOUCHERS,{month:vm,entity:ve,query:vq});
+  el('voucher-stats').innerHTML=[{l:'符合傳票',v:filtered.length+' 張'},{l:'已過帳',v:filtered.filter(function(v){return v.posted;}).length+' 張'},{l:'傳票總額',v:fmt(filtered.reduce(function(s,v){return s+v.total;},0))},{l:'自動生成率',v:'100%'}].map(function(s){return'<div class="sc"><div style="font-size:11px;color:#a08060;margin-bottom:2px">'+s.l+'</div><div style="font-size:17px;font-weight:500;color:#1e293b">'+s.v+'</div></div>';}).join('');
   el('voucher-list').innerHTML=pageResult.rows.map(function(v){
-    return'<div class="voucher-card mobile-voucher-card" data-mobile-record-card="voucher" onclick="showVoucherById(\''+v.id+'\')">'
+    return'<div class="voucher-card mobile-voucher-card" data-mobile-record-card="voucher" onclick="showVoucherById('+financeInlineJsString(v.id)+')">'
       +'<div class="mobile-voucher-summary" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
-        +'<div><div class="voucher-no">'+v.no+'</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+v.date+' · '+v.desc+'</div></div>'
+        +'<div><div class="voucher-no">'+escAttr(v.no)+'</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+escAttr(v.date)+' · '+escAttr(v.desc)+'</div></div>'
         +'<div style="text-align:right;flex-shrink:0;margin-left:10px"><div style="display:flex;gap:4px;justify-content:flex-end;margin-bottom:4px"><span class="badge b-ok">已過帳鎖定</span><span class="badge '+voucherBadgeClass(v)+'">'+voucherKind(v)+'</span></div><div style="font-size:14px;font-weight:500;color:#1e293b">'+fmt(v.total)+'</div></div>'
       +'</div>'
       +'<div class="mobile-voucher-entries"><div class="entry-row hd" style="font-size:10px"><div>科目</div><div>摘要</div><div style="text-align:right">借方</div><div style="text-align:right">貸方</div></div>'
-      +v.entries.map(function(e){return'<div class="entry-row '+(e.t==='dr'?'dr-row':'cr-row')+'"><div><span class="acct-'+(e.t==='dr'?'dr':'cr')+'">'+e.ac+'</span></div><div>'+e.an+'</div><div style="text-align:right;font-weight:500;color:#1a5010">'+(e.t==='dr'?fmt(e.amt):'—')+'</div><div style="text-align:right;font-weight:500;color:#8a1010">'+(e.t==='cr'?fmt(e.amt):'—')+'</div></div>';}).join('')+'</div>'
-      +'<div class="mobile-voucher-meta" style="font-size:10px;color:#94a3b8;margin-top:7px;display:flex;align-items:center;gap:7px"><span>建立者：'+v.creator+'</span><span class="badge b-ok" style="font-size:9px">不可修改</span>'+(v.adjusts?'<span class="badge b-gray" style="font-size:9px">來源 '+v.adjusts+'</span>':'')+'<span style="margin-left:auto"><span class="ep" style="font-size:9px">'+v.entS+'</span></span></div>'
+      +v.entries.map(function(e){return'<div class="entry-row '+(e.t==='dr'?'dr-row':'cr-row')+'"><div><span class="acct-'+(e.t==='dr'?'dr':'cr')+'">'+escAttr(e.ac)+'</span></div><div>'+escAttr(e.an)+'</div><div style="text-align:right;font-weight:500;color:#1a5010">'+(e.t==='dr'?fmt(e.amt):'—')+'</div><div style="text-align:right;font-weight:500;color:#8a1010">'+(e.t==='cr'?fmt(e.amt):'—')+'</div></div>';}).join('')+'</div>'
+      +'<div class="mobile-voucher-meta" style="font-size:10px;color:#94a3b8;margin-top:7px;display:flex;align-items:center;gap:7px"><span>建立者：'+escAttr(v.creator)+'</span><span class="badge b-ok" style="font-size:9px">不可修改</span>'+(v.adjusts?'<span class="badge b-gray" style="font-size:9px">來源 '+escAttr(v.adjusts)+'</span>':'')+'<span style="margin-left:auto"><span class="ep" style="font-size:9px">'+escAttr(v.entS)+'</span></span></div>'
     +'</div>';
   }).join('')+voucherPagerHtml(pageResult)||'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px;border:1.5px dashed #e0d0b8;border-radius:9px">目前沒有符合的傳票</div>';
 };
@@ -28285,17 +28319,17 @@ window.showVoucherById=function(vid){
   el('m-voucher-body').innerHTML=
     // 基本資訊
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px">'
-    +[['傳票號碼','<span class="voucher-no">'+v.no+'</span>'],['日期',v.date],['法人','<span class="ep" style="font-size:10px">'+ent.s+'</span>'],['過帳狀態','<span class="badge b-ok">已過帳鎖定，不可修改</span>'],['傳票類型','<span class="badge '+voucherBadgeClass(v)+'">'+voucherKind(v)+'</span>'],['來源傳票',v.adjusts?'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+v.adjusts+'\')">'+v.adjusts+'</button>':'—']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:7px;border:1px solid #f0e0c8"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+x[0]+'</div><div style="font-size:12px">'+x[1]+'</div></div>';}).join('')
+    +[['傳票號碼','<span class="voucher-no">'+escAttr(v.no)+'</span>'],['日期',escAttr(v.date)],['法人','<span class="ep" style="font-size:10px">'+escAttr(ent.s)+'</span>'],['過帳狀態','<span class="badge b-ok">已過帳鎖定，不可修改</span>'],['傳票類型','<span class="badge '+voucherBadgeClass(v)+'">'+voucherKind(v)+'</span>'],['來源傳票',v.adjusts?'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById('+financeInlineJsString(v.adjusts)+')">'+escAttr(v.adjusts)+'</button>':'—']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:7px;border:1px solid #f0e0c8"><div style="font-size:10px;color:#a08060;margin-bottom:2px">'+x[0]+'</div><div style="font-size:12px">'+x[1]+'</div></div>';}).join('')
     +'</div>'
     // 申請單資訊
-    +(req?'<div style="background:#eaf8d8;border:1px solid #b0e090;border-radius:8px;padding:8px 11px;margin-bottom:12px;font-size:12px;color:#1a5010">對應申請單：<strong>'+req.no+'</strong>　申請人：'+req.app+'　金額：'+fmt(req.amt)+'</div>':'')
+    +(req?'<div style="background:#eaf8d8;border:1px solid #b0e090;border-radius:8px;padding:8px 11px;margin-bottom:12px;font-size:12px;color:#1a5010">對應申請單：<strong>'+escAttr(req.no)+'</strong>　申請人：'+escAttr(req.app)+'　金額：'+fmt(req.amt)+'</div>':'')
     // 摘要
     +'<div style="font-size:11px;color:#a08060;margin-bottom:4px">傳票摘要</div>'
-    +'<div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;margin-bottom:12px;border:1px solid #f0e0c8">'+v.desc+'</div>'
+    +'<div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;margin-bottom:12px;border:1px solid #f0e0c8">'+escAttr(v.desc)+'</div>'
     // 分錄
     +'<div style="font-size:11px;color:#a08060;margin-bottom:4px">借貸分錄</div>'
     +'<div class="entry-row hd" style="font-size:11px;border-radius:7px 7px 0 0"><div>科目代號</div><div>科目名稱</div><div style="text-align:right">借方金額</div><div style="text-align:right">貸方金額</div></div>'
-    +v.entries.map(function(e){return'<div class="entry-row '+(e.t==='dr'?'dr-row':'cr-row')+'"><div><span class="acct-'+(e.t==='dr'?'dr':'cr')+'">'+e.ac+'</span></div><div>'+e.an+'</div><div style="text-align:right;font-weight:500;color:#1a5010">'+(e.t==='dr'?fmt(e.amt):'—')+'</div><div style="text-align:right;font-weight:500;color:#8a1010">'+(e.t==='cr'?fmt(e.amt):'—')+'</div></div>';}).join('')
+    +v.entries.map(function(e){return'<div class="entry-row '+(e.t==='dr'?'dr-row':'cr-row')+'"><div><span class="acct-'+(e.t==='dr'?'dr':'cr')+'">'+escAttr(e.ac)+'</span></div><div>'+escAttr(e.an)+'</div><div style="text-align:right;font-weight:500;color:#1a5010">'+(e.t==='dr'?fmt(e.amt):'—')+'</div><div style="text-align:right;font-weight:500;color:#8a1010">'+(e.t==='cr'?fmt(e.amt):'—')+'</div></div>';}).join('')
     +'<div style="display:flex;justify-content:space-between;padding:8px 7px;background:var(--brxxl);border-radius:0 0 7px 7px;font-size:12px;font-weight:500;margin-bottom:14px"><span>合計</span><div style="display:flex;gap:20px"><span style="color:#1a5010">'+fmt(v.total)+'</span><span style="color:#8a1010">'+fmt(v.total)+'</span></div></div>'
     // 附件憑據區（唯讀，只顯示不上傳）
     +'<div style="border-top:1px solid #f0e6d6;padding-top:12px">'
@@ -28303,7 +28337,7 @@ window.showVoucherById=function(vid){
       +filesHtml
     +'</div>'
     // 建立資訊
-    +'<div style="margin-top:12px;font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:7px">建立者：'+v.creator+' <span class="badge b-ok" style="font-size:9px">正式流水號</span><span class="badge b-ok" style="font-size:9px">已鎖定</span><span>過帳時間：'+(v.postedAt?String(v.postedAt).slice(0,19).replace('T',' '):'—')+'</span></div>';
+    +'<div style="margin-top:12px;font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:7px">建立者：'+escAttr(v.creator)+' <span class="badge b-ok" style="font-size:9px">正式流水號</span><span class="badge b-ok" style="font-size:9px">已鎖定</span><span>過帳時間：'+escAttr(v.postedAt?String(v.postedAt).slice(0,19).replace('T',' '):'—')+'</span></div>';
 
   document.getElementById('m-voucher').style.display='flex';
 };
@@ -28324,18 +28358,18 @@ window.openReportVoucherModal=function(kind,account){
   var title=el('m-voucher-title');if(title)title.textContent=(kind==='revenue'?'收入':'支出')+'分類傳票';
   function rowHtml(r){
     var v=r.voucher,dept=(r.dc||'')+' '+(gD(r.dc).n||''),ref=r.ref||'—';
-    return'<tr><td style="font-size:11px;color:#64748b;white-space:nowrap">'+(r.date||'—')+'</td>'
-      +'<td><div style="font-size:11px;color:var(--brtxt);font-weight:650">'+ref+'</div><div style="font-size:10px;color:#94a3b8">'+(v?('傳票 '+v.no):'分類帳分錄')+'</div></td>'
-      +'<td><div style="font-size:12px;color:#334155">'+escAttr(r.desc||'—')+'</div><div style="font-size:10px;color:#94a3b8">'+dept+'</div></td>'
+    return'<tr><td style="font-size:11px;color:#64748b;white-space:nowrap">'+escAttr(r.date||'—')+'</td>'
+      +'<td><div style="font-size:11px;color:var(--brtxt);font-weight:650">'+escAttr(ref)+'</div><div style="font-size:10px;color:#94a3b8">'+escAttr(v?('傳票 '+v.no):'分類帳分錄')+'</div></td>'
+      +'<td><div style="font-size:12px;color:#334155">'+escAttr(r.desc||'—')+'</div><div style="font-size:10px;color:#94a3b8">'+escAttr(dept)+'</div></td>'
       +'<td style="text-align:right;font-family:var(--font-sans);color:#1a5010">'+(r.dr?fmt(r.dr):'—')+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);color:#8a1010">'+(r.cr?fmt(r.cr):'—')+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);font-weight:650;color:'+(kind==='revenue'?'#2a9040':'#8a1010')+'">'+fmt(r.amount)+'</td>'
-      +'<td>'+(v?'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+v.id+'\')">詳情</button>':'<span style="font-size:10px;color:#94a3b8">—</span>')+'</td></tr>';
+      +'<td>'+(v?'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById('+financeInlineJsString(v.id)+')">詳情</button>':'<span style="font-size:10px;color:#94a3b8">—</span>')+'</td></tr>';
   }
   el('m-voucher-body').innerHTML=
     '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-bottom:12px">'
-      +'<div style="background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:8px"><div style="font-size:10px;color:#a08060;margin-bottom:2px">分類項目</div><div style="font-size:12px;font-weight:650;color:#334155">'+label+'</div></div>'
-      +'<div style="background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:8px"><div style="font-size:10px;color:#a08060;margin-bottom:2px">法人 / 期間</div><div style="font-size:12px;color:#334155">'+(ent.s||eid)+' · '+period+'</div></div>'
+      +'<div style="background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:8px"><div style="font-size:10px;color:#a08060;margin-bottom:2px">分類項目</div><div style="font-size:12px;font-weight:650;color:#334155">'+escAttr(label)+'</div></div>'
+      +'<div style="background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:8px"><div style="font-size:10px;color:#a08060;margin-bottom:2px">法人 / 期間</div><div style="font-size:12px;color:#334155">'+escAttr(ent.s||eid)+' · '+escAttr(period)+'</div></div>'
       +'<div style="background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:8px"><div style="font-size:10px;color:#a08060;margin-bottom:2px">合計 / 筆數</div><div style="font-size:12px;font-weight:650;color:var(--brtxt)">'+fmt(total)+' · '+rows.length+' 筆</div></div>'
     +'</div>'
     +'<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:9px">以下資料只取正式分類帳分錄，與財務報表金額同源；不含暫估或尚未入帳資料。</div>'
@@ -32339,9 +32373,7 @@ function invoiceTemplateColumns(){
     formTemplateColumn('invoice_request','rate','稅率',true,'只填 0 或 5，不需輸入 %','5',100,true)
   ].filter(Boolean);
 }
-function csvCell(v){
-  return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-}
+// CSV exports share csvCell defined with the attachment/export helpers.
 function htmlExcelCell(v,tag,style){
   tag=tag||'td';
   return '<'+tag+' style="'+(style||'')+'">'+escAttr(v==null?'':v)+'</'+tag+'>';
@@ -32379,9 +32411,13 @@ function dlCSV(csv,filename){
 }
 window.exportVoucherCSV=function(){
   if(typeof requireFinanceAccountingRead==='function'&&!requireFinanceAccountingRead())return;
-  var csv='傳票號碼,日期,法人,摘要,科目代號,科目名稱,借方,貸方\n';
-  VOUCHERS.forEach(function(v){v.entries.forEach(function(e){csv+=v.no+','+v.date+','+v.entS+',"'+v.desc+'",'+e.ac+',"'+e.an+'",'+(e.t==='dr'?e.amt:0)+','+(e.t==='cr'?e.amt:0)+'\n';});});
-  dlCSV(csv,'vouchers_'+new Date().toISOString().slice(0,10)+'.csv');
+  var options={month:(el('v-month')||{}).value||'',entity:(el('v-ent')||{}).value||'',query:(el('v-q')||{}).value||''};
+  var rows=[['傳票號碼','日期','法人','摘要','科目代號','科目名稱','借方','貸方']];
+  voucherFilteredRows(VOUCHERS,options).forEach(function(v){(v.entries||[]).forEach(function(e){
+    rows.push([v.no,v.date,v.entS,v.desc,e.ac,e.an,e.t==='dr'?csvNumericValue(e.amt):0,e.t==='cr'?csvNumericValue(e.amt):0]);
+  });});
+  var scope=[options.entity||'全部法人',options.month||'全部月份',options.query].filter(Boolean).map(function(value){return String(value).replace(/[\\/:*?"<>|\u0000-\u001f\u202a-\u202e\u2066-\u2069]/g,'_').slice(0,32);}).join('_');
+  dlCSV(rows.map(function(row){return row.map(csvCell).join(',');}).join('\r\n'),'vouchers_'+scope+'_'+new Date().toISOString().slice(0,10)+'.csv');
 };
 
 // ══ 科目 ══
