@@ -7,13 +7,15 @@
     "node": ">=22 <23"
   },
   "scripts": {
+    "test:hr-bridge": "node scripts/test_hr_private_bridge.mjs",
+    "test:hr-bridge-browser": "HR_BRIDGE_BROWSER=1 node scripts/test_hr_private_bridge.mjs",
     "build": "node scripts/build_www.js",
     "release:source-integrity": "node scripts/check_release_source_integrity.js",
     "release:environment-isolation": "node scripts/check_environment_isolation_contract.js",
     "release:migration-lineage": "node scripts/check_migration_lineage_contract.js",
     "release:production-contract": "node scripts/check_finance_production_release_contract.js",
     "release:root-cause-regressions": "node scripts/check_root_cause_regressions.js && node scripts/check_submission_identity_directory_contract.js && node scripts/check_notification_staff_access_reconciliation_contract.js && node scripts/check_membership_org_expense_submission_contract.js && node scripts/check_submission_applicant_identity_contract.js && node scripts/check_submission_persona_routes.js && node scripts/test_expense_route_authority_v2.js && node scripts/check_incident_account_org_repair.js && node scripts/check_final_accountant_self_post_contract.js && node scripts/check_formal_cashier_self_disbursement_contract.js && node scripts/check_human_accounting_authority.js",
-    "release:preflight": "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope",
+    "release:preflight": "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy",
     "release:verify-artifact": "node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js",
     "release:build": "pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact",
     "test:persona-routes": "node scripts/check_submission_persona_routes.js",
@@ -62,7 +64,11 @@
     "test:history-summary": "node scripts/check_approval_history_summary_frontend.cjs && node scripts/check_approval_history_summary.cjs && node scripts/test_history_summary_release_batch.mjs",
     "test:history-summary-browser": "node scripts/check_approval_search_summary_browser.cjs",
     "test:history-summary-concurrency": "node scripts/check_approval_history_summary_concurrency.cjs",
-    "test:invoice-read-scope": "node scripts/check_workflow_optional_reads.cjs && node scripts/check_invoice_select_initplan.cjs && node scripts/test_invoice_read_scope_release_batch.mjs"
+    "test:invoice-read-scope": "node scripts/check_workflow_optional_reads.cjs && node scripts/check_invoice_select_initplan.cjs && node scripts/test_invoice_read_scope_release_batch.mjs",
+    "test:hr-bridge-release": "node scripts/test_hr_bridge_release_batch.mjs",
+    "test:hr-voucher-posting": "node scripts/test_hr_voucher_posting.mjs",
+    "test:hr-voucher-browser": "HR_BRIDGE_BROWSER=1 node scripts/test_hr_voucher_posting.mjs",
+    "test:hr-accounting-privacy": "node scripts/check_hr_accounting_read_privacy.cjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
