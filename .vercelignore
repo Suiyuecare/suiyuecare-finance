@@ -341,3 +341,16 @@ supabase/.temp
 !scripts/finance_audit_security_fingerprint.sql
 !scripts/finance_audit_security_postflight.sql
 !scripts/finance_audit_security_canary.sql
+
+# Sealed dashboard completeness and reviewed revenue repair checks.
+!scripts/finance_revenue_repair_fingerprint.sql
+!scripts/finance_revenue_repair_postflight.sql
+!scripts/finance_revenue_repair_canary.sql
+!scripts/test_revenue_repair_release_batch.mjs
+!scripts/check_home_care_revenue_repair.cjs
+!scripts/check_revenue_repair_migration_integration.cjs
+!scripts/fixtures/finance_invoice_approval_helpers_20260924.sql
+!scripts/check_dashboard_revenue_gap.cjs
+!scripts/check_dashboard_department_overview.cjs
+!docs/finance-revenue-repair-release-20260924.md
+!docs/finance-dashboard-revenue-remediation-20260924.md

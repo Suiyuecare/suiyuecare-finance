@@ -1,8 +1,11 @@
 \set ON_ERROR_STOP on
 -- Read-only sealed HR bridge catalog checks. No identities or obligations are provisioned.
 do $finance_hr_bridge_postflight$
-declare expected record;fn record;t text;role_name text;rpc_name text;allowed boolean;seen integer:=0;
+declare revenue_repair_installed boolean:=false;expected record;fn record;t text;role_name text;rpc_name text;allowed boolean;seen integer:=0;
 begin
+ if to_regclass('supabase_migrations.schema_migrations') is not null then
+  execute $revenue_ledger$select exists(select 1 from supabase_migrations.schema_migrations where version='20260924074010')$revenue_ledger$ into revenue_repair_installed;
+ end if;
  if not has_schema_privilege('authenticated','finance_hr_private','usage') or not has_schema_privilege('service_role','finance_hr_private','usage') or has_schema_privilege('anon','finance_hr_private','usage') then raise exception 'HR bridge private schema access changed';end if;
  foreach role_name in array array['anon','authenticated','service_role'] loop
   if has_schema_privilege(role_name,'finance_hr_private','create') then raise exception 'HR private schema permits object creation: %',role_name;end if;
@@ -76,7 +79,7 @@ begin
   ('private.finance_ar_reconciliation_scope_v1','3bcf8e913c31899d80f77d01fff08996'),
   ('private.finance_audit_source_v1','911ae3e16749621fe35b77667529ec16'),
   ('public.finance_can_read_voucher_attachment_v2','88217aa61c6b4b185c1fc2329e47cf34'),
-  ('public.finance_executive_dashboard_v2','7734154b2b22e212c5dc0774cd4f7a06'),
+  ('public.finance_executive_dashboard_v2',case when revenue_repair_installed then 'cec3d2e9b694c30e189aca9b1f2431a0' else '7734154b2b22e212c5dc0774cd4f7a06' end),
   ('public.finance_executive_dashboard_v3','3d370f03d925cb8318a65e382b83cae1')
  ) patches(name,body_md5) loop
   if not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname||'.'||p.proname=expected.name and md5(p.prosrc)=expected.body_md5) then raise exception 'HR salary report or storage guard differs: %',expected.name;end if;

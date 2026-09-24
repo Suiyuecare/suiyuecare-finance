@@ -4,11 +4,14 @@ This candidate fixes the audited document-access, attachment, transaction-recove
 export, and browser-interaction defects. Local fixture tests and a GitHub upload
 are not proof of production deployment or successful Google OAuth for real staff.
 
-The protected workflow accepts exactly two current-candidate pairs:
+The protected workflow accepts these current-candidate pairs. The later optional
+revenue repair has a separate exact-version phase and does not block applying
+this security batch or publishing the compatible UI:
 
 | Phase | Migration versions | Preconditions |
 | --- | --- | --- |
 | `database_audit_security_20260922` | `20260922133752` | Every reviewed predecessor, including the complete `20260922072109,20260922072737,20260922075604` HR batch, is already recorded. |
+| `database_revenue_repair_20260924` | `20260924074010` | Every predecessor including `20260922133752`; see [the revenue release contract](finance-revenue-repair-release-20260924.md). |
 | `frontend_compat` | `none` | The complete reviewed chain including `20260922133752` is already recorded. |
 
 Historical HR and AR renderers remain available for their reviewed candidates and
