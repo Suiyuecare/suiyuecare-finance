@@ -108,6 +108,10 @@ context.STATEMENT_SOURCE_STATE.ledger={identity:run('statementDataIdentity()'),c
 check('dashboard uses distinct entity mappings and excludes OCI/closing while retaining refunds',()=>{
  const b=run('dashboardFinancialBundle(scope)');assert.equal(b.financialReady,true);assert.equal(b.summary.revenue,160);assert.equal(b.summary.expense,20);assert.equal(b.summary.net,140);assert.equal(b.previousSummary.net,50);
  assert.equal(b.summary.net,run("statementReportModel('all','2026-09').current.pl.netProfit"));assert.equal(b.companies.find(r=>r.eid==='E1').net,70);assert.equal(b.departments.find(r=>r.eid==='E2').net,70);assert.equal(b.trend[0].net,140);
+ context.bundle=b;run('dashboardRenderKpis(bundle)');const html=nodes['dash-kpis'].innerHTML;
+ assert.deepEqual(Array.from(html.matchAll(/class="dash-kpi-label">([^<]+)</g),m=>m[1]),['收入','支出','淨利','應收未收','現金淨流量']);
+ assert.match(html,/dash-kpi-expense[\s\S]*?dash-kpi-value expense">20</);assert.match(html,/dash-kpi-receivable[\s\S]*?dash-kpi-value ">核對中</);
+ assert.equal(run("dashDeltaTone(dashMetricDelta(20,30),'expense')"),'good');assert.equal(run("dashDeltaTone(dashMetricDelta(30,20),'expense')"),'bad');
 });
 check('dashboard ledger and cash flow exclude foreign tenants, test rows and voided entries',()=>{
  const b=run('dashboardFinancialBundle(scope)');assert.equal(b.rows.length,10);assert.equal(b.cashFlow.net,100);assert.equal(b.cashFlow.net,run("statementReportModel('all','2026-09').current.cf.net"));
@@ -121,6 +125,14 @@ check('profile changes invalidate cached dashboard classification even with unch
  assert.equal(run('dashboardFinancialBundle(scope).summary.revenue'),180);assert.equal(run('dashboardFinancialBundle(scope).summary.net'),160);
  dashboardProfiles.E1.accountMappings[3510]={statementClass:'equity',ociCategory:'reclassifiable'};
  assert.equal(run('dashboardFinancialBundle(scope).summary.revenue'),160);
+});
+check('confirmed income posting gaps flag provisional ledger profit without inventing revenue',()=>{
+ const b=plain(run('dashboardFinancialBundle(scope)')),before=JSON.stringify(b.summary);
+ b.reconciliation.revenue.eligibleNoLedgerCount=2;b.reconciliation.revenue.eligibleNoLedgerAmount=1000000;context.bundle=b;
+ run('dashboardRenderVerdict(bundle)');assert.equal(nodes['dash-verdict-title'].textContent,'所選期間帳載淨利 140');
+ assert.match(nodes['dash-verdict-points'].innerHTML,/2 筆已完成收入尚未入帳（1000000），淨利待核對/);assert.equal(JSON.stringify(b.summary),before);
+ b.officialSource='local_bootstrap';run('dashboardRenderVerdict(bundle)');assert.doesNotMatch(nodes['dash-verdict-title'].textContent,/帳載/);assert.doesNotMatch(nodes['dash-verdict-points'].innerHTML,/已完成收入尚未入帳/);
+ b.officialSource='remote_full';b.financialReady=false;run('dashboardRenderVerdict(bundle)');assert.equal(nodes['dash-verdict-title'].textContent,'財務資料核對中');assert.equal(nodes['dash-verdict-points'].innerHTML,'');
 });
 check('missing profile blocks financial totals without discarding confirmed canonical AR',()=>{
  records.E2={loaded:false,error:'profile unavailable'};const b=run('dashboardFinancialBundle(scope)');assert.equal(b.financialReady,false);assert.equal(b.companies.length,0);assert.equal(b.trend.length,0);assert.equal(b.cashFlow,null);assert.equal(b.receivables.total,321);assert.match(b.financialMessage,/讀取失敗/);

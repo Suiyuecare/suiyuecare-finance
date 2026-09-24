@@ -22,7 +22,8 @@ function fixture(opts={}){
  const c={console:{warn(){},info(){},error(){}},URL,Blob,FileReader:Reader,setTimeout,clearTimeout,Date,Math,JSON,Number,Promise,
   SUPABASE_ATTACHMENT_BUCKET:'finance-attachments',SUPABASE_URL:origin,SUPABASE_ANON_KEY:'fictional',ATTACHMENT_UPLOAD_TIMEOUT_MS:30000,ATTACHMENT_BATCH_TIMEOUT_MS:60000,
   APPROVAL_HISTORY_MODAL_CONTEXT:null,APPROVAL_FROZEN_EXPECTED_STEPS:{identity:'',modal:null,bulk:{}},APPROVAL_ACTION_IN_FLIGHT:{},ATTACHMENT_DOWNLOAD_HEALTH:{},STEP_DOWNLOADS:[],REQS:[],INVS:[],BILLS:[bill],
-  S:{demoLogin:false,user:{id:'FICT-ACCOUNTANT',role:'accountant',n:'虛構會計'}},el:id=>dom[id]||null,num:x=>Number(x||0),cloneSettingValue:clone,escAttr:x=>String(x||'').replace(/[&<>"']/g,'_'),normDate:x=>x,
+  financeWorkspaceIdentityBlocked:false,financeLogoutInProgress:false,financeGoogleAccountSwitchInProgress:false,financeAuthIdentityEpoch:0,CURRENT_PERMISSION_SNAPSHOT:{},currentTenantId:()=> 'fictional-tenant',
+  S:{demoLogin:false,user:{id:'FICT-ACCOUNTANT',authUserId:identity,email:'fictional-accountant@example.invalid',role:'accountant',n:'虛構會計'}},el:id=>dom[id]||null,num:x=>Number(x||0),cloneSettingValue:clone,escAttr:x=>String(x||'').replace(/[&<>"']/g,'_'),normDate:x=>x,
   activeDataEnvironment:()=> 'test',todayIso:()=> '2026-09-11',approvalFastBootstrapIdentity:()=>identity,
   activeStep:r=>r.steps.find(s=>!s.a)||null,activeStepIndex:r=>r.steps.findIndex(s=>!s.a),approvalMutationRuntimeReady:()=>!opts.runtimeDenied,
   approvalRecordSourceTable:()=> 'bills',approvalFastFinalizationProbe:false,approvalRowIsLocallyVerified:()=>!opts.unverified,
@@ -49,14 +50,14 @@ function fixture(opts={}){
   showActionFeedback(){},hideActionFeedback(){},completeActionFeedback:title=>trace.completed.push(title),failActionFeedback:(title,message)=>trace.feedback.push({title,message})};c.window=c;
  vm.createContext(c);for(const file of ['finance-v4-engine-registry.js','attachment-engine.js','approval-engine.js'])vm.runInContext(read('assets/engines/'+file),c);
  const attachment=c.FinanceAttachmentEngine;Object.assign(c,{financeAttachmentEngine:()=>attachment,normalizeFileMeta:attachment.normalizeFileMeta,normalizeFiles:attachment.normalizeFiles,uniqueAttachments:attachment.uniqueFiles,attachmentStoragePath:attachment.storagePath,attachmentRecordNoFromPath:attachment.recordNoFromPath,attachmentRecordTypeFromPath:attachment.recordTypeFromPath,attachmentInList:attachment.inList,fileIdentity:attachment.fileIdentity});
- const names=['fileExt','fileToAttachment','readStepFiles','approvalActionPayload','approvalActionValidation','approvalActionValidationError','approvalActionPreflight',
+ const names=['currentFinanceAuthUserId','fileExt','fileToAttachment','readStepFiles','approvalActionPayload','approvalActionValidation','approvalActionValidationError','approvalActionPreflight',
   'uploadAttachmentWithTrackedTimeout','uploadAttachmentsToSupabase','canActStep','canActBill','billCreatedBucket','billGroupKey','approvalHistoryExactGroupRows','billGroupRows','billGroupLeader','billGroupTotal','billGroupCount','billGroupNo',
   'approvalRowVersion','approvalFrozenExpectedState','approvalExpectedStepIds','approvalExpectedPayloadForKind','approvalFreezeExpectedSteps','approvalExpectedVersionsValid','approvalFrozenExpectedSteps','approvalValidatedExpectedSteps','approvalFreezeModalExpectedSteps','approvalModalExpectedSteps','billExpectedStepPayload',
   'billAttachmentFailure','uploadBillActionFiles','billActiveStepTransaction','approveBillGroupCore','returnBillGroupCore','rejectBillGroupCore','approvalContentVersionChangedError','approvalContentVersionFriendlyError','cleanupApprovalFilesAfterDefiniteFailure','attachmentDownloadHealthKey','stepAttachmentHtml','wrapApprovalActionLock','withActionFeedback','wrapActionFeedback','installActionFeedbackWrappers'];
  vm.runInContext(names.map(fn).join('\n')+'\n'+range('window.apprApproveBill=async function(','window.submitProcurementPaymentInfo='),c);
  vm.runInContext(range('function findAttachmentOwner(','function currentUserDownloadIds(')+range('function attachmentSignedDownloadUrl(','function storagePublicUrl(')+range('function attachmentDownloadFileName(','function stepAttachmentHtml('),c);
  c.approvalFreezeModalExpectedSteps('bill',c.BILLS);for(const name of ['apprApproveBill','apprReturnPreviousBill','apprRejectBill'])c.wrapApprovalActionLock(name);c.installActionFeedbackWrappers();
- return {c,bill,input,dom,trace,setIdentity:value=>{identity=value;}};
+ return {c,bill,input,dom,trace,setIdentity:value=>{identity=value;c.S.user.authUserId=value;}};
 }
 (async()=>{
  let f=fixture();await f.c.apprApproveBill(f.bill.id);

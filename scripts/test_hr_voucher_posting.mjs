@@ -97,6 +97,25 @@ await role('postgres');
 const pins=(await db.query("select n.nspname||'.'||p.proname name,md5(p.prosrc) body_md5 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='finance_hr_private' or (n.nspname='public' and p.proname like 'finance_hr_%') or p.proname in('finance_executive_dashboard_v2','finance_executive_dashboard_v3','finance_audit_source_v1','finance_ar_reconciliation_scope_v1','finance_can_read_voucher_attachment_v2') order by 1")).rows;await fs.writeFile('/tmp/finance-hr-voucher-function-pins.json',JSON.stringify(pins,null,2));
 const postflight=(await fs.readFile(new URL('./finance_hr_bridge_postflight.sql',import.meta.url),'utf8')).replace(/^\\set ON_ERROR_STOP on\r?\n/,'');
 await db.exec(postflight);checks++;
+// Versioned revenue repair must preserve every HR privacy guard and use only its
+// exact reviewed V2 revision. This fixture keeps the complete real HR catalog.
+const revenueRepairSource=await fs.readFile(new URL('../supabase/migrations/20260924074010_finance_e8_g1101_home_care_revenue_repair_v1.sql',import.meta.url),'utf8');
+const detector=revenueRepairSource.slice(revenueRepairSource.indexOf('do $income_detector$'));
+await db.exec('begin;create schema supabase_migrations;create table supabase_migrations.schema_migrations(version text primary key);');
+// The captured baseline stores definitions, so install the existing production
+// execute boundary as part of this isolated fixture before running the detector.
+await db.exec("revoke all on function public.finance_executive_dashboard_v2(date,date,date,date,date,text,text) from public,anon;grant execute on function public.finance_executive_dashboard_v2(date,date,date,date,date,text,text) to authenticated,service_role");
+await db.exec(postflight);checks++;
+await db.exec("insert into supabase_migrations.schema_migrations values('20260924074010');savepoint mismatched_pin");
+await reject(()=>db.exec(postflight),/HR salary report or storage guard differs/);await db.exec('rollback to savepoint mismatched_pin');
+await db.exec(detector);await db.exec(postflight);checks++;
+await db.exec("delete from supabase_migrations.schema_migrations where version='20260924074010';savepoint missing_pin");
+await reject(()=>db.exec(postflight),/HR salary report or storage guard differs/);await db.exec('rollback to savepoint missing_pin');
+await db.exec("insert into supabase_migrations.schema_migrations values('20260924074010');savepoint drifted_pin");
+const repairedV2=(await db.query("select pg_get_functiondef('public.finance_executive_dashboard_v2(date,date,date,date,date,text,text)'::regprocedure) definition")).rows[0].definition;
+await db.exec(repairedV2.replace('declare\n','declare\n -- unreviewed drift\n'));
+await reject(()=>db.exec(postflight),/HR salary report or storage guard differs/);await db.exec('rollback to savepoint drifted_pin');await db.exec(postflight);checks++;
+await db.exec('rollback');await db.exec(postflight);checks++;
 await db.exec('begin');await db.exec("create or replace function finance_hr_private.finance_hr_accounting_scope(p_tenant uuid,p_entity text,p_environment text) returns boolean language plpgsql stable security definer set search_path='' as $$begin return true;end$$");await reject(()=>db.exec(postflight),/differs from sealed source/);await db.exec('rollback');
 await db.exec('begin;drop policy hr_salary_complete_scope on public.ledger_entries');await reject(()=>db.exec(postflight),/policy/);await db.exec('rollback');await db.exec(postflight);checks++;
 

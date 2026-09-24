@@ -16,7 +16,7 @@ async function scope(code){let v=JSON.parse(await b('eval','--base64',Buffer.fro
  USERS=[{id:'fictional-reviewer',n:'匿名主管',email:'reviewer@example.invalid',role:'ceo',rL:'執行長',eid:'A',dc:'D1',active:true}];
  ENTS=[{id:'A',s:'示範甲公司',full:'示範甲公司',active:true},{id:'B',s:'示範乙公司',full:'示範乙公司',active:true}];DEPTS=[{c:'D1',n:'示範部門',eid:'A',lv:3,active:true}];
  REQS=[];INVS=[];BILLS=[];VOUCHERS=[];LEDGER=[];ORG_CHART=[];NOTIFS=[];quickLogin('ceo');
- VOUCHERS=Array.from({length:102},function(_,i){return {id:'voucher-'+i,no:'ANON-'+String(i).padStart(3,'0'),date:i%2?'2026/04/01':'2026/05/01',eid:i%2?'B':'A',entS:'示範公司',desc:'離線虛構傳票 '+i,total:i===101?1250.25:i+1,posted:true,creator:'匿名會計',entries:[{t:'dr',ac:'6202',an:'費用',amt:i===101?1250.25:i+1},{t:'cr',ac:'1112',an:'銀行存款',amt:i===101?1250.25:i+1}]};});
+ VOUCHERS=Array.from({length:102},function(_,i){return {id:'voucher-'+i,no:'ANON-'+String(i).padStart(3,'0'),date:i===0?'2025/09/01':i%2?'2026/08/01':'2026/09/01',eid:i%2?'B':'A',entS:'示範公司',desc:'離線虛構傳票 '+i,total:i===101?1250.25:i+1,posted:true,creator:'匿名會計',entries:[{t:'dr',ac:'6202',an:'費用',amt:i===101?1250.25:i+1},{t:'cr',ac:'1112',an:'銀行存款',amt:i===101?1250.25:i+1}]};});
  window.__voucherFixture=JSON.stringify(VOUCHERS);el('v-ent').innerHTML='<option value="">全部法人</option><option value="A">示範甲公司</option><option value="B">示範乙公司</option>';return true;
  })()`);
  await b('wait','200');
@@ -46,9 +46,23 @@ async function scope(code){let v=JSON.parse(await b('eval','--base64',Buffer.fro
   state=await scope(`({page:S.voucherPage,count:document.querySelectorAll('#voucher-list .voucher-card').length,text:document.querySelector('.voucher-pagination').innerText})`);
   check(width+' entity filter applies before pagination',state.page===1&&state.count===50&&state.text.includes('51'));
   await scope(`(function(){el('v-ent').value='';el('v-ent').dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
+  const months=await scope(`Array.from(el('v-month').options).map(o=>o.value)`);
+  check(width+' month filter uses loaded year/months rather than hardcoded April/May',JSON.stringify(months)===JSON.stringify(['','2026-09','2026-08','2025-09']));
+  await scope(`(function(){el('v-month').value='2026-09';el('v-month').dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
+  state=await scope(`({count:document.querySelectorAll('#voucher-list .voucher-card').length,text:el('voucher-list').innerText,label:el('v-month')._combo.querySelector('.combo-input').value,stats:el('voucher-stats').innerText})`);
+  check(width+' September excludes prior-year and August vouchers and synchronizes combo/KPI',state.count===50&&!state.text.includes('ANON-000')&&!state.text.includes('ANON-001')&&state.text.includes('ANON-100')&&state.label==='2026年9月'&&state.stats.includes('50 張'));
+  await scope(`(function(){el('v-month').value='';el('v-month').dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
   check(width+' navigation/filtering preserves all source rows and entry details',await scope(`JSON.stringify(VOUCHERS)===window.__voucherFixture`));
   const screen=path.join(out,'voucher-page-one-'+width+'.png');await b('screenshot',screen);screens.push(screen);
  }
+ await scope(`(function(){var attack='<img src=x onerror="globalThis.__voucherInjected=true">';var v=VOUCHERS[0];VOUCHERS=[Object.assign({},v,{id:"v');globalThis.__voucherInjected=true;//",desc:attack,no:attack,creator:attack,entS:attack,entries:[{t:'dr',ac:attack,an:attack,amt:1}]})];window.__voucherInjected=false;el('v-q').value='';el('v-ent').value='';el('v-month').value='';renderVouchers();return true;})()`);
+ await b('wait','100');
+ check('voucher list renders hostile stored text literally with no injected DOM or execution',await scope(`!window.__voucherInjected&&!el('voucher-list').querySelector('img')&&el('voucher-list').innerText.includes('<img')`));
+ await b('click','#voucher-list .voucher-card');
+ await b('wait','100');
+ check('voucher action passes quoted IDs safely and detail escapes stored text',await scope(`getComputedStyle(el('m-voucher')).display!=='none'&&!window.__voucherInjected&&!el('m-voucher-body').querySelector('img')&&el('m-voucher-body').innerText.includes('<img')`));
+ await b('click','#m-voucher .btn-s');
+ await scope(`(function(){VOUCHERS=JSON.parse(window.__voucherFixture);renderVouchers();return true;})()`);
  const bench=await scope(`(function(){var prior=BILLS;BILLS=Array.from({length:2500},function(_,i){return{id:'fictional-'+i,createdAt:'2026-09-13T12:00:00Z',applicantId:'fictional-reviewer',eid:'A',dc:'D1',note:'獨立來源-'+i,steps:[{rk:'ceo',a:'approved'}],status:'completed'};});var started=performance.now();var items=approvalAllItems();var result={operation:'approvalAllItems',anonymousBillGroups:2500,items:items.length,elapsedMs:performance.now()-started};BILLS=prior;return result;})()`);timings.push(bench);check('actual indexed list preserves all 2500 fictional groups',bench.items===2500);
  check('browser has no page errors',(await b('errors')).trim()==='');
  const evidence={scope:'Actual local browser and shipped renderers, fictional data; no formal login, API or writes.',sourceHash:require('node:crypto').createHash('sha256').update(source).digest('hex'),checks,screens,timings};

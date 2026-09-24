@@ -1,0 +1,69 @@
+{
+  "functions": [
+    {
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_attachment_metadata_path_matches_v2(p_storage_path text, p_record_type text, p_data_environment text, p_record_no text)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n  with path_parts as (\n    select storage.foldername(p_storage_path) as parts\n  )\n  select\n    p_storage_path is not null\n    and p_storage_path <> ''\n    and p_record_type = any(array[\n      'draft_requests', 'expense_requests', 'invoices', 'vouchers', 'bills'\n    ])\n    and p_data_environment = any(array['production', 'test'])\n    and nullif(p_record_no, '') is not null\n    and (\n      (\n        (parts)[1] = p_record_type\n        and (parts)[2] = p_data_environment\n        and (parts)[7] = p_record_no\n      )\n      or (\n        (parts)[1] = public.current_tenant_id()::text\n        and (parts)[2] = p_record_type\n        and (parts)[3] = p_data_environment\n        and (parts)[8] = p_record_no\n      )\n    )\n  from path_parts\n$function$\n",
+      "body_md5": "983d7781496e298e2de11ef960bfdd05"
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_can_insert_attachment_metadata_v2(p_attachment file_attachments)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n  select\n    auth.uid() is not null\n    and nullif(public.current_finance_user_id(), '') is not null\n    and nullif(public.finance_current_verified_google_email_v2(), '')\n          is not null\n    and p_attachment.tenant_id = public.current_tenant_id()\n    and p_attachment.bucket_id = 'finance-attachments'\n    and p_attachment.uploaded_by = public.current_finance_user_id()\n    and p_attachment.attachment_state = 'staged'\n    and p_attachment.staged_at is not null\n    and p_attachment.claimed_at is null\n    and p_attachment.record_type = any(array[\n      'draft_requests',\n      'expense_requests',\n      'invoices',\n      'vouchers',\n      'bills'\n    ])\n    and p_attachment.data_environment = any(array['production', 'test'])\n    and public.finance_attachment_metadata_path_matches_v2(\n      p_attachment.storage_path,\n      p_attachment.record_type,\n      p_attachment.data_environment,\n      p_attachment.record_no\n    )\n    and exists (\n      select 1\n      from storage.objects object_row\n      where object_row.bucket_id = p_attachment.bucket_id\n        and object_row.name = p_attachment.storage_path\n        and object_row.owner_id = auth.uid()::text\n    )\n$function$\n",
+      "body_md5": "9d1fbc21a10716eab5c57fae872876f9"
+    }
+  ],
+  "policies": [
+    {
+      "schema": "public",
+      "table_name": "file_attachments",
+      "polname": "file_attachments_delete_verified_uploader_cleanup_v2",
+      "using_md5": "204422c8dc2726bd407e4f72f86c7fdd",
+      "check_md5": null,
+      "qual": "((tenant_id = current_tenant_id()) AND (NULLIF(current_finance_user_id(), ''::text) IS NOT NULL) AND (NULLIF(finance_current_verified_google_email_v2(), ''::text) IS NOT NULL) AND (uploaded_by = current_finance_user_id()) AND (attachment_state = 'staged'::text))",
+      "with_check": null,
+      "polpermissive": true,
+      "polcmd": "d"
+    },
+    {
+      "schema": "public",
+      "table_name": "file_attachments",
+      "polname": "file_attachments_insert_verified_google_v2",
+      "using_md5": null,
+      "check_md5": "351752cc978fe6b5695a77529c873f62",
+      "qual": null,
+      "with_check": "finance_can_insert_attachment_metadata_v2(file_attachments.*)",
+      "polpermissive": true,
+      "polcmd": "a"
+    },
+    {
+      "schema": "public",
+      "table_name": "file_attachments",
+      "polname": "file_attachments_select_verified_tenant_v2",
+      "using_md5": "5784ee6adb0c4e83251330786a066737",
+      "check_md5": null,
+      "qual": "can_read_finance_attachment(file_attachments.*)",
+      "with_check": null,
+      "polpermissive": true,
+      "polcmd": "r"
+    },
+    {
+      "schema": "public",
+      "table_name": "file_attachments",
+      "polname": "hr_salary_attachment_scope",
+      "using_md5": "99557404af2117bfeb495e7c25a39af9",
+      "check_md5": null,
+      "qual": "finance_hr_attachment_scope(tenant_id, record_type, record_no, data_environment)",
+      "with_check": null,
+      "polpermissive": false,
+      "polcmd": "r"
+    },
+    {
+      "schema": "storage",
+      "table_name": "objects",
+      "polname": "finance_attachments_select_verified_tenant_metadata_v2",
+      "using_md5": "0ae6f39c68b612afe734c319430a5203",
+      "check_md5": null,
+      "qual": "((bucket_id = 'finance-attachments'::text) AND (NULLIF(current_finance_user_id(), ''::text) IS NOT NULL) AND (NULLIF(finance_current_verified_google_email_v2(), ''::text) IS NOT NULL) AND (EXISTS ( SELECT 1\n   FROM file_attachments attachment\n  WHERE ((attachment.bucket_id = objects.bucket_id) AND (attachment.storage_path = objects.name) AND (attachment.tenant_id = current_tenant_id()) AND can_read_finance_attachment(attachment.*)))))",
+      "with_check": null,
+      "polpermissive": true,
+      "polcmd": "r"
+    }
+  ]
+}

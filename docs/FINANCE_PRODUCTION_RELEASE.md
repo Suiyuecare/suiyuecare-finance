@@ -1,5 +1,7 @@
 # Finance 受保護正式發布
 
+目前候選依序執行 **audit security → revenue repair → frontend compatibility**。完整步驟見 [audit security release](finance-audit-security-release-20260922.md) 與 [revenue repair release](finance-revenue-repair-release-20260924.md)。使用 `database_audit_security_20260922=20260922133752`、`database_revenue_repair_20260924=20260924074010`，最後才用 `frontend_compat=none`。
+
 `.github/workflows/finance-production-release.yml` 是唯一允許 Finance 正式資料庫套版與 Vercel 正式提升的人工流程。它不接受 push／PR 自動上線，也不把「建置成功」當成「正式可提升」。
 
 ## 不可變更的正式目標
@@ -24,30 +26,34 @@ Environment `finance-production` 必須設定：
 
 Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權該 team/project 的 pull、build、candidate deploy、inspect/API/curl 與 promote；資料庫帳號只授權目標 Supabase project 的 migration 權限。
 
-## 目前三個受控入口：應收讀取修正、人資付款交接、後續前台發布
+## 目前三個受控階段：安全修正、收入修正與前台發布
 
-此版本只接受以下三組輸入，`release_phase` 與 `migration_versions` 任何不相符都在建置或資料庫連線前立即拒絕：
+此版本只接受以下三組輸入，`release_phase` 與 `migration_versions` 不相符時，在資料庫連線前拒絕：
 
-| 順序 | `release_phase` | `migration_versions` | 允許的動作 |
-|---|---|---|---|
-| 1 | `frontend_compat` | `none` | 日常前台發布：先確認應收與人資三個版本完整，才建立、驗證並提升新前台；資料庫不得提交變更，只能做唯讀 gate 與整筆回滾 canary |
-| 2 | `database_ar_read_scope_20260922` | `20260922072737` | 全部既有版本（含發票 SELECT policy `20260915080928`）成立後，演練並原子提交應收讀取優化、ledger 及全部 21 份 postflight，再提升相同封存候選 |
-| 3 | `database_hr_bridge_20260922` | `20260922072109,20260922072737,20260922075604` | 應收尚未安裝時原子套三版；已安裝應收時只補兩版人資；完整 22 份 postflight 與六份唯讀 canary 通過後提升相同封存候選 |
+| `release_phase` | `migration_versions` | 前置條件與動作 |
+|---|---|---|
+| `database_audit_security_20260922` | `20260922133752` | 全部前置版本含完整 HR 三版已安裝；22 份前置檢查通過後，演練新 SQL、ledger、24 份 postflight、7 份唯讀 canary，回滾指紋一致後再原子提交 SQL、ledger 與檢查。 |
+| `database_revenue_repair_20260924` | `20260924074010` | 安全版與正式 ledger 已採納的 HR directory export 來源都需通過檢查；收入修復依專屬帳務 postflight/canary 原子執行。 |
+| `frontend_compat` | `none` | 安全版及收入修正已完整安裝；執行 24 份 postflight 與 8 份唯讀 canary 後，提升同一封存前台。 |
 
-正式資料庫目前受控 lineage 為 v1 `20260826070814`、v2 `20260826155840`、v3 `20260827052447`，以及已採納回版本庫的修復 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`、`20260831042040_top_level_ceo_self_route`、`20260831043517_expense_submit_derived_status`、`20260901024020_final_accountant_self_post`、`20260901073241_assign_ceo_cashier_and_reassign_pending_cashier`、`20260901081807_allow_formal_cashier_self_disbursement`。其中正式出納固定為李佳泰、總務備援已移除，且三張待放款單保留稽核轉派紀錄。任何其他未審查的 post-baseline migration 仍會 fail closed；採納既有版次不代表流程會再次執行其 SQL。
+若 HR 三版尚未完整，先完成獨立審查的 HR 歷史候選發布；不得改填舊 phase、補寫 ledger 或拆分本批次來提升新前台。
 
-舊的 audit、cases、utility、reports、amount search、reporting integrity phase 只保留歷史 gate／前置相容驗證；此候選不得用它們 dispatch 或 promotion。
+正式資料庫也包含 `20260924043205` HR directory export。原始 SQL 不在 GitHub 歷史中；本次從正式 migration ledger 原樣還原，長度與 MD5 均固定，並增加唯讀 postflight 核對 function body、5 個變更觸發器、RLS 與權限。它只允許 `service_role` 讀取組織、人員目錄欄位；匿名及一般登入角色沒有 schema/function/table 存取權，且不匯出薪資或登入角色。這是既有正式版次的來源採納，不會再次執行 SQL。其餘 v1／v2／v3 與已採納修復維持原有受控 lineage；任何其他未審查的 post-baseline migration 仍會 fail closed。
+
+既有已採納修復版本仍包括 `20260828015718_repair_admin_ntpc_portal_employee_link_20260828`、`20260831042040_top_level_ceo_self_route`、`20260831043517_expense_submit_derived_status`、`20260901024020_final_accountant_self_post`、`20260901073241_assign_ceo_cashier_and_reassign_pending_cashier` 與 `20260901081807_allow_formal_cashier_self_disbursement`；正式出納固定為李佳泰、總務備援已移除，三張待放款單保留稽核轉派紀錄。
+
+舊的 audit、cases、utility、reports、amount search、reporting integrity、AR 與 HR phase 只保留歷史 gate／前置相容驗證；此候選不得用它們 dispatch 或 promotion。
 
 應收版本將會計角色的既有身分條件改為每次查詢計算一次，保留一般員工逐筆可見性。人資版本新增獨立薪資授權、私有交接、原子傳票及完整帳簿的薪資保護。兩者依 ledger 的未安裝／應收已安裝／全部已安裝狀態核對精確函式內容，不能用人資變更覆蓋應收最佳化。演練、apply 與 promotion 均沿用同一封存候選；正式提交與 ledger 同一交易，部分人資安裝會拒絕。
 
-### Phase 1：`frontend_compat`
+### 前台相容階段：`frontend_compat`
 
 1. workflow 固定 checkout protected `main`；`GITHUB_REF`、`GITHUB_REF_NAME`、`GITHUB_SHA`、本機 `HEAD` 與 40 碼 `candidate_sha` 必須完全相同。
 2. 跑完整 `release:preflight` 與 production artifact 驗證，只建立一次 `--prod --skip-domain` 的 unaliased candidate。
 3. 候選首頁必須恰有一個 `finance-release-contract=expense-submit-resilience-v3-20260827` meta，並實際包含 `submissionAttemptId`；release manifest 的 `source_commit` 必須等於 candidate SHA。
 4. sealed receipt v2 同時綁定 release phase、`migration_versions`、deployment ID／URL、manifest hash、首頁 hash、candidate SHA 與 GitHub run ID。下載 artifact 的後續 jobs 逐欄重算，不宣稱或依賴未比較的 artifact digest。
-5. 正式資料庫 ledger 必須恰有完整 v1／v2／v3、全部六份 audit 修復、會計明細修正 `20260908065050`、utility `20260909083825`、reports `20260910064324,20260910064325`、amount search `20260910083000`、reporting integrity `20260911135457,20260911135514`、audit readiness `20260911151054`、employee reliability `20260912145849` 與已審查歷史修復（含 `20260901073241` 正式出納修復）；workflow 以 v3 唯讀 postflight、精確的人員連結檢查、authenticated rollback canary 與 immutable project 檢查證明現況，不會提交任何資料庫變更，`prepare-apply` 不可能出現在此分支。
-6. 提升封存的同一 deployment URL 後，從 `finance.suiyuecare.com` 重新讀回 deployment ID、manifest 與首頁；只有 exact candidate SHA、release meta 與 `submissionAttemptId` 全部一致才算 Phase 1 完成。
+5. 正式資料庫 ledger 必須包含完整已審查的前置 chain、HR 三版、`20260922133752`、採納的 `20260924043205` 與收入修復版；以全部 24 份 postflight、8 份唯讀 canary 與 immutable project 檢查核對現況。不注入真人 JWT claims，不提交任何資料庫變更，`prepare-apply` 不可能出現在此分支。
+6. 提升封存的同一 deployment URL 後，從 `finance.suiyuecare.com` 重新讀回 deployment ID、manifest 與首頁；只有 exact candidate SHA、release meta 與 `submissionAttemptId` 全部一致才算發布完成。
 
 ### 歷史紀錄：`database_v3`（此版本不接受 dispatch）
 
@@ -71,25 +77,25 @@ v3 會重新解析正式直屬主管與唯一部門主管，只有可稽核的�
 
 正式 migration 來源禁止自行出現 `BEGIN`／`COMMIT`／`ROLLBACK`，也禁止 `CREATE/DROP INDEX CONCURRENTLY`、`REINDEX CONCURRENTLY`、`VACUUM`、`ALTER SYSTEM`、`CLUSTER` 等會脫離原子批次的指令。release guard 在正式 apply payload 外加唯一的 `BEGIN`／`COMMIT`，並在同一交易寫入 migration statements 與 ledger；演練時則只加 `BEGIN`／`ROLLBACK`，比較前後 catalog／ACL／RLS／政策／函式／關鍵資料與 ledger 指紋。
 
-這是 live DB 上單一 `REPEATABLE READ` 交易與 savepoint 內的 rollback rehearsal；migration 暫時套入 savepoint 後、尚未回滾前，會先以 `authenticated` 角色完整跑過送件、同一 attempt 冪等回放（v3 已安裝時）、u5／A1100 偽造部門主管 self-skip 的 42501 負向案例、主管退回，以及實際 10 參數補件 RPC 的偽造未來簽核人 42501、成功補件與同 key replay。另以徐靖雯正式 UUID／Finance 帳號／B1302／E5 驗證組織解析、舊頁拒絕與公開送件，再由 `service_role` 實際探測通知 claim worker；全部都在同一交易回滾。接著確認測試單、通知與 operation cache 等關聯資料沒有殘留，再比較前後指紋，因此一般通知新增不會造成假失敗。本次 audit 會在同一交易演練固定六份 migration 的相容性；它仍不是 production clone 或 shadow database，無法取代外部副作用與完整資料量的 shadow rehearsal。workflow 拒絕任意合併或拆分批次，文件與執行結果不得宣稱「live rollback 等同 atomic clone」。
+本候選在 live DB 的單一 `REPEATABLE READ` 交易與 savepoint 中演練新安全 migration、ledger 及 24 份檢查，並執行七份唯讀 canary；不注入真人 claims、不建立營運交易。回滾至 savepoint 後，確認新 schema、函式、附件固定關聯、Storage 權限、索引定義／條件、業務資料與 ledger 全部回到原指紋。這不是 production clone 或 shadow database，不能以 live rollback 取代外部副作用與完整資料量的獨立驗收。
 
 ## 操作
 
 在 GitHub Actions 手動選擇 `Finance Protected Production Release`，輸入：
 
 - `candidate_sha`：當下 protected `main` 的完整 SHA。
-- `release_phase`：本次員工可靠性選 `database_employee_reliability_20260912`；該版已套用後的前台發布選 `frontend_compat`。
-- `migration_versions`：employee reliability 只能填 `20260912145849`；frontend 只能填 `none`。
+- `release_phase`：依序選 `database_audit_security_20260922`、`database_revenue_repair_20260924`、`frontend_compat`。
+- `migration_versions`：依序填 `20260922133752`、`20260924074010`、`none`。
 - `confirmation`：`PROMOTE FINANCE PRODUCTION`。
 
-任一步失敗即 fail closed。`frontend_compat` 不會提交資料庫變更；audit readiness 批次已套用時只驗收，不重跑 SQL；audit 六份與全部既有 migration 保持原樣。若提升或 readback 遇到暫時錯誤，應在同一 GitHub Actions run 使用 **Re-run failed jobs**，讓獨立 `promote` job 消費同一 sealed artifact，不重新建置或套版。`candidate` artifact 保留 14 天；超過保留期不得把另一個 deployment 冒充原候選，必須另開完整受審發布。
+任一步失敗即 fail closed。`frontend_compat` 不會提交資料庫變更；安全批次已套用時只驗收，不重跑 SQL；全部既有 migration 來源保持原樣。若提升或 readback 遇到暫時錯誤，應在同一 GitHub Actions run 使用 **Re-run failed jobs**，讓獨立 `promote` job 消費同一 sealed artifact，不重新建置或套版。`candidate` artifact 保留 14 天；超過保留期不得把另一個 deployment 冒充原候選，必須另開完整受審發布。
 
 若整個 workflow 被人為選擇「Re-run all jobs」，會建立新的候選；這不等同原 candidate 的復原路徑。DB ledger 已套用時仍會阻止重複 mutation，但操作上應一律優先使用 **Re-run failed jobs** 續跑原 `promote` job。
 
 此文件與 workflow 只建立程式內的 gate；若 GitHub Environment required reviewers、branch restriction 或最小權限 secrets 尚未由平台管理者設定，不得宣稱平台層硬閘門已啟用。
 
 
-## 2026-09-08 audit repair release
+## 歷史紀錄：2026-09-08 audit repair release
 
 The `database_audit_20260907` phase accepts only the complete ordered batch
 `20260907154404,20260907154739,20260907154742,20260907154743,20260907154758,20260907154759`.
@@ -152,7 +158,7 @@ promotion job 重新驗證同一 candidate receipt、DB postflight、兩種 auth
 `pnpm test:financial-reporting` 包含實際財務計算／分頁函式、管理分析、稅務底稿、profile 與 AR 真 SQL 行為、兩份批次原子交易、五個 canary 失敗注入與指紋驗證。`pnpm test:financial-reporting-browser` 是另行執行的真瀏覽器／下載驗收，須安裝其瀏覽器 runtime，不能把純 Node CI 視為完成視覺或真人 UAT。
 
 
-## 2026-09-10 金額搜尋固定批次
+## 歷史紀錄：2026-09-10 金額搜尋固定批次
 
 本次新候選只允許 `database_amount_search_20260910=20260910083000` 或 `frontend_compat=none`。唯一新 migration 是 `20260910083000_finance_history_amount_search.sql`；完整 authority／audit／cases／utility／reports 都是前置，缺少任一版、未知遠端版次或混入其他待套版次均拒絕。歷史 reports phase 只保留前置查核與回歸，不可用來提升新候選。
 
@@ -166,13 +172,13 @@ promotion job 重新驗證同一 candidate receipt、DB postflight、兩種 auth
 
 `pnpm test:amount-search` 執行文件搜尋、應收搜尋、真 PostgreSQL 歷史 RPC 和受保護發布回歸；`pnpm test:amount-search-browser` 是另外執行的桌機／手機真瀏覽器驗收。純 Node 與匿名 PostgreSQL fixture 的通過不等於正式資料庫演練或真人帳號 UAT。
 
-## 2026-09-11 報表完整性批次
+## 歷史紀錄：2026-09-11 報表完整性批次
 
 兩份 migration 必須依序一次套用，不接受部分已安裝。套用前在同一回滾交易執行八份 authenticated canary（原有六份，加上應收核對權限與憑證來源綁定），並比較完整 catalog、ACL、設定版次及資料指紋。正式 apply 以 advisory lock 與 migration ledger lock 保護，兩份 SQL、兩筆 ledger 及十份 postflight 全部成功才 COMMIT。既有原始單據與報表分類不回填、不自動認證。
 
 資料庫驗收與提升前都再次執行兩份新 canary，要求唯一且精確的回滾成功結果；任一失敗都停止提升。已套用批次重試僅跑唯讀十份 postflight 與完整回滾 canary，不重跑 migration。
 
-## 2026-09-11 查帳準備發布
+## 歷史紀錄：2026-09-11 查帳準備發布
 
 固定一份 `20260911151054_finance_audit_readiness_v1.sql`；已發布的 authority、audit、cases、utility、reports、amount search 與 reporting integrity 版本都必須存在。保留舊 phase 的精確查詢與回歸契約，當時候選只允許 `database_audit_readiness_20260911` 或完整相容的 `frontend_compat`。
 
@@ -183,7 +189,7 @@ canary 的唯一結果必須是 `audit_readiness_canary_result`，內容精確�
 查帳工作區記錄資料準備及具名覆核，不產生會計師查核意見；[查帳準備指南](finance-cpa-audit-guide.md)列明四表與附註、法人／稅務範圍及人工查核邊界。
 
 
-## 2026-09-12 員工可靠性發布
+## 歷史紀錄：2026-09-12 員工可靠性發布
 
 固定 `20260912145849_finance_employee_payment_concerns_v1.sql`，須先有全部已審查版本，包含查帳準備。候選只允許 `database_employee_reliability_20260912` 或已套完該版的 `frontend_compat`。所有舊 phase 保留精確查詢及回歸，不能作本次候選的部署入口。
 
@@ -194,7 +200,7 @@ canary 的唯一結果必須是 `audit_readiness_canary_result`，內容精確�
 前台使用原封存 deployment；不重建、不繞過人工保護環境及原公司／tenant／角色權限。表單與登入、通知、補件和付款防重回歸使用純 Node 套件；本機 1440/390 的 agent-browser／Chrome 操作證據另存，不將真人驗收或正式部署宣稱為已完成。
 
 
-## 2026-09-13 應收對應查詢發布契約
+## 歷史紀錄：2026-09-13 應收對應查詢發布契約
 
 本批次只替換 `private.finance_ar_ledger_v1(uuid,text,date,text)` 的查詢實作，固定 migration 為 `20260913061745_finance_ar_mapping_set_based_v1.sql`。歷史 phase 仍可供前置條件與既有測試驗證，但此候選只允許 `database_ar_mapping_20260913` 或 `frontend_compat` dispatch。`frontend_compat` 必須先核對全部既有版本及本版已套用。
 
@@ -205,7 +211,7 @@ canary 的唯一結果必須是 `audit_readiness_canary_result`，內容精確�
 若 migration 已套用，重跑僅驗證 ledger、完整 postflight 與唯讀 parity canary，不得重跑 migration。promotion 只能提升先前通過建置、來源封存、候選收據與相同 deployment 驗證的候選；不得重建或重新部署。
 
 
-## 2026-09-22 應收讀取逾時修正
+## 歷史紀錄：2026-09-22 應收讀取逾時修正
 
 應收修正可獨立以 `database_ar_read_scope_20260922=20260922072737` 套用，也可納入本頁人資三版原子批次。應收 migration 僅更新兩個 private 應收讀取函式；前置函式與身份判斷皆固定來源雜湊，交易金額及一般員工逐筆權限保持不變。人資版本於其後追加薪資保護；後續 `frontend_compat=none` 要求三版完整。
 
@@ -215,7 +221,7 @@ canary 的唯一結果必須是 `audit_readiness_canary_result`，內容精確�
 4. 已套用版次的重試只執行只讀 postflight/canary；promotion 必須驗證同一封存候選與全部契約，不能重建候選或重套 migration。後續 `frontend_compat` 必須包含此版。
 5. `pnpm test:ar-read-scope` 以虛構本機資料執行真實權限/應收函式，以及 release renderer 的故障注入、回滾、精確 SQL 封存與已套版恢復測試。
 
-## 2026-09-22 人資付款交接整合
+## 歷史紀錄：2026-09-22 人資付款交接整合
 
 人資階段輸入固定為 `20260922072109,20260922072737,20260922075604`。已完整安裝應收版時不重跑應收 SQL，只提交缺少的兩個人資版本；兩個人資版本只存在其中一版時，必須停止並查核，不可補寫 ledger 假裝完整。前置演練與正式提交均包含既有檢查、薪資資料 ACL／RLS／不可變來源／原子入帳檢查，共 22 份 postflight。六項 canary 都是只讀，不建立正式員工或薪資交易。
 

@@ -35,7 +35,7 @@ check('preview without a download name preserves URL byte-for-byte',engine.signe
 function fixture(extra={}){
  const anchors=[],calls=[],alerts=[],audits=[],failures=[];
  class ObjectURL extends URL{static createObjectURL(){return 'blob:https://finance.example.invalid/local-only';}static revokeObjectURL(){}}
- const c={URL:ObjectURL,Blob,console:{warn(){},error(){},info(){}},window:null,REQS:[record],INVS:[],BILLS:[],SUPABASE_URL:origin,SUPABASE_ANON_KEY:'anonymous-fixture',SUPABASE_ATTACHMENT_BUCKET:'finance-attachments',STEP_DOWNLOADS:[file],
+ const c={S:{user:{id:'fixture-user',email:'fixture@example.invalid',active:true}},currentFinanceAuthUserId:()=> 'fixture-auth',currentTenantId:()=> 'fixture-tenant',activeDataEnvironment:()=> 'production',financeAuthIdentityEpoch:1,CURRENT_PERMISSION_SNAPSHOT:{loaded:true},financeWorkspaceIdentityBlocked:false,financeLogoutInProgress:false,financeGoogleAccountSwitchInProgress:false,URL:ObjectURL,Blob,console:{warn(){},error(){},info(){}},window:null,REQS:[record],INVS:[],BILLS:[],SUPABASE_URL:origin,SUPABASE_ANON_KEY:'anonymous-fixture',SUPABASE_ATTACHMENT_BUCKET:'finance-attachments',STEP_DOWNLOADS:[file],
   financeAttachmentEngine:()=>engine,normalizeFileMeta:engine.normalizeFileMeta,normalizeFiles:engine.normalizeFiles,uniqueAttachments:engine.uniqueFiles,attachmentStoragePath:engine.storagePath,
   attachmentRecordNoFromPath:engine.recordNoFromPath,attachmentRecordTypeFromPath:engine.recordTypeFromPath,attachmentInList:engine.inList,fileIdentity:engine.fileIdentity,
   num:Number,hasSupabase:()=>true,getSb:()=>({storage:{from:bucket=>({createSignedUrl:async(p,expires,options)=>{calls.push({bucket,path:p,expires,options});return {data:{signedUrl:signed}};}})}}),
@@ -72,5 +72,24 @@ function fixture(extra={}){
  let requests=[];f=fixture({hasSupabase:()=>false,fetch:async(url,args)=>{requests.push({url,args});return {ok:true,json:async()=>({signedURL:'/object/sign/finance-attachments/original.xlsx?token=rest-fixture'})};}});
  const rest=await f.c.signAttachmentUrl(file,60,'PUR-001_耗材.xlsx');
  check('existing REST signing fallback safely names its private signed URL',new URL(rest).searchParams.get('token')==='rest-fixture'&&new URL(rest).searchParams.get('download')==='PUR-001_耗材.xlsx'&&requests[0].args.method==='POST');
+ for(const [label,change] of [
+  ['different Finance user',c=>{c.S.user={...c.S.user,id:'other-user'};}],
+  ['same user returns after another login',c=>{c.financeAuthIdentityEpoch+=2;}],
+  ['tenant',c=>{c.currentTenantId=()=> 'other-tenant';}],
+  ['environment',c=>{c.activeDataEnvironment=()=> 'sandbox';}],
+  ['permission snapshot',c=>{c.CURRENT_PERMISSION_SNAPSHOT={loaded:true,permissions:[]};}],
+  ['blocked identity',c=>{c.financeWorkspaceIdentityBlocked=true;}],
+  ['parent permission revoked',c=>{c.canDownloadAttachment=()=>false;}]
+ ]){
+  let resolve;f=fixture();f.c.signAttachmentUrl=()=>new Promise(r=>resolve=r);
+  const pending=f.c.downloadStepAttachment(0);change(f.c);resolve(signed);await pending;
+  check('late signing after '+label+' causes no download, stale audit or stale error',f.anchors.length===0&&f.audits.length===0&&f.alerts.length===0&&f.failures.length===0);
+ }
+ let reject;f=fixture();f.c.signAttachmentUrl=()=>new Promise((_,r)=>reject=r);
+ const denied=f.c.downloadStepAttachment(0);f.c.financeAuthIdentityEpoch++;reject(new Error('late permission denied'));await denied;
+ check('late signing failure after identity change cannot mark the new account attachment as failed',f.anchors.length===0&&f.audits.length===0&&f.alerts.length===0&&f.failures.length===0);
+ let rebuilt;f=fixture({isReceiptBundleAttachment:()=>true,receiptBundleSourceFiles:()=>[file],receiptPdfAttachment:()=>new Promise(r=>rebuilt=r)});
+ const bundle=f.c.downloadFileMeta(file,{type:'expense_requests',record});f.c.financeAuthIdentityEpoch++;rebuilt({n:'merged.pdf',url:'data:application/pdf,fixture'});await bundle;
+ check('late PDF reconstruction cannot initiate signing, auditing or download for a changed account',f.anchors.length===0&&f.calls.length===0&&f.audits.length===0&&f.alerts.length===0);
  console.log('PASS '+checks+' actual attachment name/signing/download checks; anonymous fixtures, no live writes');
 })().catch(error=>{console.error(error);process.exitCode=1;});

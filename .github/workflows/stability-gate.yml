@@ -132,6 +132,7 @@ jobs:
           node scripts/check_shareholder_invoice_ocr_browser.cjs
           node scripts/check_personnel_login_browser.cjs
           pnpm test:history-summary-browser
+          pnpm test:finance-ui-interactions
 
       - name: Retain fictional search acceptance evidence even on failure
         if: always()
@@ -139,6 +140,15 @@ jobs:
         with:
           name: finance-history-summary-ci-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp/finance-search-summary-acceptance-20260915
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
+      - name: Retain fictional UI interaction evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: finance-ui-interactions-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/finance-ui-interaction-20260922
           if-no-files-found: warn
           retention-days: 14
           compression-level: 9

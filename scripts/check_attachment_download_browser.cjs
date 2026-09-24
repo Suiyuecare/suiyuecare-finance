@@ -28,6 +28,9 @@ function sourceRange(start,end){const a=source.indexOf(start),b=source.indexOf(e
  const storageOrigin='https://127.0.0.1:'+storage.address().port;
  const js=[fs.readFileSync(path.join(root,'assets/engines/finance-v4-engine-registry.js'),'utf8'),fs.readFileSync(path.join(root,'assets/engines/attachment-engine.js'),'utf8'),`
  var SUPABASE_URL=${JSON.stringify(storageOrigin)},SUPABASE_ATTACHMENT_BUCKET='finance-attachments';
+ var S={user:{id:'fixture-employee',authUserId:'fixture-auth',email:'fixture@example.invalid',role:'staff',active:true},demoLogin:false};
+ var financeWorkspaceIdentityBlocked=false,financeLogoutInProgress=false,financeGoogleAccountSwitchInProgress=false,financeAuthIdentityEpoch=1,CURRENT_PERMISSION_SNAPSHOT={fixture:true};
+ function currentTenantId(){return 'fixture-tenant';}function activeDataEnvironment(){return 'test';}
  var engine=window.FinanceAttachmentEngine;function financeAttachmentEngine(){return engine;}
  var normalizeFileMeta=engine.normalizeFileMeta,uniqueAttachments=engine.uniqueFiles,attachmentStoragePath=engine.storagePath,fileIdentity=engine.fileIdentity,attachmentRecordNoFromPath=engine.recordNoFromPath;
  var file={n:'1788888888888_abcd_PUR-001.xlsx',bucket:SUPABASE_ATTACHMENT_BUCKET,path:'anonymous-original.xlsx'};
@@ -35,7 +38,7 @@ function sourceRange(start,end){const a=source.indexOf(start),b=source.indexOf(e
  function findAttachmentOwner(){return {type:'expense_requests',record:record};}function canDownloadAttachment(){return true;}function isReceiptBundleAttachment(){return false;}
  function hasSupabase(){return true;}function num(v){return Number(v||0);}function recordAttachmentAccess(){}
  function getSb(){return {storage:{from:function(){return {createSignedUrl:async function(){return {data:{signedUrl:SUPABASE_URL+'/storage/v1/object/sign/finance-attachments/anonymous-original.xlsx?token=local-fixture'}};}};}}};}
- `,sourceRange('function attachmentSignedDownloadUrl(','function storagePublicUrl('),sourceRange('function attachmentDownloadFileName(','function stepAttachmentHtml(')].join('\n');
+ `,sourceRange('function currentFinanceAuthUserId(','function financeUsersDirectoryReadyForCurrentAuth('),sourceRange('function attachmentSignedDownloadUrl(','function storagePublicUrl('),sourceRange('function attachmentDownloadFileName(','function stepAttachmentHtml(')].join('\n');
  const app=https.createServer(tls,(req,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<!doctype html><meta charset="utf-8"><title>匿名跨網域下載驗收</title><h1>下載檔名驗收</h1><p>單號 PUR-001；申請目的：採購照護耗材 &amp; 清潔用品</p><button id="download" onclick="downloadFileMeta(file,{})">下載 Excel</button><script>'+js.replace(/<\/script/gi,'<\\/script')+'</script>');});servers.push(app);await new Promise(resolve=>app.listen(0,'127.0.0.1',resolve));
  await browser('open','https://127.0.0.1:'+app.address().port+'/');
  // Let eval return before the download starts: the driver can otherwise wait
