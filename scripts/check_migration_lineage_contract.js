@@ -299,6 +299,7 @@ check('HR directory postflight pins source body, private table boundaries, and s
     && hrDirectoryPostflightSql.includes("array['anon','authenticated']")
     && hrDirectoryPostflightSql.includes("'service_role'")
     && hrDirectoryPostflightSql.includes('relforcerowsecurity')
+    && /if \(select count\(\*\)[\s\S]+p\.proname like 'hr_directory_%'[\s\S]+p\.proname='finance_hr_directory_transport'\)\)<>3 then/.test(hrDirectoryPostflightSql)
     && !hrDirectoryPostflightSql.includes('select * from public.employees'));
 check('revenue repair is the exact final suffix',REVENUE_REPAIR_MIGRATIONS.join(',')==='20260924074010'&&migrations.slice(-REVENUE_REPAIR_MIGRATIONS.length).join(',')==='20260924074010_finance_e8_g1101_home_care_revenue_repair_v1.sql');
 process.stdout.write(`\nAdopted migration lineage: ${passed}/${passed + failed} passed.\n`);

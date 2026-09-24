@@ -60,7 +60,10 @@ begin
   end loop;
   seen:=seen+1;
  end loop;
- if (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','finance_hr_private') and p.proname like 'finance_hr_%')<>seen then raise exception 'HR bridge unexpected public/private function';end if;
+ -- The HR directory transport RPC belongs to the separately pinned directory
+ -- export contract, not this bridge catalog. Keep its exact definition and
+ -- service-role-only ACL enforced by finance_hr_directory_export_postflight.sql.
+ if (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','finance_hr_private') and p.proname like 'finance_hr_%' and p.oid<>to_regprocedure('public.finance_hr_directory_transport(text,jsonb)'))<>seen then raise exception 'HR bridge unexpected public/private function';end if;
  foreach t in array array['events','requests','callback_outbox','voucher_claims','postings'] loop
   if not exists(select 1 from pg_trigger where tgrelid=to_regclass('finance_hr_private.finance_hr_'||t) and tgname='immutable' and tgenabled='O' and tgtype=27 and tgfoid='finance_hr_private.finance_hr_immutable()'::regprocedure) then raise exception 'HR bridge append-only trigger missing: %',t;end if;
  end loop;
