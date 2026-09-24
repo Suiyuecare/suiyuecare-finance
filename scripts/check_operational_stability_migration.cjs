@@ -2,6 +2,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
@@ -19,6 +20,12 @@ for (const table of ['expense_requests', 'bills', 'invoices']) {
   assert.match(postflight, new RegExp(`'${table}_tenant_environment_id_stability_idx','${table}'`));
 }
 assert.match(migration, /create or replace function public\.finance_approval_actor_health\(p_data_environment text default 'production'\)[\s\S]+language plpgsql stable security invoker\s+set search_path = ''/i);
+const actorHealthBody = migration.match(/create or replace function public\.finance_approval_actor_health\(p_data_environment text default 'production'\)[\s\S]+?as \$function\$([\s\S]*?)\$function\$;/i)?.[1];
+assert.ok(actorHealthBody, 'reviewed approval health function body is extractable');
+const actorHealthBodyMd5 = crypto.createHash('md5').update(actorHealthBody).digest('hex');
+assert.equal(actorHealthBodyMd5, '96acac6e2745bc4786bcc5b7fd58fd5a', 'PostgreSQL stores the exact dollar-quoted source, including surrounding newlines');
+assert.ok(migration.includes(`pg_catalog.md5(p.prosrc)<>'${actorHealthBodyMd5}'`), 'migration postflight pins the exact pg_proc source');
+assert.ok(postflight.includes(`pg_catalog.md5(p.prosrc)<>'${actorHealthBodyMd5}'`), 'release postflight pins the exact pg_proc source');
 assert.equal((migration.match(/jsonb_array_elements\(/g) || []).length, 2, 'one JSON-step expansion per tenant-scoped form source');
 assert.match(migration, /revoke all on function public\.current_hr_user_company_id\(\) from public, anon;[\s\S]+grant execute on function public\.current_hr_user_company_id\(\) to authenticated, service_role/i);
 assert.match(migration, /alter function public\.current_hr_user_company_id\(\) set search_path = ''/i);

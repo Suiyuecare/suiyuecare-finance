@@ -35,7 +35,7 @@ begin
 
   select * into p from pg_catalog.pg_proc where oid='public.finance_approval_actor_health(text)'::pg_catalog.regprocedure;
   if p.prosecdef or p.provolatile<>'s' or p.proconfig is distinct from array['search_path=""']::text[]
-     or pg_catalog.md5(p.prosrc)<>'c825312f42e5a31db1fc3250e737dada'
+     or pg_catalog.md5(p.prosrc)<>'96acac6e2745bc4786bcc5b7fd58fd5a'
      or pg_catalog.has_function_privilege('anon',p.oid,'EXECUTE')
      or not pg_catalog.has_function_privilege('authenticated',p.oid,'EXECUTE')
      or not pg_catalog.has_function_privilege('service_role',p.oid,'EXECUTE')
