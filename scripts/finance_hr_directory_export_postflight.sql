@@ -40,6 +40,11 @@ begin
       raise exception 'HR directory export function differs from the reviewed source: %',r.signature;
     end if;
   end loop;
+  if (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+      where (n.nspname='private' and p.proname like 'hr_directory_%')
+         or (n.nspname='public' and p.proname='finance_hr_directory_transport'))<>3 then
+    raise exception 'HR directory export has an unexpected function or overload';
+  end if;
 
   foreach role_name in array array['anon','authenticated'] loop
     if has_schema_privilege(role_name,'private','usage')

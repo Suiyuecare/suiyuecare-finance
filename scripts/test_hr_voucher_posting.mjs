@@ -95,8 +95,14 @@ await db.exec('savepoint extra');await reject(()=>db.query(cloneSQL,[':extra',at
 await reject(()=>db.query(cloneSQL,['',atomic.voucherId]),/duplicate key/);await db.exec('rollback');
 await role('postgres');
 const pins=(await db.query("select n.nspname||'.'||p.proname name,md5(p.prosrc) body_md5 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='finance_hr_private' or (n.nspname='public' and p.proname like 'finance_hr_%') or p.proname in('finance_executive_dashboard_v2','finance_executive_dashboard_v3','finance_audit_source_v1','finance_ar_reconciliation_scope_v1','finance_can_read_voucher_attachment_v2') order by 1")).rows;await fs.writeFile('/tmp/finance-hr-voucher-function-pins.json',JSON.stringify(pins,null,2));
+// Production's directory transport RPC has its own sealed read-only contract;
+// it must not be mistaken for an undeclared member of the HR bridge catalog.
+await db.exec("create function public.finance_hr_directory_transport(command text,payload jsonb) returns jsonb language sql volatile set search_path='' as $$select null::jsonb$$");
 const postflight=(await fs.readFile(new URL('./finance_hr_bridge_postflight.sql',import.meta.url),'utf8')).replace(/^\\set ON_ERROR_STOP on\r?\n/,'');
 await db.exec(postflight);checks++;
+await db.exec("create function public.finance_hr_directory_transport(command text,payload jsonb,extra boolean) returns jsonb language sql volatile set search_path='' as $$select null::jsonb$$");
+await reject(()=>db.exec(postflight),/HR bridge unexpected public\/private function/);
+await db.exec('drop function public.finance_hr_directory_transport(text,jsonb,boolean)');
 // Versioned revenue repair must preserve every HR privacy guard and use only its
 // exact reviewed V2 revision. This fixture keeps the complete real HR catalog.
 const revenueRepairSource=await fs.readFile(new URL('../supabase/migrations/20260924074010_finance_e8_g1101_home_care_revenue_repair_v1.sql',import.meta.url),'utf8');
