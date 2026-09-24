@@ -589,7 +589,7 @@ function authenticatedCanarySections(canaryPath) {
   if (!canaryPath) fail('authenticated canary path is required for migration rehearsal');
   const raw = fs.readFileSync(canaryPath, 'utf8');
   const source = raw.startsWith('\\set') ? stripPsqlDirectives(raw, path.basename(canaryPath)) : raw;
-  if (!/^--[^\n]*\n(?:--[^\n]*\n)*\s*begin isolation level repeatable read;/i.test(source)
+  if (!/^--[^\n]*\n(?:--[^\n]*\n)*\s*begin isolation level repeatable read(?: read only)?;/i.test(source)
       || !/^\s*rollback\s*;/im.test(source)
       || /^\s*commit\s*;/im.test(source)) {
     fail('authenticated canary must be a rollback-only repeatable-read transaction');
