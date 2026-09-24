@@ -311,6 +311,7 @@ supabase/.temp
 !scripts/test_hr_private_bridge.mjs
 !scripts/test_hr_bridge_release_batch.mjs
 !scripts/finance_hr_bridge_postflight.sql
+!scripts/finance_hr_directory_export_postflight.sql
 !scripts/finance_hr_bridge_fingerprint.sql
 !scripts/test_hr_voucher_posting.mjs
 !scripts/fixtures/finance_hr_voucher_baseline_20260922.json

@@ -72,7 +72,9 @@ const RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE = 'database_invoice_read_scope_2
 const INVOICE_READ_SCOPE_POSTFLIGHT_FILES = Object.freeze(['finance_invoice_select_initplan_postflight.sql']);
 const HR_BRIDGE_MIGRATIONS = Object.freeze(['20260922072109','20260922072737','20260922075604']);
 const RELEASE_PHASE_DATABASE_HR_BRIDGE = 'database_hr_bridge_20260922';
-const HR_BRIDGE_POSTFLIGHT_FILES = Object.freeze(['finance_hr_bridge_postflight.sql']);
+const HR_DIRECTORY_EXPORT_MIGRATIONS = Object.freeze(['20260924043205']);
+const HR_DIRECTORY_EXPORT_POSTFLIGHT_FILES = Object.freeze(['finance_hr_directory_export_postflight.sql']);
+const HR_BRIDGE_POSTFLIGHT_FILES = Object.freeze(['finance_hr_bridge_postflight.sql', ...HR_DIRECTORY_EXPORT_POSTFLIGHT_FILES]);
 const AUDIT_SECURITY_MIGRATIONS = Object.freeze(['20260922133752']);
 const RELEASE_PHASE_DATABASE_AUDIT_SECURITY = 'database_audit_security_20260922';
 const AUDIT_SECURITY_POSTFLIGHT_FILES = Object.freeze(['finance_audit_security_postflight.sql']);
@@ -115,6 +117,7 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...INVOICE_READ_SCOPE_MIGRATIONS,
   ...HR_BRIDGE_MIGRATIONS,
   ...AUDIT_SECURITY_MIGRATIONS,
+  ...HR_DIRECTORY_EXPORT_MIGRATIONS,
   ...REVENUE_REPAIR_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
@@ -506,6 +509,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(AR_READ_SCOPE_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete AR read scope migration batch');
     if(HR_BRIDGE_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete HR bridge migration batch');
     if(AUDIT_SECURITY_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete audit security migration batch');
+    if(HR_DIRECTORY_EXPORT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the adopted HR directory export migration');
     return 'compat';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
@@ -1672,6 +1676,7 @@ function manifestSha(file) { return sha256File(file); }
 
 const api = {
   HR_BRIDGE_MIGRATIONS, RELEASE_PHASE_DATABASE_HR_BRIDGE, HR_BRIDGE_POSTFLIGHT_FILES, pendingHrBridgeBatch, prepareHrBridgePrerequisiteQuery, prepareHrBridgeRehearsal,
+  HR_DIRECTORY_EXPORT_MIGRATIONS, HR_DIRECTORY_EXPORT_POSTFLIGHT_FILES,
   AUDIT_SECURITY_MIGRATIONS, RELEASE_PHASE_DATABASE_AUDIT_SECURITY, AUDIT_SECURITY_POSTFLIGHT_FILES, pendingAuditSecurityBatch, prepareAuditSecurityPrerequisiteQuery, prepareAuditSecurityRehearsal,
   REVENUE_REPAIR_MIGRATIONS, RELEASE_PHASE_DATABASE_REVENUE_REPAIR, REVENUE_REPAIR_POSTFLIGHT_FILES, pendingRevenueRepairBatch, prepareRevenueRepairPrerequisiteQuery, prepareRevenueRepairRehearsal,
   INVOICE_READ_SCOPE_MIGRATIONS, RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE, INVOICE_READ_SCOPE_POSTFLIGHT_FILES, pendingInvoiceReadScopeBatch, prepareInvoiceReadScopePrerequisiteQuery, prepareInvoiceReadScopeRehearsal,

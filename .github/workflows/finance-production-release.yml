@@ -262,6 +262,7 @@ jobs:
           cp scripts/finance_approval_history_summary_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_approval_history_summary_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_hr_bridge_postflight.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_hr_directory_export_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_hr_bridge_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_audit_security_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_audit_security_postflight.sql "$BUNDLE/release-tools/scripts/"

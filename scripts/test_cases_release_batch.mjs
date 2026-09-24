@@ -107,6 +107,7 @@ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','no
 fs.appendFileSync(ledger,guard.HR_BRIDGE_MIGRATIONS.join('\n')+'\n');
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/audit security migration batch/);
 fs.appendFileSync(ledger,guard.AUDIT_SECURITY_MIGRATIONS.join('\n')+'\n');
+fs.appendFileSync(ledger,guard.HR_DIRECTORY_EXPORT_MIGRATIONS.join('\n')+'\n');
 assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
  assert.throws(()=>guard.prepareAuditBatchApply(migrationDir,path.join(dir,'again.sql'),versions,ledger,postflight,baseline,phase),/must be pending/);
  const expectedCanary={canary:'authenticated_finalize_accounting_lines',ok:true,rolled_back:true,accounting_lines_consistent:true};

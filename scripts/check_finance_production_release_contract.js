@@ -20,6 +20,8 @@ assert.deepEqual(guard.SUPPORTED_GATE_PHASES, [
 assert.deepEqual(guard.HR_BRIDGE_MIGRATIONS,['20260922072109','20260922072737','20260922075604']);
 assert.deepEqual(guard.AR_READ_SCOPE_MIGRATIONS,['20260922072737']);
 assert.deepEqual(guard.AUDIT_SECURITY_MIGRATIONS,['20260922133752']);
+assert.deepEqual(guard.HR_DIRECTORY_EXPORT_MIGRATIONS,['20260924043205']);
+assert.deepEqual(guard.HR_DIRECTORY_EXPORT_POSTFLIGHT_FILES,['finance_hr_directory_export_postflight.sql']);
 assert.deepEqual(guard.MIGRATION_CHAIN, ['20260826070814', '20260826155840', '20260827052447']);
 assert.equal(guard.MIGRATION_PORTAL_LINK_REPAIR, '20260828015718');
 assert.equal(guard.MIGRATION_TOP_LEVEL_CEO_ROUTE, '20260831042040');
@@ -32,7 +34,7 @@ assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
   '20260826070814', '20260826155840', '20260827052447', '20260828015718',
   '20260831042040', '20260831043517', '20260901024020', '20260901073241',
-  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS
+  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS
 ]);
 assert.deepEqual(guard.RELEASE_PHASES, {
   frontend_compat: 'none',
@@ -675,10 +677,12 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   fs.writeFileSync(ledger,fs.readFileSync(ledger,'utf8').trim().split('\n').sort().join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/audit security migration batch/);
   fs.appendFileSync(ledger,guard.AUDIT_SECURITY_MIGRATIONS.join('\n')+'\n');
+  assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/adopted HR directory export migration/);
+  fs.appendFileSync(ledger,guard.HR_DIRECTORY_EXPORT_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), 'compat');
   guard.verifyLedger('pre', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
   guard.verifyLedger('post', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
-  fs.appendFileSync(ledger, '20260923000000\n');
+  fs.appendFileSync(ledger, '20260925000000\n');
   assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /unreviewed post-baseline migration/);
   const duplicateDir = path.join(temp, 'duplicate'); fs.mkdirSync(duplicateDir);
   fs.writeFileSync(path.join(duplicateDir, '20260826070814_a.sql'), 'begin;\ncommit;\n');

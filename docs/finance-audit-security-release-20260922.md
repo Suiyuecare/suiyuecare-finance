@@ -4,15 +4,15 @@ This candidate fixes the audited document-access, attachment, transaction-recove
 export, and browser-interaction defects. Local fixture tests and a GitHub upload
 are not proof of production deployment or successful Google OAuth for real staff.
 
-The protected workflow accepts these current-candidate pairs. The later optional
-revenue repair has a separate exact-version phase and does not block applying
-this security batch or publishing the compatible UI:
+The protected workflow accepts these current-candidate pairs. Publish in order:
+apply the security batch, repair the reviewed revenue sources, then promote the
+compatible UI. Each database step has its own exact-version phase and canaries:
 
 | Phase | Migration versions | Preconditions |
 | --- | --- | --- |
-| `database_audit_security_20260922` | `20260922133752` | Every reviewed predecessor, including the complete `20260922072109,20260922072737,20260922075604` HR batch, is already recorded. |
-| `database_revenue_repair_20260924` | `20260924074010` | Every predecessor including `20260922133752`; see [the revenue release contract](finance-revenue-repair-release-20260924.md). |
-| `frontend_compat` | `none` | The complete reviewed chain including `20260922133752` is already recorded. |
+| `database_audit_security_20260922` | `20260922133752` | Every earlier reviewed migration, including the complete `20260922072109,20260922072737,20260922075604` HR batch, is already recorded. The later adopted HR directory source is separately verified read-only. |
+| `database_revenue_repair_20260924` | `20260924074010` | Every predecessor including `20260922133752` and adopted HR directory source `20260924043205`; see [the revenue release contract](finance-revenue-repair-release-20260924.md). |
+| `frontend_compat` | `none` | The complete reviewed chain including security, HR directory adoption `20260924043205`, and revenue repair is already recorded. |
 
 Historical HR and AR renderers remain available for their reviewed candidates and
 fixture regression checks. They cannot publish this candidate: choosing an older
@@ -23,10 +23,10 @@ checks, rename versions, or publish the new UI through an old phase.
 The release uses the sealed candidate tools and complete SQL source. The database
 step verifies all 22 predecessor postflights before rehearsal. Rehearsal takes the
 release advisory lock and migration-ledger lock, verifies the exact ledger, runs
-the migration and ledger insertion together, then runs all 23 postflights and
+the migration and ledger insertion together, then runs all 24 postflights and
 seven read-only canary cores. It rolls back to the savepoint and verifies every
 canary rollback assertion plus an unchanged database fingerprint. Apply uses the
-same lock, exact-ledger assertion, migration, ledger insertion, and all 23
+same lock, exact-ledger assertion, migration, ledger insertion, and all 24
 postflights in one transaction. Missing files, partial prerequisites, changed
 ledgers, or any postflight failure fail closed and preserve the previous state.
 

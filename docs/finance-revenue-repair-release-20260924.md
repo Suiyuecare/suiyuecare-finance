@@ -5,7 +5,10 @@ fixtures, a GitHub commit, and a UI preview are not production acceptance.
 
 Use the protected `database_revenue_repair_20260924` phase with the exact
 `migration_versions` value `20260924074010`. Every reviewed predecessor through
-`20260922133752` must already be installed. The separate security phase and
+`20260922133752`, plus the adopted production-ledger source `20260924043205`,
+must already be installed. That HR directory migration was recovered byte-for-byte
+from the immutable production ledger and is verified by a separate read-only
+postflight; the revenue release does not run it again. The separate security phase and
 `frontend_compat` remain valid before this repair so their deployment does not
 silently approve a monetary change. Historical release phases cannot publish
 this candidate.
@@ -26,12 +29,12 @@ body. Dashboard and HR postflights select the precise old or new body according
 to the installed migration ledger. Neither a new ledger with old code, new code
 without its ledger, incomplete HR predecessors, nor body drift is accepted.
 
-The protected release checks 23 prerequisite postflights, takes the advisory and
+The protected release checks 24 prerequisite postflights, takes the advisory and
 migration-ledger locks, verifies the exact ledger, and runs the full migration
-and ledger insertion in one transaction. Rehearsal runs all 24 postflights and
+and ledger insertion in one transaction. Rehearsal runs all 25 postflights and
 eight read-only canary cores before rolling back. The complete inherited
 HR/auth/storage/business fingerprint additionally covers revenue rules. Apply
-uses the same locks and all 24 postflights. Failure at any boundary must preserve
+uses the same locks and all 25 postflights. Failure at any boundary must preserve
 the previous state. Recovery of an already applied version is read-only.
 
 The database completion and production promotion gates both run the additional
@@ -50,7 +53,7 @@ Local acceptance:
 - The full migration integration executes the untrimmed candidate through the
   protected renderer with the real writer, V2 body, and final repair postflight;
   a late postflight failure restores money, source, rules, function ACL/body,
-  and ledger. Its 23 historical prerequisite checks use compact placeholders;
+  and ledger. Its 24 historical prerequisite checks use compact placeholders;
   each historical module is independently covered by its full-schema suite.
 - Protected renderer failure injection covers every postflight/canary and
   rollback boundary, exact lineage, source preservation, and recovery.

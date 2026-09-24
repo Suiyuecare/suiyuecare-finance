@@ -150,6 +150,7 @@ function releaseSourceFiles() {
   'scripts/test_hr_private_bridge.mjs',
   'scripts/test_hr_bridge_release_batch.mjs',
   'scripts/finance_hr_bridge_postflight.sql',
+  'scripts/finance_hr_directory_export_postflight.sql',
   'scripts/finance_hr_bridge_fingerprint.sql',
   'scripts/finance_audit_security_fingerprint.sql',
   'scripts/finance_audit_security_postflight.sql',

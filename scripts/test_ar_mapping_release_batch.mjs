@@ -123,6 +123,7 @@ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','no
 fs.appendFileSync(ledger,guard.HR_BRIDGE_MIGRATIONS.join('\n')+'\n');
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/audit security migration batch/);
 fs.appendFileSync(ledger,guard.AUDIT_SECURITY_MIGRATIONS.join('\n')+'\n');
+fs.appendFileSync(ledger,guard.HR_DIRECTORY_EXPORT_MIGRATIONS.join('\n')+'\n');
 assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');check();
  const futurePostflights=guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES.concat(guard.APPROVAL_SEARCH_POSTFLIGHT_FILES,guard.HISTORY_SUMMARY_POSTFLIGHT_FILES,guard.INVOICE_READ_SCOPE_POSTFLIGHT_FILES,guard.AR_READ_SCOPE_POSTFLIGHT_FILES,guard.HR_BRIDGE_POSTFLIGHT_FILES,guard.AUDIT_SECURITY_POSTFLIGHT_FILES);
  const frontendPostflights=postflights.concat(futurePostflights);
