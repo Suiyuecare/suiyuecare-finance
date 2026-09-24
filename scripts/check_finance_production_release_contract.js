@@ -712,7 +712,7 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   const rehearsalCanary = path.join(temp, 'authenticated-canary.sql');
   fs.writeFileSync(rehearsalCanary, [
     '-- rollback-only authenticated test',
-    'begin isolation level repeatable read;',
+    'begin isolation level repeatable read read only;',
     '-- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN',
     'do $canary$ begin perform 101; end; $canary$;',
     '-- FINANCE_AUTHENTICATED_CANARY_CORE_END',
@@ -730,6 +730,9 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   assert.match(fs.readFileSync(rehearsal, 'utf8'), /savepoint finance_release_migration;[\s\S]+rollback to savepoint finance_release_migration;/);
   assert.match(fs.readFileSync(rehearsal, 'utf8'), /select 2;[\s\S]+perform 101;[\s\S]+rollback to savepoint finance_release_migration;[\s\S]+perform 202;/);
   assert.equal((fs.readFileSync(rehearsal, 'utf8').match(/with value as/g) || []).length, 2, 'rehearsal must compare the same fingerprint in one snapshot');
+  const legacyCanary = path.join(temp, 'authenticated-canary-legacy.sql');
+  fs.writeFileSync(legacyCanary, fs.readFileSync(rehearsalCanary, 'utf8').replace(' repeatable read read only;', ' repeatable read;'));
+  guard.prepareRehearsal(target, path.join(temp, 'legacy-canary-rehearsal.sql'), '20260826155840', rehearsalFingerprint, legacyCanary);
   const gateSource = path.join(temp, 'gate.sql');
   const gateOutput = path.join(temp, 'gate-rendered.sql');
   fs.writeFileSync(gateSource, "\\set ON_ERROR_STOP on\nselect set_config('finance.release_migration_versions', :'migration_versions', false);\nselect 1;\n");
