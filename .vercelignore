@@ -347,6 +347,9 @@ supabase/.temp
 !scripts/finance_revenue_repair_fingerprint.sql
 !scripts/finance_revenue_repair_postflight.sql
 !scripts/finance_revenue_repair_canary.sql
+!scripts/finance_operational_stability_postflight.sql
+!scripts/finance_operational_stability_canary.sql
+!scripts/check_operational_stability_migration.cjs
 !scripts/test_revenue_repair_release_batch.mjs
 !scripts/check_home_care_revenue_repair.cjs
 !scripts/check_revenue_repair_migration_integration.cjs

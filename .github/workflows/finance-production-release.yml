@@ -8,15 +8,16 @@ on:
         required: true
         type: string
       release_phase:
-        description: frontend_compat publishes UI; audit security installs the access fix; revenue repair runs only after all reviewed security migrations
+        description: frontend_compat publishes UI; audit security installs the access fix; revenue repair corrects mapped income; operational stability repairs remaining read and function access issues
         required: true
         type: choice
         options:
           - frontend_compat
           - database_audit_security_20260922
           - database_revenue_repair_20260924
+          - database_operational_stability_20260924
       migration_versions:
-        description: frontend_compat=none; database_audit_security_20260922=20260922133752; database_revenue_repair_20260924=20260924074010
+        description: frontend_compat=none; database_audit_security_20260922=20260922133752; database_revenue_repair_20260924=20260924074010; database_operational_stability_20260924=20260924155142
         required: true
         type: string
       confirmation:
@@ -270,6 +271,8 @@ jobs:
           cp scripts/finance_revenue_repair_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_revenue_repair_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_revenue_repair_canary.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_operational_stability_postflight.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_operational_stability_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_invoice_select_initplan_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_invoice_select_initplan_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_ar_verified_accounting_scope_postflight.sql "$BUNDLE/release-tools/scripts/"
@@ -478,7 +481,7 @@ jobs:
           fi
 
       - name: Prove authenticated submit, supervisor return and applicant resubmit before DB mutation
-        if: inputs.release_phase != 'database_read_latency_20260913' && inputs.release_phase != 'database_ar_mapping_20260913' && inputs.release_phase != 'database_audit_remediation_20260914' && inputs.release_phase != 'database_approval_search_20260914' && inputs.release_phase != 'database_history_summary_20260915' && inputs.release_phase != 'database_invoice_read_scope_20260915' && inputs.release_phase != 'frontend_compat' && inputs.release_phase != 'database_audit_security_20260922' && inputs.release_phase != 'database_revenue_repair_20260924' && inputs.release_phase != 'database_hr_bridge_20260922' && inputs.release_phase != 'database_ar_read_scope_20260922'
+        if: inputs.release_phase != 'database_read_latency_20260913' && inputs.release_phase != 'database_ar_mapping_20260913' && inputs.release_phase != 'database_audit_remediation_20260914' && inputs.release_phase != 'database_approval_search_20260914' && inputs.release_phase != 'database_history_summary_20260915' && inputs.release_phase != 'database_invoice_read_scope_20260915' && inputs.release_phase != 'frontend_compat' && inputs.release_phase != 'database_audit_security_20260922' && inputs.release_phase != 'database_revenue_repair_20260924' && inputs.release_phase != 'database_operational_stability_20260924' && inputs.release_phase != 'database_hr_bridge_20260922' && inputs.release_phase != 'database_ar_read_scope_20260922'
         shell: bash
         run: |
           set -euo pipefail
@@ -564,6 +567,22 @@ jobs:
               --receivables-postflight "$TOOLS/scripts/finance_canonical_receivables_postflight.sql" \
               --profiles-postflight "$TOOLS/scripts/finance_reporting_profiles_postflight.sql"
             (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-revenue-repair-apply.sql" --output json) > "$RUNNER_TEMP/revenue-repair-apply.json"
+          elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_operational_stability_20260924"; then
+            node "$GUARD" prepare-phase-query --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
+              --output "$RUNNER_TEMP/finance-operational-stability-prerequisites.sql" \
+              --release-phase database_revenue_repair_20260924 --migration-versions 20260924074010
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-operational-stability-prerequisites.sql" --output json) > "$RUNNER_TEMP/operational-stability-prerequisites.json"
+            node "$GUARD" prepare-operational-stability-rehearsal --migration-dir "$TOOLS/supabase/migrations" \
+              --output "$RUNNER_TEMP/finance-operational-stability-rehearsal.sql" \
+              --migration-versions "$MIGRATION_VERSIONS" --fingerprint "$TOOLS/scripts/finance_statement_source_fingerprint.sql" \
+              --authenticated-canary "$TOOLS/scripts/finance_operational_stability_canary.sql" \
+              --operational-postflight "$TOOLS/scripts/finance_operational_stability_postflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-operational-stability-rehearsal.sql" --output json) > "$RUNNER_TEMP/operational-stability-rehearsal.json"
+            node "$GUARD" prepare-operational-stability-apply --migration-dir "$TOOLS/supabase/migrations" \
+              --output "$RUNNER_TEMP/finance-operational-stability-apply.sql" \
+              --migration-versions "$MIGRATION_VERSIONS" --ledger "$LEDGER" \
+              --operational-postflight "$TOOLS/scripts/finance_operational_stability_postflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-operational-stability-apply.sql" --output json) > "$RUNNER_TEMP/operational-stability-apply.json"
           elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_hr_bridge_20260922"; then
             node "$GUARD" prepare-hr-bridge-prerequisite-query --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
               --output "$RUNNER_TEMP/finance-hr-bridge-prerequisites.sql" --ledger "$LEDGER" \
@@ -953,7 +972,7 @@ jobs:
             node "$GUARD" prepare-apply --migration "$MIGRATION" --output "$APPLY" \
               --migration-version "$MIGRATION_VERSIONS" --ledger "$LEDGER"
             (cd "$TOOLS" && supabase db query --linked --file "$APPLY" --output json) > "$RUNNER_TEMP/apply-result.json"
-          elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912" || test "$RELEASE_PHASE" = "database_history_performance_20260913" || test "$RELEASE_PHASE" = "database_read_latency_20260913" || test "$RELEASE_PHASE" = "database_ar_mapping_20260913" || test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922"; }; then
+          elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912" || test "$RELEASE_PHASE" = "database_history_performance_20260913" || test "$RELEASE_PHASE" = "database_read_latency_20260913" || test "$RELEASE_PHASE" = "database_ar_mapping_20260913" || test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922"; }; then
             echo "Exact DB phase is already applied; recovering with postflight only and no mutation."
           else
             echo "Unexpected phase state: $PHASE_STATE" >&2
@@ -967,7 +986,7 @@ jobs:
             --migration-versions "$MIGRATION_VERSIONS"
           run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
             "$RUNNER_TEMP/finance-postflight.sql" "$RUNNER_TEMP/finance-postflight.json"
-          if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"; then
+          if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"; then
           (cd "$TOOLS" && supabase db query --linked \
             --file scripts/finance_production_authenticated_canary.sql \
             --output json) > "$RUNNER_TEMP/authenticated-canary-after.json"
@@ -978,25 +997,25 @@ jobs:
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_statement_source_canary.sql --output json) > "$RUNNER_TEMP/statement-source-canary.json"
             node "$GUARD" verify-reports-canary --domain statement_source --input "$RUNNER_TEMP/statement-source-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_dashboard_scope_canary.sql --output json) > "$RUNNER_TEMP/dashboard-scope-canary.json"
             node "$GUARD" verify-reports-canary --domain dashboard_scope --input "$RUNNER_TEMP/dashboard-scope-canary.json"
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_google_projection_canary.sql --output json) > "$RUNNER_TEMP/google-projection-canary.json"
             node "$GUARD" verify-reports-canary --domain google_projection --input "$RUNNER_TEMP/google-projection-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_approval_search_canary.sql --output json) > "$RUNNER_TEMP/approval-search-canary.json"
             node "$GUARD" verify-reports-canary --domain approval_search --input "$RUNNER_TEMP/approval-search-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_approval_history_summary_canary.sql --output json) > "$RUNNER_TEMP/history-summary-canary.json"
             node "$GUARD" verify-reports-canary --domain approval_history_summary --input "$RUNNER_TEMP/history-summary-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_invoice_select_initplan_canary.sql --output json) > "$RUNNER_TEMP/invoice-read-scope-canary.json"
             node "$GUARD" verify-reports-canary --domain invoice_read_scope --input "$RUNNER_TEMP/invoice-read-scope-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_ar_verified_accounting_scope_canary.sql --output json) > "$RUNNER_TEMP/ar-read-scope-canary.json"
             node "$GUARD" verify-reports-canary --domain ar_read_scope --input "$RUNNER_TEMP/ar-read-scope-canary.json"
           fi
@@ -1007,6 +1026,10 @@ jobs:
           if test "$RELEASE_PHASE" = "database_revenue_repair_20260924"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_revenue_repair_canary.sql --output json) > "$RUNNER_TEMP/revenue-repair-canary.json"
             node "$GUARD" verify-reports-canary --domain revenue_repair --input "$RUNNER_TEMP/revenue-repair-canary.json"
+          fi
+          if test "$RELEASE_PHASE" = "database_operational_stability_20260924"; then
+            (cd "$TOOLS" && supabase db query --linked --file scripts/finance_operational_stability_canary.sql --output json) > "$RUNNER_TEMP/operational-stability-canary.json"
+            node "$GUARD" verify-reports-canary --domain operational_stability --input "$RUNNER_TEMP/operational-stability-canary.json"
           fi
           if test "$RELEASE_PHASE" = "database_ar_mapping_20260913"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_ar_mapping_canary.sql --output json) > "$RUNNER_TEMP/ar-mapping-canary.json"
@@ -1182,7 +1205,7 @@ jobs:
             --release-phase "$RELEASE_PHASE" --migration-versions "$MIGRATION_VERSIONS"
           (cd "$TOOLS" && supabase db query --linked \
             --file "$RUNNER_TEMP/promotion-postflight.sql" --output json) > "$RUNNER_TEMP/promotion-postflight.json"
-          if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"; then
+          if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"; then
           (cd "$TOOLS" && supabase db query --linked \
             --file scripts/finance_production_authenticated_canary.sql \
             --output json) > "$RUNNER_TEMP/promotion-authenticated-canary.json"
@@ -1193,25 +1216,25 @@ jobs:
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_statement_source_canary.sql --output json) > "$RUNNER_TEMP/promotion-statement-source-canary.json"
             node "$GUARD" verify-reports-canary --domain statement_source --input "$RUNNER_TEMP/promotion-statement-source-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_dashboard_scope_canary.sql --output json) > "$RUNNER_TEMP/promotion-dashboard-scope-canary.json"
             node "$GUARD" verify-reports-canary --domain dashboard_scope --input "$RUNNER_TEMP/promotion-dashboard-scope-canary.json"
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_google_projection_canary.sql --output json) > "$RUNNER_TEMP/promotion-google-projection-canary.json"
             node "$GUARD" verify-reports-canary --domain google_projection --input "$RUNNER_TEMP/promotion-google-projection-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_approval_search_canary.sql --output json) > "$RUNNER_TEMP/promotion-approval-search-canary.json"
             node "$GUARD" verify-reports-canary --domain approval_search --input "$RUNNER_TEMP/promotion-approval-search-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_approval_history_summary_canary.sql --output json) > "$RUNNER_TEMP/promotion-history-summary-canary.json"
             node "$GUARD" verify-reports-canary --domain approval_history_summary --input "$RUNNER_TEMP/promotion-history-summary-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_invoice_select_initplan_canary.sql --output json) > "$RUNNER_TEMP/promotion-invoice-read-scope-canary.json"
             node "$GUARD" verify-reports-canary --domain invoice_read_scope --input "$RUNNER_TEMP/promotion-invoice-read-scope-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
+          if test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_ar_verified_accounting_scope_canary.sql --output json) > "$RUNNER_TEMP/promotion-ar-read-scope-canary.json"
             node "$GUARD" verify-reports-canary --domain ar_read_scope --input "$RUNNER_TEMP/promotion-ar-read-scope-canary.json"
           fi
@@ -1222,6 +1245,10 @@ jobs:
           if test "$RELEASE_PHASE" = "database_revenue_repair_20260924"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_revenue_repair_canary.sql --output json) > "$RUNNER_TEMP/promotion-revenue-repair-canary.json"
             node "$GUARD" verify-reports-canary --domain revenue_repair --input "$RUNNER_TEMP/promotion-revenue-repair-canary.json"
+          fi
+          if test "$RELEASE_PHASE" = "database_operational_stability_20260924"; then
+            (cd "$TOOLS" && supabase db query --linked --file scripts/finance_operational_stability_canary.sql --output json) > "$RUNNER_TEMP/promotion-operational-stability-canary.json"
+            node "$GUARD" verify-reports-canary --domain operational_stability --input "$RUNNER_TEMP/promotion-operational-stability-canary.json"
           fi
           if test "$RELEASE_PHASE" = "database_ar_mapping_20260913"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_ar_mapping_canary.sql --output json) > "$RUNNER_TEMP/promotion-ar-mapping-canary.json"
