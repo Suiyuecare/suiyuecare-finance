@@ -24,7 +24,8 @@ create table finance_hr_private.finance_hr_obligations(obligation_id uuid,tenant
 create table finance_hr_private.finance_hr_salary_readers(tenant_id uuid,source_employer_id uuid,finance_user_id text,revoked_at timestamptz,verified_at timestamptz,effective_from timestamptz,effective_until timestamptz);
 create function public.finance_user_has_verified_google_identity(uuid,text) returns boolean language plpgsql as $$begin raise exception 'unexpected non-fixture organization source';end$$;
 `);
-for(const t of ['expense_requests','invoices','bills'])await db.exec(`alter table ${t} add no text,add batch_id text,add status text default 'returned',add note text,add entity_id text default 'E1';`);
+await db.exec("alter table expense_requests add no text,add status text default 'returned',add note text,add entity_id text default 'E1'");
+for(const t of ['invoices','bills'])await db.exec(`alter table ${t} add no text,add batch_id text,add status text default 'returned',add note text,add entity_id text default 'E1';`);
 await db.exec('set check_function_bodies=off');
 await db.exec("alter table expense_requests add actual_files jsonb default '[]';alter table invoices add receipt_files jsonb default '[]';");
 const writeScope=JSON.parse(read('scripts/fixtures/finance_attachment_write_scope_20260922.json'));

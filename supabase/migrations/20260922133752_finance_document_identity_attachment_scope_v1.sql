@@ -169,7 +169,9 @@ with parents as materialized(
  select 'expense_requests'::text record_type,p.tenant_id,p.data_environment,p.id,
   'id:'||p.id parent_group,array[p.id,p.no] aliases,
   public.finance_attachment_paths_v1(array[p.files,p.actual_files,p.steps,p.form_payload]) paths,
-  jsonb_build_object('entity',p.entity_id,'department',p.department_code,'applicant',p.applicant_id,'batch',p.batch_id) source_scope
+  -- Expense requests have no physical batch_id column in production. Their
+  -- attachment parent is already keyed by the immutable request ID.
+  jsonb_build_object('entity',p.entity_id,'department',p.department_code,'applicant',p.applicant_id,'batch',null::text) source_scope
  from public.expense_requests p
  union all
  select 'invoices',p.tenant_id,p.data_environment,p.id,
