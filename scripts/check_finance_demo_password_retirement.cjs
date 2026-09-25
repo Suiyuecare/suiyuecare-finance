@@ -40,6 +40,14 @@ assert.equal(guard.RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,
   'database_demo_password_retirement_20260925');
 assert.equal(guard.RELEASE_PHASES[guard.RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT], '20260925170000');
 assert.ok(guard.SUPPORTED_GATE_PHASES.some((phase) => phase.join(',') === '20260925170000'));
+assert.doesNotThrow(() => guard.validateTarget({
+  SUPABASE_ACCESS_TOKEN: 'sbp_test-only',
+  FINANCE_SUPABASE_URL: `https://${guard.PRODUCTION_CATALOG.supabaseProjectRef}.supabase.co/`,
+  FINANCE_SUPABASE_ANON_KEY: 'sb_publishable_test-only',
+  VERCEL_TOKEN: 'test-only',
+  VERCEL_ORG_ID: guard.PRODUCTION_CATALOG.vercelOrgId,
+  VERCEL_PROJECT_ID: guard.PRODUCTION_CATALOG.vercelProjectId
+}, 'a'.repeat(40), 'database_demo_password_retirement_20260925', '20260925170000', guard.PRODUCTION_CATALOG.supabaseProjectRef));
 assert.match(releaseWorkflow, /database_demo_password_retirement_20260925/);
 assert.match(releaseWorkflow, /finance_demo_password_retirement_canary\.sql/);
 assert.match(releaseWorkflow, /finance_demo_password_retirement_postflight\.sql/);
