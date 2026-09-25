@@ -497,8 +497,6 @@ const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
   'scripts/finance_demo_password_retirement_postflight.sql',
   'scripts/finance_demo_password_retirement_canary.sql',
   'scripts/check_finance_demo_password_retirement.cjs',
-  'supabase/migrations/20260925170000_finance_retire_demo_password_v1.sql',
-  'supabase/migrations/20260925170000_finance_retire_demo_password_v1.sql',
   'scripts/test_revenue_repair_release_batch.mjs',
   'scripts/check_home_care_revenue_repair.cjs',
   'scripts/check_revenue_repair_migration_integration.cjs',
