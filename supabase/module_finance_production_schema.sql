@@ -7,7 +7,6 @@ create table if not exists finance_users (
   id text primary key,
   name text not null,
   email text unique not null,
-  demo_password text,
   role text not null check (role in ('employee','section_chief','dept_manager','admin_director','general_affairs','hr','accountant','ceo')),
   role_label text,
   entity_id text,
