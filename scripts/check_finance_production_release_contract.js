@@ -420,6 +420,7 @@ assert.match(operationalBranch,/operational-stability-prerequisites\.sql[\s\S]+p
 assert.doesNotMatch(promoteJob,/prepare-operational-stability-(?:apply|rehearsal)/);
 assert.equal((workflow.match(/verify-reports-canary --domain operational_stability /g)||[]).length,2);
 guard.validateTarget(exactEnvironment,'a'.repeat(40),guard.RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,guard.OPERATIONAL_STABILITY_MIGRATIONS.join(','),catalog.supabaseProjectRef);
+guard.validateTarget(exactEnvironment,'a'.repeat(40),guard.RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS.join(','),catalog.supabaseProjectRef);
 for(const file of ['finance_operational_stability_postflight.sql','finance_operational_stability_canary.sql']){
  assert.ok(candidateJob.includes(file),'Operational stability sources must be sealed: '+file);
  if(file.startsWith('scripts/'))for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert.ok(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'"+file+"'"));
