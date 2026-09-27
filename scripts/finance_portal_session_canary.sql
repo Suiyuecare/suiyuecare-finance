@@ -17,4 +17,4 @@ do $portal_session_rollback$ begin
  if auth.uid() is not null or current_user in('anon','authenticated','service_role') then raise exception 'Portal session canary left user context';end if;
 end $portal_session_rollback$;
 -- FINANCE_AUTHENTICATED_CANARY_ROLLBACK_CHECK_END
-select jsonb_build_object('canary','readonly_portal_session_v1','ok',true,'rolled_back',true,'privacy_preserved',true) as hr_portal_session_canary_result;
+select jsonb_build_object('canary','readonly_portal_session_v1','ok',true,'rolled_back',true,'privacy_preserved',true) as portal_session_canary_result;
