@@ -317,11 +317,14 @@ declare a public.finance_users;env text:=coalesce(nullif(btrim(p_environment),''
  return true;
 end $$;
 
-create function public.finance_payroll_accrual_evidence_prepare_v1(p_request_id uuid,p_obligation_id uuid) returns jsonb language sql security invoker set search_path='' as $$select private.finance_payroll_accrual_evidence_prepare_v1(p_request_id,p_obligation_id)$$;
-create function public.finance_payroll_accrual_save_v1(p_request_id uuid,p_obligation_id uuid,p_entries jsonb,p_evidence jsonb) returns jsonb language sql security invoker set search_path='' as $$select private.finance_payroll_accrual_save_v1(p_request_id,p_obligation_id,p_entries,p_evidence)$$;
-create function public.finance_payroll_accrual_review_v1(p_id uuid,p_expected_version integer,p_reason text) returns jsonb language sql security invoker set search_path='' as $$select private.finance_payroll_accrual_review_v1(p_id,p_expected_version,p_reason,false)$$;
-create function public.finance_payroll_accrual_return_v1(p_id uuid,p_expected_version integer,p_reason text) returns jsonb language sql security invoker set search_path='' as $$select private.finance_payroll_accrual_review_v1(p_id,p_expected_version,p_reason,true)$$;
-create function public.finance_payroll_accrual_list_v1(p_entity_id text default null,p_period text default null) returns jsonb language sql security invoker set search_path='' as $$select private.finance_payroll_accrual_list_v1(p_entity_id,p_period)$$;
+-- Bounded public entrypoints preserve the directory's private namespace denial.
+-- Each implementation authenticates the original JWT through auth.uid(), then
+-- checks its active Finance identity, tenant, salary reader and company scope.
+create function public.finance_payroll_accrual_evidence_prepare_v1(p_request_id uuid,p_obligation_id uuid) returns jsonb language sql security definer set search_path='' as $$select private.finance_payroll_accrual_evidence_prepare_v1(p_request_id,p_obligation_id)$$;
+create function public.finance_payroll_accrual_save_v1(p_request_id uuid,p_obligation_id uuid,p_entries jsonb,p_evidence jsonb) returns jsonb language sql security definer set search_path='' as $$select private.finance_payroll_accrual_save_v1(p_request_id,p_obligation_id,p_entries,p_evidence)$$;
+create function public.finance_payroll_accrual_review_v1(p_id uuid,p_expected_version integer,p_reason text) returns jsonb language sql security definer set search_path='' as $$select private.finance_payroll_accrual_review_v1(p_id,p_expected_version,p_reason,false)$$;
+create function public.finance_payroll_accrual_return_v1(p_id uuid,p_expected_version integer,p_reason text) returns jsonb language sql security definer set search_path='' as $$select private.finance_payroll_accrual_review_v1(p_id,p_expected_version,p_reason,true)$$;
+create function public.finance_payroll_accrual_list_v1(p_entity_id text default null,p_period text default null) returns jsonb language sql security definer set search_path='' as $$select private.finance_payroll_accrual_list_v1(p_entity_id,p_period)$$;
 do $$declare f record;begin
  for f in select p.oid::regprocedure signature,p.proname,n.nspname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in('public','private') and p.proname like 'finance_payroll_%_v1' loop
   execute format('revoke all on function %s from public,anon,authenticated,service_role',f.signature);

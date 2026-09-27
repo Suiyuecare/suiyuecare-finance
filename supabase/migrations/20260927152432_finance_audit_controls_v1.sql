@@ -122,7 +122,7 @@ begin
 exception when insufficient_privilege then return false;
 end $$;
 revoke all on function private.finance_archive_path_allowed_v1(text) from public,anon,authenticated,service_role;
-grant usage on schema private to authenticated;
+-- Policies bind these guarded functions by OID; preserve the HR directory namespace boundary.
 grant execute on function private.finance_archive_path_allowed_v1(text) to authenticated;
 create policy finance_archive_insert_v1 on storage.objects for insert to authenticated
  with check(bucket_id='finance-audit-archives' and public.is_finance_accounting() and private.finance_archive_path_allowed_v1(name));

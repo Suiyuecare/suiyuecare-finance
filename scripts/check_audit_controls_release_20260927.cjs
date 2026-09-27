@@ -9,6 +9,7 @@ let checks=0;const check=(fn)=>{fn();checks++};
 try{
  check(()=>assert.deepEqual(guard.AUDIT_CONTROLS_20260927_MIGRATIONS,versions.split(',')));
  check(()=>assert.deepEqual(guard.RELEASE_PHASES[phase],versions));
+ check(()=>{for(const[version,sha]of Object.entries(guard.AUDIT_CONTROLS_20260927_SOURCE_SHA256)){const file=fs.readdirSync(migrations).find(name=>name.startsWith(version+'_'));assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(migrations,file))).digest('hex'),sha);}});
  check(()=>assert.throws(()=>guard.releasePlan(phase,'20260927152432'),/exact|requires/));
  const base=['20260801000000'],baseline={count:1,lastVersion:base[0],sha256:crypto.createHash('sha256').update(base[0]+'\n').digest('hex')};
  const prior=[...base,...guard.REVIEWED_MIGRATION_CATALOG.filter(v=>v<versions.split(',')[0])].sort(),ledger=path.join(temp,'ledger.txt');
