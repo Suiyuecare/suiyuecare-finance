@@ -955,9 +955,18 @@ check('Vercel source includes build assets',
   !activeVercelIgnoreLines.some((line) => /^\/?assets\/?(?:$|\*|\*\*)/.test(line)));
 check('Vercel does not exclude the complete scripts directory',
   !activeVercelIgnoreLines.some((line) => /^\/?scripts\/?$/.test(line)));
-for (const requiredScript of VERCEL_BUILD_REQUIRED_SCRIPTS) {
+// Derive direct script contracts from the actual required source set so a new
+// release check cannot silently be dropped by Vercel's scripts/* denylist.
+const requiredVercelScripts = new Set([...VERCEL_BUILD_REQUIRED_SCRIPTS,
+  ...REQUIRED_RELEASE_FILES.filter((file) => /^scripts\/[^/]+$/.test(file))]);
+const orderedIgnoreRules = vercelIgnore.split(/\r?\n/).map((line) => line.trim())
+  .filter((line) => line && !line.startsWith('#'));
+for (const requiredScript of requiredVercelScripts) {
   check(`Vercel source includes release script: ${requiredScript}`,
-    !vercelIgnoreLines.has('scripts/*') || vercelIgnoreLines.has(`!${requiredScript}`));
+    !vercelIgnoreLines.has('scripts/*') || (vercelIgnoreLines.has(`!${requiredScript}`)
+      && orderedIgnoreRules.lastIndexOf(`!${requiredScript}`) > orderedIgnoreRules.lastIndexOf('scripts/*')
+      && !orderedIgnoreRules.slice(orderedIgnoreRules.lastIndexOf(`!${requiredScript}`) + 1)
+        .some((rule) => [requiredScript, '/' + requiredScript, 'scripts/*', '/scripts/*', 'scripts/**', '/scripts/**'].includes(rule))));
 }
 check('Vercel source includes the release gate contract',
   !vercelIgnoreLines.has('docs/*') || vercelIgnoreLines.has('!docs/RELEASE_GATES.md'));

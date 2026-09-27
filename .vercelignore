@@ -380,3 +380,19 @@ supabase/.temp
 !scripts/finance_audit_controls_20260927_canary.sql
 !scripts/finance_audit_controls_20260927_fingerprint.sql
 !scripts/finance_payroll_accrual_v1_postflight.sql
+
+# Exact reviewed contractor and portal-session release contracts.
+!scripts/test_hr_contractor_bridge.mjs
+!scripts/check_hr_contractor_release.cjs
+!scripts/test_hr_contractor_release_batch.mjs
+!scripts/test_hr_contractor_concurrency.mjs
+!scripts/finance_hr_contractor_postflight.sql
+!scripts/finance_hr_contractor_canary.sql
+!scripts/finance_hr_contractor_fingerprint.sql
+!scripts/test_portal_session_logout.mjs
+!scripts/check_portal_session_release.cjs
+!scripts/test_portal_session_release_batch.mjs
+!scripts/test_portal_logout_client.mjs
+!scripts/finance_portal_session_logout_postflight.sql
+!scripts/finance_portal_session_canary.sql
+!scripts/finance_portal_session_fingerprint.sql
