@@ -81,7 +81,7 @@
     "test:hr-contractor": "node scripts/test_hr_contractor_bridge.mjs && node scripts/check_hr_contractor_release.cjs && node scripts/test_hr_contractor_release_batch.mjs",
     "test:hr-contractor-browser": "HR_BRIDGE_BROWSER=1 node scripts/test_hr_contractor_bridge.mjs",
     "test:hr-contractor-native": "node scripts/test_hr_contractor_concurrency.mjs",
-    "test:portal-session": "node scripts/test_portal_session_logout.mjs && node scripts/check_portal_session_release.cjs && node scripts/test_portal_session_release_batch.mjs && node scripts/test_portal_logout_client.mjs"
+    "test:portal-session": "node scripts/test_portal_session_logout.mjs && node scripts/check_portal_session_release.cjs && node scripts/test_portal_session_release_batch.mjs && node scripts/test_portal_logout_client.mjs && node scripts/test_canary_active_sessions.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

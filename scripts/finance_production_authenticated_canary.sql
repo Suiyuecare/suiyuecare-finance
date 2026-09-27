@@ -10,6 +10,7 @@ set local statement_timeout = '120s';
 -- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN
 do $canary$
 declare
+  v_canary_session_id uuid;
   v_tenant_id constant uuid := '00000000-0000-0000-0000-000000000001';
   v_request_id constant text := '__finance_release_canary_u8__';
   v_request_no constant text := 'CANARY-ROLLBACK-U8';
@@ -271,10 +272,20 @@ begin
   );
 
   perform pg_catalog.set_config('request.jwt.claim.sub', v_applicant_auth_user_id::text, true);
+  -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using v_applicant_auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
   perform pg_catalog.set_config(
     'request.jwt.claims',
     pg_catalog.jsonb_build_object(
-      'sub', v_applicant_auth_user_id,
+      'sub', v_applicant_auth_user_id, 'session_id', v_canary_session_id,
       'role', 'authenticated',
       'email', v_applicant_email
     )::text,
@@ -545,10 +556,20 @@ begin
     perform pg_catalog.set_config(
       'request.jwt.claim.sub', v_supervisor_auth_user_id::text, true
     );
-    perform pg_catalog.set_config(
+    -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using v_supervisor_auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform pg_catalog.set_config(
       'request.jwt.claims',
       pg_catalog.jsonb_build_object(
-        'sub', v_supervisor_auth_user_id,
+        'sub', v_supervisor_auth_user_id, 'session_id', v_canary_session_id,
         'role', 'authenticated',
         'email', v_supervisor_email
       )::text,
@@ -624,10 +645,20 @@ begin
     and expense_row.data_environment = 'test';
 
   perform pg_catalog.set_config('request.jwt.claim.sub', v_supervisor_auth_user_id::text, true);
+  -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using v_supervisor_auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
   perform pg_catalog.set_config(
     'request.jwt.claims',
     pg_catalog.jsonb_build_object(
-      'sub', v_supervisor_auth_user_id,
+      'sub', v_supervisor_auth_user_id, 'session_id', v_canary_session_id,
       'role', 'authenticated',
       'email', v_supervisor_email
     )::text,
@@ -671,10 +702,20 @@ begin
   end if;
 
   perform pg_catalog.set_config('request.jwt.claim.sub', v_applicant_auth_user_id::text, true);
+  -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using v_applicant_auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
   perform pg_catalog.set_config(
     'request.jwt.claims',
     pg_catalog.jsonb_build_object(
-      'sub', v_applicant_auth_user_id,
+      'sub', v_applicant_auth_user_id, 'session_id', v_canary_session_id,
       'role', 'authenticated',
       'email', v_applicant_email
     )::text,
@@ -864,10 +905,20 @@ begin
   -- her authenticated UUID, reject a stale pre-v3 tab, then create a complete
   -- rollback-only request through the same public submit endpoint.
   perform pg_catalog.set_config('request.jwt.claim.sub', v_xu_auth_user_id::text, true);
+  -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using v_xu_auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
   perform pg_catalog.set_config(
     'request.jwt.claims',
     pg_catalog.jsonb_build_object(
-      'sub', v_xu_auth_user_id,
+      'sub', v_xu_auth_user_id, 'session_id', v_canary_session_id,
       'role', 'authenticated',
       'email', v_xu_applicant_email
     )::text,

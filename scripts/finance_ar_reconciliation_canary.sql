@@ -5,18 +5,37 @@ set local statement_timeout='120s';
 -- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN
 do $ar_reconciliation_canary$
 declare
+  v_canary_session_id uuid;
+  v_canary_active_session_users uuid[];
  t constant uuid:='00000000-0000-0000-0000-000000000001';prefix constant text:='__finance_ar_reconcile_canary_20260911__';
  a public.finance_users%rowtype;employee public.finance_users%rowtype;b jsonb;r jsonb;production_before jsonb;production_after jsonb;
  d date:=(statement_timestamp() at time zone 'Asia/Taipei')::date;
  old_claims text:=current_setting('request.jwt.claims',true);old_sub text:=current_setting('request.jwt.claim.sub',true);old_tenant text:=current_setting('app.current_tenant_id',true);
 begin
+ -- Preserve every original actor/role/scope predicate; require a genuine
+ -- active session when the installed Auth fence requires it. NULL is only
+ -- the legacy (helper absent) branch; an empty array authorizes no candidate.
+ if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'select coalesce(array_agg(distinct s.user_id),''{}''::uuid[]) from auth.sessions s join public.finance_users u on u.auth_user_id=s.user_id where u.tenant_id=$1 and u.active and (s.not_after is null or s.not_after>statement_timestamp())'
+   into v_canary_active_session_users using t;
+ end if;
  if exists(select 1 from public.invoices where left(id,length(prefix))=prefix or left(no,length(prefix))=prefix)
   or exists(select 1 from public.ledger_entries where left(coalesce(source_id,''),length(prefix))=prefix or left(coalesce(posting_key,''),length(prefix))=prefix) then raise exception 'AR reconciliation canary identifiers already exist';end if;
- select * into a from public.finance_users u where u.tenant_id=t and u.active and u.role='accountant' and public.finance_user_is_approval_identity_ready(t,u.id) order by u.id limit 1;
- select * into employee from public.finance_users u where u.tenant_id=t and u.active and u.role not in ('accountant','ceo','admin_director','external_audit','board') and public.finance_user_is_approval_identity_ready(t,u.id) order by u.id limit 1;
+ select * into a from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=t and u.active and u.role='accountant' and public.finance_user_is_approval_identity_ready(t,u.id) order by u.id limit 1;
+ select * into employee from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=t and u.active and u.role not in ('accountant','ceo','admin_director','external_audit','board') and public.finance_user_is_approval_identity_ready(t,u.id) order by u.id limit 1;
  if a.id is null or employee.id is null then raise exception 'AR reconciliation canary requires verified accountant and non-financial member';end if;
  perform set_config('app.current_tenant_id',t::text,true);perform set_config('request.jwt.claim.sub',a.auth_user_id::text,true);
- perform set_config('request.jwt.claims',jsonb_build_object('sub',a.auth_user_id,'role','authenticated','email',a.email)::text,true);
+ -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using a.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',a.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',a.email)::text,true);
  execute 'set local role authenticated';
  if current_user<>'authenticated' then raise exception 'AR reconciliation canary must use browser role';end if;
  b:=public.finance_receivables_v1(d,'E6','J1101','test')->'reconciliation';
@@ -42,7 +61,17 @@ begin
  r:=public.finance_receivables_v1(d,prefix||'unauthorized-company',null,'test')->'reconciliation';
  if r->>'reconciliationVisible' is distinct from 'false' or r->'ledgerNet'<>'null'::jsonb or r->'needsReview'<>'null'::jsonb then raise exception 'AR reconciliation exposed unverified company scope';end if;
  execute 'reset role';
- perform set_config('request.jwt.claim.sub',employee.auth_user_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',employee.auth_user_id,'role','authenticated','email',employee.email)::text,true);
+ perform set_config('request.jwt.claim.sub',employee.auth_user_id::text,true);-- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using employee.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',employee.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',employee.email)::text,true);
  execute 'set local role authenticated';
  r:=public.finance_receivables_v1(d,'E6','J1101','test')->'reconciliation';
  if r->>'reconciliationVisible' is distinct from 'false' or r->'ledgerNet'<>'null'::jsonb or r->'unmappedDebitAmount'<>'null'::jsonb or r->'unmappedCreditAmount'<>'null'::jsonb or r->'needsReview'<>'null'::jsonb then raise exception 'AR reconciliation exposed complete totals to partial reader';end if;

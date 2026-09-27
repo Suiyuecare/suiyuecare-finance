@@ -7,6 +7,8 @@ set local statement_timeout='120s';
 -- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN
 do $canary$
 declare
+  v_canary_session_id uuid;
+  v_canary_active_session_users uuid[];
  v_tenant constant uuid:='00000000-0000-0000-0000-000000000001';
  v_id constant text:='__finance_ar_canary_20260910__';v_no constant text:='CANARY-AR-20260910';v_event_no constant text:='CANARY-AR-ALW-20260910';
  v_actor public.finance_users%rowtype;v_i public.invoices%rowtype;v_income text;v_income_name text;v_result jsonb;v_ar jsonb;v_event text;v_blocked boolean:=false;
@@ -14,12 +16,19 @@ declare
  v_claims text:=current_setting('request.jwt.claims',true);v_sub text:=current_setting('request.jwt.claim.sub',true);v_tenant_setting text:=current_setting('app.current_tenant_id',true);
  v_old_op text:=current_setting('app.finance_receipt_operation',true);v_old_actor text:=current_setting('app.finance_receipt_actor',true);
 begin
+ -- Preserve every original actor/role/scope predicate; require a genuine
+ -- active session when the installed Auth fence requires it. NULL is only
+ -- the legacy (helper absent) branch; an empty array authorizes no candidate.
+ if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'select coalesce(array_agg(distinct s.user_id),''{}''::uuid[]) from auth.sessions s join public.finance_users u on u.auth_user_id=s.user_id where u.tenant_id=$1 and u.active and (s.not_after is null or s.not_after>statement_timestamp())'
+   into v_canary_active_session_users using v_tenant;
+ end if;
  if exists(select 1 from public.invoices where id=v_id or no=v_no) or exists(select 1 from public.invoice_lifecycle_events where invoice_id=v_id or event_no=v_event_no)
   or exists(select 1 from public.ledger_entries where source_id=v_id or reference_no=v_no) or exists(select 1 from public.vouchers where request_id=v_id)
   or exists(select 1 from private.finance_ar_terms_v1 where invoice_id=v_id) then raise exception 'AR canary identifiers already exist; refusing to overwrite';end if;
  perform set_config('app.current_tenant_id',v_tenant::text,true);
  select u.* into v_actor from public.finance_users u join auth.users au on au.id=u.auth_user_id
- where u.tenant_id=v_tenant and u.active is true and au.email_confirmed_at is not null and coalesce(au.is_anonymous,false)=false
+ where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=v_tenant and u.active is true and au.email_confirmed_at is not null and coalesce(au.is_anonymous,false)=false
   and exists(select 1 from auth.identities g where g.user_id=au.id and g.provider='google')
   and public.finance_user_is_approval_identity_ready(v_tenant,u.id)
   and exists(select 1 from public.employee_department_roles r where r.tenant_id=v_tenant and r.finance_user_id=u.id and r.role_key='accountant' and r.can_approve is true
@@ -31,7 +40,17 @@ begin
  if v_income is null then raise exception 'AR canary income account unavailable';end if;
  v_income_name:=private.finance_tenant_account_name(v_tenant,v_income);
  perform set_config('request.jwt.claim.sub',v_actor.auth_user_id::text,true);
- perform set_config('request.jwt.claims',jsonb_build_object('sub',v_actor.auth_user_id,'role','authenticated','email',v_actor.email)::text,true);
+ -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using v_actor.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',v_actor.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',v_actor.email)::text,true);
  v_steps:=jsonb_build_array(jsonb_build_object('rk','applicant_submit','uid',v_actor.id,'a','approved','n',v_actor.name),jsonb_build_object('rk','accountant_invoice','uid',v_actor.id,'a','approved','n',v_actor.name),jsonb_build_object('rk','applicant_invoice_delivery','uid',v_actor.id,'a',''));
  insert into public.invoices(id,no,tenant_id,data_environment,entity_id,entity_name,department_code,invoice_date,buyer,amount,tax,total,status,approval_status,approval_step,steps,applicant,applicant_id,invoice_identifier_type,
  revenue_posted,revenue_posted_at,revenue_posting_state,revenue_posting_version,revenue_account_code,revenue_account_name)

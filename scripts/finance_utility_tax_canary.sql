@@ -7,6 +7,8 @@ set local statement_timeout='120s';
 -- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN
 do $canary$
 declare
+  v_canary_session_id uuid;
+  v_canary_active_session_users uuid[];
   v_tenant constant uuid:='00000000-0000-0000-0000-000000000001';
   v_id constant text:='__finance_utility_tax_canary_20260909__';
   v_no constant text:='CANARY-UTILITY-TAX-20260909';
@@ -19,6 +21,13 @@ declare
   v_old_sub text:=current_setting('request.jwt.claim.sub',true);
   v_old_tenant text:=current_setting('app.current_tenant_id',true);
 begin
+ -- Preserve every original actor/role/scope predicate; require a genuine
+ -- active session when the installed Auth fence requires it. NULL is only
+ -- the legacy (helper absent) branch; an empty array authorizes no candidate.
+ if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'select coalesce(array_agg(distinct s.user_id),''{}''::uuid[]) from auth.sessions s join public.finance_users u on u.auth_user_id=s.user_id where u.tenant_id=$1 and u.active and (s.not_after is null or s.not_after>statement_timestamp())'
+   into v_canary_active_session_users using v_tenant;
+ end if;
   if to_regprocedure('private.finance_assert_utility_posting_v1(public.expense_requests,jsonb,jsonb)') is null then
     raise exception 'Utility tax canary requires the new atomic persistence helper';end if;
   if exists(select 1 from public.expense_requests where id=v_id or no=v_no)
@@ -27,7 +36,7 @@ begin
     or exists(select 1 from public.ledger_entries where source_id=v_id or reference_no=v_no or voucher_no=v_voucher) then
     raise exception 'Utility tax canary identifiers already exist; refusing to overwrite';end if;
   select u.* into v_actor from public.finance_users u join auth.users au on au.id=u.auth_user_id
-  where u.tenant_id=v_tenant and u.active is true and au.email_confirmed_at is not null
+  where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=v_tenant and u.active is true and au.email_confirmed_at is not null
     and coalesce(au.is_anonymous,false)=false
     and exists(select 1 from auth.identities i where i.user_id=au.id and i.provider='google')
     and public.finance_user_is_approval_identity_ready(v_tenant,u.id)
@@ -36,7 +45,7 @@ begin
       and private.finance_org_effective_now_v2(to_jsonb(r)||coalesce(r.metadata->'org_effective_period','{}')))
   order by u.id limit 1;
   if v_actor.id is null then raise exception 'Utility tax canary has no verified active accountant';end if;
-  select u.* into v_applicant from public.finance_users u where u.tenant_id=v_tenant and u.active is true and u.id<>v_actor.id
+  select u.* into v_applicant from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=v_tenant and u.active is true and u.id<>v_actor.id
     and public.finance_user_is_approval_identity_ready(v_tenant,u.id) order by u.id limit 1;
   if v_applicant.id is null then raise exception 'Utility tax canary has no separate active applicant';end if;
   if not exists(select 1 from public.finance_department_units u join public.finance_department_entity_scopes s
@@ -44,7 +53,17 @@ begin
     where u.tenant_id=v_tenant and u.code='J1101' and u.active and u.present_in_source and u.is_posting_unit and s.active and s.entity_code='E6') then
     raise exception 'Utility tax canary posting scope is unavailable';end if;
   perform set_config('request.jwt.claim.sub',v_actor.auth_user_id::text,true);
-  perform set_config('request.jwt.claims',jsonb_build_object('sub',v_actor.auth_user_id,'role','authenticated','email',v_actor.email)::text,true);
+  -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using v_actor.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',v_actor.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',v_actor.email)::text,true);
   perform set_config('app.current_tenant_id',v_tenant::text,true);
   v_old:=jsonb_build_object('id','line_1','source','detail','description','水費11508',
     'grossAmount',100,'netAmount',100,'taxAmount',0,'debitAccount','6299',

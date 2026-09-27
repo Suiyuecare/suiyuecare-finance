@@ -12,6 +12,8 @@ declare
  t uuid:=public.default_tenant_id();
  other_t constant uuid:='d9130426-2900-4000-8000-000000000002';
  uid constant uuid:='d9130426-2900-4000-8000-000000000001';
+ sid constant uuid:='d9130426-2900-4000-8000-000000000003';
+ session_fixture_exists boolean;
  fid constant text:='__statement_source_employee_20260913__';
  v_email constant text:='statement-source-canary-20260913@suiyuecare.com';
  label constant text:='STATEMENT-SOURCE-ROLLBACK-ONLY-20260913';
@@ -20,6 +22,11 @@ declare
  page_offset integer;expected_count integer;denied boolean;row_id text;
  old_claims text:=current_setting('request.jwt.claims',true);old_sub text:=current_setting('request.jwt.claim.sub',true);old_tenant text:=current_setting('app.current_tenant_id',true);
 begin
+ if to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'select exists(select 1 from auth.sessions where id=$1 or user_id=$2)'
+   into session_fixture_exists using sid,uid;
+  if session_fixture_exists then raise exception 'Synthetic statement session identifiers already exist; refusing overwrite';end if;
+ end if;
  if exists(select 1 from auth.users u where u.id=uid or lower(btrim(u.email))=v_email)
   or exists(select 1 from auth.identities i where i.user_id=uid or lower(btrim(i.identity_data->>'email'))=v_email)
   or exists(select 1 from public.finance_users u where u.id=fid or lower(btrim(u.email))=v_email or u.name=label)
@@ -46,6 +53,12 @@ begin
  values(uid,'authenticated','authenticated',v_email,now(),'{"provider":"google","providers":["google"]}',jsonb_build_object('email',v_email,'email_verified',true,'name',label),now(),now());
  insert into auth.identities(provider_id,user_id,provider,identity_data,created_at,updated_at)
  values(uid::text,uid,'google',jsonb_build_object('sub',uid::text,'email',v_email,'email_verified',true),now(),now());
+ -- This session belongs only to the synthetic Auth identity above. The normal
+ -- session fence stays enabled; BEGIN/ROLLBACK also encloses this fixture.
+ if to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'insert into auth.sessions(id,user_id,created_at,updated_at,not_after) values($1,$2,statement_timestamp(),statement_timestamp(),statement_timestamp()+interval ''5 minutes'')'
+   using sid,uid;
+ end if;
  insert into public.finance_users(id,tenant_id,auth_user_id,email,name,role,role_label,entity_id,department_code,active,google_link_status)
  values(fid,t,uid,v_email,label,'employee','Synthetic rollback-only employee',company_code,dept,true,'bound');
  insert into public.tenants(id,slug,name) values(other_t,'statement-source-canary-20260913',label);
@@ -61,7 +74,7 @@ begin
   case when suffix='secret' then label||'-UNASSIGNED' else label end,current_date,label,label,amount,0,amount,'unpaid','draft',1,'[]'::jsonb,'領據'
  from (values('a',1250.25::numeric),('b',136::numeric),('c',1050::numeric),('secret',99999::numeric)) v(suffix,amount);
  select jsonb_agg(to_jsonb(i) order by id) into source_before from public.invoices i where left(i.id,length(prefix))=prefix;
- perform set_config('request.jwt.claim.sub',uid::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'role','authenticated','email',v_email)::text,true);
+ perform set_config('request.jwt.claim.sub',uid::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'session_id',sid,'role','authenticated','email',v_email)::text,true);
  execute 'set local role authenticated';
  if current_user<>'authenticated' or auth.uid() is distinct from uid or public.current_finance_user_id() is distinct from fid or public.current_tenant_id() is distinct from t or public.current_finance_role() is distinct from 'employee' then raise exception 'Synthetic employee did not resolve through real identity helpers';end if;
  foreach source in array array['expense_requests','bills','invoices'] loop
@@ -111,7 +124,14 @@ rollback;
 do $statement_source_rollback$
 declare
  uid constant uuid:='d9130426-2900-4000-8000-000000000001';fid constant text:='__statement_source_employee_20260913__';prefix constant text:='__statement_source_canary_20260913__';
+ sid constant uuid:='d9130426-2900-4000-8000-000000000003';
+ session_fixture_exists boolean;
 begin
+ if to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'select exists(select 1 from auth.sessions where id=$1 or user_id=$2)'
+   into session_fixture_exists using sid,uid;
+  if session_fixture_exists then raise exception 'Statement canary rollback left synthetic session data';end if;
+ end if;
  if exists(select 1 from auth.users where id=uid) or exists(select 1 from auth.identities where user_id=uid)
   or exists(select 1 from public.finance_users where id=fid)
   or exists(select 1 from public.employees where employee_no=fid or metadata->>'finance_user_id'=fid)

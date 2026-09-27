@@ -393,6 +393,7 @@ supabase/.temp
 !scripts/check_portal_session_release.cjs
 !scripts/test_portal_session_release_batch.mjs
 !scripts/test_portal_logout_client.mjs
+!scripts/test_canary_active_sessions.mjs
 !scripts/finance_portal_session_logout_postflight.sql
 !scripts/finance_portal_session_canary.sql
 !scripts/finance_portal_session_fingerprint.sql

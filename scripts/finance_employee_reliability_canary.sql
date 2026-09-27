@@ -6,28 +6,67 @@ set local statement_timeout='120s';
 -- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN
 do $employee_reliability_canary$
 declare
+  v_canary_session_id uuid;
+  v_canary_active_session_users uuid[];
  t uuid:=public.default_tenant_id();v_id constant text:='__finance_employee_reliability_20260912__';v_no constant text:='CANARY-EMPLOYEE-RELIABILITY-20260912';
  owner public.finance_users%rowtype;handler public.finance_users%rowtype;candidate public.finance_users%rowtype;probe public.expense_requests%rowtype;r jsonb;before jsonb;denied boolean;op uuid:=gen_random_uuid();
  old_claims text:=current_setting('request.jwt.claims',true);old_sub text:=current_setting('request.jwt.claim.sub',true);old_tenant text:=current_setting('app.current_tenant_id',true);
 begin
+ -- Preserve every original actor/role/scope predicate; require a genuine
+ -- active session when the installed Auth fence requires it. NULL is only
+ -- the legacy (helper absent) branch; an empty array authorizes no candidate.
+ if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'select coalesce(array_agg(distinct s.user_id),''{}''::uuid[]) from auth.sessions s join public.finance_users u on u.auth_user_id=s.user_id where u.tenant_id=$1 and u.active and (s.not_after is null or s.not_after>statement_timestamp())'
+   into v_canary_active_session_users using t;
+ end if;
  if exists(select 1 from public.expense_requests e where e.id=v_id or e.no=v_no) or exists(select 1 from private.finance_payment_concerns_v1 c where c.request_id=v_id) then raise exception 'Employee canary synthetic identifiers already exist';end if;
  -- Resolve candidates against the actual source read/handler predicates, not
  -- an assumed company-wide grant or an employment department alone.
  perform set_config('app.current_tenant_id',t::text,true);
  probe:=jsonb_populate_record(null::public.expense_requests,jsonb_build_object('id',v_id,'no',v_no,'tenant_id',t,'data_environment','test','entity_id','E6','department_code','J1101','type','payment_request','status','completed','amount',100,'cash_posted_at',now(),'steps','[]'::jsonb,'form_payload','{}'::jsonb));
- for candidate in select u.* from public.finance_users u where u.tenant_id=t and u.active and u.role='employee' and public.finance_user_is_approval_identity_ready(t,u.id) order by u.id loop
-  perform set_config('request.jwt.claim.sub',candidate.auth_user_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',candidate.auth_user_id,'role','authenticated','email',candidate.email)::text,true);
+ for candidate in select u.* from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=t and u.active and u.role='employee' and public.finance_user_is_approval_identity_ready(t,u.id) order by u.id loop
+  perform set_config('request.jwt.claim.sub',candidate.auth_user_id::text,true);-- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using candidate.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',candidate.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',candidate.email)::text,true);
   probe.applicant_id:=candidate.id;probe.applicant:=candidate.name;probe.applicant_email:=candidate.email;
   if public.can_read_expense_request(probe) is true then owner:=candidate;exit;end if;
  end loop;
- for candidate in select u.* from public.finance_users u where u.tenant_id=t and u.active and u.role='accountant' and u.id<>owner.id and public.finance_user_is_approval_identity_ready(t,u.id) order by u.id loop
-  perform set_config('request.jwt.claim.sub',candidate.auth_user_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',candidate.auth_user_id,'role','authenticated','email',candidate.email)::text,true);
+ for candidate in select u.* from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=t and u.active and u.role='accountant' and u.id<>owner.id and public.finance_user_is_approval_identity_ready(t,u.id) order by u.id loop
+  perform set_config('request.jwt.claim.sub',candidate.auth_user_id::text,true);-- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using candidate.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',candidate.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',candidate.email)::text,true);
   if private.finance_payment_concern_handler_v1(probe,candidate) is true then handler:=candidate;exit;end if;
  end loop;
  if owner.id is null or handler.id is null or owner.id=handler.id then raise exception 'Employee canary requires distinct verified owner and handler authorized for its source';end if;
  if not exists(select 1 from public.finance_department_units u join public.finance_department_entity_scopes s on s.tenant_id=u.tenant_id and s.unit_id=u.id where u.tenant_id=t and u.code='J1101' and u.active and u.present_in_source and u.is_posting_unit and s.active and s.entity_code='E6') then raise exception 'Employee canary posting scope unavailable';end if;
  perform set_config('app.current_tenant_id',t::text,true);perform set_config('request.jwt.claim.sub',owner.auth_user_id::text,true);
- perform set_config('request.jwt.claims',jsonb_build_object('sub',owner.auth_user_id,'role','authenticated','email',owner.email)::text,true);
+ -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using owner.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',owner.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',owner.email)::text,true);
  -- Seed a closed test source using the same reviewed shape as the finalizer
  -- canary. Normal insert triggers remain enabled; every step is completed.
  insert into public.expense_requests(id,no,tenant_id,data_environment,entity_id,department_code,applicant_id,applicant,applicant_email,type,type_label,amount,description,status,step,ver,request_date,bank_fee_amount,files,actual_files,steps,form_payload,cash_posted_at)
@@ -43,11 +82,31 @@ begin
  denied:=false;begin perform public.finance_payment_concern_action_v1(v_id,'respond','Owner cannot impersonate accountant',1,gen_random_uuid(),'test');exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Employee escalated to payment handler';end if;
  denied:=false;begin perform public.finance_payment_concern_read_v1(v_id,'production');exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Employee concern crossed data environment';end if;
  denied:=false;begin execute 'select 1 from private.finance_payment_concerns_v1';exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Employee direct concern table exposed';end if;
- execute 'reset role';perform set_config('request.jwt.claim.sub',handler.auth_user_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',handler.auth_user_id,'role','authenticated','email',handler.email)::text,true);
+ execute 'reset role';perform set_config('request.jwt.claim.sub',handler.auth_user_id::text,true);-- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using handler.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',handler.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',handler.email)::text,true);
  execute 'set local role authenticated';
  r:=public.finance_payment_concern_action_v1(v_id,'respond','Synthetic verified accountant response',1,gen_random_uuid(),'test');if r->>'status' is distinct from 'responded' or r->>'version' is distinct from '2' then raise exception 'Authorized concern handler did not respond';end if;
  denied:=false;begin perform public.finance_payment_concern_action_v1(v_id,'resolve','Handler cannot confirm for owner',2,gen_random_uuid(),'test');exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Handler resolved on behalf of employee';end if;
- execute 'reset role';perform set_config('request.jwt.claim.sub',owner.auth_user_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',owner.auth_user_id,'role','authenticated','email',owner.email)::text,true);
+ execute 'reset role';perform set_config('request.jwt.claim.sub',owner.auth_user_id::text,true);-- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using owner.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',owner.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',owner.email)::text,true);
  execute 'set local role authenticated';
  r:=public.finance_payment_concern_action_v1(v_id,'resolve','Synthetic owner confirms concern resolved',2,gen_random_uuid(),'test');if r->>'status' is distinct from 'resolved' or r->>'version' is distinct from '3' then raise exception 'Employee resolution failed';end if;
  r:=public.finance_payment_concern_read_v1(v_id,'test');if jsonb_array_length(r#>'{rows,0,history}') is distinct from 3 then raise exception 'Employee event history not retained';end if;
