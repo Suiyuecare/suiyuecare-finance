@@ -208,3 +208,36 @@ version; archived phases cannot promote this candidate. See
 [the exact release and rollback contract](finance-audit-security-release-20260922.md)
 for the 23 atomic postflights, seven read-only canaries, and Storage/legacy-link
 fingerprint coverage. Local fixture passes are not production deployment proof.
+
+
+## 2026-09-27 audit controls and payroll accrual release
+
+The reviewed phase `database_audit_controls_20260927` accepts exactly
+`20260927152432,20260927153326`. The batch requires all prior reviewed migrations,
+including operational stability and legacy demo password retirement. A partial
+batch is refused. `frontend_compat` also requires the complete new batch so the
+new archive and payroll RPCs cannot be omitted when promoting this UI.
+
+The protected workflow first builds and seals one candidate. Before any database
+apply it holds the production release advisory lock, locks and rechecks the exact
+captured migration ledger, and rehearses both migrations in one rollback-only
+transaction. The rehearsal runs every inherited and new catalog postflight,
+then rolls back and compares full schema/business/ledger fingerprints. Apply
+writes both migration ledger rows and runs the full postflight in one transaction.
+Read-only catalog canaries run after apply and again before domain promotion.
+They do not impersonate employees or create production accounting records.
+
+`pnpm test:audit-controls-20260927` is mandatory in `release:preflight` and covers
+real synthetic SQL controls, pinned postflight rejection of tampering, company
+submission response-loss replay, organization save races, exact cents and backup
+validation, archive readback, search/selection, and payroll accrual SQL/UI logic.
+Before build, the private disposable PostgreSQL service must pass
+`pnpm test:audit-controls-native-concurrency` with two real sessions and observed
+lock waits for both close-first and posting-first commits. The offline Chromium
+lane must also pass `pnpm test:audit-controls-browser-20260927` for real visible
+search and accounting interactions. A missing local PostgreSQL is not a native
+pass; this required proof is enforced by CI before build or database mutation.
+
+These checks establish synthetic behavior and release integrity. Google OAuth
+and real employee operation remain distinct production acceptance evidence.
+No missing payroll or revenue is estimated or backfilled by the migration.

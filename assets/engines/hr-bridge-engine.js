@@ -6,7 +6,7 @@
   var eventLabels = { received: '收到人資核准資料', bank_batch_validation: '核對銀行付款清冊', bank_upload: '登錄兆豐上傳結果', accounting_review: '完成會計項目檢核', bank_disbursement: '登錄放款結果', applicant_confirmation: '原申請人確認', posted_voucher: '核對傳票並結案' };
   function escape(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function money(cents) { return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 2 }).format(cents / 100); }
-  function dispose() { if (active) { active.alive = false; active.rows = []; active.pending = null; active.element.replaceChildren(); } active = null; }
+  function dispose() { if(global.FinancePayrollAccrual)global.FinancePayrollAccrual.dispose(); if (active) { active.alive = false; active.rows = []; active.pending = null; active.element.replaceChildren(); } active = null; }
   function valid(ctx) { return ctx.alive && active === ctx && ctx.isCurrent(); }
   function current(ctx, generation) { return valid(ctx) && ctx.generation === generation; }
   function permissionDenied(error) { return !!error && (error.code === '42501' || ['PGRST301', 'PGRST302', 'PGRST303'].indexOf(error.code) >= 0 || [401, 403].indexOf(error.status) >= 0 || error.context && [401, 403].indexOf(error.context.status) >= 0); }
@@ -14,6 +14,7 @@
     // A denial from any request of this identity invalidates every in-flight read.
     if (!valid(ctx) || !permissionDenied(error)) return false;
     ctx.generation += 1; ctx.rows = []; ctx.pending = null; ctx.busy = false;
+    if(global.FinancePayrollAccrual)global.FinancePayrollAccrual.dispose();
     ctx.element.querySelector('[data-hr-list]').replaceChildren();
     message(ctx, '目前無權讀取此薪資資料，已清除畫面內容。請確認授權後重新讀取。');
     return true;
@@ -26,6 +27,7 @@
   async function load(ctx) {
     if (!valid(ctx) || ctx.busy) return false;
     var generation = ++ctx.generation;
+    if(global.FinancePayrollAccrual)global.FinancePayrollAccrual.dispose();
     ctx.rows = []; ctx.element.querySelector('[data-hr-list]').replaceChildren(); message(ctx, '正在確認權限與交接資料…');
     try {
       var response = await ctx.client.rpc('finance_hr_snapshot', {});
@@ -39,6 +41,7 @@
   }
   function render(ctx) {
     if (!valid(ctx)) return;
+    if(global.FinancePayrollAccrual)global.FinancePayrollAccrual.dispose();
     var list = ctx.element.querySelector('[data-hr-list]'); list.replaceChildren();
     ctx.rows.forEach(function (row) {
       var card = document.createElement('section'); card.className = 'card'; card.style.cssText = 'padding:16px;margin:12px 0;overflow-wrap:anywhere';
@@ -61,6 +64,7 @@
       var sync = document.createElement('button'); sync.type = 'button'; sync.className = 'btn-s'; sync.style.marginTop = '12px'; sync.textContent = '同步進度至人資'; sync.addEventListener('click', function () { flush(ctx, row.obligationId); }); card.appendChild(sync);
       list.appendChild(card);
     });
+    if(global.FinancePayrollAccrual&&['accountant','ceo','admin_director'].indexOf(ctx.role)>=0){var payroll=document.createElement('section'),payrollGeneration=ctx.generation;list.appendChild(payroll);global.FinancePayrollAccrual.mount(payroll,{client:ctx.client,userId:ctx.userId,role:ctx.role,obligations:ctx.rows,accounts:ctx.accounts||[],departments:ctx.departments||[],isCurrent:function(){return current(ctx,payrollGeneration)&&payroll.isConnected;},afterPost:ctx.afterPost});}
   }
   async function showVoucher(ctx, row, card) {
     var generation = ctx.generation;

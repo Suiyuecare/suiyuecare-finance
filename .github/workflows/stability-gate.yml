@@ -133,6 +133,8 @@ jobs:
           node scripts/check_personnel_login_browser.cjs
           pnpm test:history-summary-browser
           pnpm test:finance-ui-interactions
+          pnpm test:audit-controls-native-concurrency
+          pnpm test:audit-controls-browser-20260927
 
       - name: Retain fictional search acceptance evidence even on failure
         if: always()
@@ -149,6 +151,18 @@ jobs:
         with:
           name: finance-ui-interactions-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp/finance-ui-interaction-20260922
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
+      - name: Retain fictional audit controls evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: finance-audit-controls-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            /tmp/finance-accounting-controls-20260927
+            /tmp/finance-approval-search-selection-20260927
+            /tmp/finance-payroll-accrual-20260927
           if-no-files-found: warn
           retention-days: 14
           compression-level: 9

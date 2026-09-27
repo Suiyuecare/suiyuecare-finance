@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 -- Read-only sealed HR bridge catalog checks. No identities or obligations are provisioned.
 do $finance_hr_bridge_postflight$
-declare revenue_repair_installed boolean:=false;expected record;fn record;t text;role_name text;rpc_name text;allowed boolean;seen integer:=0;
+declare payroll_accrual_installed boolean:=to_regclass('private.finance_payroll_accruals_v1') is not null;revenue_repair_installed boolean:=false;expected record;fn record;t text;role_name text;rpc_name text;allowed boolean;seen integer:=0;
 begin
  if to_regclass('supabase_migrations.schema_migrations') is not null then
   execute $revenue_ledger$select exists(select 1 from supabase_migrations.schema_migrations where version='20260924074010')$revenue_ledger$ into revenue_repair_installed;
@@ -41,12 +41,12 @@ begin
   ('public.finance_hr_callback_ack','4e795ca3a93853cebea70aa614784132',false),
   ('finance_hr_private.finance_hr_callback_authorize','828ee7a2f6aad1e3742491a06476ecf8',true),
   ('public.finance_hr_callback_authorize','43054e87683dad0ac401764e8f350caf',false),
-  ('finance_hr_private.finance_hr_accounting_scope','fde27da332acff3bb30054ad6caf50a8',true),
+  ('finance_hr_private.finance_hr_accounting_scope',case when payroll_accrual_installed then 'abddcba56b7640031bbd0dbcff11764d' else 'fde27da332acff3bb30054ad6caf50a8' end,true),
   ('public.finance_hr_accounting_scope','23ac15569baf985c4f9546c674afcb2c',false),
   ('finance_hr_private.finance_hr_guard_book_insert','873afdfa552872e12c2d59c5683b964e',true),
   ('finance_hr_private.finance_hr_voucher_options','fa725fffedfbf4be65dc9708b98ea1cc',true),
   ('public.finance_hr_voucher_options','806c35dcce86fe07bfe6fe64aa844bd0',false),
-  ('finance_hr_private.finance_hr_post_voucher','574bf7be65ce8c6684c4458359152fbd',true),
+  ('finance_hr_private.finance_hr_post_voucher',case when payroll_accrual_installed then '9456cbe480d95c56bd665d589fbaf6da' else '574bf7be65ce8c6684c4458359152fbd' end,true),
   ('public.finance_hr_post_voucher','40c8ac77d8792d6d9ce4e167a12fd7e9',false),
   ('finance_hr_private.finance_hr_attachment_scope','2767c0835ce92b1437eb39522e9c35d1',true),
   ('public.finance_hr_attachment_scope','84f399e41236bb191a79d2305d246ab0',false)
