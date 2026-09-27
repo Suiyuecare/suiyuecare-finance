@@ -24,7 +24,7 @@ begin
  ) seals(name,hash) loop
   select p.* into f from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname||'.'||p.proname=pin.name;
   if f.oid is null or md5(f.prosrc)<>pin.hash or f.proconfig is distinct from array['search_path=""']::text[] then raise exception 'Payroll sealed function changed: %',pin.name;end if;
-  if pin.name like 'public.finance_payroll_%' and f.prosecdef then raise exception 'Payroll RPC must be invoker: %',pin.name;end if;
+  if pin.name like 'public.finance_payroll_%' and (not f.prosecdef or f.proowner<>'postgres'::regrole) then raise exception 'Payroll RPC must be bounded postgres definer: %',pin.name;end if;
   if pin.name like 'private.finance_payroll_%' then
    if f.prosecdef is distinct from (f.proname not in('finance_payroll_accrual_json_v1','finance_payroll_settlement_accounts_v1')) then raise exception 'Payroll private security mode changed: %',pin.name;end if;
   end if;
@@ -37,6 +37,9 @@ begin
   end if;
  end loop;
  if (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in('public','private') and p.proname like 'finance_payroll_%')<>15 then raise exception 'Payroll unreviewed function or overload';end if;
+ foreach r in array array['anon','authenticated'] loop
+  if has_schema_privilege(r,'private','USAGE') then raise exception 'Payroll must preserve private namespace isolation: %',r;end if;
+ end loop;
  foreach relation in array array['finance_payroll_accruals_v1','finance_payroll_evidence_intents_v1','finance_payroll_accrual_events_v1'] loop
   if not exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='private' and c.relname=relation and c.relrowsecurity and c.relforcerowsecurity) then raise exception 'Payroll relation RLS missing: %',relation;end if;
   foreach r in array array['anon','authenticated','service_role'] loop

@@ -3,6 +3,7 @@
 do $finance_audit_controls_20260927$
 declare api text;r text;source text;table_name text;pin record;
 begin
+ if has_schema_privilege('anon','private','USAGE') or has_schema_privilege('authenticated','private','USAGE') then raise exception 'HR directory private namespace boundary changed';end if;
  for pin in select * from (values
   ('private.finance_archive_is_sealed_v1','4358150a7b6a3466f36bee197434c535'),
   ('private.finance_archive_path_allowed_v1','0e127d6f5ae77c3a72df7277a598f2a4'),

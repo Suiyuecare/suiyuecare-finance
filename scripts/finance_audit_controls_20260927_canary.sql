@@ -5,6 +5,7 @@ set local statement_timeout='20s';
 do $finance_audit_controls_20260927_canary$
 declare r text;table_name text;
 begin
+ if has_schema_privilege('anon','private','USAGE') or has_schema_privilege('authenticated','private','USAGE') then raise exception 'Canary HR directory namespace boundary widened';end if;
  foreach table_name in array array['public.finance_document_archives_v1','private.finance_period_close_events_v1','private.finance_archive_verifications_v1','private.finance_reporting_rule_preparers_v1','private.finance_payroll_accruals_v1','private.finance_payroll_evidence_intents_v1','private.finance_payroll_accrual_events_v1'] loop
   if to_regclass(table_name) is null or not exists(select 1 from pg_class where oid=to_regclass(table_name) and relrowsecurity) then raise exception 'Canary protected table missing: %',table_name;end if;
   foreach r in array array['anon','authenticated','service_role'] loop if has_table_privilege(r,table_name,'SELECT,INSERT,UPDATE,DELETE') then raise exception 'Canary direct-table bypass: %, %',r,table_name;end if;end loop;

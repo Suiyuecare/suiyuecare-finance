@@ -304,5 +304,9 @@ check('HR directory postflight pins source body, private table boundaries, and s
     && !hrDirectoryPostflightSql.includes('select * from public.employees'));
 check('revenue repair is the exact predecessor of operational stability',REVENUE_REPAIR_MIGRATIONS.join(',')==='20260924074010'&&migrations.slice(-CURRENT_RELEASE_TAIL_MIGRATIONS.length-REVENUE_REPAIR_MIGRATIONS.length,-CURRENT_RELEASE_TAIL_MIGRATIONS.length).join(',')==='20260924074010_finance_e8_g1101_home_care_revenue_repair_v1.sql');
 check('audit controls and payroll are the exact atomic final suffix',CURRENT_RELEASE_TAIL_MIGRATIONS.join(',')==='20260924155142,20260925170000,20260927152432,20260927153326'&&migrations.slice(-CURRENT_RELEASE_TAIL_MIGRATIONS.length).join(',')==='20260924155142_finance_operational_stability_v1.sql,20260925170000_finance_retire_demo_password_v1.sql,20260927152432_finance_audit_controls_v1.sql,20260927153326_finance_payroll_accrual_v1.sql');
+for(const[version,sha256]of Object.entries(require('./finance_production_release_guard').AUDIT_CONTROLS_20260927_SOURCE_SHA256)){
+ const filename=migrations.find(name=>name.startsWith(version+'_'));
+ check('new controls source matches reviewed SHA-256: '+version,!!filename&&crypto.createHash('sha256').update(fs.readFileSync(path.join(MIGRATIONS_DIR,filename))).digest('hex')===sha256);
+}
 process.stdout.write(`\nAdopted migration lineage: ${passed}/${passed + failed} passed.\n`);
 if (failed) process.exit(1);

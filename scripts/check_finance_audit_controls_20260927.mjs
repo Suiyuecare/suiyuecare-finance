@@ -52,7 +52,10 @@ try{
  await db.exec(fixture);
  await db.exec('alter table public.period_closes add column note text');
  await db.exec(await fs.readFile(new URL('../supabase/migrations/20260927152432_finance_audit_controls_v1.sql',import.meta.url),'utf8'));
+ eq((await db.query("select has_schema_privilege('anon','private','USAGE') allowed")).rows[0].allowed,false,'anonymous cannot resolve the HR directory private namespace');
+ eq((await db.query("select has_schema_privilege('authenticated','private','USAGE') allowed")).rows[0].allowed,false,'authenticated cannot resolve the HR directory private namespace');
  await actor('A','ceo');
+ await rejects(()=>db.query("select private.finance_archive_path_allowed_v1('fixture')"),/permission denied for schema private/);
  eq((await db.query('select count(*)::int n from public.finance_identity_links')).rows[0].n,1,'permissive ALL cannot widen tenant');
  eq((await db.query('select count(*)::int n from public.finance_portal_roles')).rows[0].n,1,'portal role tenant');
  eq((await db.query("update public.finance_identity_links set finance_user_id='A' where tenant_id=$1 returning id",[OTHER])).rows.length,0,'foreign tenant update invisible');
