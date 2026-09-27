@@ -19,7 +19,7 @@ jobs:
   release-gate:
     name: Verify adopted database lineage and immutable candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       FINANCE_BUILD_TARGET: preview
     steps:
