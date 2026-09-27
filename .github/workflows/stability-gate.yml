@@ -135,6 +135,9 @@ jobs:
           pnpm test:finance-ui-interactions
           pnpm test:audit-controls-native-concurrency
           pnpm test:audit-controls-browser-20260927
+          pnpm test:hr-contractor-browser
+          pnpm test:hr-contractor-native
+          pnpm test:portal-session
 
       - name: Retain fictional search acceptance evidence even on failure
         if: always()
