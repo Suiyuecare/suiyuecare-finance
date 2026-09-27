@@ -83,9 +83,13 @@ const equal = (a, b, m) => {
   await page.waitForFunction(() => window.__payrollApp);
   await page.evaluate(() =>
     window.__payrollApp.run(
-      "USERS=[{id:'fictional-accountant',n:'虛構會計',email:'accountant@example.invalid',role:'accountant',rL:'會計',eid:'F1',dc:'D1',active:true}];ENTS=[{id:'F1',n:'虛構法人',active:true}];DEPTS=[{c:'D1',n:'虛構第一課',eid:'F1',active:true}];ORG_CHART=[];REQS=[];INVS=[];BILLS=[];VOUCHERS=[];LEDGER=[];NOTIFS=[];quickLogin('accountant');",
+      "USERS=[{id:'fictional-accountant',n:'虛構會計',email:'accountant@example.invalid',role:'accountant',rL:'會計',eid:'F1',dc:'D1',active:true}];ENTS=[{id:'F1',n:'虛構法人',active:true}];DEPTS=[{c:'D1',n:'虛構第一課',eid:'F1',active:true}];ORG_CHART=[];REQS=[];INVS=[];BILLS=[];VOUCHERS=[];LEDGER=[];NOTIFS=[];quickLogin('accountant');nav('hrbridge');",
     ),
   );
+  // Use the app navigation contract before mounting the mocked private service.
+  // quickLogin schedules a dashboard animation frame. Direct DOM mounting used
+  // to race that frame, which could legitimately dispose the test's HR child.
+  equal(await page.evaluate(() => window.__payrollApp.run("S.page")), "hrbridge");
   await page.evaluate(() => {
     const tenant = "11111111-1111-4111-8111-111111111111",
       obligation = "22222222-2222-4222-8222-222222222222";
