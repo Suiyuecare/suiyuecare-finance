@@ -1,4 +1,5 @@
 import {PGlite}from'@electric-sql/pglite';import assert from'node:assert/strict';import{readFile}from'node:fs/promises';import{randomUUID}from'node:crypto';
+import{mkdtempSync,writeFileSync,rmSync}from'node:fs';import{tmpdir}from'node:os';import{join}from'node:path';import{createRequire}from'node:module';
 const db=new PGlite();const user=randomUUID(),other=randomUUID(),sid=randomUUID(),otherSid=randomUUID(),tenant=randomUUID();
 await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);create table auth.identities(id uuid,user_id uuid,provider text,provider_id text,identity_data jsonb,created_at timestamptz default now());create table auth.sessions(id uuid primary key,user_id uuid,not_after timestamptz);create function auth.jwt() returns jsonb language sql stable as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;create function auth.uid() returns uuid language sql stable as $$select nullif(auth.jwt()->>'sub','')::uuid$$;create table public.finance_users(id text,name text,email text,tenant_id uuid,active boolean,auth_user_id uuid,google_link_status text,created_at timestamptz default now());create function public.current_tenant_id()returns uuid language sql stable as $$select nullif(current_setting('app.current_tenant_id',true),'')::uuid$$;grant usage on schema auth to authenticated;grant execute on function auth.jwt(),auth.uid() to authenticated;`);
 const source=await readFile(new URL('fixtures/finance_statement_source_authority_20260913.sql',import.meta.url),'utf8');
@@ -14,4 +15,22 @@ await db.exec('begin;set local role service_role');await db.query("select public
 await db.exec('begin;set local role service_role');const revoked=(await db.query("select public.portal_revoke_google_sessions('synthetic-sub','qa@suiyuecare.com') v")).rows[0].v;await db.exec('commit');assert.equal(revoked.revoked,true);assert.equal((await db.query('select count(*)::int n from auth.sessions')).rows[0].n,1);
 assert.equal((await asUser(sid,()=>db.query('select (public.current_finance_user()).id id,public.finance_current_verified_google_email_v2() email'))).rows[0].id,null);await assert.rejects(()=>asUser(sid,()=>db.query('select public.portal_session_status()')),/FINANCE_AUTH_SESSION_REVOKED/);
 await db.exec((await readFile(new URL('finance_portal_session_logout_postflight.sql',import.meta.url),'utf8')).replace(/^\\set ON_ERROR_STOP on\n/,''));
-const seals=(await db.query("select md5(pg_get_functiondef('public.current_finance_user()'::regprocedure)) current_seal,md5(pg_get_functiondef('public.finance_current_verified_google_email_v2()'::regprocedure)) read_seal,(select md5(prosrc)from pg_proc where oid='public.current_finance_user()'::regprocedure) current_prosrc,(select md5(prosrc)from pg_proc where oid='public.finance_current_verified_google_email_v2()'::regprocedure) read_prosrc,md5(pg_get_functiondef('public.finance_auth_session_active()'::regprocedure)) session_seal,md5(pg_get_functiondef('public.portal_session_status()'::regprocedure)) status_seal,md5(pg_get_functiondef('public.portal_revoke_google_sessions(text,text)'::regprocedure)) revoke_seal")).rows[0];console.log(JSON.stringify({verified:true,seals}));await db.close();
+const seals=(await db.query("select md5(pg_get_functiondef('public.current_finance_user()'::regprocedure)) current_seal,md5(pg_get_functiondef('public.finance_current_verified_google_email_v2()'::regprocedure)) read_seal,(select md5(prosrc)from pg_proc where oid='public.current_finance_user()'::regprocedure) current_prosrc,(select md5(prosrc)from pg_proc where oid='public.finance_current_verified_google_email_v2()'::regprocedure) read_prosrc,md5(pg_get_functiondef('public.finance_auth_session_active()'::regprocedure)) session_seal,md5(pg_get_functiondef('public.portal_session_status()'::regprocedure)) status_seal,md5(pg_get_functiondef('public.portal_revoke_google_sessions(text,text)'::regprocedure)) revoke_seal")).rows[0];
+// Exercise the actual SQL result through the protected release parser. A
+// hand-written expected JSON result cannot detect a mismatched SELECT alias.
+const guard=createRequire(import.meta.url)('./finance_production_release_guard.js');
+const canary=await readFile(new URL('finance_portal_session_canary.sql',import.meta.url),'utf8');
+const evidence=mkdtempSync(join(tmpdir(),'finance-portal-canary-output-'));
+try{
+ const file=join(evidence,'canary.json');
+ const results=await db.exec(canary);
+ writeFileSync(file,JSON.stringify(results));
+ assert.equal(guard.verifyReportsCanary(file,'portal_session'),true);
+ const legacyAlias=await db.exec(canary.replace(/\bas portal_session_canary_result\b/,'as hr_portal_session_canary_result'));
+ writeFileSync(file,JSON.stringify(legacyAlias));
+ assert.throws(()=>guard.verifyReportsCanary(file,'portal_session'),/exactly one result/);
+ writeFileSync(file,JSON.stringify([...results,...results]));
+ assert.throws(()=>guard.verifyReportsCanary(file,'portal_session'),/exactly one result/);
+ console.log('PASS actual portal catalog SQL output satisfies the release guard; wrong/duplicate result markers fail closed');
+}finally{rmSync(evidence,{recursive:true,force:true});await db.close();}
+console.log(JSON.stringify({verified:true,seals,actualSqlCanaryOutputVerified:true}));

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {PGlite} from '@electric-sql/pglite';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 const require = createRequire(import.meta.url);
 const scripts = new URL('.', import.meta.url);
@@ -100,4 +102,36 @@ try {
   assert.equal((await synthetic.query('select count(*)::int n from auth.sessions')).rows[0].n, 0);
   pass('synthetic statement canary fails without matching fixture session; failure also rolls back');
 } finally {await synthetic.close();}
+
+// Validate every actual final SQL result against the release parser. This is
+// output-contract coverage only; the protected workflow still executes each
+// complete canary, including its role, rollback and business assertions.
+const outputDb = new PGlite();
+const outputDir = fs.mkdtempSync(join(tmpdir(), 'finance-canary-output-contracts-'));
+try {
+  const guard = require('./finance_production_release_guard.js');
+  const guardSource = fs.readFileSync(new URL('finance_production_release_guard.js', scripts), 'utf8');
+  const domains = new Map([...guardSource.matchAll(/(\w+):\{marker:'[^']+',result:\{canary:'([^']+)'/g)].map(match => [match[2], match[1]]));
+  let verified = 0;
+  for (const name of fs.readdirSync(scripts).filter(name => /^finance_.*canary\.sql$/.test(name))) {
+    // The separate human-accounting gate does not use these release parsers.
+    if (name === 'finance_production_human_accounting_canary.sql') continue;
+    const source = fs.readFileSync(new URL(name, scripts), 'utf8');
+    const select = source.match(/(?:^|\n)(select\s+(?:pg_catalog\.)?jsonb_build_object\([\s\S]*?\)\s+as\s+\w+\s*;)\s*$/i)?.[1];
+    assert.ok(select, name+' final output must be explicitly verified');
+    const file = join(outputDir, name+'.json');
+    fs.writeFileSync(file, JSON.stringify(await outputDb.exec(select)));
+    if (name === 'finance_production_authenticated_canary.sql') guard.verifyAuthenticatedCanary(file);
+    else if (name === 'finance_finalize_accounting_lines_canary.sql') guard.verifyFinalizeCanary(file);
+    else if (name === 'finance_utility_tax_canary.sql') guard.verifyUtilityCanary(file);
+    else {
+      const canary = select.match(/'canary'\s*,\s*'([^']+)'/)?.[1];
+      assert.ok(domains.has(canary), name+' must have a protected report domain');
+      guard.verifyReportsCanary(file, domains.get(canary));
+    }
+    verified++;
+  }
+  assert.equal(verified, 26, 'every protected authenticated/report/finalize/utility final SQL result is covered');
+  pass('all 26 actual final SQL result shapes satisfy their unchanged protected release parsers');
+} finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);
