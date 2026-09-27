@@ -21,6 +21,14 @@ begin
  end loop;
  if not exists(select 1 from pg_trigger where tgrelid='private.finance_reporting_profile_revisions_v1'::regclass and tgname='finance_reporting_revision_immutable_v1' and tgenabled='O' and not tgisinternal) then raise exception 'Reporting immutable audit trigger missing';end if;
  source:=pg_get_functiondef('public.finance_reporting_profile_save_v1(text,bigint,jsonb,text,text)'::regprocedure);
+ if to_regprocedure('public.finance_reporting_profile_save_pre_review_v1(text,bigint,jsonb,text,text)') is not null then
+  if position('finance_reporting_rule_preparers_v1' in source)=0 or position('preparer=actor' in source)=0 or position('finance_reporting_profile_save_pre_review_v1' in source)=0 then raise exception 'Reporting second-person review wrapper missing';end if;
+  foreach r in array array['anon','authenticated','service_role'] loop
+   if has_function_privilege(r,'public.finance_reporting_profile_save_pre_review_v1(text,bigint,jsonb,text,text)','EXECUTE') then raise exception 'Reporting legacy save bypass exposed to %',r;end if;
+  end loop;
+  if not exists(select 1 from pg_proc where oid='public.finance_reporting_profile_save_pre_review_v1(text,bigint,jsonb,text,text)'::regprocedure and prosecdef and proconfig @> array['search_path=""']) then raise exception 'Reporting legacy save security path missing';end if;
+  source:=pg_get_functiondef('public.finance_reporting_profile_save_pre_review_v1(text,bigint,jsonb,text,text)'::regprocedure);
+ end if;
  if position('pg_advisory_xact_lock' in source)=0 or position('rev<>p_expected_revision' in source)=0 or position('p_profile-''documents''-''tax''' in source)=0 or position('finance_reporting_profile_revisions_v1' in source)=0 then raise exception 'Reporting save CAS, narrow path authorization or audit contract missing';end if;
  if exists(select 1 from public.finance_reporting_profiles p left join private.finance_reporting_profile_revisions_v1 h using(tenant_id,data_environment,entity_id,revision) where h.revision is null or h.profile is distinct from p.profile or h.actor_id is distinct from p.updated_by) then raise exception 'Reporting current profile does not match its audited revision';end if;
  if exists(select 1 from public.finance_reporting_profiles p join lateral(select max(revision) revision from private.finance_reporting_profile_revisions_v1 where tenant_id=p.tenant_id and data_environment=p.data_environment and entity_id=p.entity_id) h on true where h.revision<>p.revision) then raise exception 'Reporting current revision is not latest audit revision';end if;

@@ -1,6 +1,6 @@
 # Finance 受保護正式發布
 
-目前候選依序執行 **audit security → revenue repair → frontend compatibility**。完整步驟見 [audit security release](finance-audit-security-release-20260922.md) 與 [revenue repair release](finance-revenue-repair-release-20260924.md)。使用 `database_audit_security_20260922=20260922133752`、`database_revenue_repair_20260924=20260924074010`，最後才用 `frontend_compat=none`。
+本次候選使用 `database_audit_controls_20260927=20260927152432,20260927153326`，將關帳、原件封存、報表獨立覆核及薪資應計兩份 migration 原子演練／套用後，提升同一封存前台。`frontend_compat=none` 必須已具備完整兩版。前置版本仍包含安全、收入、操作穩定性與舊 demo 密碼退役；歷史發布步驟保留在下方。
 
 `.github/workflows/finance-production-release.yml` 是唯一允許 Finance 正式資料庫套版與 Vercel 正式提升的人工流程。它不接受 push／PR 自動上線，也不把「建置成功」當成「正式可提升」。
 
@@ -26,15 +26,16 @@ Environment `finance-production` 必須設定：
 
 Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權該 team/project 的 pull、build、candidate deploy、inspect/API/curl 與 promote；資料庫帳號只授權目標 Supabase project 的 migration 權限。
 
-## 目前三個受控階段：安全修正、收入修正與前台發布
+## 目前候選與歷史受控階段
 
-此版本只接受以下三組輸入，`release_phase` 與 `migration_versions` 不相符時，在資料庫連線前拒絕：
+本次候選使用下列第一組，前台相容路徑需要完整兩版。各歷史受控階段保留精確輸入；`release_phase` 與 `migration_versions` 不相符時，在資料庫連線前拒絕：
 
 | `release_phase` | `migration_versions` | 前置條件與動作 |
 |---|---|---|
+| `database_audit_controls_20260927` | `20260927152432,20260927153326` | 全部前置版次完整；兩版在同一交易演練，通過 29 份 postflight、回滾指紋及唯讀 canary，再原子套用並提升同一候選。 |
 | `database_audit_security_20260922` | `20260922133752` | 全部前置版本含完整 HR 三版已安裝；22 份前置檢查通過後，演練新 SQL、ledger、24 份 postflight、7 份唯讀 canary，回滾指紋一致後再原子提交 SQL、ledger 與檢查。 |
 | `database_revenue_repair_20260924` | `20260924074010` | 安全版與正式 ledger 已採納的 HR directory export 來源都需通過檢查；收入修復依專屬帳務 postflight/canary 原子執行。 |
-| `frontend_compat` | `none` | 安全版及收入修正已完整安裝；執行 24 份 postflight 與 8 份唯讀 canary 後，提升同一封存前台。 |
+| `frontend_compat` | `none` | 全部前置版本及本次兩版已完整安裝；執行 29 份 postflight 與全部繼承及新唯讀 canary 後，提升同一封存前台。 |
 
 若 HR 三版尚未完整，先完成獨立審查的 HR 歷史候選發布；不得改填舊 phase、補寫 ledger 或拆分本批次來提升新前台。
 
@@ -226,3 +227,36 @@ canary 的唯一結果必須是 `audit_readiness_canary_result`，內容精確�
 人資階段輸入固定為 `20260922072109,20260922072737,20260922075604`。已完整安裝應收版時不重跑應收 SQL，只提交缺少的兩個人資版本；兩個人資版本只存在其中一版時，必須停止並查核，不可補寫 ledger 假裝完整。前置演練與正式提交均包含既有檢查、薪資資料 ACL／RLS／不可變來源／原子入帳檢查，共 22 份 postflight。六項 canary 都是只讀，不建立正式員工或薪資交易。
 
 正式啟用另需逐筆核對雇主、原申請人、會計四階段承辦及薪資查看授權；部署不會自動建立映射，也不代表銀行已付款。詳見 `FINANCE_HR_PRIVATE_BRIDGE.md`。
+
+
+## 2026-09-27 audit controls and payroll accrual release
+
+The reviewed phase `database_audit_controls_20260927` accepts exactly
+`20260927152432,20260927153326`. The batch requires all prior reviewed migrations,
+including operational stability and legacy demo password retirement. A partial
+batch is refused. `frontend_compat` also requires the complete new batch so the
+new archive and payroll RPCs cannot be omitted when promoting this UI.
+
+The protected workflow first builds and seals one candidate. Before any database
+apply it holds the production release advisory lock, locks and rechecks the exact
+captured migration ledger, and rehearses both migrations in one rollback-only
+transaction. The rehearsal runs every inherited and new catalog postflight,
+then rolls back and compares full schema/business/ledger fingerprints. Apply
+writes both migration ledger rows and runs the full postflight in one transaction.
+Read-only catalog canaries run after apply and again before domain promotion.
+They do not impersonate employees or create production accounting records.
+
+`pnpm test:audit-controls-20260927` is mandatory in `release:preflight` and covers
+real synthetic SQL controls, pinned postflight rejection of tampering, company
+submission response-loss replay, organization save races, exact cents and backup
+validation, archive readback, search/selection, and payroll accrual SQL/UI logic.
+Before build, the private disposable PostgreSQL service must pass
+`pnpm test:audit-controls-native-concurrency` with two real sessions and observed
+lock waits for both close-first and posting-first commits. The offline Chromium
+lane must also pass `pnpm test:audit-controls-browser-20260927` for real visible
+search and accounting interactions. A missing local PostgreSQL is not a native
+pass; this required proof is enforced by CI before build or database mutation.
+
+These checks establish synthetic behavior and release integrity. Google OAuth
+and real employee operation remain distinct production acceptance evidence.
+No missing payroll or revenue is estimated or backfilled by the migration.

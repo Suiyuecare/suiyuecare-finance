@@ -178,7 +178,7 @@ await check('inconsistent member publication rolls back the preceding member mut
  await db.exec('rollback');assert.equal(await value("select name v from public.finance_users where id='staff'"),'Updated Staff');
 });
 function code(start,end){const i=html.indexOf(start),j=html.indexOf(end,i+start.length);assert(i>=0&&j>i);return html.slice(i,j);}
-function ctx(extra){const c={Date,Array,Number,Error,console,...extra};c.window=c;return vm.createContext(c);}
+function ctx(extra){const c={Date,Array,Number,Error,console,financeAuthIdentityEpoch:1,CURRENT_PERMISSION_SNAPSHOT:{role:'hr'},expenseSubmissionOperationIdentity:()=> 'anonymous-fixture',stableSnapshotValue:x=>x,cloneSettingValue:x=>structuredClone(x),...extra};c.window=c;vm.createContext(c);vm.runInContext(code('function membershipOrgOperationIdentity(){','window.refreshMembershipOrgGraph='),c);return c;}
 await check('save errors stop draft submit and validation; successful save permits submit',async()=>{
  const calls=[];let fail=true;
  const c=ctx({MEMBERSHIP_ORG_DRAFT:{version:{id:'draft',etag:'etag'},snapshot:{newData:true},dirty:true},getSb:()=>({rpc:async(name)=>{calls.push(name);return name==='membership_org_save_draft'&&fail?{error:{message:'stale'}}:{data:{ok:true,version:{id:'draft'},snapshot:{newData:true},validation:{errors:[],warnings:[]}}};}}),alert:()=>{},confirm:()=>true,friendlyErrorMessage:e=>e.message,renderMembershipOrgManager:()=>{},setTopSyncStatus:()=>{}});

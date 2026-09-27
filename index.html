@@ -39,6 +39,7 @@
 <script src="assets/engines/form-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/employee-form-ux.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/approval-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/payroll-accrual-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/hr-bridge-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/attachment-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/permission-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -988,7 +989,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
       <div class="card" data-mobile-compliance-pane="close"><div class="chd"><span class="cht">2. 傳票作廢 / 沖銷 / 調整</span><button class="btn-g" data-mobile-desktop-only-action onclick="createAdjustmentVoucher()">建立調整</button></div><div class="mobile-desktop-recommended">為避免誤操作，建立沖銷／調整請使用桌機。</div><div style="padding:12px" id="voucher-adjust-box"></div></div>
     </div>
     <div class="g2" style="margin-bottom:12px">
-      <div class="card" data-mobile-compliance-pane="archive"><div class="chd"><span class="cht">3. 憑證保存與索引</span><button class="btn-g" data-mobile-desktop-only-action onclick="archivePeriodDocuments()">建立本期憑證索引</button></div><div class="mobile-desktop-recommended">請在桌機核對索引；保存紀錄不代表附件已封存。</div><div style="padding:12px" id="retention-box"></div></div>
+      <div class="card" data-mobile-compliance-pane="archive"><div class="chd"><span class="cht">3. 憑證保存與驗證</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn-g" data-mobile-desktop-only-action onclick="archivePeriodDocuments()">建立索引</button><button class="btn-p" data-mobile-desktop-only-action onclick="sealPeriodDocuments()">封存本期原件</button><button class="btn-g" onclick="verifyPeriodDocumentArchive()">驗證封存原件</button><button class="btn-s" onclick="cancelDocumentArchiveOperation()">停止後續封存</button></div></div><div class="mobile-desktop-recommended">請在桌機封存原件；索引與原件封存分開記錄。</div><div style="padding:12px" id="retention-box"></div><div style="padding:0 12px 12px" id="document-archive-status" role="status"></div><div style="padding:0 12px 12px"><button class="btn-g" onclick="restartPeriodDocumentArchive()">來源已變更：重新建立封存清單</button></div></div>
       <div class="card" data-mobile-compliance-pane="archive"><div class="chd"><span class="cht">4. 年度財報匯出</span><button class="btn-g" onclick="exportAnnualPackage()">下載年度包</button></div><div style="padding:12px" id="annual-box"></div></div>
     </div>
     <div class="g2" style="margin-bottom:12px">
@@ -1503,7 +1504,8 @@ function financeReportEngine(){
 function fmt(n){
   var engine=financeReportEngine();
   var value=engine&&typeof engine.money==='function'?engine.money(n):Number(n||0);
-  return'NT$'+Math.round(value).toLocaleString('zh-TW');
+  var cents=Math.round((value+Math.sign(value)*Number.EPSILON)*100),amount=cents/100;
+  return'NT$'+amount.toLocaleString('zh-TW',{minimumFractionDigits:cents%100===0?0:2,maximumFractionDigits:2});
 }
 function fmtMoney(n){return fmt(n);}
 function el(id){return document.getElementById(id);}
@@ -5728,11 +5730,12 @@ function backupSummary(pkg){
   };
 }
 async function recordBackupEvent(action,status,detail,summary,hash,fileName){
+  var identity=backupOperationIdentity();
   var row={id:'bak_'+Date.now()+'_'+Math.random().toString(36).slice(2),action:action,status:status||'completed',fileName:fileName||'',hash:hash||'',summary:summary||{},by:S.user?S.user.n:'系統',time:new Date().toISOString(),note:detail||'',dataEnv:activeDataEnvironment()};
-  BACKUP_EVENTS.unshift(row);
-  saveComplianceStore('backup_events',BACKUP_EVENTS);
   await upsertComplianceRemote('backup_restore_events',{id:row.id,action:row.action,status:row.status,file_name:row.fileName,file_hash:row.hash,summary:row.summary,actor_name:row.by,note:row.note,created_at:row.time,data_environment:row.dataEnv});
-  await auditLog(action==='restore'?'資料還原':'資料備份','備份與還原',detail||'',{period:todayMonth()});
+  if(identity!==backupOperationIdentity())return;
+  BACKUP_EVENTS.unshift(row);saveComplianceStore('backup_events',BACKUP_EVENTS);
+  await auditLog(action==='restore'?'本機測試資料還原':action==='validation'?'備份驗證':'資料備份','備份與還原',detail||'',{period:todayMonth()});
 }
 function auditLogRowsForExport(eid,period){
   var start=periodStart(period),end=periodEnd(period),ent=gE(eid);
@@ -5782,7 +5785,7 @@ function ensureOpenPostingPeriod(eid,dateVal,action){
 }
 function periodTrialBalanceStatus(eid,period){
   var rows=ledgerRows(eid,period),dr=rows.reduce(function(s,r){return s+num(r.dr);},0),cr=rows.reduce(function(s,r){return s+num(r.cr);},0);
-  return {rows:rows.length,debit:dr,credit:cr,diff:Math.round((dr-cr)*100)/100,ok:Math.abs(dr-cr)<0.5};
+  return {rows:rows.length,debit:dr,credit:cr,diff:Math.round((dr-cr)*100)/100,ok:Math.abs(dr-cr)<0.005};
 }
 function voucherLocked(v){return !!(v&&v.posted)||periodClosed(v&&v.eid,v&&String(v.date||'').slice(0,7).replace('/','-'));}
 function voucherYear(voucherDate){
@@ -15159,6 +15162,7 @@ window.returnToPortalModules=function(){
   location.href=url.toString();
 };
 function clearFinanceLoginState(){
+  clearDocumentArchiveRetryForCurrentIdentity();
   if(window.FinanceHrBridge)window.FinanceHrBridge.dispose();
   clearApprovalFastBootstrapState();
   resetFinanceUsersDirectoryReadiness();
@@ -15574,7 +15578,7 @@ async function guardedNav(id,btn){
   if(btn){btn.classList.add('on');if(['newreq','notif','users'].indexOf(id)<0){var d=document.createElement('span');d.className='dot';btn.appendChild(d);}}
   if(id==='hrbridge'&&window.FinanceHrBridge){
     if(S.demoLogin||!hasSupabase())pg.textContent='請使用正式帳號登入後查看人資付款交接。';
-    else {var hrBridgeIdentity=S.user.id;window.FinanceHrBridge.mount(pg,{client:getSb(),userId:hrBridgeIdentity,isCurrent:function(){return S.page==='hrbridge'&&S.user&&S.user.id===hrBridgeIdentity;}});}
+    else {var hrBridgeIdentity=S.user.id,hrBridgeTenant=currentTenantId(),hrBridgeRole=S.user.role,hrBridgeEpoch=S.authEpoch,hrBridgeEnvironment=activeDataEnvironment();window.FinanceHrBridge.mount(pg,{client:getSb(),userId:hrBridgeIdentity,role:hrBridgeRole,accounts:ACCTS,departments:DEPTS,isCurrent:function(){return S.page==='hrbridge'&&S.user&&S.user.id===hrBridgeIdentity&&currentTenantId()===hrBridgeTenant&&S.user.role===hrBridgeRole&&S.authEpoch===hrBridgeEpoch&&activeDataEnvironment()===hrBridgeEnvironment&&!S.demoLogin&&canAccessPage('hrbridge');},afterPost:function(){return refreshRemoteData();}});}
   }
   if(id==='dashboard')buildDash();
   if(id==='expenses')buildExp();
@@ -23140,6 +23144,7 @@ function nrTravelValidationTarget(kind,field){
   return box.id;
 }
 window.submitNR=async function(){
+  if(POSTING_IN_FLIGHT.shareholderApproval)return;
   if(loadExpenseRevisionPending()){await window.reconcilePendingExpenseRevision();return;}
   if(S.nrSubmissionConfirmationPending||loadExpenseSubmissionPending()){
     if(!await guardSubmissionIdentityDirectory('確認上一筆費用申請'))return;
@@ -25601,13 +25606,12 @@ function approvalItemIsCashierTask(item){
 }
 function approvalBulkBarHtml(items){
   if((S.aT!=='p'&&S.aT!=='cashier')||!items||!items.length)return'';
-  var selected=S.apprSelected||{};
-  var cnt=Object.keys(selected).filter(function(k){return selected[k];}).length;
+  var cnt=selectedApprovalItems().length;
   var approveText=S.aT==='cashier'?'整批出納放款':'整批通過';
   return '<div class="appr-bulkbar"><label class="appr-select" style="margin:0"><input type="checkbox" onchange="toggleAllApprovalSelection(this.checked)">全選本頁待辦</label><span id="appr-bulk-count" style="font-size:11px;color:#8b7358">已選 '+cnt+' 筆</span><button class="btn-p" onclick="bulkApproveSelected()">'+approveText+'</button><button class="btn-g" onclick="bulkCountersignSelected()">整批加簽</button><button class="btn-g" onclick="bulkReturnSelected()">整批退回上一關</button><button class="btn-s" style="color:#8a1010" onclick="bulkCancelSelected()">整批不通過</button></div>';
 }
 function refreshApprovalBulkCount(){
-  var cnt=Object.keys(S.apprSelected||{}).filter(function(k){return S.apprSelected[k];}).length;
+  var cnt=selectedApprovalItems().length;
   var b=el('appr-bulk-count');if(b)b.textContent='已選 '+cnt+' 筆';
   document.querySelectorAll('[data-appr-key]').forEach(function(card){
     var key=card.getAttribute('data-appr-key');
@@ -25641,6 +25645,25 @@ window.toggleAllApprovalSelection=function(checked){
 function selectedApprovalItems(){
   var map=S.apprItemMap||{},sel=S.apprSelected||{};
   return Object.keys(sel).filter(function(k){return sel[k]&&map[k];}).map(function(k){return map[k];});
+}
+function resetApprovalPageSelection(){
+  S.apprSelected={};
+  approvalClearBulkExpectedSteps();
+  refreshApprovalBulkCount();
+}
+function reconcileApprovalPageSelection(items){
+  // Bulk actions are explicitly for this page. Keep the selected IDs and frozen
+  // versions aligned with the visible map, including refreshes and empty results.
+  var map={};
+  (items||[]).forEach(function(item){map[approvalItemKey(item)]=item;});
+  Object.keys(S.apprSelected||{}).forEach(function(key){
+    if(!map[key]||!approvalItemAvailability(map[key]).ok
+      ||(['p','cashier'].indexOf(S.aT)>-1&&!approvalItemActionRows(map[key]).length)){
+      delete S.apprSelected[key];approvalClearBulkExpectedSteps(key);
+    }
+  });
+  S.apprItemMap=map;
+  refreshApprovalBulkCount();
 }
 function approvalItemSourceRows(item){
   if(!item||!item.raw)return[];
@@ -26010,11 +26033,30 @@ function approvalSortValue(item,field){
   if(field==='applyDate')return approvalDateSortValue(approvalRowApplyDate(item));
   return approvalDateSortValue(approvalRowExpectedPayDate(item));
 }
-function approvalSearchText(item){
+function approvalSearchRowText(row,kind){
+  if(!row)return'';
+  var dept=row.dc?gD(row.dc):null,entity=row.eid?gE(row.eid):null;
+  var fields=kind==='draft'&&row.state?row.state.fields||{}:{};
+  var values=[row.no,row.id,row.batchNo,row.app,row.applicant,row.applicantEmail,
+    row.dc,dept&&dept.n,row.eid,entity&&entity.s,entity&&entity.full,
+    row.desc,row.description,row.title,row.note,row.buyer,row.payer,row.item,
+    row.period,row.servicePeriod,row.contractNo,row.taxId,row.receiptNote,
+    row.date,row.due,row.createdAt,fields['nr-app'],fields['nr-dc'],fields['nr-dept']];
+  if(kind==='req')values.push(requestPurposeText(row),requestNoteText(row));
+  return values.filter(function(value){return value!=null;}).join(' ');
+}
+function approvalSearchText(item,rows){
   var d=approvalRowDept(item),type=approvalRowType(item),status=approvalRowStatus(item);
+  // Presentation summaries are escaped and shortened. Index the original fields
+  // of the already-authorized group, never fetch additional siblings to search.
+  if(!rows){
+    rows=item.rows&&item.rows.length?item.rows:[item.raw];
+    if(item.kind==='bill')rows=billGroupApprovalRows(item);
+    else if(item.kind==='inv'||item.kind==='recv')rows=invoiceGroupApprovalRows(item);
+  }
   return [
     approvalRowFormNo(item),d.code,d.name,approvalRowApplicant(item),type.label,
-    approvalRowSummary(item),approvalRowApplyDate(item),
+    rows.map(function(row){return approvalSearchRowText(row,item.kind);}).join(' '),approvalRowApplyDate(item),
     approvalRowExpectedPayDate(item),status.label
   ].join(' ').toLowerCase();
 }
@@ -26026,7 +26068,7 @@ function approvalMatchesQuery(item,query){
     if(item.kind==='req')amounts=amounts.concat(requestSearchAmounts(row));
     else if(row)amounts=amounts.concat([row.amt,row.amount,row.total,row.tax]);
   });
-  return financeDocumentMatchesQuery(query,[approvalSearchText(item)],amounts);
+  return financeDocumentMatchesQuery(query,[approvalSearchText(item,rows)],amounts);
 }
 function approvalApplySearchSort(data){
   // History is filtered, ordered, and paged by the participant-scoped RPC.
@@ -26107,6 +26149,7 @@ window.apprSearch=function(v,event){
     buildApprovals();
     return;
   }
+  resetApprovalPageSelection();
   buildApprovals();
 };
 window.apprSort=function(field){
@@ -26116,16 +26159,19 @@ window.apprSort=function(field){
   if(st.field===field)st.dir=st.dir==='asc'?'desc':'asc';
   else {st.field=field;st.dir=(field==='amount'||field==='waitTime')?'desc':'asc';}
   S.apprPage=1;
+  resetApprovalPageSelection();
   buildApprovals();
   var button=restoreFocus&&document.querySelector('[data-approval-sort="'+field+'"]');
   if(button)button.focus();
 };
 window.apprPage=function(page){
+  var previousPage=S.apprPage;
   S.apprPage=Math.max(1,Number(page)||1);
   if(S.aT==='h'){
     loadApprovalHistoryPage({page:S.apprPage,query:S.apprQuery||'',trigger:'page'}).catch(function(error){console.warn('approval history page failed',error);});
     return;
   }
+  if(S.apprPage!==previousPage)resetApprovalPageSelection();
   buildApprovals();
 };
 window.openApprovalItem=function(key){
@@ -26245,6 +26291,7 @@ function renderApprList(data){
     ?(historyRuntime.status==='loading'?'正在更新曾參與流程的紀錄':historyRuntime.status==='error'?'簽核紀錄更新未完成，請重試':('共 '+total+' 筆曾參與流程 · 每頁最多 50 筆'))
     :('搜尋後 '+total+' 筆 · 每頁最多 50 筆');
   if(!filtered.length){
+    reconcileApprovalPageSelection([]);
     if(isHistory&&historyRuntime.status==='loading'){
       l.innerHTML='<div class="card" aria-busy="true" style="text-align:center;padding:34px;color:#8b7358;font-size:12px">正在讀取你曾被指派或實際處理過的流程…</div>';
       syncApprovalWaitTimer();
@@ -26261,6 +26308,7 @@ function renderApprList(data){
     return;
   }
   var pageData=isHistory?filtered:filtered.slice((page-1)*50,page*50);
+  reconcileApprovalPageSelection(pageData);
   var rows=pageData.map(function(item){
     var r=item.raw,kind=item.kind,status=approvalRowStatus(item),type=approvalRowType(item),dept=approvalRowDept(item);
     var key=approvalItemKey(item);
@@ -29231,8 +29279,11 @@ function buildBackupPackage(){
   if(typeof financeAccountingReadReady==='function'&&!financeAccountingReadReady())throw new Error(financeAccountingReadMessage());
   return {
     schema:'module_finance_backup',
-    version:1,
+    version:2,
     app:'module-finance',
+    tenantId:currentTenantId(),
+    recordFormat:'frontend',
+    scope:'local_demo',
     createdAt:new Date().toISOString(),
     dataEnvironment:activeDataEnvironment(),
     dataEnvironmentLabel:dataEnvLabel(),
@@ -29240,7 +29291,7 @@ function buildBackupPackage(){
     note:'此備份包不包含 Supabase Auth 密碼、Storage 原始檔二進位，只保存附件路徑、簽核紀錄與分類帳資料。',
     data:{
       users:(USERS||[]).map(function(u){var x=Object.assign({},u);delete x.pw;return x;}),
-      settings:currentSystemSettings(),
+      settings:Object.assign({},SYSTEM_SETTINGS,currentSystemSettings()),
       requests:(REQS||[]).filter(inActiveDataEnvironment).map(sanitizeLocalReq),
       invoices:(INVS||[]).filter(inActiveDataEnvironment),
       vouchers:(VOUCHERS||[]).filter(inActiveDataEnvironment),
@@ -29254,27 +29305,113 @@ function buildBackupPackage(){
     }
   };
 }
+var FINANCE_BACKUP_TABLES=[
+  {key:'requests',table:'expense_requests'},{key:'invoices',table:'invoices'},
+  {key:'vouchers',table:'vouchers'},{key:'ledger',table:'ledger_entries'},
+  {key:'bills',table:'bills'},{key:'notifications',table:'notifications'},
+  {key:'periodCloses',table:'period_closes'},{key:'archives',table:'compliance_archives'},
+  {key:'annualReviews',table:'annual_reviews'},{key:'auditLogs',table:'compliance_audit_logs'},
+  {key:'attachments',table:'file_attachments'},
+  {key:'users',table:'finance_users',columns:FINANCE_USER_SAFE_COLUMNS,noEnvironment:true},
+  {key:'settings',table:'system_settings',order:'key',noEnvironment:true,keys:SYSTEM_SETTINGS_RUNTIME_KEYS}
+];
+function backupOperationIdentity(){return approvalFastBootstrapIdentity()+'|'+currentTenantId()+'|'+activeDataEnvironment();}
+async function backupStrictHash(value){
+  if(!window.crypto||!window.crypto.subtle)throw new Error('瀏覽器無法驗證 SHA-256，已停止備份操作。');
+  var bytes=typeof value==='string'?new TextEncoder().encode(value):value;
+  var digest=await window.crypto.subtle.digest('SHA-256',bytes);
+  return Array.from(new Uint8Array(digest)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+}
+async function loadBackupTablePages(client,spec,identity){
+  var rows=[],seen=new Set(),count=null,size=250,tenant=currentTenantId(),environment=activeDataEnvironment();
+  for(var offset=0;;offset+=size){
+    if(identity!==backupOperationIdentity())throw new Error('備份期間登入身分已變更，已停止匯出。');
+    var query=client.from(spec.table).select(spec.columns||'*',{count:'exact'}).eq('tenant_id',tenant);
+    if(spec.keys)query=query.in('key',spec.keys);
+    if(!spec.noEnvironment)query=query.eq('data_environment',environment);
+    var result=await financeBootstrapRead(query.order(spec.order||'id',{ascending:true}).range(offset,offset+size-1),'完整備份 '+spec.table,20000);
+    if(result.error)throw result.error;
+    if(!Array.isArray(result.data)||!Number.isSafeInteger(result.count)||result.count<0||count!==null&&count!==result.count)throw new Error('備份來源筆數變更或尚未確認：'+spec.table);
+    count=result.count;
+    result.data.forEach(function(row){
+      var id=String(row[spec.order||'id']||'');
+      if(!id||seen.has(id)||String(row.tenant_id||'')!==tenant||!spec.noEnvironment&&row.data_environment!==environment)throw new Error('備份資料重複或範圍不一致：'+spec.table);
+      seen.add(id);rows.push(row);
+    });
+    if(rows.length===count)break;
+    if(!result.data.length||result.data.length>size||rows.length>count)throw new Error('備份資料分頁不完整：'+spec.table);
+  }
+  return rows;
+}
+async function buildVerifiedRemoteBackupPackage(identity){
+  var client=getSb();if(!client)throw new Error('正式資料服務尚未連線。');
+  var pkg=buildBackupPackage();pkg.recordFormat='database';pkg.scope='authorized_rows';pkg.data={};pkg.tableCounts={};
+  pkg.note='逐頁讀取本人獲授權、同租戶同環境的指定會計資料表；不含 Auth 密碼或原附件內容，也不是整個資料庫的同交易快照。原件請另建立憑證封存。';
+  for(var index=0;index<FINANCE_BACKUP_TABLES.length;index++){
+    var spec=FINANCE_BACKUP_TABLES[index],rows=await loadBackupTablePages(client,spec,identity);
+    pkg.data[spec.key]=rows;pkg.tableCounts[spec.key]=rows.length;
+  }
+  // Detect inserts/deletes between paged reads and final export. An exact
+  // database restore still requires the independent transactional recovery path.
+  for(var check=0;check<FINANCE_BACKUP_TABLES.length;check++){
+    if(identity!==backupOperationIdentity())throw new Error('備份期間登入身分已變更。');
+    var table=FINANCE_BACKUP_TABLES[check],q=client.from(table.table).select(table.order||'id',{count:'exact',head:true}).eq('tenant_id',pkg.tenantId);
+    if(table.keys)q=q.in('key',table.keys);
+    if(!table.noEnvironment)q=q.eq('data_environment',pkg.dataEnvironment);
+    var checkpoint=await financeBootstrapRead(q,'備份筆數複核 '+table.table,20000);
+    if(checkpoint.error)throw checkpoint.error;
+    if(checkpoint.count!==pkg.tableCounts[table.key])throw new Error('備份期间資料筆數已變更，請重新匯出：'+table.table);
+  }
+  pkg.verifiedAt=new Date().toISOString();return pkg;
+}
+async function validateBackupPackage(pkg){
+  if(!pkg||pkg.schema!=='module_finance_backup'||pkg.version!==2||pkg.app!=='module-finance'||!pkg.data||typeof pkg.data!=='object'||Array.isArray(pkg.data))throw new Error('備份格式或版本不支援，請重新匯出新版備份。');
+  if(pkg.tenantId!==currentTenantId())throw new Error('備份租戶與目前租戶不同，已停止匯入。');
+  if(pkg.dataEnvironment!==activeDataEnvironment())throw new Error('備份資料環境與目前環境不同，已停止匯入。');
+  if(['frontend','database'].indexOf(pkg.recordFormat)<0||!/^[a-f0-9]{64}$/.test(String(pkg.fileHash||'')))throw new Error('備份缺少有效格式識別或 SHA-256。');
+  var unsigned=Object.assign({},pkg);delete unsigned.fileHash;
+  if(await backupStrictHash(JSON.stringify(unsigned,null,2))!==pkg.fileHash)throw new Error('備份內容雜湊不符，檔案可能不完整或遭修改。');
+  FINANCE_BACKUP_TABLES.forEach(function(spec){
+    var rows=pkg.data[spec.key];
+    if(pkg.recordFormat==='frontend'&&(spec.key==='settings'||spec.key==='attachments'))return;
+    if(!Array.isArray(rows))throw new Error('備份缺少必要資料：'+spec.key);
+    if(pkg.recordFormat==='database'&&(!pkg.tableCounts||pkg.tableCounts[spec.key]!==rows.length))throw new Error('備份筆數未驗證：'+spec.key);
+    rows.forEach(function(row){
+      if(!row||typeof row!=='object'||Array.isArray(row))throw new Error('備份資料格式不正確：'+spec.key);
+      if(pkg.recordFormat==='database'&&row.tenant_id!==pkg.tenantId||row.tenant_id&&row.tenant_id!==pkg.tenantId||row.tenantId&&row.tenantId!==pkg.tenantId)throw new Error('備份含不同租戶資料。');
+      if(!spec.noEnvironment&&(pkg.recordFormat==='database'&&row.data_environment!==pkg.dataEnvironment||row.data_environment&&row.data_environment!==pkg.dataEnvironment||row.dataEnv&&row.dataEnv!==pkg.dataEnvironment))throw new Error('備份含不同資料環境的紀錄。');
+    });
+  });
+  if(pkg.recordFormat==='frontend'&&(!pkg.data.settings||typeof pkg.data.settings!=='object'||Array.isArray(pkg.data.settings)))throw new Error('備份設定格式不正確。');
+  return pkg;
+}
 window.downloadBackupPackage=async function(){
   if(typeof requireFinanceAccountingRead==='function'&&!requireFinanceAccountingRead())return;
   if(!isFinance()){alert('只有會計、行政部門主任或執行長可以下載備份包');return;}
-  var pkg=buildBackupPackage();
-  var text=JSON.stringify(pkg,null,2),hash=await sha256Text(text),summary=backupSummary(pkg);
-  pkg.fileHash=hash;
-  text=JSON.stringify(pkg,null,2);
-  var fn='module_finance_'+activeDataEnvironment()+'_backup_'+new Date().toISOString().slice(0,10)+'.json';
-  downloadTextFile(text,fn,'application/json;charset=utf-8');
-  await recordBackupEvent('backup','completed','下載備份包：'+backupReadableSummary(summary),summary,hash,fn);
-  buildCompliance();
+  if(S.backupDownloadBusy)return;S.backupDownloadBusy=true;
+  var identity=backupOperationIdentity();
+  try{
+    var pkg=S.demoLogin&&allowLocalPersistence()?buildBackupPackage():await buildVerifiedRemoteBackupPackage(identity);
+    pkg.fileHash=await backupStrictHash(JSON.stringify(pkg,null,2));await validateBackupPackage(pkg);
+    if(identity!==backupOperationIdentity())throw new Error('登入身分已變更，已停止下載。');
+    var fn='module_finance_'+activeDataEnvironment()+'_backup_'+new Date().toISOString().slice(0,10)+'.json',summary=backupSummary(pkg);
+    downloadTextFile(JSON.stringify(pkg,null,2),fn,'application/json;charset=utf-8');
+    await recordBackupEvent('backup','completed','下載已驗證的授權範圍備份包：'+backupReadableSummary(summary),summary,pkg.fileHash,fn);
+    buildCompliance();
+  }catch(error){alert('備份尚未完成：'+(error.message||error));}
+  finally{S.backupDownloadBusy=false;}
 };
 window.backupFileChange=function(inp){
   var file=inp.files&&inp.files[0];if(!file)return;
   var reader=new FileReader();
-  reader.onload=function(){
+  var identity=backupOperationIdentity();
+  reader.onload=async function(){
     try{
       var pkg=JSON.parse(String(reader.result||'{}'));
-      if(pkg.schema!=='module_finance_backup'||!pkg.data){alert('這不是有效的會計系統備份包');return;}
+      await validateBackupPackage(pkg);
+      if(identity!==backupOperationIdentity())throw new Error('讀入期間登入身分已變更。');
       S.restorePackage=pkg;S.restoreFileName=file.name;renderBackupRestorePreview(pkg,file.name);
-    }catch(err){alert('備份包讀取失敗：'+(err.message||err));}
+    }catch(err){S.restorePackage=null;S.restoreFileName='';alert('備份包驗證失敗：'+(err.message||err));}
     inp.value='';
   };
   reader.onerror=function(){alert('備份包讀取失敗，請重新選擇檔案');inp.value='';};
@@ -29288,34 +29425,38 @@ function renderBackupRestorePreview(pkg,fileName){
     +'來源環境：'+dataEnvLabel(env)+'；目前環境：'+dataEnvLabel()+(warn?' <span class="badge b-rej">環境不同</span>':' <span class="badge b-ok">環境一致</span>')+'<br>'
     +'內容：'+backupReadableSummary(s)+'<br>'
     +'SHA-256：<span style="font-family:var(--font-sans)">'+escAttr(pkg.fileHash||'尚未提供')+'</span>'
-    +'</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn-p" onclick="restoreBackupPackage()">確認還原到目前環境</button><button class="btn-s" onclick="cancelBackupRestore()">取消</button></div>';
+    +'<br>格式：'+escAttr(pkg.recordFormat||'')+'；SHA-256 已驗證。'+(S.demoLogin&&allowLocalPersistence()?'':'正式系統只驗證備份，不會以檔案取代畫面或正式帳務。')
+    +'</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn-p" onclick="restoreBackupPackage()">'+(S.demoLogin&&allowLocalPersistence()?'還原本機測試資料':'完成備份驗證')+'</button><button class="btn-s" onclick="cancelBackupRestore()">取消</button></div>';
 }
 window.cancelBackupRestore=function(){S.restorePackage=null;S.restoreFileName='';buildCompliance();};
 function restoreRows(rows,mapper){
-  return (Array.isArray(rows)?rows:[]).map(function(r){var x=mapper?mapper(r):Object.assign({},r);x.dataEnv=activeDataEnvironment();return x;});
+  // Version 2 demo packages contain the application's own normalized records.
+  // Database-only mappers would erase eid/by/time/docs and unknown future fields.
+  return JSON.parse(JSON.stringify(Array.isArray(rows)?rows:[]));
 }
 window.restoreBackupPackage=async function(){
   if(!isFinance()){alert('只有會計、行政部門主任或執行長可以還原備份包');return;}
   var pkg=S.restorePackage;if(!pkg||!pkg.data){alert('請先上傳備份包');return;}
+  var identity=backupOperationIdentity();
+  try{await validateBackupPackage(pkg);if(identity!==backupOperationIdentity())throw new Error('登入身分已變更。');}
+  catch(error){alert('備份驗證失敗：'+error.message);return;}
+  if(!S.demoLogin||!allowLocalPersistence()){
+    await recordBackupEvent('validation','verified','備份雜湊、版本、租戶、環境及筆數通過；未修改正式資料。',backupSummary(pkg),pkg.fileHash,S.restoreFileName||'');
+    if(identity!==backupOperationIdentity())return;
+    S.restorePackage=null;S.restoreFileName='';buildCompliance();
+    alert('備份驗證通過。正式帳務與畫面未更動；正式恢復需由管理端在隔離環境驗證及執行資料庫恢復。');return;
+  }
+  if(pkg.recordFormat!=='frontend'){alert('資料庫備份不能直接還原至本機測試畫面，請使用同環境的測試備份。');return;}
   var phrase=activeDataEnvironment()===DATA_ENV_PRODUCTION?'還原正式資料':'還原測試資料';
   var typed=prompt('還原會覆蓋目前畫面中的 '+dataEnvLabel()+'。若要繼續，請輸入：「'+phrase+'」');
   if(typed!==phrase)return;
   var d=pkg.data||{};
   if(d.settings){
-    ENTS=Array.isArray(d.settings.entities)?d.settings.entities:ENTS;
-    DEPTS=Array.isArray(d.settings.departments)?d.settings.departments:DEPTS;
-    ACCTS=Array.isArray(d.settings.accounts)?d.settings.accounts:ACCTS;
-    ensureSharedAccountingConfig();
-    BANK_TRANSFER_FEES=Object.assign({},d.settings.bank_transfer_fees||BANK_TRANSFER_FEES);
-    ROLE_PERMISSIONS=normalizeRolePermissionsConfig(d.settings.role_permissions||ROLE_PERMISSIONS);
-    PRODUCT_MODULES=normalizeProductModules(d.settings.product_modules||PRODUCT_MODULES);
-    WORKFLOW_TEMPLATES=normalizeWorkflowTemplates(d.settings.workflow_templates||WORKFLOW_TEMPLATES);
-    FORM_FIELD_CONFIGS=normalizeFormFieldConfigs(d.settings.form_field_configs||FORM_FIELD_CONFIGS);
-    ACCOUNTING_TEMPLATES=normalizeAccountingTemplates(d.settings.accounting_templates||ACCOUNTING_TEMPLATES);
-    CUSTOMER_PROFILES=normalizeCustomerProfiles(d.settings.customer_profiles||CUSTOMER_PROFILES);
-    DEFAULT_CUSTOMER_PROFILE_ID=normalizeDefaultCustomerProfileId(d.settings.default_customer_profile_id||DEFAULT_CUSTOMER_PROFILE_ID,CUSTOMER_PROFILES);
+    applySystemSettings(Object.keys(d.settings).map(function(key){return {key:key,value:d.settings[key],tenant_id:pkg.tenantId};}));
+    // Retain settings not consumed by this app version for future export.
+    SYSTEM_SETTINGS=JSON.parse(JSON.stringify(d.settings));
   }
-  if(Array.isArray(d.users)&&d.users.length)USERS=d.users.map(mapUser);
+  if(Array.isArray(d.users))USERS=restoreRows(d.users);
   REQS=restoreRows(d.requests,mapReq);
   INVS=restoreRows(d.invoices,mapInv);
   VOUCHERS=restoreRows(d.vouchers,mapVoucher);
@@ -29334,7 +29475,7 @@ window.restoreBackupPackage=async function(){
   var summary=backupSummary(pkg);
   await recordBackupEvent('restore','completed','還原備份包：'+backupReadableSummary(summary),summary,pkg.fileHash||'',S.restoreFileName||'');
   S.restorePackage=null;S.restoreFileName='';
-  initFilters();buildAll();alert('還原完成。若要同步正式 Supabase 遠端資料，請再由資料庫管理端套用完整還原流程。');
+  initFilters();buildAll();alert('本機測試資料還原完成；未更動正式資料庫。');
 };
 window.buildCompliance=function buildCompliance(){
   if(typeof financeAccountingReadReady==='function'&&!financeAccountingReadReady()){paintFinanceAccountingUnavailable(['comp-kpis','accounting-control-center','period-close-box','voucher-adjust-box','retention-box','annual-box','audit-box','lock-box','doc-map-box','annual-review-box','backup-box']);return;}
@@ -29342,6 +29483,7 @@ window.buildCompliance=function buildCompliance(){
   var eid=compEntity(),period=compPeriod(),closed=periodClosed(eid,period),e=gE(eid);
   var vs=vouchersForPeriod(eid,period),docs=sourceDocsForPeriod(eid,period),locked=vs.filter(voucherLocked).length;
   var review=ANNUAL_REVIEWS.find(function(r){return r.eid===eid&&r.period===period&&r.status==='approved';});
+  if(S.documentArchiveStatusScope!==backupOperationIdentity()+'|'+eid+'|'+period){var archiveStatus=el('document-archive-status');if(archiveStatus)archiveStatus.textContent='';}
   el('comp-kpis').innerHTML=[
     {l:'期間狀態',v:closed?'已關帳':'未關帳'},
     {l:'正式傳票',v:vs.length+' 張'},
@@ -29358,9 +29500,10 @@ window.buildCompliance=function buildCompliance(){
   el('doc-map-box').innerHTML=(vs.slice(0,8).map(function(v){var req=REQS.find(function(r){return r.voucherId===v.id||r.no===v.reqId;});var count=req?normalizeFiles(req.files).length+normalizeFiles(req.passbookFiles).length+normalizeFiles(req.actualFiles).length:0;return'<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #f0e6d6"><div><div style="font-size:12px;font-weight:650;color:#334155">'+v.no+'</div><div style="font-size:10px;color:#94a3b8">'+(req?req.no+' · '+req.tL:'未找到對應申請')+'</div></div><span class="badge '+(count?'b-ok':'b-rej')+'">'+count+' 份憑證</span></div>';}).join('')||'<div style="font-size:12px;color:#94a3b8">本期尚無傳票</div>');
   el('annual-review-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">執行長或授權負責人需確認年度財報、關帳紀錄、憑證對應表與 audit log 後通過。</div><div style="margin-top:8px">'+(review?'<span class="badge b-ok">已由 '+review.by+' 於 '+String(review.time).slice(0,10)+' 審核</span>':'<span class="badge b-wait">尚未審核</span>')+'</div>';
   if(el('backup-box')&&!S.restorePackage){
-    el('backup-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">備份包包含目前資料環境的申請、發票、傳票、分類帳、繳費、系統設定與合規紀錄。還原前會要求輸入確認文字，並留下 audit log。</div>'
+    el('backup-box').innerHTML='<div style="font-size:12px;color:#334155;line-height:1.7">正式備份逐頁核對本人授權範圍的申請、發票、傳票、分類帳、繳費、附件索引、設定與合規紀錄，任何來源讀取失敗即停止下載。上傳時驗證 SHA-256、版本、租戶與環境，正式模式僅驗證、不替換帳務。原附件內容請另建立原件封存；整個資料庫恢復需由管理端隔離驗證。</div>'
       +'<div style="margin-top:8px">'+(BACKUP_EVENTS||[]).slice(0,5).map(function(b){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #f0e6d6"><div><div style="font-size:11px;font-weight:650;color:#334155">'+(b.action==='restore'?'還原':'備份')+' · '+(b.status||'completed')+'</div><div style="font-size:10px;color:#94a3b8">'+String(b.time||'').slice(0,19).replace('T',' ')+' · '+(b.by||'—')+' · '+backupReadableSummary(b.summary)+'</div></div><span class="badge '+(b.action==='restore'?'b-purp':'b-blue')+'">'+dataEnvLabel(b.dataEnv)+'</span></div>';}).join('')+'</div>';
   }
+  var adjustmentAmountInput=el('adj-amount');if(adjustmentAmountInput)adjustmentAmountInput.setAttribute('step','0.01');
 }
 var COMPLIANCE_ACTIONS_PENDING=new Set();
 async function commitComplianceAction(table,payload,apply,action,target,detail,meta){
@@ -29396,28 +29539,43 @@ window.closeAccountingPeriod=async function(){
   await commitComplianceAction('period_closes',{id:row.id,entity_id:eid,period:period,status:'closed',closed_by:row.by,closed_at:row.time,note:row.note,data_environment:row.dataEnv},function(){PERIOD_CLOSES.push(row);saveComplianceStore('period_closes',PERIOD_CLOSES);},'會計期間關帳',gE(eid).s+' '+period,note,{eid:eid,period:period});
 };
 function adjustmentEntriesFromVoucher(v,amount){
-  var total=num(v&&v.total)||0;
-  var ratio=total&&amount?Math.min(1,amount/total):1;
-  var entries=(v&&v.entries||[]).map(function(e){
-    return {t:e.t==='dr'?'cr':'dr',ac:e.ac,an:e.an,dept:e.dept,amt:Math.round(num(e.amt)*ratio)};
-  }).filter(function(e){return e.ac&&e.amt>0;});
-  var dr=entries.reduce(function(s,e){return s+(e.t==='dr'?num(e.amt):0);},0);
-  var cr=entries.reduce(function(s,e){return s+(e.t==='cr'?num(e.amt):0);},0);
-  var diff=dr-cr;
-  if(diff!==0){
-    var target=entries.slice().reverse().find(function(e){return diff>0?e.t==='cr':e.t==='dr';});
-    if(target)target.amt+=Math.abs(diff);
-  }
-  return entries;
+  var total=adjustmentMoneyCents(v&&v.total),target=adjustmentMoneyCents(amount);
+  if(total<=0||target<=0||target>total)throw new Error('調整金額必須大於零，且不能超過原傳票金額。');
+  var entries=(v&&v.entries||[]).map(function(e,index){
+    if((e.t!=='dr'&&e.t!=='cr')||!e.ac)throw new Error('原傳票分錄科目或借貸方向不完整。');
+    return {t:e.t==='dr'?'cr':'dr',ac:e.ac,an:e.an,dept:e.dept,cents:adjustmentMoneyCents(e.amt),index:index};
+  });
+  ['dr','cr'].forEach(function(side){
+    var rows=entries.filter(function(e){return e.t===side;}),sum=rows.reduce(function(s,e){return s+e.cents;},0);
+    if(sum!==total)throw new Error('原傳票借貸合計與傳票金額不一致，請先核對原分錄。');
+    var allocated=0;
+    rows.forEach(function(e){
+      // Integer arithmetic distributes the remaining cents deterministically.
+      var product=BigInt(e.cents)*BigInt(target),denominator=BigInt(total);
+      e.allocated=Number(product/denominator);e.remainder=product%denominator;allocated+=e.allocated;
+    });
+    rows.slice().sort(function(a,b){return a.remainder===b.remainder?a.index-b.index:a.remainder>b.remainder?-1:1;}).slice(0,target-allocated).forEach(function(e){e.allocated++;});
+  });
+  return entries.filter(function(e){return e.allocated>0;}).map(function(e){return {t:e.t,ac:e.ac,an:e.an,dept:e.dept,amt:e.allocated/100};});
+}
+function adjustmentMoneyCents(value){
+  var text=String(value==null?'':value).trim();
+  if(!/^\d+(?:\.\d{1,2})?$/.test(text))throw new Error('金額須為零或正數，最多兩位小數。');
+  var parts=text.split('.'),cents=Number(parts[0])*100+Number((parts[1]||'').padEnd(2,'0'));
+  if(!Number.isSafeInteger(cents))throw new Error('金額超過可安全處理的範圍。');
+  return cents;
 }
 window.createAdjustmentVoucher=async function(){
   if(typeof requireFinanceAccountingRead==='function'&&!requireFinanceAccountingRead())return;
+  var adjustmentIdentity=backupOperationIdentity();
   var id=(el('adj-voucher')||{}).value,v=VOUCHERS.find(function(x){return x.id===id;});if(!v){alert('請先選擇傳票');return;}
-  var type=(el('adj-type')||{}).value||'reversal',reason=((el('adj-reason')||{}).value||'').trim(),amount=num((el('adj-amount')||{}).value)||v.total;
+  var type=(el('adj-type')||{}).value||'reversal',reason=((el('adj-reason')||{}).value||'').trim(),amountText=String((el('adj-amount')||{}).value||'').trim(),amount;
   if(!reason){alert('請填寫原因');return;}
   if(!voucherLocked(v)){alert('原傳票尚未鎖定，不需要建立沖銷或調整傳票');return;}
   if(!ensureOpenPostingPeriod(v.eid,todayIso(),type==='reversal'?'沖銷傳票建立':'調整傳票建立'))return;
-  var entries=adjustmentEntriesFromVoucher(v,amount);
+  var entries;
+  try{amount=adjustmentMoneyCents(amountText===''?v.total:amountText)/100;entries=adjustmentEntriesFromVoucher(v,amount);}
+  catch(amountError){alert(amountError.message);return;}
   if(!entries.length){alert('原傳票沒有可沖銷或調整的分錄');return;}
   if(!S.demoLogin){
     try{
@@ -29425,19 +29583,22 @@ window.createAdjustmentVoucher=async function(){
         ?await callAccountingRpc('reverse_voucher',{p_voucher_id:v.id,p_reason:reason,p_reversal_date:todayIso()})
         :await callAccountingRpc('post_adjustment_voucher',{p_source_voucher_id:v.id,p_reason:(type==='reversal'?'沖銷 '+v.no+' — ':'')+reason,p_entries:entries,p_voucher_date:todayIso()});
       if(rpc&&rpc.ok){
+        if(adjustmentIdentity!==backupOperationIdentity())return;
         await auditLog(type==='reversal'?'建立沖銷傳票':'建立調整傳票',(rpc.data&&rpc.data.voucher_no)||v.no,'原傳票 '+v.no+'；原因：'+reason,{eid:v.eid,period:accountingPeriodOf(todayIso())});
         if(hasSupabase())await loadRemoteData();
         renderVouchers();buildCompliance();
         return;
       }
+      throw new Error(rpc&&rpc.error&&rpc.error.message||'尚未確認正式調整傳票結果，請重新讀取傳票後確認。');
     }catch(rpcErr){
       console.error(rpcErr);
-      alert((type==='reversal'?'沖銷傳票建立失敗：':'調整傳票建立失敗：')+(rpcErr&&rpcErr.message?rpcErr.message:rpcErr));
+      if(adjustmentIdentity===backupOperationIdentity())alert((type==='reversal'?'沖銷傳票建立失敗：':'調整傳票建立失敗：')+(rpcErr&&rpcErr.message?rpcErr.message:rpcErr));
       return;
     }
   }
   var kind=type==='reversal'?'RV':'ADJ';
   var no=await nextVoucherNo(kind,todayIso());
+  if(adjustmentIdentity!==backupOperationIdentity())return;
   var ts=new Date().toISOString();
   var nv={id:no,no:no,reqId:v.reqId,eid:v.eid,entS:v.entS,date:todaySlash(),desc:(type==='reversal'?'沖銷 ':'調整 ')+v.no+' — '+reason,entries:entries,total:amount,creator:S.user?S.user.n:'系統',posted:true,postedAt:ts,postingLockedAt:ts,adjusts:v.no,adjustmentType:type,dataEnv:activeDataEnvironment()};
   VOUCHERS.unshift(nv);
@@ -29451,6 +29612,161 @@ window.archivePeriodDocuments=async function(){
   var eid=compEntity(),period=compPeriod(),docs=sourceDocsForPeriod(eid,period);
   var row={id:'arc_'+Date.now(),eid:eid,period:period,docs:docs.length,fileCount:docs.reduce(function(s,r){return s+normalizeFiles(r.files).length+normalizeFiles(r.passbookFiles).length+normalizeFiles(r.actualFiles).length;},0),by:S.user?S.user.n:'系統',time:new Date().toISOString(),retainDocsUntil:(Number(period.slice(0,4))+10)+'-12-31',retainBooksUntil:(Number(period.slice(0,4))+10)+'-12-31',dataEnv:activeDataEnvironment()};
   await commitComplianceAction('compliance_archives',{id:row.id,entity_id:eid,period:period,docs_count:row.docs,file_count:row.fileCount,archived_by:row.by,archived_at:row.time,retain_docs_until:row.retainDocsUntil,retain_books_until:row.retainBooksUntil,data_environment:row.dataEnv},function(){ARCHIVES.push(row);saveComplianceStore('archives',ARCHIVES);},'建立憑證索引紀錄',gE(eid).s+' '+period,'來源單據 '+docs.length+' 張；附件索引 '+row.fileCount+' 份，未驗證附件內容或封存保存',{eid:eid,period:period});
+};
+function documentArchiveStatus(text,error){
+  S.documentArchiveStatusScope=backupOperationIdentity()+'|'+compEntity()+'|'+compPeriod();
+  var box=el('document-archive-status');if(box){box.textContent=text;box.style.color=error?'#b42318':'#21633d';}
+}
+function documentArchiveCurrent(identity,eid,period){return !S.documentArchiveCancelled&&identity===backupOperationIdentity()&&eid===compEntity()&&period===compPeriod();}
+function documentArchiveRetryKey(identity,eid,period){return 'finance_archive_retry_v1:'+encodeURIComponent(identity)+'|'+encodeURIComponent(eid)+'|'+encodeURIComponent(period);}
+function clearDocumentArchiveRetryForCurrentIdentity(){
+  var prefix='finance_archive_retry_v1:'+encodeURIComponent(backupOperationIdentity())+'|';
+  try{for(var index=window.sessionStorage.length-1;index>=0;index--){var key=window.sessionStorage.key(index);if(key&&key.startsWith(prefix))window.sessionStorage.removeItem(key);}}catch(_){}
+  S.documentArchiveCancelled=true;S.documentArchiveRetry=null;
+}
+function saveDocumentArchiveRetry(retry){
+  try{window.sessionStorage.setItem(documentArchiveRetryKey(retry.identity,retry.eid,retry.period),JSON.stringify(retry));return true;}catch(_){return false;}
+}
+function loadDocumentArchiveRetry(identity,eid,period){
+  var key=documentArchiveRetryKey(identity,eid,period),retry;
+  try{retry=JSON.parse(window.sessionStorage.getItem(key)||'null');}catch(_){return null;}
+  if(!retry)return null;
+  var m=retry.manifest,prefix=m&&[currentTenantId(),eid,period,m.archiveId].join('/')+'/';
+  if(retry.identity!==identity||retry.eid!==eid||retry.period!==period||!m||m.version!==1||m.tenantId!==currentTenantId()||m.dataEnvironment!==activeDataEnvironment()||!m.scope||m.scope.entityId!==eid||m.scope.period!==period||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(m.archiveId||'')||!Array.isArray(m.files)||m.files.length>10000||!Array.isArray(m.documents)||m.files.some(function(f){return !f||!String(f.path||'').startsWith(prefix)||!/^[a-f0-9]{64}$/.test(f.sha256||'')||!Number.isSafeInteger(f.size)||f.size<1||f.size>50*1024*1024;})){
+    try{window.sessionStorage.removeItem(key);}catch(_){}return null;
+  }
+  return retry;
+}
+window.cancelDocumentArchiveOperation=function(){
+  if(!S.documentArchiveBusy)return;
+  S.documentArchiveCancelled=true;
+  documentArchiveStatus('正在停止後續原件處理。已送出的保存或封存請求可能已完成；重試相同月份可確認結果，不會覆寫原件。');
+};
+window.restartPeriodDocumentArchive=async function(){
+  if(S.documentArchiveBusy){alert('請先停止後續封存，並等待本次處理結束。');return;}
+  if(!isFinance()||S.demoLogin||activeDataEnvironment()!==DATA_ENV_PRODUCTION)return;
+  if(!confirm('將按目前來源建立新的封存清單。先前已上傳的副本會保留，已完成的封存也不會刪除。確定重新建立嗎？'))return;
+  var identity=backupOperationIdentity(),eid=compEntity(),period=compPeriod();
+  if(S.documentArchiveRetry&&S.documentArchiveRetry.identity===identity&&S.documentArchiveRetry.eid===eid&&S.documentArchiveRetry.period===period)S.documentArchiveRetry=null;
+  try{window.sessionStorage.removeItem(documentArchiveRetryKey(identity,eid,period));}catch(_){}
+  await window.sealPeriodDocuments();
+};
+async function documentArchiveReadBlob(client,file,context,identity){
+  if(identity!==backupOperationIdentity()||!canDownloadAttachment(file,context))throw new Error('憑證原件讀取權限或登入身分已變更。');
+  var path=attachmentStoragePath(file);if(!path)throw new Error('附件只有檔名或外部連結，尚未取得可驗證的保存原件。');
+  var result=await financeBootstrapRead(client.storage.from(file.bucket||SUPABASE_ATTACHMENT_BUCKET).download(path),'讀取憑證原件',30000);
+  if(result.error)throw result.error;
+  if(!result.data||typeof result.data.arrayBuffer!=='function')throw new Error('憑證原件內容不完整。');
+  if(identity!==backupOperationIdentity()||!canDownloadAttachment(file,context))throw new Error('憑證讀取期間登入身分已變更。');
+  return result.data;
+}
+async function loadDocumentArchiveSources(client,identity,eid,period){
+  var groups=[{table:'expense_requests',kind:'request',mapper:mapReq},{table:'invoices',kind:'invoice',mapper:mapInv},{table:'bills',kind:'bill',mapper:mapBill}],documents=[],files=[],seen=new Set();
+  for(var index=0;index<groups.length;index++){
+    var group=groups[index],rows=await loadBackupTablePages(client,{table:group.table},identity);
+    rows.map(group.mapper).filter(function(row){return row.eid===eid&&inPeriod(accountingControlRecordDate(group.kind,row),period);}).forEach(function(row){
+      var sourceFiles=accountingControlFiles(group.kind,row);documents.push({sourceType:group.table,sourceId:String(row.id),sourceNo:String(row.no||row.id),fileCount:sourceFiles.length});
+      sourceFiles.forEach(function(file){
+        var path=attachmentStoragePath(file),key=group.table+'|'+row.id+'|'+(file.bucket||SUPABASE_ATTACHMENT_BUCKET)+'|'+path;
+        if(!seen.has(key)){seen.add(key);files.push({file:file,context:{type:group.table,record:row},sourceType:group.table,sourceId:String(row.id),sourceFileId:String(file.id||file.attachmentId||path||'')});}
+      });
+    });
+  }
+  if(!files.length)throw new Error('本期沒有可封存的原始附件。');
+  if(files.length>10000)throw new Error('本期附件超過 10,000 份，超過封存清單安全上限。尚未上傳或封存任何副本。');
+  return {documents:documents,files:files};
+}
+async function readVerifiedArchiveCopy(client,item){
+  if(!item||!/^\d+$/.test(String(item.size))||!Number.isSafeInteger(item.size)||item.size<0||!/^[a-f0-9]{64}$/.test(item.sha256||''))throw new Error('封存件數或雜湊格式不正確。');
+  var result=await financeBootstrapRead(client.storage.from('finance-audit-archives').download(item.path),'驗證封存副本',30000);
+  if(result.error)throw result.error;
+  var blob=result.data;if(!blob||blob.size!==item.size||await backupStrictHash(await blob.arrayBuffer())!==item.sha256)throw new Error('封存副本內容雜湊或大小不符。');
+  return blob;
+}
+window.sealPeriodDocuments=async function(){
+  if(typeof requireFinanceAccountingRead==='function'&&!requireFinanceAccountingRead())return;
+  if(!isFinance()||S.demoLogin||activeDataEnvironment()!==DATA_ENV_PRODUCTION){alert('原件封存需使用正式授權會計帳號與正式資料環境。');return;}
+  if(S.documentArchiveBusy)return;S.documentArchiveBusy=true;S.documentArchiveCancelled=false;
+  var identity=backupOperationIdentity(),eid=compEntity(),period=compPeriod(),client=getSb();
+  try{
+    if(!client)throw new Error('正式資料服務尚未連線。');
+    if(!/^\d{4}-\d{2}$/.test(period)||!eid||eid==='all')throw new Error('請選擇單一法人與月份。');
+    documentArchiveStatus('正在核對完整來源單據與原始附件…');
+    var sources=await loadDocumentArchiveSources(client,identity,eid,period);
+    if(!documentArchiveCurrent(identity,eid,period))throw new Error('法人、月份或登入身分已變更，已停止封存。');
+    var retry=S.documentArchiveRetry||loadDocumentArchiveRetry(identity,eid,period);
+    if(!retry||retry.identity!==identity||retry.eid!==eid||retry.period!==period){
+      retry={identity:identity,eid:eid,period:period,manifest:{version:1,archiveId:window.crypto.randomUUID(),tenantId:currentTenantId(),dataEnvironment:activeDataEnvironment(),scope:{entityId:eid,period:period},documents:sources.documents,createdAt:new Date().toISOString(),files:[]}};
+    }
+    S.documentArchiveRetry=retry;saveDocumentArchiveRetry(retry);
+    var manifest=retry.manifest;
+    if(JSON.stringify(manifest.documents)!==JSON.stringify(sources.documents))throw new Error('來源单據已變更，請重新整理後建立新封存，不會將變更原件混入舊副本。');
+    for(var index=0;index<sources.files.length;index++){
+      if(!documentArchiveCurrent(identity,eid,period))throw new Error('封存期間資料範圍已變更。');
+      var source=sources.files[index],blob=await documentArchiveReadBlob(client,source.file,source.context,identity);
+      if(blob.size<1||blob.size>50*1024*1024)throw new Error('原件為空或超過單檔 50 MB 的保存上限，尚未封存此原件。');
+      var sha256=await backupStrictHash(await blob.arrayBuffer()),existing=manifest.files[index];
+      if(existing&&(existing.sha256!==sha256||existing.sourceId!==source.sourceId||existing.sourceFileId!==source.sourceFileId))throw new Error('重試期間原件已變更，已停止封存。');
+      var entry=existing||{path:[currentTenantId(),eid,period,manifest.archiveId,String(index+1).padStart(4,'0')+'_'+window.crypto.randomUUID()].join('/'),sha256:sha256,size:blob.size,name:source.file.n||source.file.name||'附件',mime:blob.type||'application/octet-stream',sourceType:source.sourceType,sourceId:source.sourceId,sourceFileId:source.sourceFileId};
+      if(!documentArchiveCurrent(identity,eid,period))throw new Error('已停止後續封存或登入身分已變更。');
+      var copyPresent=false;
+      if(existing){try{await readVerifiedArchiveCopy(client,entry);copyPresent=true;}catch(_){}}
+      if(!copyPresent){
+        manifest.files[index]=entry;
+        saveDocumentArchiveRetry(retry);
+        var upload=await financeBootstrapRead(client.storage.from('finance-audit-archives').upload(entry.path,blob,{contentType:entry.mime,upsert:false}),'保存憑證副本',30000);
+        if(upload.error){
+          // The response can be lost after Storage committed the immutable copy.
+          // Reading and hashing that same path makes retry safe without overwrite.
+          try{await readVerifiedArchiveCopy(client,entry);}catch(_){throw upload.error;}
+        }
+      }
+      await readVerifiedArchiveCopy(client,entry);
+      if(!documentArchiveCurrent(identity,eid,period))throw new Error('原件封存期間登入或資料範圍已變更。');
+      recordAttachmentAccess(source.file,'archive_copy_verified',{source:'sealPeriodDocuments',archiveId:manifest.archiveId,sha256:sha256});
+      documentArchiveStatus('已驗證 '+(index+1)+' / '+sources.files.length+' 份原件副本…');
+    }
+    if(manifest.files.length!==sources.files.length)throw new Error('原件清單與副本件數不一致。');
+    var latestSources=await loadDocumentArchiveSources(client,identity,eid,period);
+    if(JSON.stringify(latestSources.documents)!==JSON.stringify(manifest.documents)||latestSources.files.length!==manifest.files.length||latestSources.files.some(function(source,index){var entry=manifest.files[index];return entry.sourceType!==source.sourceType||entry.sourceId!==source.sourceId||entry.sourceFileId!==source.sourceFileId;}))throw new Error('封存期間来源單據或附件清單已變更，尚未確認封存；請重新核對來源後建立新封存。');
+    if(!documentArchiveCurrent(identity,eid,period))throw new Error('已停止封存或資料範圍已變更。');
+    var sealed=await financeBootstrapRead(client.rpc('finance_seal_document_archive_v1',{p_entity_id:eid,p_period:period,p_manifest:manifest}),'確認原件封存',30000);
+    if(sealed.error)throw sealed.error;
+    if(!sealed.data||sealed.data.ok!==true)throw new Error('尚未取得伺服器封存確認。');
+    if(!documentArchiveCurrent(identity,eid,period))return;
+    S.documentArchiveRetry=null;
+    try{window.sessionStorage.removeItem(documentArchiveRetryKey(identity,eid,period));}catch(_){}
+    documentArchiveStatus('已封存並核對 '+manifest.files.length+' 份原件。副本禁止一般帳號覆寫或刪除；保存至 '+((Number(period.slice(0,4))+10)+'-12-31')+'。');
+  }catch(error){if(documentArchiveCurrent(identity,eid,period))documentArchiveStatus('封存尚未完成：'+(error.message||error)+'。已傳副本不會被當作封存成功；可按原件封存重試。',true);}
+  finally{S.documentArchiveBusy=false;}
+};
+window.verifyPeriodDocumentArchive=async function(){
+  if(!isFinance()||S.demoLogin||activeDataEnvironment()!==DATA_ENV_PRODUCTION){alert('請使用正式授權會計帳號與正式資料環境驗證原件封存。');return;}
+  if(S.documentArchiveBusy)return;S.documentArchiveBusy=true;S.documentArchiveCancelled=false;
+  var identity=backupOperationIdentity(),eid=compEntity(),period=compPeriod(),client=getSb();
+  try{
+    if(!client)throw new Error('正式資料服務尚未連線。');
+    documentArchiveStatus('正在讀取已封存原件並驗證還原內容…');
+    var result=await financeBootstrapRead(client.rpc('finance_document_archives_v1',{p_entity_id:eid,p_period:period}),'讀取原件封存',20000);
+    if(result.error)throw result.error;
+    var archives=Array.isArray(result.data)?result.data:result.data&&result.data.archives;
+    if(!Array.isArray(archives)||!archives.length)throw new Error('本期沒有已確認封存的原件。');
+    var latest=archives[0],manifest=latest.manifest;if(!manifest||manifest.version!==1||manifest.tenantId!==currentTenantId()||manifest.dataEnvironment!==activeDataEnvironment()||!manifest.scope||manifest.scope.entityId!==eid||manifest.scope.period!==period||!Array.isArray(manifest.files)||!manifest.files.length)throw new Error('封存版本或資料範圍不一致。');
+    var prefix=[currentTenantId(),eid,period,manifest.archiveId].join('/')+'/',count=0;
+    for(var index=0;index<manifest.files.length;index++){
+      if(!documentArchiveCurrent(identity,eid,period))throw new Error('驗證期間資料範圍已變更。');
+      if(!String(manifest.files[index].path||'').startsWith(prefix))throw new Error('封存檔案路徑不在授權範圍。');
+      await readVerifiedArchiveCopy(client,manifest.files[index]);count++;
+      documentArchiveStatus('還原讀取與雜湊驗證 '+count+' / '+manifest.files.length+' 份…');
+    }
+    if(!documentArchiveCurrent(identity,eid,period))return;
+    var recorded=await client.rpc('finance_verify_document_archive_v1',{p_archive_id:latest.id||manifest.archiveId,p_verified_count:count});
+    if(recorded.error)throw recorded.error;
+    if(!recorded.data||recorded.data.ok!==true)throw new Error('原件讀取成功，但伺服器尚未確認驗證紀錄。');
+    if(!documentArchiveCurrent(identity,eid,period))return;
+    documentArchiveStatus('還原讀取驗證通過：'+count+' 份原件的內容與 SHA-256 完全相符。未覆寫原始附件或帳務。');
+  }catch(error){if(documentArchiveCurrent(identity,eid,period))documentArchiveStatus('封存驗證未完成：'+(error.message||error),true);}
+  finally{S.documentArchiveBusy=false;}
 };
 window.exportAnnualPackage=async function(){
   if(typeof requireFinanceAccountingRead==='function'&&!requireFinanceAccountingRead())return;
@@ -31668,7 +31984,17 @@ function renderShareholderFlow(){
 async function submitShareholderApprovalRequest(){
   if(!canAccessPage('shareholder')){alert('只有執行長、行政部門主任、會計可以操作');return false;}
   if(POSTING_IN_FLIGHT.shareholderApproval){alert('公司往來簽核單正在送出中，請勿重複送出。');return false;}
+  if(S.nrSubmitting)return false;
   if(!await guardSubmissionIdentityDirectory('公司往來簽核單'))return false;
+  if(S.nrSubmissionConfirmationPending||loadExpenseSubmissionPending()){
+    var previous=await reconcilePendingExpenseSubmission({notify:true,allowRetry:true});
+    if(previous.state==='unknown')alert('上一筆送件結果仍待確認，附件與原識別碼已保留；請勿另建重複單據。');
+    else if(previous.state==='deterministic_failure')alert('上一筆送件已確認沒有建立正式申請，請檢查內容後再送出。');
+    return false;
+  }
+  var submissionIdentity=expenseSubmissionOperationIdentity();
+  var submissionEpoch=financeAuthIdentityEpoch;
+  function currentSubmission(record){return submissionEpoch===financeAuthIdentityEpoch&&expenseSubmissionOperationCurrent(submissionIdentity,record);}
   var appUser=S.user||USERS[0];
   var type=(el('sh-type')||{}).value||'capital',payer=shareholderParty('payer'),payee=shareholderParty('payee');
   var eid=shareholderAccountingEntityId(type,payer,payee),dc=currentUserDeptForEntity(eid)||'A1100';
@@ -31699,7 +32025,8 @@ async function submitShareholderApprovalRequest(){
   if(!shareholderRouteReady.ok)return false;
   shareholderStepsForPreflight=shareholderRouteReady.steps;
   var p1=await p1SubmissionPreflight('shareholder',{label:'公司往來簽核單',steps:shareholderStepsForPreflight,hasAttachments:!!(shFileInput&&shFileInput.files&&shFileInput.files.length)});
-  if(!p1.ok)return false;
+  if(!p1.ok||!currentSubmission())return false;
+  if(POSTING_IN_FLIGHT.shareholderApproval||S.nrSubmitting||S.nrSubmissionConfirmationPending||loadExpenseSubmissionPending())return false;
   var no='';
   POSTING_IN_FLIGHT.shareholderApproval=true;
   try{
@@ -31710,38 +32037,61 @@ async function submitShareholderApprovalRequest(){
     alert('系統目前無法產生正式單號，這張公司往來單尚未送出。\n\n請重新整理後再試；若仍失敗，請通知系統管理員檢查流水號設定。');
     return false;
   }
+  var stagedFiles=[],request=null,phase='before_rpc',committed=false,cleanupWarning='';
+  async function cleanupShareholderStagedFiles(){
+    if(!stagedFiles.length||!currentSubmission())return;
+    try{await cleanupUploadedSupabaseAttachments([stagedFiles],'公司往來未建單附件清理');stagedFiles=[];}
+    catch(cleanupError){
+      cleanupWarning='\n\n附件清理尚未完成，請通知系統管理員。';
+      recordOpsEvent('shareholder_staged_attachment_cleanup_failed','warn','公司往來未建單附件清理失敗',friendlyErrorMessage(cleanupError,{action:'附件清理'}),{recordNo:no,retryable:true,dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
+    }
+  }
   try{
+    if(!currentSubmission())return false;
     var rawFiles=await readStepFiles('sh-file');
+    if(!currentSubmission())return false;
     var attachments=await Promise.all(rawFiles.map(fileToAttachment));
+    if(!currentSubmission())return false;
     attachments=await uploadAttachmentsToSupabase(attachments,{recordType:'expense_requests',recordNo:no,kind:'shareholder_transaction',date:dateIso,entityId:eid,departmentCode:dc});
+    stagedFiles=attachments;
+    if(!currentSubmission())return false;
     var steps=cloneApprovalStepsForRecord(shareholderStepsForPreflight);
     var nextStep=steps.find(function(s){return !s.a;})||null;
     var partyTrail=shareholderPartyTrail(payer,payee),desc=shareholderCategoryLabel(m.category)+' / '+m.label+' — '+partyTrail+(bank?' · '+bank:'')+(note?' · '+note:'');
-    var req={id:'r_'+Date.now(),no:no,eid:eid,dc:dc,app:appUser.n||'申請人',applicantId:appUser.id||'',applicantEmail:appUser.email||'',type:'shareholder_transaction',tL:'股東 / 公司間往來',amt:amt,estimatedAmt:amt,desc:desc,payee:payee.name,bankAcc:bank,status:nextStep?nextStep.status:'completed',step:nextStep?2:steps.length,ver:1,date:dateIso.replace(/-/g,'/'),dr:m.dr,drN:m.drN,cr:m.cr,crN:m.crN,files:attachments,steps:steps,voucherId:'',dataEnv:activeDataEnvironment(),formPayload:{shareholderTxn:{eid:eid,dc:dc,targetEid:targetEid,type:type,category:m.category,cashDirection:m.direction,offsetRequired:offsetRequired,counterpartyType:payee.type,counterpartyLabel:payee.label,name:name,payer:payer,payee:payee,amount:amt,date:dateIso.replace(/-/g,'/'),bank:bank,bankInfo:bankInfo,note:note,label:m.label},shareholderAccounting:{debit:m.dr,debitName:m.drN,credit:m.cr,creditName:m.crN,rule:m.rule,cashFlowClass:m.cash},dataEnvironment:activeDataEnvironment()}};
-    var notif={id:'n_'+Date.now(),type:'approval',title:'公司往來待'+(nextStep&&nextStep.r?nextStep.r:'簽核'),body:(appUser.n||'申請人')+'送出'+m.label+'（'+fmt(amt)+'）',time:'剛才',read:false,reqId:req.id,dataEnv:activeDataEnvironment()};
-    REQS.unshift(req);pushNotification(notif,{eventType:'shareholder_approval'});
-    var ins=await insertMembershipOrgSubmittedRecord('expense','expense_requests',req,reqDbRow(req));
-    if((!ins||!ins.ok)&&isDuplicateExpenseRequestNoError(ins&&ins.error?(ins.error.message||JSON.stringify(ins.error)):'')){
-      req.no=bumpExpenseRequestNo(req.no);
-      req.files=normalizeFiles(req.files).map(function(f){var x=Object.assign({},f);if(x.recordNo)x.recordNo=req.no;return x;});
-      ins=await insertMembershipOrgSubmittedRecord('expense','expense_requests',req,reqDbRow(req));
+    var req={id:'r_'+membershipOrgDraftUuid(),no:no,eid:eid,dc:dc,app:appUser.n||'申請人',applicantId:appUser.id||'',applicantEmail:appUser.email||'',type:'shareholder_transaction',tL:'股東 / 公司間往來',amt:amt,estimatedAmt:amt,desc:desc,payee:payee.name,bankAcc:bank,status:nextStep?nextStep.status:'completed',step:nextStep?2:steps.length,ver:1,date:dateIso.replace(/-/g,'/'),dr:m.dr,drN:m.drN,cr:m.cr,crN:m.crN,files:attachments,steps:steps,voucherId:'',dataEnv:activeDataEnvironment(),formPayload:{submissionAttemptId:'expense_submit_'+membershipOrgDraftUuid(),submissionStartedAt:new Date().toISOString(),clientReleaseContract:currentFinanceReleaseContract(),shareholderTxn:{eid:eid,dc:dc,targetEid:targetEid,type:type,category:m.category,cashDirection:m.direction,offsetRequired:offsetRequired,counterpartyType:payee.type,counterpartyLabel:payee.label,name:name,payer:payer,payee:payee,amount:amt,date:dateIso.replace(/-/g,'/'),bank:bank,bankInfo:bankInfo,note:note,label:m.label},shareholderAccounting:{debit:m.dr,debitName:m.drN,credit:m.cr,creditName:m.crN,rule:m.rule,cashFlowClass:m.cash},dataEnvironment:activeDataEnvironment()}};
+    request=req;
+    var durable=saveExpenseSubmissionPending(req,null);
+    if(!durable.ok)throw new Error('瀏覽器無法保存安全送件復原資料，這張單尚未送出。');
+    phase='rpc_started';
+    var outcome=await submitExpenseRequestWithAmbiguousRecovery(req,'公司往來簽核單保存');
+    if(!currentSubmission(req)||outcome.identityChanged)return false;
+    if(outcome.unknown){
+      phase='rpc_unknown';S.nrSubmissionConfirmationPending=durable.pending;
+      alert('公司往來送件結果待確認，請勿重複送出。原表單、附件與識別碼已保留，重新操作時會先確認同一張單。\n\n事件識別：'+req.formPayload.submissionAttemptId);
+      return false;
     }
-    if(!ins||!ins.ok){
-      REQS=REQS.filter(function(x){return x.id!==req.id;});
-      NOTIFS=NOTIFS.filter(function(x){return x.id!==notif.id;});
-      buildAll();renderNotifs();
-      throw new Error(ins&&ins.error?(ins.error.message||JSON.stringify(ins.error)):'Supabase 寫入失敗');
-    }
-    applyMembershipOrgActorsToSteps(req.steps,ins.orgStamp);
-    await dbInsert('notifications',notifDbRow(notif));
+    if(!outcome.ok){phase='deterministic_failure';clearExpenseSubmissionPending();throw(outcome.error||new Error('正式申請保存失敗'));}
+    committed=true;phase='committed';stagedFiles=[];
+    var ins=outcome.result||{};
+    if(ins.orgStamp)applyMembershipOrgActorsToSteps(req.steps,ins.orgStamp);
+    req=mergeCommittedExpenseRequest(ins.data&&ins.data.row?mapReq(ins.data.row):outcome.record||req)||req;
+    var notif={id:'n_submit_'+req.id,type:'approval',title:'公司往來待'+(nextStep&&nextStep.r?nextStep.r:'簽核'),body:(appUser.n||'申請人')+'送出'+m.label+'（'+fmt(amt)+'）',time:'剛才',read:false,reqId:req.id,dataEnv:activeDataEnvironment()};
+    var outbox=ensureExpensePostCommitOutbox(req,notif);
+    if(!outbox.ok)throw outbox.error;
+    var notificationResult=await runExpensePostCommitOutbox({reason:'shareholder_submission',identity:submissionIdentity});
+    if(!currentSubmission(req))return false;
     ['sh-payer-name','sh-payee-name','sh-amt','sh-payer-account-name','sh-payer-bank','sh-payer-branch','sh-payer-account','sh-payee-account-name','sh-payee-bank','sh-payee-branch','sh-payee-account','sh-transfer-ref','sh-bank-note','sh-note'].forEach(function(id){var x=el(id);if(x)x.value='';});
     var f=el('sh-file');if(f)f.value='';
     buildAll();renderNotifs();updateShareholderPreview();
-    alert('公司往來簽核單 '+req.no+' 已送出。\n目前送到：'+requestNextStepLabel(nextStep)+'\n完成簽核後才會建立傳票並同步三表。');
+    clearExpenseSubmissionPending();pruneCompletedExpensePostCommitOutbox();
+    alert('公司往來簽核單 '+req.no+' 已送出。\n目前送到：'+requestNextStepLabel(nextStep)+'\n完成簽核後才會建立傳票並同步三表。'+((notificationResult.failed||[]).length?'\n\n部分通知同步稍慢，系統已保存重試工作；請勿重送申請。':''));
     return true;
   }catch(err){
+    if(!currentSubmission(request))return false;
     console.error(err);
-    alert('公司往來送出簽核失敗：'+friendlyErrorMessage(err,{action:'公司往來送出簽核'})+'\n\n這張單尚未完成送出，請重新整理後確認資料再試一次。');
+    if(committed)alert('公司往來單 '+(request&&request.no||no)+' 已建立，請勿重複送出。\n\n完成畫面或通知同步時發生錯誤：'+friendlyErrorMessage(err,{action:'公司往來送件後同步'}));
+    else if(phase==='rpc_started'||phase==='rpc_unknown')alert('公司往來送件交易結果待確認，請勿重複送出；表單、附件與原識別碼仍保留。');
+    else{await cleanupShareholderStagedFiles();alert('公司往來送出簽核失敗：'+friendlyErrorMessage(err,{action:'公司往來送出簽核'})+'\n\n已確認這張單尚未建立，請修正內容後再試。'+cleanupWarning);}
     return false;
   }finally{
     delete POSTING_IN_FLIGHT.shareholderApproval;
@@ -37418,17 +37768,32 @@ function membershipOrgApplyPostingProjection(graph){
     recordOpsEventDedup('membership_org_graph_loaded','ok','正式組織版本已讀取','已發布版本會同步投影公司部門、費用責任中心與主管簽核關係。',{orgVersionId:graph.orgVersionId||'',units:(graph.units||[]).length,assignments:(graph.assignments||[]).length,dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
   }
 }
+var MEMBERSHIP_ORG_CONTEXT_SEQUENCE=0;
+function membershipOrgOperationIdentity(){
+  var identity=expenseSubmissionOperationIdentity();
+  return identity?JSON.stringify([identity,financeAuthIdentityEpoch,CURRENT_PERMISSION_SNAPSHOT]):'';
+}
+function membershipOrgAsyncScope(draft){
+  draft=draft||MEMBERSHIP_ORG_DRAFT;
+  return{draft:draft,identity:membershipOrgOperationIdentity(),versionId:draft.version&&draft.version.id||'',snapshot:JSON.stringify(stableSnapshotValue(draft.snapshot)),metadata:JSON.stringify(stableSnapshotValue(draft.version||{}))};
+}
+function membershipOrgAsyncScopeCurrent(scope,unchanged){
+  return !!scope.identity&&scope.identity===membershipOrgOperationIdentity()&&scope.draft===MEMBERSHIP_ORG_DRAFT&&scope.versionId===(MEMBERSHIP_ORG_DRAFT.version&&MEMBERSHIP_ORG_DRAFT.version.id||'')&&(!unchanged||(scope.snapshot===JSON.stringify(stableSnapshotValue(MEMBERSHIP_ORG_DRAFT.snapshot))&&scope.metadata===JSON.stringify(stableSnapshotValue(MEMBERSHIP_ORG_DRAFT.version||{}))));
+}
 window.refreshMembershipOrgGraph=async function(reason,options){
   options=options||{};
-  var client=getSb(),engine=membershipOrgEngine();
+  var client=getSb(),engine=membershipOrgEngine(),identity=membershipOrgOperationIdentity();
   if(!client||S.demoLogin||!engine){
     MEMBERSHIP_ORG_RUNTIME={loading:false,available:false,error:'版本化組織圖僅供正式 Membership/Supabase 登入使用',graph:null,lastLoaded:'',subscription:null};
     renderMembershipOrgManager();return null;
   }
-  if(MEMBERSHIP_ORG_RUNTIME.loading)return MEMBERSHIP_ORG_RUNTIME.graph;
-  MEMBERSHIP_ORG_RUNTIME.loading=true;
+  if(MEMBERSHIP_ORG_RUNTIME.loading&&MEMBERSHIP_ORG_RUNTIME.identity===identity)return MEMBERSHIP_ORG_RUNTIME.graph;
+  var runtime=MEMBERSHIP_ORG_RUNTIME;
+  if(runtime.identity&&runtime.identity!==identity){runtime.graph=null;runtime.available=false;}
+  runtime.loading=true;runtime.identity=identity;
   if(!options.silent)renderMembershipOrgManager();
   var response=await client.rpc('membership_org_get_published_graph',{});
+  if(!identity||identity!==membershipOrgOperationIdentity()||runtime!==MEMBERSHIP_ORG_RUNTIME||runtime.identity!==identity)return null;
   MEMBERSHIP_ORG_RUNTIME.loading=false;
   if(response.error){
     MEMBERSHIP_ORG_RUNTIME.available=false;
@@ -37758,8 +38123,9 @@ window.createMembershipOrgDraft=async function(){
   if(!membershipOrgCanManage())return alert('需要組織管理權限');
   var reason=prompt('請填寫本次組織異動原因（至少 3 字）','調整組織單位與主管');
   if(!reason||reason.trim().length<3)return;
-  var title=prompt('草稿標題','組織異動')||'組織異動',client=getSb();
+  var title=prompt('草稿標題','組織異動')||'組織異動',client=getSb(),identity=membershipOrgOperationIdentity(),sequence=++MEMBERSHIP_ORG_CONTEXT_SEQUENCE;
   var response=await client.rpc('membership_org_create_draft',{p_title:title,p_reason:reason.trim(),p_effective_at:new Date().toISOString(),p_from_version_id:null});
+  if(!identity||identity!==membershipOrgOperationIdentity()||sequence!==MEMBERSHIP_ORG_CONTEXT_SEQUENCE)return;
   if(response.error)return alert('建立草稿失敗：'+friendlyErrorMessage(response.error,{action:'建立組織草稿'}));
   MEMBERSHIP_ORG_DRAFT={version:response.data.version,snapshot:response.data.snapshot,dirty:false,people:[],validation:null,impact:null,dragUnitId:'',batchUnitIds:[]};
   await loadMembershipOrgPeople();
@@ -37767,26 +38133,36 @@ window.createMembershipOrgDraft=async function(){
 };
 async function loadMembershipOrgPeople(){
   if(MEMBERSHIP_ORG_DRAFT.people&&MEMBERSHIP_ORG_DRAFT.people.length)return MEMBERSHIP_ORG_DRAFT.people;
+  var scope=membershipOrgAsyncScope();
   var response=await getSb().rpc('membership_org_list_people',{});
+  if(!membershipOrgAsyncScopeCurrent(scope))return [];
   if(!response.error)MEMBERSHIP_ORG_DRAFT.people=membershipRuntimeArray(response.data&&response.data.items||response.data);
   return MEMBERSHIP_ORG_DRAFT.people;
 }
 window.loadMembershipOrgDraft=async function(id){
+  if(MEMBERSHIP_ORG_DRAFT.dirty&&!confirm('目前草稿還有未儲存修改，確定切換版本？'))return;
+  var identity=membershipOrgOperationIdentity(),sequence=++MEMBERSHIP_ORG_CONTEXT_SEQUENCE,previousScope=membershipOrgAsyncScope();
   var response=await getSb().rpc('membership_org_get_draft',{p_version_id:id});
+  if(!identity||identity!==membershipOrgOperationIdentity()||sequence!==MEMBERSHIP_ORG_CONTEXT_SEQUENCE)return;
+  if(!membershipOrgAsyncScopeCurrent(previousScope,true)){setTopSyncStatus('讀取期間有新修改，保留目前草稿；請儲存後再切換');return;}
   if(response.error)return alert('載入版本失敗：'+friendlyErrorMessage(response.error,{action:'載入組織版本'}));
   MEMBERSHIP_ORG_DRAFT={version:response.data.version,snapshot:response.data.snapshot,dirty:false,people:[],validation:response.data.version.validation_summary||null,impact:response.data.version.impact_summary||null,dragUnitId:'',batchUnitIds:[]};
   await loadMembershipOrgPeople();renderMembershipOrgManager();
 };
 window.closeMembershipOrgDraft=function(){
   if(MEMBERSHIP_ORG_DRAFT.dirty&&!confirm('草稿還有未儲存修改，確定關閉？'))return;
+  ++MEMBERSHIP_ORG_CONTEXT_SEQUENCE;
   MEMBERSHIP_ORG_DRAFT={version:null,snapshot:null,dirty:false,people:[],validation:null,impact:null,dragUnitId:'',batchUnitIds:[]};renderMembershipOrgManager();
 };
 window.cancelMembershipOrgDraft=async function(){
   var draft=MEMBERSHIP_ORG_DRAFT.version;
   if(!draft)return;
   if(!confirm('確定作廢這份組織草稿？\n\n正式組織不會被更動；作廢後可立即建立新的草稿。'))return;
+  var scope=membershipOrgAsyncScope();
   var response=await getSb().rpc('membership_org_cancel_draft',{p_version_id:draft.id});
+  if(!membershipOrgAsyncScopeCurrent(scope))return;
   if(response.error)return alert('作廢失敗：'+friendlyErrorMessage(response.error,{action:'作廢組織草稿'}));
+  ++MEMBERSHIP_ORG_CONTEXT_SEQUENCE;
   MEMBERSHIP_ORG_DRAFT={version:null,snapshot:null,dirty:false,people:[],validation:null,impact:null,dragUnitId:'',batchUnitIds:[]};
   renderMembershipOrgManager();
   setTopSyncStatus('組織草稿已作廢，正式組織沒有變更');
@@ -37888,9 +38264,10 @@ function membershipOrgEditorPeopleOptions(selectedIds){
 async function refreshMembershipOrgUnitEditorCode(){
   var editId=(el('org-unit-edit-id')||{}).value||'',codeBox=el('org-unit-edit-code');
   if(editId||!codeBox)return;
-  var type=(el('org-unit-edit-type')||{}).value||'',entity=(el('org-unit-edit-entity')||{}).value||'',client=getSb();
+  var type=(el('org-unit-edit-type')||{}).value||'',entity=(el('org-unit-edit-entity')||{}).value||'',client=getSb(),scope=membershipOrgAsyncScope();
   codeBox.value='正在產生…';
   var response=await client.rpc('membership_org_suggest_unit_code',{p_unit_type:type,p_entity_code:entity});
+  if(!membershipOrgAsyncScopeCurrent(scope)||(el('org-unit-edit-id')||{}).value!==editId||(el('org-unit-edit-type')||{}).value!==type||(el('org-unit-edit-entity')||{}).value!==entity||el('org-unit-edit-code')!==codeBox)return;
   if(response.error){codeBox.value='';throw response.error;}
   codeBox.value=(response.data&&response.data.code)||'';
 }
@@ -37904,7 +38281,9 @@ window.refreshMembershipOrgUnitEditorRules=async function(){
 };
 window.openMembershipOrgUnitEditor=async function(parentId,editId){
   var graph=membershipOrgEditableGraph();if(!graph||!MEMBERSHIP_ORG_DRAFT.snapshot)return;
+  var scope=membershipOrgAsyncScope();
   await loadMembershipOrgPeople();
+  if(!membershipOrgAsyncScopeCurrent(scope))return;
   var unit=editId?membershipOrgDraftUnit(editId):null,parent=membershipOrgDraftUnit(parentId),allowed=parent?membershipOrgAllowedChildTypes(parent.unit_type||''):[];
   if(!unit&&(!parent||!allowed.length))return alert('這個層級不能再新增下一階單位');
   var type=unit?unit.unit_type:allowed[0],typeBox=el('org-unit-edit-type'),entityBox=el('org-unit-edit-entity');
@@ -37954,11 +38333,12 @@ function membershipOrgApplyUnitPeople(unit,headId,memberIds){
 window.saveMembershipOrgUnitEditor=async function(){
   var errorBox=el('org-unit-edit-error'),editId=(el('org-unit-edit-id')||{}).value||'',name=((el('org-unit-edit-name')||{}).value||'').trim(),type=(el('org-unit-edit-type')||{}).value||'',parentId=(el('org-unit-edit-parent')||{}).value||'',entity=(el('org-unit-edit-entity')||{}).value||'',code=((el('org-unit-edit-code')||{}).value||'').trim().toUpperCase(),headId=(el('org-unit-edit-head')||{}).value||'',memberIds=Array.from((el('org-unit-edit-members')||{}).selectedOptions||[]).map(function(option){return option.value;});
   var scopeMode=(el('org-unit-edit-scope')||{}).value||'explicit',entityCodes=Array.from((el('org-unit-edit-entity')||{}).selectedOptions||[]).map(function(option){return option.value;}).filter(Boolean);
-  var previousSnapshot=cloneSettingValue(MEMBERSHIP_ORG_DRAFT.snapshot);
+  var scope=membershipOrgAsyncScope(),previousSnapshot=cloneSettingValue(MEMBERSHIP_ORG_DRAFT.snapshot);
   try{
     if(!name||!type||(!parentId&&type!=='shareholders')||['inherit','all','explicit'].indexOf(scopeMode)<0||scopeMode==='explicit'&&!entityCodes.length)throw new Error('請完整填寫單位名稱、層級、上一階單位與公司範圍。');
     if(!headId&&type!=='shareholders')throw new Error('請選擇單位主管；如職務暫時空缺，請先指定代理主管再發布。');
     if(!code||code==='正在產生…')await refreshMembershipOrgUnitEditorCode();
+    if(!membershipOrgAsyncScopeCurrent(scope,true))return;
     code=((el('org-unit-edit-code')||{}).value||'').trim().toUpperCase();
     if(!code)throw new Error('正式系統未能產生單位代碼，請稍後再試。');
     var unit=editId?membershipOrgDraftUnit(editId):null;
@@ -37972,7 +38352,7 @@ window.saveMembershipOrgUnitEditor=async function(){
     }
     membershipOrgApplyUnitPeople(unit,headId,memberIds);
     MEMBERSHIP_ORG_DRAFT.dirty=true;MEMBERSHIP_ORG_DRAFT.validation=null;closeModal('m-org-unit-editor');renderMembershipOrgManager();
-  }catch(err){MEMBERSHIP_ORG_DRAFT.snapshot=previousSnapshot;if(errorBox){errorBox.style.display='block';errorBox.textContent=err.message||String(err);}}
+  }catch(err){if(!membershipOrgAsyncScopeCurrent(scope))return;MEMBERSHIP_ORG_DRAFT.snapshot=previousSnapshot;if(errorBox){errorBox.style.display='block';errorBox.textContent=err.message||String(err);}}
 };
 window.membershipOrgAddChild=function(parentId){return openMembershipOrgUnitEditor(parentId,'');};
 window.membershipOrgToggleUnit=function(id){var unit=membershipOrgDraftUnit(id);if(!unit)return;unit.active=!unit.active;MEMBERSHIP_ORG_DRAFT.dirty=true;MEMBERSHIP_ORG_DRAFT.validation=null;renderMembershipOrgManager();};
@@ -38017,13 +38397,28 @@ window.membershipOrgDragLeave=function(event){event.currentTarget.classList.remo
 window.membershipOrgDrop=function(event,targetId){event.preventDefault();event.currentTarget.classList.remove('drag-over');var source=MEMBERSHIP_ORG_DRAFT.dragUnitId;MEMBERSHIP_ORG_DRAFT.dragUnitId='';if(source&&source!==targetId)membershipOrgMoveUnit(source,targetId);};
 window.saveMembershipOrgDraft=async function(){
   var draft=MEMBERSHIP_ORG_DRAFT.version;if(!draft)return false;
-  var response=await getSb().rpc('membership_org_save_draft',{p_version_id:draft.id,p_etag:draft.etag,p_snapshot:MEMBERSHIP_ORG_DRAFT.snapshot,p_title:draft.title,p_reason:draft.reason,p_effective_at:draft.effective_at});
-  if(response.error){alert('儲存失敗：'+friendlyErrorMessage(response.error,{action:'儲存組織草稿'}));return false;}
-  MEMBERSHIP_ORG_DRAFT.version=response.data.version;MEMBERSHIP_ORG_DRAFT.snapshot=response.data.snapshot;MEMBERSHIP_ORG_DRAFT.impact=response.data.impact;MEMBERSHIP_ORG_DRAFT.dirty=false;MEMBERSHIP_ORG_DRAFT.validation=null;renderMembershipOrgManager();setTopSyncStatus('組織草稿已儲存');return true;
+  if(MEMBERSHIP_ORG_DRAFT.saving)return false;
+  var scope=membershipOrgAsyncScope(),owner=scope.draft,snapshot=cloneSettingValue(owner.snapshot);
+  if(!scope.identity)return false;
+  owner.saving=true;
+  try{
+    var response=await getSb().rpc('membership_org_save_draft',{p_version_id:draft.id,p_etag:draft.etag,p_snapshot:snapshot,p_title:draft.title,p_reason:draft.reason,p_effective_at:draft.effective_at});
+    if(!membershipOrgAsyncScopeCurrent(scope))return false;
+    if(response.error){alert('儲存失敗：'+friendlyErrorMessage(response.error,{action:'儲存組織草稿'}));return false;}
+    var unchanged=membershipOrgAsyncScopeCurrent(scope,true);
+    // The returned etag belongs to the saved revision. New edits remain local
+    // and dirty so their next save uses that etag without discarding edits.
+    if(unchanged){owner.version=response.data.version;owner.snapshot=response.data.snapshot;owner.impact=response.data.impact;owner.dirty=false;}
+    else{owner.version=Object.assign({},response.data.version,{title:owner.version.title,reason:owner.version.reason,effective_at:owner.version.effective_at});owner.dirty=true;owner.impact=null;}
+    owner.validation=null;renderMembershipOrgManager();setTopSyncStatus(unchanged?'組織草稿已儲存':'已儲存前一版；新增修改尚未儲存');return unchanged;
+  }catch(error){if(membershipOrgAsyncScopeCurrent(scope))alert('儲存失敗：'+friendlyErrorMessage(error,{action:'儲存組織草稿'}));return false;}
+  finally{owner.saving=false;}
 };
 window.validateMembershipOrgDraft=async function(){
   if(MEMBERSHIP_ORG_DRAFT.dirty&&!await saveMembershipOrgDraft())return;
+  var scope=membershipOrgAsyncScope();if(!scope.versionId||MEMBERSHIP_ORG_DRAFT.saving)return;
   var response=await getSb().rpc('membership_org_validate_draft',{p_version_id:MEMBERSHIP_ORG_DRAFT.version.id});
+  if(!membershipOrgAsyncScopeCurrent(scope,true))return;
   if(response.error)return alert('驗證失敗：'+friendlyErrorMessage(response.error,{action:'驗證組織草稿'}));
   MEMBERSHIP_ORG_DRAFT.version=response.data.version;MEMBERSHIP_ORG_DRAFT.validation=response.data.validation;MEMBERSHIP_ORG_DRAFT.impact=response.data.impact;renderMembershipOrgManager();
   alert((response.data.ok?'驗證通過':'驗證未通過')+'\n\n錯誤：'+((response.data.validation.errors||[]).join('\n')||'無')+'\n\n提醒：'+((response.data.validation.warnings||[]).join('\n')||'無')+'\n\n影響：'+JSON.stringify(response.data.impact||{}));
@@ -38031,7 +38426,10 @@ window.validateMembershipOrgDraft=async function(){
 window.submitMembershipOrgDraft=async function(){
   if(MEMBERSHIP_ORG_DRAFT.dirty&&!await saveMembershipOrgDraft())return;
   if(!confirm('確定送交執行長核准？送審後草稿將暫時鎖定。'))return;
+  var scope=membershipOrgAsyncScope();if(!scope.versionId||MEMBERSHIP_ORG_DRAFT.saving)return;
   var response=await getSb().rpc('membership_org_submit_draft',{p_version_id:MEMBERSHIP_ORG_DRAFT.version.id});
+  if(!membershipOrgAsyncScopeCurrent(scope))return;
+  if(!membershipOrgAsyncScopeCurrent(scope,true)){MEMBERSHIP_ORG_DRAFT.dirty=true;setTopSyncStatus('送審期間有新修改；請重新開啟草稿確認正式狀態');return;}
   if(response.error)return alert('送審失敗：'+friendlyErrorMessage(response.error,{action:'送審組織草稿'}));
   if(!response.data.ok){MEMBERSHIP_ORG_DRAFT.validation=response.data.validation;renderMembershipOrgManager();return alert('草稿驗證未通過，請先修正錯誤。');}
   MEMBERSHIP_ORG_DRAFT.version=response.data.version;MEMBERSHIP_ORG_DRAFT.validation=response.data.validation;renderMembershipOrgManager();
@@ -38039,7 +38437,9 @@ window.submitMembershipOrgDraft=async function(){
 window.publishMembershipOrgDraft=async function(){
   if(!membershipOrgCanPublish())return alert('只有目前正任執行長可以發布');
   if(!confirm('確定立即核准並發布？\n\n公司部門、費用申請選項、主管與簽核路徑會在同一筆交易更新；任何一項失敗都會全部回復。'))return;
+  var scope=membershipOrgAsyncScope();if(!scope.versionId||MEMBERSHIP_ORG_DRAFT.dirty||MEMBERSHIP_ORG_DRAFT.saving)return;
   var response=await getSb().rpc('membership_org_publish_draft',{p_version_id:MEMBERSHIP_ORG_DRAFT.version.id,p_effective_at:null});
+  if(!membershipOrgAsyncScopeCurrent(scope,true))return;
   if(response.error)return alert('發布失敗：'+friendlyErrorMessage(response.error,{action:'發布組織版本'}));
   MEMBERSHIP_ORG_DRAFT={version:null,snapshot:null,dirty:false,people:[],validation:null,impact:null,dragUnitId:'',batchUnitIds:[]};
   try{await loadRemoteData();}catch(loadErr){console.warn('Organization publish canonical reload failed:',loadErr&&loadErr.message?loadErr.message:loadErr);}
@@ -38047,27 +38447,35 @@ window.publishMembershipOrgDraft=async function(){
 };
 window.rejectMembershipOrgDraft=async function(){
   var comment=prompt('請填退回原因（至少 3 字）','');if(!comment||comment.trim().length<3)return;
+  var scope=membershipOrgAsyncScope();if(!scope.versionId)return;
   var response=await getSb().rpc('membership_org_reject_draft',{p_version_id:MEMBERSHIP_ORG_DRAFT.version.id,p_comment:comment.trim()});
+  if(!membershipOrgAsyncScopeCurrent(scope,true))return;
   if(response.error)return alert('退回失敗：'+response.error.message);
   MEMBERSHIP_ORG_DRAFT.version=response.data.version;renderMembershipOrgManager();
 };
 window.cancelMembershipOrgSchedule=async function(){
   if(!confirm('確定取消此排程版本？'))return;
+  var scope=membershipOrgAsyncScope();if(!scope.versionId)return;
   var response=await getSb().rpc('membership_org_cancel_scheduled',{p_version_id:MEMBERSHIP_ORG_DRAFT.version.id});
+  if(!membershipOrgAsyncScopeCurrent(scope,true))return;
   if(response.error)return alert('取消失敗：'+response.error.message);
   MEMBERSHIP_ORG_DRAFT.version=response.data.version;renderMembershipOrgManager();
 };
 window.openMembershipOrgVersions=async function(){
   var box=el('membership-org-versions');if(!box)return;
   if(box.style.display!=='none'){box.style.display='none';return;}
+  var scope=membershipOrgAsyncScope();
   var response=await getSb().rpc('membership_org_list_versions',{p_limit:40});
+  if(!membershipOrgAsyncScopeCurrent(scope))return;
   if(response.error)return alert('讀取版本歷史失敗：'+friendlyErrorMessage(response.error,{action:'讀取組織版本'}));
   var rows=membershipRuntimeArray(response.data&&response.data.items||response.data);
   box.style.display='block';box.innerHTML='<div class="chd"><span class="cht">版本歷史</span><button class="btn-g" onclick="openMembershipOrgVersions()">關閉</button></div><div style="overflow:auto"><table class="membership-org-versions-table"><thead><tr><th>版本</th><th>狀態</th><th>原因／影響</th><th>生效／發布</th><th>操作</th></tr></thead><tbody>'+rows.map(function(v){var canLoad=['draft','validated','rejected','pending_review','scheduled'].indexOf(v.status)>-1&&membershipOrgCanManage(),canRollback=['published','archived'].indexOf(v.status)>-1&&membershipOrgCanManage();return'<tr><td><strong>'+escAttr(v.title||v.version_no)+'</strong><br>'+escAttr(v.version_no||v.id)+'</td><td>'+membershipOrgVersionStatusLabel(v.status)+'</td><td>'+escAttr(v.reason||'')+'<br><small>'+escAttr(JSON.stringify(v.impact_summary||{}))+'</small></td><td>'+escAttr(v.effective_at?new Date(v.effective_at).toLocaleString('zh-TW'):'—')+'<br>'+escAttr(v.published_at?new Date(v.published_at).toLocaleString('zh-TW'):'')+'</td><td>'+(canLoad?'<button class="btn-g" onclick="loadMembershipOrgDraft(\''+attr(v.id)+'\')">開啟</button>':'')+(canRollback?'<button class="btn-g" onclick="createMembershipOrgRollback(\''+attr(v.id)+'\')">建立回復草稿</button>':'')+'</td></tr>';}).join('')+'</tbody></table></div>';
 };
 window.createMembershipOrgRollback=async function(id){
   var reason=prompt('請填回復原因（會建立新草稿，不會覆蓋歷史）','回復至指定組織版本');if(!reason||reason.trim().length<3)return;
+  var identity=membershipOrgOperationIdentity(),sequence=++MEMBERSHIP_ORG_CONTEXT_SEQUENCE;
   var response=await getSb().rpc('membership_org_create_rollback_draft',{p_published_version_id:id,p_reason:reason.trim()});
+  if(!identity||identity!==membershipOrgOperationIdentity()||sequence!==MEMBERSHIP_ORG_CONTEXT_SEQUENCE)return;
   if(response.error)return alert('建立回復草稿失敗：'+response.error.message);
   MEMBERSHIP_ORG_DRAFT={version:response.data.version,snapshot:response.data.snapshot,dirty:false,people:[],validation:null,impact:null,dragUnitId:'',batchUnitIds:[]};await loadMembershipOrgPeople();renderMembershipOrgManager();
 };
