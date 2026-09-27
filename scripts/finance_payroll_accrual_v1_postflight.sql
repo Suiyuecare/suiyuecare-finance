@@ -1,17 +1,17 @@
 \set ON_ERROR_STOP on
 -- Catalog-only assertions. The release guard supplies its enclosing transaction.
 do $payroll_postflight$
-declare f record;pin record;r text;policy_name text;allowed boolean;relation text;
+declare contractor_installed boolean:=exists(select 1 from pg_constraint where conrelid=to_regclass('finance_hr_private.finance_hr_obligations') and conname='finance_hr_obligations_kind_check' and position('contractor' in pg_get_constraintdef(oid))>0);f record;pin record;r text;policy_name text;allowed boolean;relation text;
 begin
  for pin in select * from (values
 ('finance_hr_private.finance_hr_accounting_scope','abddcba56b7640031bbd0dbcff11764d'),
-('finance_hr_private.finance_hr_post_voucher','9456cbe480d95c56bd665d589fbaf6da'),
+('finance_hr_private.finance_hr_post_voucher',case when contractor_installed then '01682ebe60f7774a0874404a4c13af18' else '9456cbe480d95c56bd665d589fbaf6da' end),
 ('private.finance_payroll_accrual_evidence_prepare_v1','beac1cba903258b46926fe28c1e1af65'),
 ('private.finance_payroll_accrual_json_v1','67ddf0e2d5a37e65ffb1d33c50526e7e'),
 ('private.finance_payroll_accrual_list_v1','09cd05602aa8c1aa5d94bcf0ee99e684'),
 ('private.finance_payroll_accrual_review_v1','dee94499bb63d436b02d7cea54e1521a'),
 ('private.finance_payroll_accrual_save_v1','5a64a65f42e8d11258cd8e816088a298'),
-('private.finance_payroll_actor_v1','ec87b7b049655fd858da8b71998e1f37'),
+('private.finance_payroll_actor_v1',case when contractor_installed then 'f2551099f51dec0098a20fee5ae85dfa' else 'ec87b7b049655fd858da8b71998e1f37' end),
 ('private.finance_payroll_book_guard_v1','b4d7ed385e40a3a9032b91f5404d8cf0'),
 ('private.finance_payroll_entries_v1','bf15cbca29885e790dc1d9fca43ee536'),
 ('private.finance_payroll_settlement_accounts_v1','c94d56ae505c6e7c619ea0cebf67684b'),

@@ -11,10 +11,10 @@ begin
  for expected in select * from (values
   ('public.can_read_invoice(public.invoices)',(case when audit_security_installed then '5ccbaefe4040cdb85ceb123d05aef6db' else 'd761ec0bbd1544410ae52bd860ec78b6' end),false,'search_path=""'),
   ('public.current_finance_role()','21dee4f613511ba49f259a8371005e9d',false,'search_path=public'),
-  ('public.current_finance_user()','5fc4f077185c7e351c730378e4d0eca4',true,'search_path=""'),
+  ('public.current_finance_user()',(case when to_regprocedure('public.finance_auth_session_active()') is not null then '6dae0e205f8268d0064c8c49990e5bd4' else '5fc4f077185c7e351c730378e4d0eca4' end),true,'search_path=""'),
   ('public.current_finance_user_id()','14764ed0aa1758b0d159b8506b0f8c26',false,'search_path=public'),
   ('public.current_tenant_id()','7db91f7dbfb876063cd14610b2c310e4',true,'search_path=""'),
-  ('public.finance_current_verified_google_email_v2()','9d9d0c836e527510ca3a76b569c95f82',true,'search_path=""'),
+  ('public.finance_current_verified_google_email_v2()',(case when to_regprocedure('public.finance_auth_session_active()') is not null then '679b68e0c8317f133504515cd58e306d' else '9d9d0c836e527510ca3a76b569c95f82' end),true,'search_path=""'),
   ('public.finance_verified_google_email(uuid)','cc9904d39d410a933a2a31ccddc91038',true,'search_path=public, auth, pg_temp'),
   ('public.is_finance_accounting()','b615fdf7d194eab2ef2003874db09318',false,'search_path=public'),
   ('private.finance_correction_actor_v1()','e61d45d9aa0e001b0ae212678b0a196a',true,'search_path=""'),

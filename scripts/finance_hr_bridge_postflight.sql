@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 -- Read-only sealed HR bridge catalog checks. No identities or obligations are provisioned.
 do $finance_hr_bridge_postflight$
-declare payroll_accrual_installed boolean:=to_regclass('private.finance_payroll_accruals_v1') is not null;revenue_repair_installed boolean:=false;expected record;fn record;t text;role_name text;rpc_name text;allowed boolean;seen integer:=0;
+declare contractor_installed boolean:=exists(select 1 from pg_constraint where conrelid=to_regclass('finance_hr_private.finance_hr_obligations') and conname='finance_hr_obligations_kind_check' and position('contractor' in pg_get_constraintdef(oid))>0);payroll_accrual_installed boolean:=to_regclass('private.finance_payroll_accruals_v1') is not null;revenue_repair_installed boolean:=false;expected record;fn record;t text;role_name text;rpc_name text;allowed boolean;seen integer:=0;
 begin
  if to_regclass('supabase_migrations.schema_migrations') is not null then
   execute $revenue_ledger$select exists(select 1 from supabase_migrations.schema_migrations where version='20260924074010')$revenue_ledger$ into revenue_repair_installed;
@@ -26,10 +26,10 @@ begin
   ('finance_hr_private.finance_hr_route_active','11aa719bab4a1a0432eb750b03a3435f',false),
   ('finance_hr_private.finance_hr_json','31b55b6c30858b8352175d63f362521f',false),
   ('finance_hr_private.finance_hr_emit','850f1b1e1dde02da9b2943672cede41e',false),
-  ('finance_hr_private.finance_hr_intake','e7466441abfafdb5079e3a7e163f7a3b',true),
+  ('finance_hr_private.finance_hr_intake',case when contractor_installed then '10ac04b3e8a6b0d48ce06cdc75333ade' else 'e7466441abfafdb5079e3a7e163f7a3b' end,true),
   ('finance_hr_private.finance_hr_snapshot','db29f28ce29ad3e923d3b18420b4432b',true),
   ('finance_hr_private.finance_hr_evidence','8678a81338f11bdc33730f0f9408a83c',false),
-  ('finance_hr_private.finance_hr_command','a9c61777902878da2d20dffbdbcb031c',true),
+  ('finance_hr_private.finance_hr_command',case when contractor_installed then 'bbe1e1d7460f0682ce0e22e051fe7413' else 'a9c61777902878da2d20dffbdbcb031c' end,true),
   ('finance_hr_private.finance_hr_applicant_confirm','152445ceb1bbf506a13d71cdc8957ba5',true),
   ('finance_hr_private.finance_hr_callback_claim','aabebcf224bb1a1540bf30f392b4b203',true),
   ('finance_hr_private.finance_hr_callback_ack','24bb86fd555914171710d6de34acf988',true),
@@ -46,7 +46,7 @@ begin
   ('finance_hr_private.finance_hr_guard_book_insert','873afdfa552872e12c2d59c5683b964e',true),
   ('finance_hr_private.finance_hr_voucher_options','fa725fffedfbf4be65dc9708b98ea1cc',true),
   ('public.finance_hr_voucher_options','806c35dcce86fe07bfe6fe64aa844bd0',false),
-  ('finance_hr_private.finance_hr_post_voucher',case when payroll_accrual_installed then '9456cbe480d95c56bd665d589fbaf6da' else '574bf7be65ce8c6684c4458359152fbd' end,true),
+  ('finance_hr_private.finance_hr_post_voucher',case when contractor_installed then (case when payroll_accrual_installed then '01682ebe60f7774a0874404a4c13af18' else 'e0487f62793a4eb1d73f5cb96f00d659' end) else (case when payroll_accrual_installed then '9456cbe480d95c56bd665d589fbaf6da' else '574bf7be65ce8c6684c4458359152fbd' end) end,true),
   ('public.finance_hr_post_voucher','40c8ac77d8792d6d9ce4e167a12fd7e9',false),
   ('finance_hr_private.finance_hr_attachment_scope','2767c0835ce92b1437eb39522e9c35d1',true),
   ('public.finance_hr_attachment_scope','84f399e41236bb191a79d2305d246ab0',false)

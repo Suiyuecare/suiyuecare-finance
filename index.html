@@ -60,6 +60,7 @@
 <script src="assets/engines/receipt-transactions.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/notification-routing.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/payment-concerns.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/portal-session-logout.js?v=__FINANCE_ASSET_VERSION__"></script>
 <link rel="stylesheet" href="assets/styles/payment-concerns.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/finance-core.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/mobile-operations.css?v=__FINANCE_ASSET_VERSION__">
@@ -14919,6 +14920,7 @@ function showFinanceOfflinePreviewNotice(){
   if(google){google.disabled=true;google.title='離線預覽不提供 Google 登入；正式登入請使用正式網址。';}
 }
 async function bootAuthGate(){
+  if(window.FinanceModuleLogout&&window.FinanceModuleLogout.pending()){await window.financeLogout();return false;}
   if(!isFinanceProductionBuild()){
     scrubOAuthUrl(location.href,true);
     showFinanceOfflinePreviewNotice();
@@ -15185,16 +15187,15 @@ function redirectFinanceLogoutToPortalLogin(){
 }
 window.financeLogout=async function(){
   if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，現在不能登出。請勿離開目前畫面。');return;}
-  financeLogoutInProgress=true;
-  try{
-    await stopRealtime();
-    var client=getSb();
-    if(client&&client.auth)await client.auth.signOut();
-  }catch(e){
-    console.warn('Finance sign out failed:',e);
-  }
-  clearFinanceLoginState();
-  redirectFinanceLogoutToPortalLogin();
+  return window.FinanceModuleLogout.start({
+    client:getSb,stopRealtime:stopRealtime,returnToPortal:function(){location.assign(PORTAL_MODULE_URL);},
+    clearPrivate:function(){
+      financeLogoutInProgress=true;++financeAuthIdentityEpoch;setFinanceWorkspaceIdentityBlocked(true);
+      clearFinanceLoginState();REQS=[];VOUCHERS=[];INVS=[];BILLS=[];LEDGER=[];DRAFTS=[];
+      ['sidebar','main-wrap','login-screen','auth-loading'].forEach(function(id){var node=el(id);if(node)node.style.display='none';});
+      document.querySelectorAll('dialog,.modal-bg,.modal-overlay,.modal-backdrop,.mobile-primary-nav,.mobile-more-backdrop').forEach(function(node){if(node.open&&node.close)node.close();node.replaceChildren();node.hidden=true;node.style.display='none';});
+    }
+  });
 };
 window.showLogin=function(){
   var loading=el('auth-loading');if(loading)loading.style.display='none';
