@@ -6,20 +6,39 @@ set local statement_timeout='120s';
 -- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN
 do $tax_source_integrity_canary$
 declare
+  v_canary_session_id uuid;
+  v_canary_active_session_users uuid[];
  t constant uuid:='00000000-0000-0000-0000-000000000001';
  marker constant text:='__finance_tax_source_integrity_canary_20260911__';
  actor public.finance_users%rowtype;entity text;dept text;selector jsonb;result jsonb;before jsonb;patch jsonb;binding jsonb;fresh_binding jsonb;rev bigint;denied boolean;fixture_before jsonb;
  old_claims text:=current_setting('request.jwt.claims',true);old_sub text:=current_setting('request.jwt.claim.sub',true);old_tenant text:=current_setting('app.current_tenant_id',true);
 begin
+ -- Preserve every original actor/role/scope predicate; require a genuine
+ -- active session when the installed Auth fence requires it. NULL is only
+ -- the legacy (helper absent) branch; an empty array authorizes no candidate.
+ if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'select coalesce(array_agg(distinct s.user_id),''{}''::uuid[]) from auth.sessions s join public.finance_users u on u.auth_user_id=s.user_id where u.tenant_id=$1 and u.active and (s.not_after is null or s.not_after>statement_timestamp())'
+   into v_canary_active_session_users using t;
+ end if;
  if exists(select 1 from public.invoices where id=marker) or exists(select 1 from private.finance_reporting_profile_revisions_v1 where reason=marker) then raise exception 'Tax source canary already exists';end if;
- select u.* into actor from public.finance_users u where u.tenant_id=t and u.active and u.role='accountant'
+ select u.* into actor from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=t and u.active and u.role='accountant'
   and public.finance_user_is_approval_identity_ready(t,u.id) and private.finance_reporting_page_level_v1(t,u.role,'reports') in ('edit','delete') order by u.id limit 1;
  select s.entity_code,d.code into entity,dept from public.finance_department_units d join public.finance_department_entity_scopes s on s.tenant_id=d.tenant_id and s.unit_id=d.id and s.active
   where d.tenant_id=t and d.active and d.is_posting_unit and d.present_in_source is true
    and private.finance_department_allows_new_form(d.tenant_id,d.code,s.entity_code) order by s.entity_code,d.code limit 1;
  if actor.id is null or entity is null then raise exception 'Tax source canary lacks verified accountant/company department';end if;
  perform set_config('app.current_tenant_id',t::text,true);perform set_config('request.jwt.claim.sub',actor.auth_user_id::text,true);
- perform set_config('request.jwt.claims',jsonb_build_object('sub',actor.auth_user_id,'role','authenticated','email',actor.email)::text,true);
+ -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using actor.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',actor.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',actor.email)::text,true);
  insert into public.invoices(id,no,tenant_id,data_environment,entity_id,entity_name,department_code,invoice_date,buyer,description,amount,tax,total,status,approval_status,approval_step,steps,invoice_identifier_type)
  values(marker,marker,t,'test',entity,'Rollback-only fixture',dept,date '2099-09-11','Tax source canary','Tax source canary',105,0,105,'unpaid','draft',1,'[]','領據');
  selector:=jsonb_build_array(jsonb_build_object('key','invoice:'||marker,'sourceType','invoice','sourceId',marker));

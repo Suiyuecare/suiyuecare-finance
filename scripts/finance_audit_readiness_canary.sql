@@ -6,22 +6,41 @@ set local statement_timeout='120s';
 do $audit_readiness_canary$
 <<audit_readiness_canary>>
 declare
+  v_canary_session_id uuid;
+  v_canary_active_session_users uuid[];
  t uuid:=public.default_tenant_id();e text;period constant text:='2099-Q4';reason constant text:='__finance_audit_readiness_canary_20260911__';
  preparer public.finance_users%rowtype;reviewer public.finance_users%rowtype;reader public.finance_users%rowtype;
  before jsonb;r jsonb;p jsonb;hist jsonb;denied boolean;production_before jsonb;
  old_claims text:=current_setting('request.jwt.claims',true);old_sub text:=current_setting('request.jwt.claim.sub',true);old_tenant text:=current_setting('app.current_tenant_id',true);
 begin
- select * into preparer from public.finance_users u where u.tenant_id=t and u.active and u.role='accountant' and public.finance_user_is_approval_identity_ready(t,u.id)
+ -- Preserve every original actor/role/scope predicate; require a genuine
+ -- active session when the installed Auth fence requires it. NULL is only
+ -- the legacy (helper absent) branch; an empty array authorizes no candidate.
+ if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'select coalesce(array_agg(distinct s.user_id),''{}''::uuid[]) from auth.sessions s join public.finance_users u on u.auth_user_id=s.user_id where u.tenant_id=$1 and u.active and (s.not_after is null or s.not_after>statement_timestamp())'
+   into v_canary_active_session_users using t;
+ end if;
+ select * into preparer from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=t and u.active and u.role='accountant' and public.finance_user_is_approval_identity_ready(t,u.id)
   and private.finance_reporting_page_level_v1(t,u.role,'reports') in ('edit','delete') order by u.id limit 1;
- select * into reviewer from public.finance_users u where u.tenant_id=t and u.active and u.role in ('ceo','admin_director') and public.finance_user_is_approval_identity_ready(t,u.id)
+ select * into reviewer from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=t and u.active and u.role in ('ceo','admin_director') and public.finance_user_is_approval_identity_ready(t,u.id)
   and private.finance_reporting_page_level_v1(t,u.role,'reports')<>'none' and private.finance_reporting_page_level_v1(t,u.role,'settings') in ('edit','delete') order by u.id limit 1;
- select * into reader from public.finance_users u where u.tenant_id=t and u.active and u.role not in ('accountant','ceo','admin_director','external_audit','board') and public.finance_user_is_approval_identity_ready(t,u.id) order by u.id limit 1;
+ select * into reader from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=t and u.active and u.role not in ('accountant','ceo','admin_director','external_audit','board') and public.finance_user_is_approval_identity_ready(t,u.id) order by u.id limit 1;
  if preparer.id is null or reviewer.id is null or reader.id is null or preparer.id=reviewer.id then raise exception 'Audit canary requires verified preparer, independent reviewer and ordinary reader';end if;
  select v->>'id' into e from public.system_settings s cross join lateral jsonb_array_elements(case when jsonb_typeof(s.value)='array' then s.value else '[]'::jsonb end) v where s.tenant_id=t and s.key='entities' and nullif(v->>'id','') is not null and v->>'id'<>'all' order by v->>'id' limit 1;
  if e is null or exists(select 1 from private.finance_audit_cases_v1 where tenant_id=t and data_environment='test' and entity_id=e and finance_audit_cases_v1.period=audit_readiness_canary.period)
   or exists(select 1 from private.finance_audit_case_revisions_v1 where finance_audit_case_revisions_v1.reason=audit_readiness_canary.reason) then raise exception 'Audit canary scope missing or synthetic key already exists';end if;
  perform set_config('app.current_tenant_id',t::text,true);perform set_config('request.jwt.claim.sub',preparer.auth_user_id::text,true);
- perform set_config('request.jwt.claims',jsonb_build_object('sub',preparer.auth_user_id,'role','authenticated','email',preparer.email)::text,true);
+ -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using preparer.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',preparer.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',preparer.email)::text,true);
  execute 'set local role authenticated';
  if current_user<>'authenticated' or public.current_finance_user_id() is distinct from preparer.id then raise exception 'Audit preparer browser identity mismatch';end if;
  before:=public.finance_audit_case_read_v1(e,period,'test');production_before:=public.finance_audit_case_read_v1(e,period,'production');
@@ -39,7 +58,17 @@ begin
  denied:=false;begin perform public.finance_audit_case_read_v1('__audit_unscoped_company__',period,'test');exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Audit unknown-company disclosure accepted';end if;
  execute 'reset role';
- perform set_config('request.jwt.claim.sub',reviewer.auth_user_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',reviewer.auth_user_id,'role','authenticated','email',reviewer.email)::text,true);
+ perform set_config('request.jwt.claim.sub',reviewer.auth_user_id::text,true);-- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using reviewer.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',reviewer.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',reviewer.email)::text,true);
  execute 'set local role authenticated';
  if public.current_finance_user_id() is distinct from reviewer.id then raise exception 'Audit reviewer browser identity mismatch';end if;
  r:=public.finance_audit_case_save_v1(e,period,1,r->>'sourceFingerprint',p,reason,'test');
@@ -49,12 +78,32 @@ begin
  denied:=false;begin execute 'select 1 from private.finance_audit_cases_v1';exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Audit table directly exposed';end if;
  execute 'reset role';
- perform set_config('request.jwt.claim.sub',reader.auth_user_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',reader.auth_user_id,'role','authenticated','email',reader.email)::text,true);
+ perform set_config('request.jwt.claim.sub',reader.auth_user_id::text,true);-- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using reader.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',reader.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',reader.email)::text,true);
  execute 'set local role authenticated';denied:=false;
  begin perform public.finance_audit_case_read_v1(e,period,'test');exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Audit employee disclosed company workpapers';end if;
  execute 'reset role';
- perform set_config('request.jwt.claim.sub',preparer.auth_user_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',preparer.auth_user_id,'role','authenticated','email',preparer.email)::text,true);
+ perform set_config('request.jwt.claim.sub',preparer.auth_user_id::text,true);-- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using preparer.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',preparer.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',preparer.email)::text,true);
  execute 'set local role authenticated';
  if public.finance_audit_case_read_v1(e,period,'production') is distinct from production_before then raise exception 'Audit test fixture modified production case/source response';end if;
  execute 'reset role';

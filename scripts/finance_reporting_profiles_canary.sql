@@ -7,6 +7,8 @@ set local statement_timeout='120s';
 -- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN
 do $reporting_profiles_canary$
 declare
+  v_canary_session_id uuid;
+  v_canary_active_session_users uuid[];
  v_tenant constant uuid:='00000000-0000-0000-0000-000000000001';
  v_reason constant text:='__finance_reporting_profiles_canary_20260910__';
  v_period constant text:='2099-11-01/2099-12-31';
@@ -14,13 +16,20 @@ declare
  v_entity text;v_before jsonb;v_result jsonb;v_patch jsonb;v_revision bigint;v_denied boolean;
  v_old_claims text:=current_setting('request.jwt.claims',true);v_old_sub text:=current_setting('request.jwt.claim.sub',true);v_old_tenant text:=current_setting('app.current_tenant_id',true);
 begin
+ -- Preserve every original actor/role/scope predicate; require a genuine
+ -- active session when the installed Auth fence requires it. NULL is only
+ -- the legacy (helper absent) branch; an empty array authorizes no candidate.
+ if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'select coalesce(array_agg(distinct s.user_id),''{}''::uuid[]) from auth.sessions s join public.finance_users u on u.auth_user_id=s.user_id where u.tenant_id=$1 and u.active and (s.not_after is null or s.not_after>statement_timestamp())'
+   into v_canary_active_session_users using v_tenant;
+ end if;
  if exists(select 1 from private.finance_reporting_profile_revisions_v1 where reason=v_reason)
   or exists(select 1 from public.finance_reporting_profiles where profile#>>array['tax','periods',v_period,'priorCarryforwardTax']='123456.78') then raise exception 'Reporting canary marker already exists; refusing to overwrite';end if;
- select u.* into v_manager from public.finance_users u where u.tenant_id=v_tenant and u.active and u.role in ('ceo','admin_director')
+ select u.* into v_manager from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=v_tenant and u.active and u.role in ('ceo','admin_director')
   and public.finance_user_is_approval_identity_ready(v_tenant,u.id)
   and private.finance_reporting_page_level_v1(v_tenant,u.role,'reports')<>'none'
   and private.finance_reporting_page_level_v1(v_tenant,u.role,'settings') in ('edit','delete') order by u.id limit 1;
- select u.* into v_accountant from public.finance_users u where u.tenant_id=v_tenant and u.active and u.role='accountant'
+ select u.* into v_accountant from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=v_tenant and u.active and u.role='accountant'
   and public.finance_user_is_approval_identity_ready(v_tenant,u.id)
   and private.finance_reporting_page_level_v1(v_tenant,u.role,'reports') in ('edit','delete') order by u.id limit 1;
  if v_manager.id is null or v_accountant.id is null then raise exception 'Reporting canary lacks verified authorized manager/accountant';end if;
@@ -29,7 +38,17 @@ begin
  if v_entity is null then raise exception 'Reporting canary has no current company';end if;
  perform set_config('app.current_tenant_id',v_tenant::text,true);
  perform set_config('request.jwt.claim.sub',v_manager.auth_user_id::text,true);
- perform set_config('request.jwt.claims',jsonb_build_object('sub',v_manager.auth_user_id,'role','authenticated','email',v_manager.email)::text,true);
+ -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using v_manager.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',v_manager.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',v_manager.email)::text,true);
  execute 'set local role authenticated';
  if current_user<>'authenticated' or public.current_finance_user_id() is distinct from v_manager.id then raise exception 'Reporting manager browser identity did not resolve exactly';end if;
  v_before:=public.finance_reporting_profile_read_v1(v_entity,'test');v_revision:=(v_before->>'revision')::bigint;
@@ -42,7 +61,17 @@ begin
  if not v_denied then raise exception 'Reporting stale revision was accepted';end if;
  execute 'reset role';
  perform set_config('request.jwt.claim.sub',v_accountant.auth_user_id::text,true);
- perform set_config('request.jwt.claims',jsonb_build_object('sub',v_accountant.auth_user_id,'role','authenticated','email',v_accountant.email)::text,true);
+ -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using v_accountant.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',v_accountant.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',v_accountant.email)::text,true);
  execute 'set local role authenticated';
  if current_user<>'authenticated' or public.current_finance_user_id() is distinct from v_accountant.id then raise exception 'Reporting accountant browser identity did not resolve exactly';end if;
  v_result:=public.finance_reporting_profile_read_v1(v_entity,'test');

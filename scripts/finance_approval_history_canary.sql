@@ -6,6 +6,8 @@ set local statement_timeout='120s';
 -- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN
 do $approval_history_canary$
 declare
+  v_canary_session_id uuid;
+  v_canary_active_session_users uuid[];
  t constant uuid:='00000000-0000-0000-0000-000000000001';
  prefix constant text:='__finance_approval_history_canary_20260913__';
  label constant text:='APPROVALHISTORYCANARYONLY20260913';
@@ -13,14 +15,31 @@ declare
  old_claims text:=current_setting('request.jwt.claims',true);old_sub text:=current_setting('request.jwt.claim.sub',true);
  old_tenant text:=current_setting('app.current_tenant_id',true);
 begin
+ -- Preserve every original actor/role/scope predicate; require a genuine
+ -- active session when the installed Auth fence requires it. NULL is only
+ -- the legacy (helper absent) branch; an empty array authorizes no candidate.
+ if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+  execute 'select coalesce(array_agg(distinct s.user_id),''{}''::uuid[]) from auth.sessions s join public.finance_users u on u.auth_user_id=s.user_id where u.tenant_id=$1 and u.active and (s.not_after is null or s.not_after>statement_timestamp())'
+   into v_canary_active_session_users using t;
+ end if;
  if exists(select 1 from public.invoices where left(id,length(prefix))=prefix) or exists(select 1 from public.approval_step_actor_snapshots where left(record_id,length(prefix))=prefix) then raise exception 'Approval history canary IDs already exist; refusing overwrite';end if;
- select u.* into actor from public.finance_users u where u.tenant_id=t and u.active is true and u.auth_user_id is not null
+ select u.* into actor from public.finance_users u where (v_canary_active_session_users is null or u.auth_user_id=any(v_canary_active_session_users)) and u.tenant_id=t and u.active is true and u.auth_user_id is not null
   and lower(btrim(u.email))=lower(btrim(public.finance_verified_google_email(u.auth_user_id)))
   and (select count(*) from public.finance_users f join public.tenant_members m on m.tenant_id=f.tenant_id and m.finance_user_id=f.id and m.auth_user_id=f.auth_user_id and m.active=true
    where f.auth_user_id=u.auth_user_id and f.active=true and lower(btrim(f.email))=lower(btrim(public.finance_verified_google_email(u.auth_user_id))))=1 order by u.id limit 1;
  if actor.id is null then raise exception 'Approval history canary requires an existing uniquely verified Finance member';end if;
  perform set_config('request.jwt.claim.sub',actor.auth_user_id::text,true);
- perform set_config('request.jwt.claims',jsonb_build_object('sub',actor.auth_user_id,'role','authenticated','email',actor.email)::text,true);
+ -- Use only an existing active session for this exact verified actor.
+  -- Dynamic SQL keeps older, pre-session migration rehearsals compatible.
+  v_canary_session_id := null;
+  if pg_catalog.to_regprocedure('public.finance_auth_session_active()') is not null then
+    execute 'select s.id from auth.sessions s where s.user_id=$1 and (s.not_after is null or s.not_after>statement_timestamp()) order by s.created_at desc nulls last,s.id desc limit 1'
+      into v_canary_session_id using actor.auth_user_id;
+    if v_canary_session_id is null then
+      raise exception 'Authenticated canary requires an existing active session for its verified actor';
+    end if;
+  end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',actor.auth_user_id,'session_id',v_canary_session_id,'role','authenticated','email',actor.email)::text,true);
  perform set_config('app.current_tenant_id',t::text,true);
  insert into public.invoices(id,no,tenant_id,data_environment,entity_id,entity_name,department_code,invoice_date,buyer,description,amount,tax,total,batch_id,status,approval_status,approval_step,steps,invoice_identifier_type)
  select prefix||suffix,prefix||suffix,t,'test','E6','Rollback-only fixture','J1101',current_date,label,label,amount,0,amount,batch,'unpaid','draft',1,'[]'::jsonb,'領據'
