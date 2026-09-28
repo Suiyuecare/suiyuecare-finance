@@ -119,7 +119,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
       guardedNav: async () => { ctx.buildNR(); ctx.S.page = 'newreq'; }, clearExpenseApplicantRevisionMode() {},
       renderNR() { ctx.S.lazyRows = []; fields.forEach(n => { n.value = ''; }); }, markNRClean() {},
       applicantSelectChanged() {}, renderLazySheet() {}, renderRefundSheet() {}, renderPurchaseSheet() {}, renderHrExpenseSheet() {},
-      renderLaborElectronicLines() {}, laborElectronicSelected: () => false,
+      renderLaborElectronicLines() {}, renderLaborElectronicPaymentDates() {}, laborElectronicSelected: () => false,
       renderTravelPeople() {}, renderTravelSheet() {}, updateBankTypeUI() {}, renderNRFList() {}, updNRAcct() {},
       isExpenseApplicantRevisionMode: () => false, setTimeout() {},
       calcTravelDays() { throw new Error('must not recalculate recovered manual amounts'); },
