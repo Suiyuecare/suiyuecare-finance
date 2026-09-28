@@ -8932,6 +8932,7 @@ function renderApprovalImmediateSkeleton(reason){
   return true;
 }
 function clearApprovalFastBootstrapState(){
+  APPROVAL_SEARCH_COMPOSING=false;
   if(typeof cancelApprovalHistoryDetail==='function')cancelApprovalHistoryDetail();
   if(typeof clearSystemHealthRuntime==='function')clearSystemHealthRuntime();
   var key=approvalFastBootstrapCacheKey();
