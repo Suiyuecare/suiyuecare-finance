@@ -57,6 +57,10 @@ function relative(file) {
   return path.relative(ROOT, file).split(path.sep).join('/');
 }
 
+function comparePathBytes(a, b) {
+  return Buffer.compare(Buffer.from(a), Buffer.from(b));
+}
+
 function removeGeneratedOsMetadata(directory) {
   if (!fs.existsSync(directory)) return;
   const stack = [directory];
@@ -90,7 +94,7 @@ function walk(directory, excluded = new Set()) {
       else if (entry.isFile()) files.push(full);
     }
   }
-  return files.sort((a, b) => relative(a).localeCompare(relative(b)));
+  return files.sort((a, b) => comparePathBytes(relative(a), relative(b)));
 }
 
 function fileRecords(files) {
@@ -101,7 +105,8 @@ function fileRecords(files) {
 }
 
 function recordDigest(records) {
-  const canonical = records.map((item) => `${item.path}\0${item.bytes}\0${item.sha256}\n`).join('');
+  const canonical = records.slice().sort((a, b) => comparePathBytes(a.path, b.path))
+    .map((item) => `${item.path}\0${item.bytes}\0${item.sha256}\n`).join('');
   return sha256(Buffer.from(canonical));
 }
 
@@ -464,7 +469,7 @@ function releaseSourceFiles() {
   ].map((item) => path.join(ROOT, item));
   const recursive = ['assets/engines', 'assets/styles', 'assets/templates', 'supabase/migrations']
     .flatMap((item) => walk(path.join(ROOT, item)));
-  return [...new Set(exact.concat(recursive))].sort((a, b) => relative(a).localeCompare(relative(b)));
+  return [...new Set(exact.concat(recursive))].sort((a, b) => comparePathBytes(relative(a), relative(b)));
 }
 
 function expectedBuiltIndex() {
