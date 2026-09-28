@@ -22304,6 +22304,9 @@ function renderLaborElectronicLines(){
   var requestEntity=(el('nr-ent')||{}).value||currentUserEntityId();
   var depts=applicantDeptSelectRows('',requestEntity);
   box.innerHTML=S.nrLaborLines.map(function(line,i){
+    var originalDepartment=String(line.departmentCode||'').trim();
+    var unavailableDepartment=originalDepartment&&!depts.some(function(dept){return String(dept.c)===originalDepartment;});
+    if(unavailableDepartment)line.departmentCode='';
     var opts='<option value="">選擇支出部門</option>'+depts.map(function(d){return'<option value="'+escAttr(d.c)+'" '+(String(line.departmentCode||'')===String(d.c)?'selected':'')+'>'+escAttr(d.c+' '+d.n)+'</option>';}).join('');
     var field=function(label,key,type,placeholder){return'<div class="fg"><label class="fl" for="labor-line-'+i+'-'+key+'">'+label+'</label><input id="labor-line-'+i+'-'+key+'" type="'+type+'" value="'+escAttr(line[key]||'')+'" placeholder="'+escAttr(placeholder||'')+'" oninput="laborElectronicEdit('+i+',\''+key+'\',this.value)"></div>';};
     return'<div class="labor-line-card"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px"><strong style="font-size:12px">第 '+(i+1)+' 堂課</strong><button type="button" class="btn-g" onclick="laborElectronicDeleteLine('+i+')" aria-label="刪除第 '+(i+1)+' 堂課">刪除</button></div><div class="labor-line-grid">'
@@ -22311,7 +22314,7 @@ function renderLaborElectronicLines(){
       +field('課程類型 *','courseType','text','例：職能治療、照服課程')
       +field('課程名稱與服務內容 *','description','text','簡述實際授課')
       +field('服務日期 *','serviceDate','date','')
-      +'<div class="fg"><label class="fl" for="labor-line-'+i+'-departmentCode">支出部門 *</label><select id="labor-line-'+i+'-departmentCode" onchange="laborElectronicEdit('+i+',\'departmentCode\',this.value)">'+opts+'</select></div>'
+      +'<div class="fg"><label class="fl" for="labor-line-'+i+'-departmentCode">支出部門 *</label><select id="labor-line-'+i+'-departmentCode" onchange="laborElectronicEdit('+i+',\'departmentCode\',this.value)">'+opts+'</select>'+(unavailableDepartment?'<small role="status" style="display:block;margin-top:5px;color:#8a4b0f">原單位不在這次可用的支出部門內，請選擇現行部門。</small>':'')+'</div>'
       +field('講師酬勞毛額（元）*','grossValue','text','例：2500.00')
       +'</div></div>';
   }).join('');
