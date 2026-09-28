@@ -19055,7 +19055,7 @@ async function serializeDraftFiles(recordNo){
 function collectNRFormState(){
   var fields={};
   draftInputIds().forEach(function(id){var e=el(id);if(e)fields[id]=e.value;});
-  return {fields:fields,nrPettyGeneralRows:S.nrPettyGeneralRows||[],nrPettyGeneralReceiptType:S.nrPettyGeneralReceiptType||'',lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'salary_50',hrPeriod:normalizeHrMonthStrict(fields['hr-period'])||S.hrPeriod||'',hrLaborPeriod:fields['hr-labor-period']||S.hrLaborPeriod||'',hrPrivacyMode:!!S.hrPrivacyMode,nrLaborLines:S.nrLaborLines||[],nrLaborSignerName:fields['labor-signer-name']||S.nrLaborSignerName||'',nrLaborInviteEmail:fields['labor-invite-email']||S.nrLaborInviteEmail||'',nrLaborPlannedDates:[fields['labor-plan-1'],fields['labor-plan-2'],fields['labor-plan-3']],pettyMode:S.pettyMode||((el('petty-mode')||{}).value)||'general',travelFiles:S.travelFiles||{},travelPeople:S.travelPeople||[],travelRows:S.travelRows||[]};
+  return {fields:fields,nrPettyGeneralRows:S.nrPettyGeneralRows||[],nrPettyGeneralReceiptType:S.nrPettyGeneralReceiptType||'',lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'salary_50',hrPeriod:normalizeHrMonthStrict(fields['hr-period'])||S.hrPeriod||'',hrLaborPeriod:fields['hr-labor-period']||S.hrLaborPeriod||'',hrPrivacyMode:!!S.hrPrivacyMode,nrLaborLines:S.nrLaborLines||[],nrLaborSignerName:fields['labor-signer-name']||S.nrLaborSignerName||'',nrLaborInviteEmail:fields['labor-invite-email']||S.nrLaborInviteEmail||'',nrLaborPlannedDates:(laborElectronicSelected()?laborElectronicPlannedDates():Array.isArray(S.nrLaborPlannedDates)?S.nrLaborPlannedDates:[]).slice(),pettyMode:S.pettyMode||((el('petty-mode')||{}).value)||'general',travelFiles:S.travelFiles||{},travelPeople:S.travelPeople||[],travelRows:S.travelRows||[]};
 }
 function applyNRFormState(state,opts){
   state=state||{};
@@ -19077,7 +19077,11 @@ function applyNRFormState(state,opts){
   if(Array.isArray(state.nrLaborLines)){S.nrLaborLines=state.nrLaborLines;renderLaborElectronicLines();}
   if(Object.prototype.hasOwnProperty.call(state,'nrLaborSignerName'))S.nrLaborSignerName=state.nrLaborSignerName||'';
   if(Object.prototype.hasOwnProperty.call(state,'nrLaborInviteEmail'))S.nrLaborInviteEmail=state.nrLaborInviteEmail||'';
-  if(Array.isArray(state.nrLaborPlannedDates))S.nrLaborPlannedDates=state.nrLaborPlannedDates;
+  var savedLaborDates=Object.keys(state.fields||{}).filter(function(id){return /^labor-plan-([1-9]|1[0-2])$/.test(id);}).sort(function(a,b){return Number(a.slice(11))-Number(b.slice(11));});
+  if(Array.isArray(state.nrLaborPlannedDates)&&state.nrLaborPlannedDates.length)S.nrLaborPlannedDates=state.nrLaborPlannedDates.slice();
+  else if(savedLaborDates.length)S.nrLaborPlannedDates=savedLaborDates.map(function(id){return String(state.fields[id]||'');});
+  else if(Array.isArray(state.nrLaborPlannedDates))S.nrLaborPlannedDates=[];
+  renderLaborElectronicPaymentDates();
   if(state.pettyMode){S.pettyMode=state.pettyMode;var pm=el('petty-mode');if(pm)pm.value=S.pettyMode;}
   if(state.travelFiles)S.travelFiles=state.travelFiles;
   if(state.travelPeople)S.travelPeople=state.travelPeople;
@@ -22155,27 +22159,41 @@ function laborElectronicCents(value){
   return Number.isSafeInteger(cents)&&cents>0?cents:null;
 }
 function laborElectronicAmountText(cents){return (cents/100).toFixed(2);}
-function laborElectronicDefaultDates(period){
-  var next=addMonthsToHrMonth(period,1)||todayMonth();
-  return [next+'-15',next+'-16',next+'-17'];
-}
-function laborElectronicPlannedDates(period){
-  var defaults=laborElectronicDefaultDates(period),dates=[0,1,2].map(function(i){var field=el('labor-plan-'+(i+1));return String((field&&field.value)||(S.nrLaborPlannedDates||[])[i]||defaults[i]).trim();});
-  S.nrLaborPlannedDates=dates;
-  return dates;
+function laborElectronicPlannedDates(){
+  var fields=el('labor-plan-fields');
+  var dates=fields?Array.from(fields.querySelectorAll('input[data-labor-plan-date]')).map(function(field){return String(field.value||'').trim();}):(Array.isArray(S.nrLaborPlannedDates)?S.nrLaborPlannedDates.slice():[]);
+  S.nrLaborPlannedDates=dates.map(function(date){return String(date||'').trim();});
+  return S.nrLaborPlannedDates;
 }
 function laborElectronicDateValid(value){
   var date=String(value||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return false;
   var parsed=new Date(date+'T12:00:00Z');return !Number.isNaN(parsed.getTime())&&parsed.toISOString().slice(0,10)===date;
 }
+function laborElectronicPaymentDateRowsHtml(){
+  var dates=Array.isArray(S.nrLaborPlannedDates)&&S.nrLaborPlannedDates.length?S.nrLaborPlannedDates:[''];
+  return dates.map(function(date,i){return'<div class="fg"><label class="fl" for="labor-plan-'+(i+1)+'">'+(i?'第 '+(i+1)+' 次預計付款日 *':'預計付款日 *')+'</label><div style="display:flex;gap:8px;align-items:center"><input type="date" id="labor-plan-'+(i+1)+'" data-labor-plan-date="1" required style="min-width:0;flex:1" value="'+escAttr(String(date||''))+'" oninput="laborElectronicPlanChanged()">'+(i?'<button type="button" class="btn-g" style="min-height:44px" aria-label="移除第 '+(i+1)+' 次預計付款日" onclick="laborElectronicRemovePaymentDate('+i+')">移除</button>':'')+'</div></div>';}).join('')
+    +(dates.length<12?'<button type="button" class="btn-g" style="min-height:44px;margin:2px 0 12px" onclick="laborElectronicAddPaymentDate()">＋ 新增分期付款日</button>':'');
+}
+function renderLaborElectronicPaymentDates(){
+  var fields=el('labor-plan-fields');if(fields)fields.innerHTML=laborElectronicPaymentDateRowsHtml();
+}
 function laborElectronicPaymentHtml(){
-  var dates=(S.nrLaborPlannedDates&&S.nrLaborPlannedDates.length===3?S.nrLaborPlannedDates:laborElectronicDefaultDates(hrSelectedPeriod()));
   return'<div class="labor-payment-plan"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">預計付款安排</div>'
-    +'<p style="font-size:11px;color:#6a5840;line-height:1.7">以下只是預計日期，不會自動扣稅、撥款或入帳。實際付款須待講師簽名、會計覆核、另一位授權人確認應計，再以銀行對帳證據逐筆登錄。</p>'
-    +dates.map(function(date,i){return'<div class="fg"><label class="fl" for="labor-plan-'+(i+1)+'">第 '+(i+1)+' 次預計付款日</label><input type="date" id="labor-plan-'+(i+1)+'" value="'+escAttr(date)+'" oninput="laborElectronicPlanChanged()"></div>';}).join('')
+    +'<p style="font-size:11px;color:#6a5840;line-height:1.7">請填一個預計付款日；若確定分期，再新增日期（最多 12 次）。日期不會自動扣稅、撥款或入帳；實際付款須待講師簽名、會計覆核、另一位授權人確認應計，再以銀行對帳證據逐筆登錄。</p>'
+    +'<div id="labor-plan-fields">'+laborElectronicPaymentDateRowsHtml()+'</div>'
     +'<div style="font-size:11px;color:#8a4b0f;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:10px">實付金額、代扣所得稅與補充保費由會計依適用規定逐筆核定；此申請只記錄課程毛額。</div></div>';
 }
-window.laborElectronicPlanChanged=function(){S.nrLaborPlannedDates=[0,1,2].map(function(i){return String((el('labor-plan-'+(i+1))||{}).value||'');});};
+window.laborElectronicPlanChanged=function(){laborElectronicPlannedDates();};
+window.laborElectronicAddPaymentDate=function(){
+  var dates=laborElectronicPlannedDates().slice();if(dates.length>=12)return;
+  dates.push('');S.nrLaborPlannedDates=dates;renderLaborElectronicPaymentDates();
+  var field=el('labor-plan-'+dates.length);if(field)field.focus();
+};
+window.laborElectronicRemovePaymentDate=function(index){
+  var dates=laborElectronicPlannedDates().slice();if(index<1||index>=dates.length)return;
+  dates.splice(index,1);S.nrLaborPlannedDates=dates;renderLaborElectronicPaymentDates();
+  var field=el('labor-plan-'+Math.min(index+1,dates.length));if(field)field.focus();
+};
 function laborElectronicFieldsHtml(opts){
   var signer=String((el('labor-signer-name')||{}).value||S.nrLaborSignerName||''),email=String((el('labor-invite-email')||{}).value||S.nrLaborInviteEmail||'');
   return'<div class="card" style="background:#f3fbec;border-color:#b8dfaa;margin-bottom:9px"><div class="chd"><span class="cht">電子勞務報酬單 · 一位講師一個月份</span></div><div style="padding:12px">'
@@ -22339,7 +22357,7 @@ function collectHrExpenseInfo(){
       return{id:String(line.id||''),courseRef:String(line.courseRef||'').trim(),courseType:String(line.courseType||'').trim(),description:String(line.description||'').trim(),serviceDate:String(line.serviceDate||''),departmentCode:String(line.departmentCode||'').trim(),grossCents:cents||0};
     });
     if(!Number.isSafeInteger(totalCents)||totalCents<=0||totalCents>99999999999999)digitalMissing.push('講師酬勞毛額合計須大於 0，且不得超過資料庫金額上限');
-    if(plannedDates.length!==3||plannedDates.some(function(date){return !laborElectronicDateValid(date);})||new Set(plannedDates).size!==3||plannedDates.slice().sort().join('|')!==plannedDates.join('|'))digitalMissing.push('三次預計付款日須為不同日期，並依先後順序填寫');
+    if(plannedDates.length<1||plannedDates.length>12||plannedDates.some(function(date){return !laborElectronicDateValid(date);})||plannedDates.some(function(date,i){return i>0&&date<=plannedDates[i-1];}))digitalMissing.push('請填寫 1 至 12 個不同的預計付款日，並依日期先後順序排列');
     S.nrLaborSignerName=signerName;S.nrLaborInviteEmail=inviteEmail;
     return{item:item,digital:true,rows:[],serviceLines:serviceLines,total:totalCents/100,totalGrossCents:totalCents,cashTotal:0,paymentTotal:0,transferFeeTotal:0,missing:digitalMissing,period:period,signerName:signerName,inviteEmail:inviteEmail,plannedPaymentDates:plannedDates,summary:['電子勞務報酬單：'+signerName,'服務月份：'+period,'課程：'+serviceLines.length+' 堂','申請毛額：NT$'+laborElectronicAmountText(totalCents),'講師簽署及會計逐項覆核前，不得付款或入帳。'].join('\n')};
   }
@@ -23868,7 +23886,7 @@ function rejectedRequestDraftState(r){
   };
   if(String(labor.version)==='1'){
     fields['labor-signer-name']=labor.signerName||'';fields['labor-invite-email']=labor.inviteEmail||'';fields['hr-period']=labor.period||'';
-    (labor.plannedPaymentDates||[]).forEach(function(date,i){if(i<3)fields['labor-plan-'+(i+1)]=date;});
+    (labor.plannedPaymentDates||[]).forEach(function(date,i){if(i<12)fields['labor-plan-'+(i+1)]=date;});
   }
   return {fields:fields,lazyRows:fp.lazyRows||[],refundRows:fp.refundRows||[],purchaseRows:fp.purchaseRows||[],hrRows:fp.hrRows||[],hrItem:fp.hrItem||'',hrPrivacyMode:(fp.hrRows||[]).some(function(x){return x&&x.__privacyMode;}),nrLaborLines:String(labor.version)==='1'?(labor.serviceLines||[]).map(function(line){return Object.assign({},line,{grossValue:laborElectronicAmountText(Number(line.grossCents)||0)});}):[],nrLaborSignerName:labor.signerName||'',nrLaborInviteEmail:labor.inviteEmail||'',nrLaborPlannedDates:labor.plannedPaymentDates||[],pettyMode:fp.pettyMode||'',travelInfo:fp.travelInfo||null,travelRows:(fp.travelInfo&&fp.travelInfo.rows)||[],travelPeople:(fp.travelInfo&&fp.travelInfo.people)||[]};
 }
@@ -23921,7 +23939,7 @@ function returnedRequestFormState(r){
   };
   if(String(labor.version)==='1'){
     fields['labor-signer-name']=labor.signerName||'';fields['labor-invite-email']=labor.inviteEmail||'';fields['hr-period']=labor.period||'';
-    (labor.plannedPaymentDates||[]).forEach(function(date,i){if(i<3)fields['labor-plan-'+(i+1)]=date;});
+    (labor.plannedPaymentDates||[]).forEach(function(date,i){if(i<12)fields['labor-plan-'+(i+1)]=date;});
   }
   var travelPeople=[];
   String(travel.people||'').split(/[、,，]/).forEach(function(label){
