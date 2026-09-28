@@ -556,6 +556,12 @@ const sourceRecords = fileRecords(releaseSourceFiles());
 const artifactRecords = fileRecords(walk(OUTPUT, new Set(['www/release-manifest.json'])));
 if (!artifactRecords.length) fail('artifact is empty');
 
+if (process.env.VERCEL_ENV === 'preview' && args.has('--write-manifest')) {
+  for (const record of sourceRecords) {
+    process.stdout.write(`FINANCE_SOURCE_RECORD ${JSON.stringify(record)}\n`);
+  }
+}
+
 const expectedManifest = {
   schema_version: 2,
   contract: 'finance-release-artifact-v2',
