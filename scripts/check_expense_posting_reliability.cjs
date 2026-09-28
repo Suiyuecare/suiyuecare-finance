@@ -37,7 +37,7 @@ async function runCases(f){
    sessionGetItem:k=>store.get(k)||null,sessionSetItem:(k,v)=>{if(opts.storageFails)return false;store.set(k,v);return true;},sessionRemoveItem:k=>store.delete(k),
    cloneSettingValue:clone,num:v=>Number(v)||0,normalizeSettingValue:v=>v,normalizeFiles:clone,financeInlineJsString:v=>JSON.stringify(String(v)).replace(/"/g,'&quot;'),
    alert:v=>c.alerts.push(String(v)),friendlyErrorMessage:e=>e&&e.message||String(e),setTopSyncStatus:()=>{},
-   requestPostingLocked:r=>!!(r.ledgerPostedAt||r.postingLockedAt),requestLedgerRowsExist:()=>false,
+   requestPostingLocked:r=>!!(r.ledgerPostedAt||r.postingLockedAt),requestLedgerRowsExist:()=>false,laborElectronicMarker:()=>null,
    canActStep:()=>true,approvalRecordReconcilePending:(_k,r)=>!!c.pending[r.id],approvalSetReconcilePending:(_k,ids,value)=>ids.forEach(id=>c.pending[id]=value),
    ensureOpenPostingPeriod:()=>true,allowLegacyClientFlowRepair:()=>false,
    purchaseReadyForFinalAccounting:()=>({ok:true}),pettyReadyForFinalAccounting:()=>({ok:true}),

@@ -91,7 +91,7 @@ try{
  for(let slot=0;slot<1;slot++)for(const failure of ['core','rollback']){const paths=canaries.slice();paths[slot]=canary('failure_'+slot+'_'+failure,30+slot,failure);await assert.rejects(()=>db.exec(rehearsal('rendered_failure_'+slot+'_'+failure,paths)),/intentional/);await db.exec('rollback');assert.equal(await fp(),original);check();}
  for(let i=0;i<postflights.length;i++){
   write(postflights[i],postSources[i]+"do $bad_contract$ begin raise exception 'postflight rejected';end;$bad_contract$;\n");
-  for(const mode of ['rehearsal','apply']){await assert.rejects(()=>db.exec(mode==='rehearsal'?rehearsal('bad_post_rehearsal_'+i):apply('bad_post_apply_'+i)),/postflight rejected/);await db.exec('rollback');assert.equal(await fp(),original);assert.equal((await db.query('select count(*)::int as count from supabase_migrations.schema_migrations where version=$1',[guard.READ_LATENCY_MIGRATIONS[0]])).rows[0].count,0);check();}
+  for(const mode of ['rehearsal','apply']){await assert.rejects(()=>db.exec(mode==='rehearsal'?rehearsal('bad_post_rehearsal_'+i):apply('bad_post_apply_'+i)),/postflight rejected/,postflights[i]+' '+mode);await db.exec('rollback');assert.equal(await fp(),original);assert.equal((await db.query('select count(*)::int as count from supabase_migrations.schema_migrations where version=$1',[guard.READ_LATENCY_MIGRATIONS[0]])).rows[0].count,0);check();}
   write(postflights[i],postSources[i]);
  }
  for(let i=0;i<postflights.length;i++){fs.unlinkSync(path.join(dir,postflights[i]));assert.throws(()=>apply('missing_post_'+i),/ENOENT/);write(postflights[i],postSources[i]);check();}

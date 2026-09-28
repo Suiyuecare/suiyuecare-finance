@@ -415,3 +415,8 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# Guest invitation tokens are verified inside the function. Staff routes still
+# require a user JWT and are checked against the caller's database permissions.
+[functions.finance-labor-external]
+verify_jwt = false

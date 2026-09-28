@@ -138,6 +138,7 @@ jobs:
           pnpm test:hr-contractor-browser
           pnpm test:hr-contractor-native
           pnpm test:portal-session
+          pnpm test:external-labor-browser
 
       - name: Retain fictional search acceptance evidence even on failure
         if: always()

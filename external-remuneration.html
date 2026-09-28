@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>電子勞務報酬單｜歲悅長照集團</title>
+  <link rel="stylesheet" href="/assets/styles/external-remuneration.css?v=__FINANCE_ASSET_VERSION__">
+  <script src="/assets/engines/external-remuneration.js?v=__FINANCE_ASSET_VERSION__" defer></script>
+</head>
+<body>
+  <main class="shell" id="external-labor" data-api-url="__FINANCE_EXTERNAL_API_URL__">
+    <header class="masthead">
+      <img src="/assets/suiyue-logo-transparent.png" alt="歲悅長照集團" width="48" height="48">
+      <div><div class="brand">歲悅長照集團</div><div class="brand-sub">電子勞務報酬單</div></div>
+      <span class="security-note">專屬連結</span>
+    </header>
+    <div class="intro"><p class="eyebrow">外部講師填寫</p><h1>確認服務內容，完成簽署</h1><p>此表單由承辦單位提供專屬連結。資料提交後由會計核對，核對前不會直接付款。</p></div>
+    <div class="notice" role="note">此連結可供持有人填寫，<strong>不代表系統已驗證本人身分</strong>。請勿轉傳；如服務明細有誤，請先聯繫承辦人。</div>
+    <div id="message" class="message" role="status" aria-live="polite">正在讀取服務明細…</div>
+
+    <div id="form-area" hidden>
+      <nav class="steps" aria-label="填寫步驟"><span class="step is-current">1　核對服務</span><span class="step">2　填寫資料</span><span class="step">3　簽名送出</span></nav>
+      <section class="panel" aria-labelledby="service-title">
+        <div class="section-title"><span class="step-num">01</span><div><p class="eyebrow">請先確認</p><h2 id="service-title">服務與報酬</h2></div></div>
+        <div class="entity"><span>付款單位</span><strong id="entity-name"></strong></div>
+        <div id="service-lines" class="service-lines"></div>
+        <div class="total"><span>報酬合計（未扣代扣項目）</span><strong id="total-gross"></strong></div>
+        <p class="hint">扣繳與付款金額由會計依正式資料核對；此處不預估稅額或實領金額。</p>
+      </section>
+
+      <form id="labor-form" novalidate>
+        <section class="panel" aria-labelledby="profile-title">
+          <div class="section-title"><span class="step-num">02</span><div><p class="eyebrow">僅會計可核對</p><h2 id="profile-title">本人與收款資料</h2></div></div>
+          <div class="field-grid">
+            <label>姓名（與證件相同）<input name="fullName" autocomplete="name" required maxlength="80"></label>
+            <label>身分證字號／居留證號<input name="idNumber" autocomplete="off" required maxlength="32" spellcheck="false"></label>
+            <label>聯絡電話<input name="phone" type="tel" autocomplete="tel" required maxlength="40"></label>
+            <label class="wide">通訊地址<input name="address" autocomplete="street-address" required maxlength="300"></label>
+            <label>銀行代碼<input name="bankCode" inputmode="numeric" required maxlength="20"></label>
+            <label>銀行名稱<input name="bankName" required maxlength="100"></label>
+            <label>分行名稱<input name="branchName" required maxlength="100"></label>
+            <label>帳戶名稱<input name="accountHolder" required maxlength="80"></label>
+            <label class="wide">帳號<input name="accountNumber" inputmode="numeric" autocomplete="off" required maxlength="80" spellcheck="false"></label>
+          </div>
+          <div class="upload-grid">
+            <label>證件正面 <span>PNG、JPG 或 PDF，8 MB 內</span><input type="file" data-kind="identity_front" accept="image/png,image/jpeg,application/pdf" required></label>
+            <label>證件反面 <span>PNG、JPG 或 PDF，8 MB 內</span><input type="file" data-kind="identity_back" accept="image/png,image/jpeg,application/pdf" required></label>
+            <label>存摺封面或銀行帳戶證明 <span>PNG、JPG 或 PDF，8 MB 內</span><input type="file" data-kind="bank_proof" accept="image/png,image/jpeg,application/pdf" required></label>
+          </div>
+          <p class="hint">第一次填寫或資料更改都須重新上傳證明文件。檔案存於受限區域，不能透過此連結查閱他人的資料。</p>
+        </section>
+
+        <section class="panel" aria-labelledby="signature-title">
+          <div class="section-title"><span class="step-num">03</span><div><p class="eyebrow">確認後送出</p><h2 id="signature-title">簽名與聲明</h2></div></div>
+          <p class="signature-help" id="signature-help">請用手指或滑鼠在下方簽名。使用鍵盤時，可改用下方的「上傳簽名 PNG」。</p>
+          <div class="signature-box"><canvas id="signature-pad" width="960" height="240" aria-label="手寫簽名區" aria-describedby="signature-help"></canvas></div>
+          <div class="signature-actions"><button type="button" class="secondary" id="clear-signature">清除重簽</button><label class="signature-upload">改以上傳簽名 PNG<input id="signature-file" type="file" accept="image/png"></label></div>
+          <label class="consent"><input id="consent" type="checkbox" required><span>我已核對上列服務明細、本人及銀行資料，同意以此電子簽名作為本份勞務報酬單的簽署紀錄。我了解持有專屬連結不等於身分驗證，提交後若要修正，須聯絡承辦人重新邀請。</span></label>
+          <div class="submit-row"><div><strong>送出前請再次核對資料</strong><small>送出後此連結不可再修改，也不會顯示個資或下載原始檔。</small></div><button type="submit" id="submit-button" class="primary">確認並送出簽署</button></div>
+        </section>
+      </form>
+    </div>
+    <section id="complete" class="complete panel" hidden aria-live="polite"><div class="complete-icon">✓</div><h2>簽署資料已送出</h2><p>會計將核對您提交的資料；核對完成後，承辦人會通知後續付款程序。</p><p class="reference">參考編號：<strong id="complete-id"></strong></p><p class="hint">本連結不提供已提交的身分證、銀行資料或簽署原始檔下載。</p></section>
+    <footer>資料由歲悅長照集團會計單位依業務需要處理。若連結失效或資料有誤，請聯繫原邀請承辦人。<a href="/privacy.html" target="_blank" rel="noopener noreferrer">隱私權說明</a></footer>
+  </main>
+</body>
+</html>

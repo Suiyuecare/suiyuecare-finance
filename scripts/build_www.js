@@ -54,6 +54,18 @@ fs.writeFileSync(path.join(out, startupBundle.file), startupBundle.code);
 fs.writeFileSync(path.join(out, startupBundle.sdk.file), startupBundle.sdk.code);
 fs.writeFileSync(path.join(out, 'index.html'), html);
 
+let externalHtml = fs.readFileSync(path.join(root, 'external-remuneration.html'), 'utf8');
+const externalApiUrl = buildConfig.supabaseUrl
+  ? `${buildConfig.supabaseUrl}/functions/v1/finance-labor-external`
+  : '';
+if (externalHtml.split('__FINANCE_EXTERNAL_API_URL__').length !== 2) {
+  throw new Error('external remuneration page requires exactly one API URL placeholder');
+}
+externalHtml = externalHtml
+  .replace('__FINANCE_EXTERNAL_API_URL__', externalApiUrl)
+  .replace(/__FINANCE_ASSET_VERSION__/g, assetVersion);
+fs.writeFileSync(path.join(out, 'external-remuneration.html'), externalHtml);
+
 copyFile('privacy.html', 'www/privacy.html');
 copyFile('assets/suiyue-logo-transparent.png', 'www/assets/suiyue-logo-transparent.png');
 copyDir('assets/styles', 'www/assets/styles');

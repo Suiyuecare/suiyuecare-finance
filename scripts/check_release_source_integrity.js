@@ -163,6 +163,20 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/finance_portal_session_logout_postflight.sql',
   'scripts/finance_portal_session_canary.sql',
   'scripts/finance_portal_session_fingerprint.sql',
+  'external-remuneration.html',
+  'assets/engines/external-remuneration.js',
+  'assets/styles/external-remuneration.css',
+  'supabase/functions/finance-labor-external/index.ts',
+  'supabase/functions/finance-labor-external/handler.mjs',
+  'supabase/migrations/20260928090000_finance_external_labor_v1.sql',
+  'scripts/check_external_labor_gateway.mjs',
+  'scripts/test_external_labor_v1.mjs',
+  'scripts/check_external_labor_release.cjs',
+  'scripts/finance_external_labor_postflight.sql',
+  'scripts/finance_external_labor_canary.sql',
+  'scripts/finance_external_labor_fingerprint.sql',
+  'scripts/check_electronic_labor_ui_20260928.cjs',
+  'scripts/check_external_labor_browser.cjs',
   'supabase/migrations/20260927180201_finance_portal_session_logout.sql',
   'supabase/migrations/20260927175827_finance_hr_native_contractor_bridge.sql',
   'supabase/migrations/20260927180005_finance_hr_contractor_settlement_caption.sql',
@@ -440,6 +454,8 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'test:audit-controls-20260927': 'node scripts/check_finance_audit_controls_20260927.mjs && node scripts/check_finance_audit_postflight_20260927.mjs && node scripts/check_workflow_submission_org_races_20260927.cjs && node scripts/check_accounting_precision_backup_archive_20260927.cjs && node scripts/check_approval_search_selection_regressions.cjs && node scripts/test_payroll_accrual_v1.mjs && node scripts/check_payroll_accrual_engine.cjs && node scripts/check_audit_controls_release_20260927.cjs && node scripts/test_audit_controls_release_batch_20260927.mjs',
   'test:hr-contractor': 'node scripts/test_hr_contractor_bridge.mjs && node scripts/check_hr_contractor_release.cjs && node scripts/test_hr_contractor_release_batch.mjs',
   'test:portal-session': 'node scripts/test_portal_session_logout.mjs && node scripts/check_portal_session_release.cjs && node scripts/test_portal_session_release_batch.mjs && node scripts/test_portal_logout_client.mjs && node scripts/test_canary_active_sessions.mjs',
+  'test:external-labor': 'node scripts/test_external_labor_v1.mjs && node scripts/check_external_labor_release.cjs && node scripts/check_external_labor_gateway.mjs',
+  'test:external-labor-browser': 'node scripts/check_electronic_labor_ui_20260928.cjs && node scripts/check_external_labor_browser.cjs',
   'test:hr-contractor-native': 'node scripts/test_hr_contractor_concurrency.mjs',
   'test:hr-contractor-browser': 'HR_BRIDGE_BROWSER=1 node scripts/test_hr_contractor_bridge.mjs',
   'test:audit-controls-native-concurrency': 'node scripts/test_finance_period_close_concurrency_20260927.mjs',
@@ -467,7 +483,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   "test:finance-ui-interactions": "node scripts/check_finance_ui_interaction_browser.cjs",
   'test:hr-bridge-release': 'node scripts/test_hr_bridge_release_batch.mjs',
   'test:hr-bridge-browser': 'HR_BRIDGE_BROWSER=1 node scripts/test_hr_private_bridge.mjs',
-  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session",
+  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor",
   'release:verify-artifact': 'node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js',
   'release:build': 'pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact'
 });
@@ -774,7 +790,7 @@ function git(args) {
   return childProcess.execFileSync('git', args, {
     cwd: ROOT,
     encoding: 'utf8',
-    timeout: 10000,
+    timeout: 60000,
     stdio: ['ignore', 'pipe', 'pipe']
   });
 }

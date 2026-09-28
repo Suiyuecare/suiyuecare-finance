@@ -397,3 +397,13 @@ supabase/.temp
 !scripts/finance_portal_session_logout_postflight.sql
 !scripts/finance_portal_session_canary.sql
 !scripts/finance_portal_session_fingerprint.sql
+
+# Private electronic labor remuneration and production release checks.
+!scripts/check_external_labor_gateway.mjs
+!scripts/test_external_labor_v1.mjs
+!scripts/check_external_labor_release.cjs
+!scripts/finance_external_labor_postflight.sql
+!scripts/finance_external_labor_canary.sql
+!scripts/finance_external_labor_fingerprint.sql
+!scripts/check_electronic_labor_ui_20260928.cjs
+!scripts/check_external_labor_browser.cjs

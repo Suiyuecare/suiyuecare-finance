@@ -1717,8 +1717,8 @@ function nrTypeIcon(type){
   return '<svg viewBox="0 0 24 24">'+(icons[type]||'<path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h4"/>')+'</svg>';
 }
 var TCSS={expense_reimbursement:'b-wait',payment_request:'b-blue',advance_request:'b-purp',petty_cash_request:'b-teal',travel_request:'b-ok',purchase_request:'b-gray',refund_request:'b-rej',welfare_request:'b-ok',hr_expense_request:'b-purp',shareholder_transaction:'b-blue'};
-var SCSS={completed:'b-ok',rejected:'b-rej',cancelled:'b-gray',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_procurement:'b-teal',pending_hr:'b-blue',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_cashier:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal',pending_countersign:'b-purp'};
-var SL={completed:'已完成',rejected:'被駁回',cancelled:'已抽單取消',pending_section_chief:'待上一層主管',pending_dept_manager:'待申請人部門主任',pending_admin_director:'待行政部門主任',pending_procurement:'待總務採購審核',pending_hr:'待人資',pending_accountant:'待會計',pending_ceo:'待執行長檢視科目',pending_cashier:'待出納放款',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳',pending_countersign:'待指定員工加簽'};
+var SCSS={completed:'b-ok',rejected:'b-rej',cancelled:'b-gray',pending_section_chief:'b-wait',pending_dept_manager:'b-purp',pending_admin_director:'b-wait',pending_procurement:'b-teal',pending_hr:'b-blue',pending_accountant:'b-wait',pending_ceo:'b-wait',pending_cashier:'b-wait',pending_applicant_confirm:'b-blue',pending_voucher:'b-teal',pending_countersign:'b-purp',pending_external_labor_settlement:'b-teal'};
+var SL={completed:'已完成',rejected:'被駁回',cancelled:'已抽單取消',pending_section_chief:'待上一層主管',pending_dept_manager:'待申請人部門主任',pending_admin_director:'待行政部門主任',pending_procurement:'待總務採購審核',pending_hr:'待人資',pending_accountant:'待會計',pending_ceo:'待執行長檢視科目',pending_cashier:'待出納放款',pending_applicant_confirm:'待申請人確認',pending_voucher:'待會計入帳',pending_countersign:'待指定員工加簽',pending_external_labor_settlement:'電子勞報已應計，待實際付款'};
 var RL={employee:'一般組員',section_chief:'課長',dept_manager:'部門主管',admin_director:'行政部門主任',general_affairs:'總務',hr:'人資',accountant:'會計',ceo:'執行長',cashier:'出納',external_audit:'外部檢核單位',board:'董事會',shareholder:'股東'};
 var DEFAULT_PORTAL_ROLES=[
   {id:'external-audit',name:'外部檢核單位',defaultScope:'custom',financeRole:'external_audit'},
@@ -3814,6 +3814,7 @@ async function restoreFinanceAuthRecoveryDraft(){
     if(S.nrType==='refund_request')renderRefundSheet();
     if(S.nrType==='purchase_request')renderPurchaseSheet();
     if(S.nrType==='hr_expense_request')renderHrExpenseSheet();
+    if(laborElectronicSelected())renderLaborElectronicLines();
     if(S.nrType==='travel_request'){renderTravelPeople();renderTravelSheet();}
     if(draft.hadFiles){S.nrDraftFileNotice='登入恢復已保留欄位與明細；未上傳的附件無法從瀏覽器儲存空間復原，請重新選取並核對附件。';renderNRFList();}
     S.nrDirtyBaseline='__auth_recovered_unsaved__';
@@ -12951,6 +12952,7 @@ function allowLegacyClientFlowRepair(){
   return !!(S.demoLogin||!hasSupabase());
 }
 function normalizeRequestSemanticSteps(r){
+  if(r&&r.formPayload&&r.formPayload.electronicLabor&&String(r.formPayload.electronicLabor.version)==='1')return false;
   if(!allowLegacyClientFlowRepair())return false;
   var engine=financeApprovalEngine();
   if(engine&&typeof engine.normalizeRequestSemanticSteps==='function')return engine.normalizeRequestSemanticSteps(r,{
@@ -12962,6 +12964,7 @@ function normalizeRequestSemanticSteps(r){
   return false;
 }
 function ensureRequestCashierStep(r){
+  if(r&&r.formPayload&&r.formPayload.electronicLabor&&String(r.formPayload.electronicLabor.version)==='1')return false;
   if(!allowLegacyClientFlowRepair())return false;
   var engine=financeApprovalEngine();
   if(engine&&typeof engine.ensureRequestCashierStep==='function')return engine.ensureRequestCashierStep(r,{
@@ -12972,6 +12975,7 @@ function ensureRequestCashierStep(r){
   return false;
 }
 function normalizeCeoCashierOrder(r){
+  if(r&&r.formPayload&&r.formPayload.electronicLabor&&String(r.formPayload.electronicLabor.version)==='1')return false;
   if(!allowLegacyClientFlowRepair())return false;
   var engine=financeApprovalEngine();
   if(engine&&typeof engine.normalizeCeoCashierOrder==='function')return engine.normalizeCeoCashierOrder(r,{flowIsTerminal:flowIsTerminal});
@@ -18612,7 +18616,7 @@ function nrTypeCardHtml(t){
     +'<div class="type-copy"><div class="type-title">'+t.n+'</div><div class="type-desc">'+t.d+'</div><div class="type-employee-note">'+requestTypeEmployeeNote(t.id)+'</div></div>'
     +'</button>';
 }
-function buildNR(){S.nrPettyGeneralRows=[];S.nrPettyGeneralReceiptType='';S.nrFileIssues=[];if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();clearExpenseApplicantRevisionMode();S.nrStep=1;S.nrType=null;S.nrRec=null;S.nrPay=null;S.nrFiles=[];S.nrPassbookFile=null;S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;S.lazyRows=[];S.refundRows=[];S.purchaseRows=[];S.hrRows=[];S.hrPeriod='';S.hrLaborPeriod='';S.hrPrivacyMode=false;S.pettyMode='general';S.nrFixedExpense=false;S.lazyBusy=false;S.lazyMode=false;S.nrDraftId='';renderNR();markNRClean();}
+function buildNR(){S.nrPettyGeneralRows=[];S.nrPettyGeneralReceiptType='';S.nrFileIssues=[];if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();clearExpenseApplicantRevisionMode();S.nrStep=1;S.nrType=null;S.nrRec=null;S.nrPay=null;S.nrFiles=[];S.nrPassbookFile=null;S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;S.lazyRows=[];S.refundRows=[];S.purchaseRows=[];S.hrRows=[];S.hrPeriod='';S.hrLaborPeriod='';S.hrPrivacyMode=false;S.nrLaborLines=[];S.nrLaborSignerName='';S.nrLaborInviteEmail='';S.nrLaborPlannedDates=[];S.pettyMode='general';S.nrFixedExpense=false;S.lazyBusy=false;S.lazyMode=false;S.nrDraftId='';renderNR();markNRClean();}
 function renderNR(){
   var c=el('nr-content');if(!c)return;
   if(S.nrStep>3)S.nrStep=3;
@@ -18665,12 +18669,12 @@ function renderNR(){
       +hrHtml
       +'<div class="fg"><label class="fl">申請說明 * （請詳述費用用途）</label><textarea id="nr-desc" rows="3" placeholder="例：2026/05 居服部門薪資" onkeydown="handleTextareaLineDelete(event)">'+(S.nrType==='hr_expense_request'?'2026/05 居服部門薪資':'')+'</textarea></div>'
       +aoHtml;
-    var rightPayHtml=S.nrType==='hr_expense_request'?hrBatchPaymentFieldsHtml():(S.nrType==='purchase_request'?'<div style="font-size:12px;color:#334155;line-height:1.7;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:10px">採購申請由申請人先提出商品項目、數量與商品連結即可。總務會在下一關填寫預估匯款金額、收款人、銀行分行帳號與預計匯款日。</div>':paymentFieldsHtml());
+    var rightPayHtml=S.nrType==='hr_expense_request'?(laborElectronicSelected()?laborElectronicPaymentHtml():hrBatchPaymentFieldsHtml()):(S.nrType==='purchase_request'?'<div style="font-size:12px;color:#334155;line-height:1.7;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:10px">採購申請由申請人先提出商品項目、數量與商品連結即可。總務會在下一關填寫預估匯款金額、收款人、銀行分行帳號與預計匯款日。</div>':paymentFieldsHtml());
     var submitActions=nrSubmitActionsHtml(S.nrType==='travel_request');
     var uploadBackButton=isExpenseApplicantRevisionMode()?'<button class="btn-g" onclick="newReqBack()">← 返回申請單</button>':'<button class="btn-g" onclick="'+((S.nrType==='travel_request'||S.nrType==='hr_expense_request')?'nrBack(1)':'nrBack(2)')+'">← 返回</button>';
     var uploadSectionHtml=S.nrType==='purchase_request'?'':'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span>'+uploadBackButton+'</div><div style="padding:11px"><div class="fr2">'
-        +(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():S.nrType==='travel_request'?travelAttachmentGuideHtml():receiptUploadPanelHtml({ocr:['expense_reimbursement','payment_request','petty_cash_request'].indexOf(S.nrType)>-1,kind:S.nrType==='hr_expense_request'?'payroll':'receipt'}))
-        +(S.nrType==='travel_request'?'':S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A、9B 勞務報酬單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
+        +(laborElectronicSelected()?'<div style="background:#f3fbec;border:1px solid #b8dfaa;border-radius:10px;padding:12px;font-size:12px;color:#1a5010;line-height:1.8">講師身分證明、匯款資料與簽名將由講師在專屬邀請頁提交。此處不需重傳紙本勞務報酬單；其他課程佐證可在核簽時補充。</div>':(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():S.nrType==='travel_request'?travelAttachmentGuideHtml():receiptUploadPanelHtml({ocr:['expense_reimbursement','payment_request','petty_cash_request'].indexOf(S.nrType)>-1,kind:S.nrType==='hr_expense_request'?'payroll':'receipt'})))
+        +(S.nrType==='travel_request'||laborElectronicSelected()?'':S.nrType==='hr_expense_request'?'<div style="background:#fffaf3;border:1px solid #efd7b8;border-radius:10px;padding:10px;min-height:100%"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">附件提醒</div><div style="font-size:11px;color:#8b7358;line-height:1.7">人事費用為整批匯款，不需上傳存摺封面。請在左側上傳薪資表、人事費用支出表；9A、9B 勞務報酬單請一併上傳勞務報酬單。</div></div>':passbookUploadPanelHtml())
       +'</div></div></div>';
     c.innerHTML='<div style="display:flex;flex-direction:column;gap:10px;'+(S.nrType==='hr_expense_request'?'max-width:1180px;margin:0 auto;width:100%;':'')+'">'
       +uploadSectionHtml
@@ -18760,7 +18764,7 @@ function applyCurrentUserDefaults(){
 }
 window.nrT=function(t){
   S.nrPettyGeneralRows=[];S.nrPettyGeneralReceiptType='';S.nrFileIssues=[];
-  S.nrType=t;S.nrRec=null;S.nrPay=null;S.nrPassbookFile=null;S.lazyRows=[];S.refundRows=[];S.purchaseRows=[];S.hrRows=[];S.hrPeriod=t==='hr_expense_request'?todayMonth():'';S.hrLaborPeriod='';S.hrPrivacyMode=t==='hr_expense_request';S.hrItem='salary_50';S.travelFiles={};S.travelPeople=[];S.travelRows=[];S.pettyMode='general';S.lazyBusy=false;
+  S.nrType=t;S.nrRec=null;S.nrPay=null;S.nrPassbookFile=null;S.lazyRows=[];S.refundRows=[];S.purchaseRows=[];S.hrRows=[];S.hrPeriod=t==='hr_expense_request'?todayMonth():'';S.hrLaborPeriod='';S.hrPrivacyMode=t==='hr_expense_request';S.hrItem='salary_50';S.nrLaborLines=[];S.nrLaborSignerName='';S.nrLaborInviteEmail='';S.nrLaborPlannedDates=[];S.travelFiles={};S.travelPeople=[];S.travelRows=[];S.pettyMode='general';S.lazyBusy=false;
   if(isLazyRequestType(t)){
     var def=LAZY_DEFAULTS[t]||LAZY_DEFAULTS.expense_reimbursement;
     S.nrRec=def.rec;S.nrPay=def.pay;S.lazyMode=true;S.nrStep=3;
@@ -18799,6 +18803,7 @@ window.nrHrItem=function(id){
   var item=hrItem();
   S.nrRec=item.rec;
   S.nrPay='bank';
+  if(id==='labor_electronic'&&!(S.nrLaborLines&&S.nrLaborLines.length))S.nrLaborLines=[laborElectronicDefaultLine()];
   if(!(S.hrRows&&S.hrRows.length))S.hrRows=[hrDefaultRow()];
   S.hrRows=S.hrRows.map(function(r){return Object.assign({},r,{'類別':item.label});});
   S.nrStep=3;
@@ -18808,7 +18813,7 @@ window.nrHrItem=function(id){
 window.nrP=function(p){S.nrPay=p;S.nrStep=3;renderNR();};
 window.nrBack=function(n){if(isExpenseApplicantRevisionMode()){newReqBack();return;}S.nrStep=n;renderNR();};
 function draftInputIds(){
-  return ['nr-app','nr-app-id','nr-app-sel','nr-dept','nr-ent','nr-date','nr-fixed-expense','nr-amt','nr-pay-form','nr-fee-bearer','nr-payee','nr-paydate','nr-bank-type','nr-bank-name','nr-bank-branch','nr-bank-no','nr-desc-purpose','nr-desc','tr-days-manual','tr-type','tr-project','tr-reason','tr-outcome','tr-start','tr-end','tr-days','tr-from','tr-to','tr-lodging-yn','tr-lodging-amt','tr-transport-yn','tr-transport-amt','tr-meal-yn','tr-meal-amt','tr-parking-yn','tr-parking-amt','tr-other-yn','tr-other-amt','po-type','po-reason','po-budget','po-urgent','po-asset','po-need-date','po-deposit-date','po-deposit','po-balance','po-bank-code','po-bank-branch','po-bank-account','hr-period','hr-labor-period','hr-bank-type','hr-fee-bearer','petty-mode'];
+  return ['nr-app','nr-app-id','nr-app-sel','nr-dept','nr-ent','nr-date','nr-fixed-expense','nr-amt','nr-pay-form','nr-fee-bearer','nr-payee','nr-paydate','nr-bank-type','nr-bank-name','nr-bank-branch','nr-bank-no','nr-desc-purpose','nr-desc','tr-days-manual','tr-type','tr-project','tr-reason','tr-outcome','tr-start','tr-end','tr-days','tr-from','tr-to','tr-lodging-yn','tr-lodging-amt','tr-transport-yn','tr-transport-amt','tr-meal-yn','tr-meal-amt','tr-parking-yn','tr-parking-amt','tr-other-yn','tr-other-amt','po-type','po-reason','po-budget','po-urgent','po-asset','po-need-date','po-deposit-date','po-deposit','po-bank-code','po-bank-branch','po-bank-account','hr-period','hr-labor-period','hr-bank-type','hr-fee-bearer','labor-signer-name','labor-invite-email','labor-plan-1','labor-plan-2','labor-plan-3','petty-mode'];
 }
 function draftOwnerKey(){
   if(!S.user)return'guest';
@@ -19050,7 +19055,7 @@ async function serializeDraftFiles(recordNo){
 function collectNRFormState(){
   var fields={};
   draftInputIds().forEach(function(id){var e=el(id);if(e)fields[id]=e.value;});
-  return {fields:fields,nrPettyGeneralRows:S.nrPettyGeneralRows||[],nrPettyGeneralReceiptType:S.nrPettyGeneralReceiptType||'',lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'salary_50',hrPeriod:normalizeHrMonthStrict(fields['hr-period'])||S.hrPeriod||'',hrLaborPeriod:fields['hr-labor-period']||S.hrLaborPeriod||'',hrPrivacyMode:!!S.hrPrivacyMode,pettyMode:S.pettyMode||((el('petty-mode')||{}).value)||'general',travelFiles:S.travelFiles||{},travelPeople:S.travelPeople||[],travelRows:S.travelRows||[]};
+  return {fields:fields,nrPettyGeneralRows:S.nrPettyGeneralRows||[],nrPettyGeneralReceiptType:S.nrPettyGeneralReceiptType||'',lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'salary_50',hrPeriod:normalizeHrMonthStrict(fields['hr-period'])||S.hrPeriod||'',hrLaborPeriod:fields['hr-labor-period']||S.hrLaborPeriod||'',hrPrivacyMode:!!S.hrPrivacyMode,nrLaborLines:S.nrLaborLines||[],nrLaborSignerName:fields['labor-signer-name']||S.nrLaborSignerName||'',nrLaborInviteEmail:fields['labor-invite-email']||S.nrLaborInviteEmail||'',nrLaborPlannedDates:[fields['labor-plan-1'],fields['labor-plan-2'],fields['labor-plan-3']],pettyMode:S.pettyMode||((el('petty-mode')||{}).value)||'general',travelFiles:S.travelFiles||{},travelPeople:S.travelPeople||[],travelRows:S.travelRows||[]};
 }
 function applyNRFormState(state,opts){
   state=state||{};
@@ -19069,6 +19074,10 @@ function applyNRFormState(state,opts){
   if(state.hrPeriod||state.fields&&state.fields['hr-period'])S.hrPeriod=normalizeHrMonthStrict(state.hrPeriod||state.fields['hr-period'])||S.hrPeriod;
   if(state.hrLaborPeriod||state.fields&&state.fields['hr-labor-period'])S.hrLaborPeriod=state.hrLaborPeriod||state.fields['hr-labor-period']||'';
   if(state.hrRows){S.hrRows=state.hrRows;S.hrPrivacyMode=!!state.hrPrivacyMode||S.hrRows.some(function(r){return r&&r.__privacyMode;});renderHrExpenseSheet();}
+  if(Array.isArray(state.nrLaborLines)){S.nrLaborLines=state.nrLaborLines;renderLaborElectronicLines();}
+  if(Object.prototype.hasOwnProperty.call(state,'nrLaborSignerName'))S.nrLaborSignerName=state.nrLaborSignerName||'';
+  if(Object.prototype.hasOwnProperty.call(state,'nrLaborInviteEmail'))S.nrLaborInviteEmail=state.nrLaborInviteEmail||'';
+  if(Array.isArray(state.nrLaborPlannedDates))S.nrLaborPlannedDates=state.nrLaborPlannedDates;
   if(state.pettyMode){S.pettyMode=state.pettyMode;var pm=el('petty-mode');if(pm)pm.value=S.pettyMode;}
   if(state.travelFiles)S.travelFiles=state.travelFiles;
   if(state.travelPeople)S.travelPeople=state.travelPeople;
@@ -20816,6 +20825,10 @@ window.passbookFileChange=async function(inp){
 };
 function collectPaymentInfo(){
   if(S.nrType==='hr_expense_request'){
+    if(laborElectronicSelected()){
+      var planned=laborElectronicPlannedDates(hrSelectedPeriod());
+      return{payee:'講師電子勞報（待簽署及覆核）',bankType:'',bankName:'',bankBranch:'',bankNo:'',expectedPayDate:planned[0]||'',feeBearer:'',bankFeeAmount:0,summary:'只記錄預計付款日 '+planned.join('、')+'；不得視為已付或據此自動入帳'};
+    }
     var hrPayDate=((el('nr-paydate')||{}).value||'').trim();
     var hrBankType=hrBankTypeValue();
     var hrFeeBearer=hrFeeBearerValue();
@@ -21753,6 +21766,7 @@ var HR_ITEMS=[
   {id:'bonus',label:'獎金',hint:'績效、開案或專案獎金',rec:'form'},
   {id:'labor_fee_9a',label:'9A勞務報酬單',hint:'接案人員 9A 勞務報酬',rec:'form2'},
   {id:'labor_fee_9b',label:'9B勞務報酬單',hint:'接案人員 9B 勞務報酬',rec:'form2'},
+  {id:'labor_electronic',label:'電子勞務報酬單',hint:'講師每月一份，可列多堂課；由講師自行填資料與簽名',rec:'form2'},
   {id:'labor_insurance',label:'勞保',hint:'勞保、職保費用',rec:'form'},
   {id:'health_insurance',label:'健保',hint:'健保費與眷屬加保',rec:'form'},
   {id:'labor_pension',label:'勞退',hint:'勞退提繳與自願提繳',rec:'form'},
@@ -22032,6 +22046,7 @@ function hrAccountingMap(itemId,dc,eid){
     labor_fee_9a:{dr:'6221',drN:'勞務費',cr:'2131',crN:'應付費用'},
     labor_fee_9b:{dr:'6221',drN:'勞務費',cr:'2131',crN:'應付費用'},
     labor_fee_9a9b:{dr:'6221',drN:'勞務費',cr:'2131',crN:'應付費用'},
+    labor_electronic:{dr:'6221',drN:'勞務費（待會計逐項分類）',cr:'2131',crN:'應付費用'},
     labor_insurance:{dr:'6102',drN:'行政勞健保',cr:'2122',crN:'應付勞健保'},
     health_insurance:{dr:'6102',drN:'行政勞健保',cr:'2122',crN:'應付勞健保'},
     labor_pension:{dr:'6103',drN:'行政勞退',cr:'2123',crN:'應付勞退'},
@@ -22049,7 +22064,7 @@ function hrAccountingMap(itemId,dc,eid){
     severance_termination:{dr:'6105',drN:'資遣費及離職給付',cr:'2121',crN:'應付薪資'},
     hr_other:{dr:'5299',drN:'其他直接成本',cr:'2131',crN:'應付費用'}
   };
-  if(isLaborHrItem(itemId)){
+  if(isLaborHrItem(itemId)||itemId==='labor_electronic'){
     var labor=hrLaborFeeAccountForDept(dc,eid);
     if(labor)return labor;
   }
@@ -22129,10 +22144,84 @@ function hrRowGrossAmount(r){
   return hrRowAmount(r)+num(r&&r['扣繳稅額'])+num(r&&r['補充保費'])+num(r&&r['員工勞保自付'])+num(r&&r['員工健保自付'])+num(r&&r['員工勞退自提']);
 }
 function hrSum(){return (S.hrRows||[]).reduce(function(s,r){return s+hrRowAmount(r);},0);}
+function laborElectronicSelected(){return S.nrType==='hr_expense_request'&&S.hrItem==='labor_electronic';}
+function laborElectronicDefaultLine(){
+  return {id:membershipOrgDraftUuid(),courseRef:'',courseType:'',description:'',serviceDate:'',departmentCode:(el('nr-dept')||{}).value||(S.user&&S.user.dc)||'',grossValue:''};
+}
+function laborElectronicCents(value){
+  var input=String(value==null?'':value).trim().replace(/,/g,'');
+  if(!/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/.test(input))return null;
+  var parts=input.split('.'),cents=Number(parts[0])*100+Number((parts[1]||'').padEnd(2,'0'));
+  return Number.isSafeInteger(cents)&&cents>0?cents:null;
+}
+function laborElectronicAmountText(cents){return (cents/100).toFixed(2);}
+function laborElectronicDefaultDates(period){
+  var next=addMonthsToHrMonth(period,1)||todayMonth();
+  return [next+'-15',next+'-16',next+'-17'];
+}
+function laborElectronicPlannedDates(period){
+  var defaults=laborElectronicDefaultDates(period),dates=[0,1,2].map(function(i){var field=el('labor-plan-'+(i+1));return String((field&&field.value)||(S.nrLaborPlannedDates||[])[i]||defaults[i]).trim();});
+  S.nrLaborPlannedDates=dates;
+  return dates;
+}
+function laborElectronicDateValid(value){
+  var date=String(value||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return false;
+  var parsed=new Date(date+'T12:00:00Z');return !Number.isNaN(parsed.getTime())&&parsed.toISOString().slice(0,10)===date;
+}
+function laborElectronicPaymentHtml(){
+  var dates=(S.nrLaborPlannedDates&&S.nrLaborPlannedDates.length===3?S.nrLaborPlannedDates:laborElectronicDefaultDates(hrSelectedPeriod()));
+  return'<div class="labor-payment-plan"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:8px">預計付款安排</div>'
+    +'<p style="font-size:11px;color:#6a5840;line-height:1.7">以下只是預計日期，不會自動扣稅、撥款或入帳。實際付款須待講師簽名、會計覆核、另一位授權人確認應計，再以銀行對帳證據逐筆登錄。</p>'
+    +dates.map(function(date,i){return'<div class="fg"><label class="fl" for="labor-plan-'+(i+1)+'">第 '+(i+1)+' 次預計付款日</label><input type="date" id="labor-plan-'+(i+1)+'" value="'+escAttr(date)+'" oninput="laborElectronicPlanChanged()"></div>';}).join('')
+    +'<div style="font-size:11px;color:#8a4b0f;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:10px">實付金額、代扣所得稅與補充保費由會計依適用規定逐筆核定；此申請只記錄課程毛額。</div></div>';
+}
+window.laborElectronicPlanChanged=function(){S.nrLaborPlannedDates=[0,1,2].map(function(i){return String((el('labor-plan-'+(i+1))||{}).value||'');});};
+function laborElectronicFieldsHtml(opts){
+  var signer=String((el('labor-signer-name')||{}).value||S.nrLaborSignerName||''),email=String((el('labor-invite-email')||{}).value||S.nrLaborInviteEmail||'');
+  return'<div class="card" style="background:#f3fbec;border-color:#b8dfaa;margin-bottom:9px"><div class="chd"><span class="cht">電子勞務報酬單 · 一位講師一個月份</span></div><div style="padding:12px">'
+    +'<div class="fg"><label class="fl" for="hr-item-select">人事支出項目 *</label><select id="hr-item-select" onchange="hrSetItem(this.value)">'+opts+'</select></div>'
+    +'<div class="fr2"><div class="fg"><label class="fl" for="hr-period">服務月份 *</label><input type="month" id="hr-period" value="'+escAttr(hrSelectedPeriod())+'" oninput="hrPeriodChanged(this.value)"></div><div class="fg"><label class="fl" for="labor-signer-name">講師姓名 *</label><input id="labor-signer-name" maxlength="120" autocomplete="name" value="'+escAttr(signer)+'" oninput="S.nrLaborSignerName=this.value" placeholder="與講師證件相符"></div></div>'
+    +'<div class="fg"><label class="fl" for="labor-invite-email">講師邀請 Email *</label><input type="email" id="labor-invite-email" maxlength="254" autocomplete="email" value="'+escAttr(email)+'" oninput="S.nrLaborInviteEmail=this.value" placeholder="供會計核對邀請對象"></div>'
+    +'<p style="font-size:11px;color:#1a5010;line-height:1.7;margin:6px 0 0">請在下方列出同一法人、同一月份的各堂課。每堂課只填毛額；所得類別 50／9A／9B、會計科目與扣繳由會計依事實覆核。送件後會計建立專屬邀請，講師自行提交身分、銀行佐證與簽名。</p></div></div>';
+}
+function laborElectronicSideHtml(){
+  return'<div class="card" style="width:100%;margin-top:10px"><div class="chd"><span class="cht">課程與毛額明細</span><button class="btn-g" type="button" onclick="laborElectronicAddLine()">新增一堂課</button></div><div style="padding:11px">'
+    +'<style>.labor-line-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.labor-line-card{border:1px solid #e5d3b6;border-radius:10px;background:#fff;padding:12px;margin-bottom:9px}.labor-line-card .fg{min-width:0}.labor-line-card input,.labor-line-card select{max-width:100%}@media(max-width:700px){.labor-line-grid{grid-template-columns:1fr}.labor-line-card{padding:10px}}</style>'
+    +'<div id="labor-electronic-lines" aria-live="polite"></div><div style="text-align:right;font-size:13px;color:#334155">申請毛額合計 <strong id="labor-electronic-total">NT$0.00</strong></div></div></div>';
+}
+function renderLaborElectronicLines(){
+  var box=el('labor-electronic-lines');if(!box)return;
+  if(!(S.nrLaborLines&&S.nrLaborLines.length))S.nrLaborLines=[laborElectronicDefaultLine()];
+  var requestEntity=(el('nr-ent')||{}).value||currentUserEntityId();
+  var depts=applicantDeptSelectRows('',requestEntity);
+  box.innerHTML=S.nrLaborLines.map(function(line,i){
+    var opts='<option value="">選擇支出部門</option>'+depts.map(function(d){return'<option value="'+escAttr(d.c)+'" '+(String(line.departmentCode||'')===String(d.c)?'selected':'')+'>'+escAttr(d.c+' '+d.n)+'</option>';}).join('');
+    var field=function(label,key,type,placeholder){return'<div class="fg"><label class="fl" for="labor-line-'+i+'-'+key+'">'+label+'</label><input id="labor-line-'+i+'-'+key+'" type="'+type+'" value="'+escAttr(line[key]||'')+'" placeholder="'+escAttr(placeholder||'')+'" oninput="laborElectronicEdit('+i+',\''+key+'\',this.value)"></div>';};
+    return'<div class="labor-line-card"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px"><strong style="font-size:12px">第 '+(i+1)+' 堂課</strong><button type="button" class="btn-g" onclick="laborElectronicDeleteLine('+i+')" aria-label="刪除第 '+(i+1)+' 堂課">刪除</button></div><div class="labor-line-grid">'
+      +field('課程編號／期別 *','courseRef','text','例：2026-09-教學01')
+      +field('課程類型 *','courseType','text','例：職能治療、照服課程')
+      +field('課程名稱與服務內容 *','description','text','簡述實際授課')
+      +field('服務日期 *','serviceDate','date','')
+      +'<div class="fg"><label class="fl" for="labor-line-'+i+'-departmentCode">支出部門 *</label><select id="labor-line-'+i+'-departmentCode" onchange="laborElectronicEdit('+i+',\'departmentCode\',this.value)">'+opts+'</select></div>'
+      +field('講師酬勞毛額（元）*','grossValue','text','例：2500.00')
+      +'</div></div>';
+  }).join('');
+  laborElectronicUpdateTotal();
+}
+function laborElectronicUpdateTotal(){
+  var cents=(S.nrLaborLines||[]).reduce(function(sum,line){return sum+(laborElectronicCents(line.grossValue)||0);},0);
+  var total=el('labor-electronic-total'),amount=el('nr-amt');
+  if(total)total.textContent='NT$'+laborElectronicAmountText(cents);
+  if(amount)amount.value=cents?laborElectronicAmountText(cents):'';
+}
+window.laborElectronicEdit=function(i,key,value){if(!S.nrLaborLines||!S.nrLaborLines[i]||['courseRef','courseType','description','serviceDate','departmentCode','grossValue'].indexOf(key)<0)return;S.nrLaborLines[i][key]=String(value||'');laborElectronicUpdateTotal();};
+window.laborElectronicAddLine=function(){if(!Array.isArray(S.nrLaborLines))S.nrLaborLines=[];S.nrLaborLines.push(laborElectronicDefaultLine());renderLaborElectronicLines();};
+window.laborElectronicDeleteLine=function(i){if(!S.nrLaborLines||S.nrLaborLines.length<=1)return;S.nrLaborLines.splice(i,1);renderLaborElectronicLines();};
 function hrExpenseFieldsHtml(){
   if(!S.hrItem||!HR_ITEMS.some(function(x){return x.id===S.hrItem;}))S.hrItem='salary_50';
   if(!S.hrRows.length)S.hrRows=[hrDefaultRow()];
   var opts=HR_ITEMS.map(function(x,i){return'<option value="'+x.id+'" '+(S.hrItem===x.id?'selected':'')+'>'+(i+1)+'. '+x.label+' - '+(x.hint||'整批人事費用明細')+'</option>';}).join('');
+  if(laborElectronicSelected())return laborElectronicFieldsHtml(opts);
   var item=hrItem();
   var contractorHint=isLaborHrItem(item.id)?'<div style="font-size:11px;color:#8a1010;background:#fde8e8;border:1px solid #f0b0b0;border-radius:8px;padding:8px;margin-bottom:8px">建議流程：先在 2-1 上傳 9A 或 9B 勞務報酬單，再按 OPENAI 分析；系統會嘗試回填姓名、銀行、分行、帳號、匯款金額與 9A/9B 類別，送出前請逐列確認。</div>':'<div style="font-size:11px;color:#8b7358;background:#fff;border:1px solid #f0e0c8;border-radius:8px;padding:8px;margin-bottom:8px">建議流程：先在 2-1 上傳人事費用支出表或薪資表並按 OPENAI 分析，再確認 2-2 明細表。9A、9B 勞務報酬單才需要附勞務報酬單。</div>';
   return'<div class="card" style="background:#fffaf3;border-color:#efd7b8;margin-bottom:9px"><div class="chd"><span class="cht">人事費用申請資料</span></div><div style="padding:11px">'
@@ -22142,6 +22231,7 @@ function hrExpenseFieldsHtml(){
     +'</div></div>';
 }
 function hrExpenseSideHtml(){
+  if(laborElectronicSelected())return laborElectronicSideHtml();
   var visibleCols=hrTransferVisibleLabelList();
   return'<div style="margin-top:10px">'+
     '<div class="card" style="width:100%"><div class="chd"><span class="cht">2-2. 即時 Excel 明細表</span><div style="display:flex;gap:5px"><button class="btn-g" onclick="hrAdd()">新增列</button><button class="btn-g" onclick="hrApplySummary()">回填金額</button></div></div><div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:8px">此表固定為 104 匯款清冊格式，只保留：'+escAttr(visibleCols)+'。序位由系統自動從 1 編號；公司、部門與申請人由表單自動帶入。</div><div id="hr-expense-sheet"></div></div></div>'
@@ -22228,6 +22318,31 @@ window.hrAdd=function(){S.hrRows.push(hrDefaultRow());renderHrExpenseSheet();};
 window.hrDel=function(i){S.hrRows.splice(i,1);if(!S.hrRows.length)S.hrRows=[hrDefaultRow()];renderHrExpenseSheet();applyHrSummary(false);};
 function collectHrExpenseInfo(){
   var item=hrItem(),get=function(id){return ((el(id)||{}).value||'').trim();};
+  if(laborElectronicSelected()){
+    var period=hrSelectedPeriod(),signerName=get('labor-signer-name')||String(S.nrLaborSignerName||'').trim(),inviteEmail=(get('labor-invite-email')||String(S.nrLaborInviteEmail||'')).trim().toLowerCase();
+    var plannedDates=laborElectronicPlannedDates(period),digitalMissing=[],totalCents=0;
+    if(!signerName)digitalMissing.push('請填寫講師姓名');
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)||inviteEmail.length>254)digitalMissing.push('請填寫有效的講師邀請 Email');
+    if(!/^\d{4}-\d{2}$/.test(period))digitalMissing.push('請選擇服務月份');
+    if(!(S.nrLaborLines&&S.nrLaborLines.length))digitalMissing.push('請至少填一堂課');
+    var serviceLines=(S.nrLaborLines||[]).map(function(line,i){
+      var index='第 '+(i+1)+' 堂課',cents=laborElectronicCents(line.grossValue);
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(line.id||'')))digitalMissing.push(index+'識別碼無效，請重新新增該課程');
+      if(!String(line.courseRef||'').trim())digitalMissing.push(index+'課程編號／期別');
+      if(!String(line.courseType||'').trim())digitalMissing.push(index+'課程類型');
+      if(!String(line.description||'').trim())digitalMissing.push(index+'課程名稱與服務內容');
+      if(!laborElectronicDateValid(line.serviceDate)||String(line.serviceDate).slice(0,7)!==period)digitalMissing.push(index+'服務日期須在服務月份內');
+      if(!String(line.departmentCode||'').trim())digitalMissing.push(index+'支出部門');
+      else if(!normalizeRequestEntityDept((el('nr-ent')||{}).value||currentUserEntityId(),line.departmentCode).ok)digitalMissing.push(index+'支出部門不屬於本次支出法人或目前無權限');
+      if(cents===null)digitalMissing.push(index+'毛額須為大於 0 且最多兩位小數的金額');
+      else totalCents+=cents;
+      return{id:String(line.id||''),courseRef:String(line.courseRef||'').trim(),courseType:String(line.courseType||'').trim(),description:String(line.description||'').trim(),serviceDate:String(line.serviceDate||''),departmentCode:String(line.departmentCode||'').trim(),grossCents:cents||0};
+    });
+    if(!Number.isSafeInteger(totalCents)||totalCents<=0||totalCents>99999999999999)digitalMissing.push('講師酬勞毛額合計須大於 0，且不得超過資料庫金額上限');
+    if(plannedDates.length!==3||plannedDates.some(function(date){return !laborElectronicDateValid(date);})||new Set(plannedDates).size!==3||plannedDates.slice().sort().join('|')!==plannedDates.join('|'))digitalMissing.push('三次預計付款日須為不同日期，並依先後順序填寫');
+    S.nrLaborSignerName=signerName;S.nrLaborInviteEmail=inviteEmail;
+    return{item:item,digital:true,rows:[],serviceLines:serviceLines,total:totalCents/100,totalGrossCents:totalCents,cashTotal:0,paymentTotal:0,transferFeeTotal:0,missing:digitalMissing,period:period,signerName:signerName,inviteEmail:inviteEmail,plannedPaymentDates:plannedDates,summary:['電子勞務報酬單：'+signerName,'服務月份：'+period,'課程：'+serviceLines.length+' 堂','申請毛額：NT$'+laborElectronicAmountText(totalCents),'講師簽署及會計逐項覆核前，不得付款或入帳。'].join('\n')};
+  }
   var selectedPeriod=hrSelectedPeriod();
   var selectedLaborPeriod=hrSelectedLaborPeriod();
   S.hrMissingCells={};
@@ -22267,11 +22382,11 @@ function collectHrExpenseInfo(){
 }
 function applyHrSummary(writeDesc){
   var info=collectHrExpenseInfo(),amt=el('nr-amt');
-  if(amt)amt.value=Math.round(info.total);
+  if(amt)amt.value=info.digital?laborElectronicAmountText(info.totalGrossCents):Math.round(info.total);
   updateNRRouteHealth();
   if(writeDesc!==false){
     var desc=el('nr-desc');
-    if(desc&&!desc.value)desc.value='人事費用申請：'+info.item.label+'，詳見人事費用明細表';
+    if(desc&&!desc.value)desc.value=info.digital?'電子勞務報酬：'+info.signerName+'，'+info.serviceLines.length+' 堂課':'人事費用申請：'+info.item.label+'，詳見人事費用明細表';
   }
 }
 window.hrApplySummary=function(){applyHrSummary(true);};
@@ -23051,6 +23166,12 @@ async function submitExpenseApplicantRevisionFromForm(ctx){
   var record=expenseApplicantRevisionCurrentRecord();
   var guard=expenseApplicantRevisionGuard(record);
   if(!guard.ok){alert(guard.error);return false;}
+  if(laborElectronicMarker(record)){
+    var laborEntry=laborElectronicCached(record);
+    if(!ctx.hrInfo||!ctx.hrInfo.digital||!laborElectronicUninvited(laborEntry)){
+      alert('電子勞報只有建立邀請前可以修改課程與毛額；請先讀取進度。邀請建立後需撤銷並重建申請，不可覆寫簽署來源。');openDetail(record.id);return false;
+    }
+  }
   var confirmed=await showSubmitConfirm({
     revision:true,typeLabel:record.tL||requestTypeLabel(record.type),app:record.app,entity:(gE(record.eid)||{}).full||record.eid,
     department:record.dc+' '+((gD(record.dc)||{}).n||''),amount:ctx.amount,isFixedExpense:ctx.isFixedExpense,desc:ctx.description,
@@ -23065,8 +23186,9 @@ async function submitExpenseApplicantRevisionFromForm(ctx){
     requestPurpose:ctx.purpose,requestNote:ctx.note,
     receiptType:S.nrRec||'',paymentType:S.nrPay||'bank',isFixedExpense:ctx.isFixedExpense,is_fixed_expense:ctx.isFixedExpense,
     lazyRows:cloneSettingValue(S.lazyRows||[]),refundRows:cloneSettingValue(S.refundRows||[]),purchaseRows:cloneSettingValue(S.purchaseRows||[]),
-    hrRows:cloneSettingValue(S.hrRows||[]),hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:delta.passbookFiles.map(function(file){return cloneSettingValue(file);}),
-    travelInfo:ctx.travelInfo||null,refundInfo:ctx.refundInfo||null,purchaseInfo:ctx.purchaseInfo||null,hrInfo:ctx.hrInfo||null
+    hrRows:ctx.hrInfo&&ctx.hrInfo.digital?[]:cloneSettingValue(S.hrRows||[]),hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:delta.passbookFiles.map(function(file){return cloneSettingValue(file);}),
+    travelInfo:ctx.travelInfo||null,refundInfo:ctx.refundInfo||null,purchaseInfo:ctx.purchaseInfo||null,hrInfo:ctx.hrInfo&&ctx.hrInfo.digital?{digital:true,item:ctx.hrInfo.item,period:ctx.hrInfo.period,totalGrossCents:ctx.hrInfo.totalGrossCents,serviceLines:ctx.hrInfo.serviceLines,plannedPaymentDates:ctx.hrInfo.plannedPaymentDates,summary:ctx.hrInfo.summary}:(ctx.hrInfo||null),
+    electronicLabor:ctx.hrInfo&&ctx.hrInfo.digital?{version:1,status:'pending_invite',signerName:ctx.hrInfo.signerName,inviteEmail:ctx.hrInfo.inviteEmail,period:ctx.hrInfo.period,plannedPaymentDates:ctx.hrInfo.plannedPaymentDates,totalGrossCents:ctx.hrInfo.totalGrossCents,serviceLines:ctx.hrInfo.serviceLines}:null
   };
   var patch={
     amount:ctx.amount,description:ctx.description,payee:ctx.payment.payee||'',bank_type:ctx.payment.bankType||'',bank_name:ctx.payment.bankName||'',
@@ -23222,10 +23344,10 @@ window.submitNR=async function(){
   if(S.nrType==='hr_expense_request'){
     hrInfo=collectHrExpenseInfo();
     if(hrInfo.missing.length)renderHrExpenseSheet();
-    hrInfo.missing.forEach(function(message){issue(message,nrDetailValidationTarget('hr',message)||'hr-sheet');});
+    hrInfo.missing.forEach(function(message){issue(message,hrInfo.digital?'nr-content':(nrDetailValidationTarget('hr',message)||'hr-sheet'));});
     S.nrRec=hrInfo.item.rec;
     amt=hrInfo.total;
-    if(el('nr-amt'))el('nr-amt').value=Math.round(amt);
+    if(el('nr-amt'))el('nr-amt').value=hrInfo.digital?laborElectronicAmountText(hrInfo.totalGrossCents):Math.round(amt);
     desc=(note?note+'\n\n':'')+hrInfo.summary;
   }
   var pay=collectPaymentInfo();
@@ -23258,7 +23380,7 @@ window.submitNR=async function(){
     {key:'purpose',value:purpose||note,label:formFieldLabel('expense_request','purpose','申請原因')},
     {key:'note',value:note,label:formFieldLabel('expense_request','note','備註內容')},
     {key:'amount',value:S.nrType==='purchase_request'?'採購需求階段':(amt?String(amt):''),label:formFieldLabel('expense_request','amount','總金額')},
-    {key:'attachments',value:(S.nrFiles||[]).length?String(S.nrFiles.length):'',label:formFieldLabel('expense_request','attachments','附件')}
+    {key:'attachments',value:hrInfo&&hrInfo.digital?'講師電子簽署待取得':((S.nrFiles||[]).length?String(S.nrFiles.length):''),label:formFieldLabel('expense_request','attachments','附件')}
   ]);
   var fieldTargets={entity:'nr-ent',applicant:'nr-app',department:'nr-dept',date:'nr-date',purpose:el('nr-desc-purpose')?'nr-desc-purpose':'nr-desc',note:'nr-desc',amount:'nr-amt',attachments:'nr-dz'};
   expenseMissing.forEach(function(label){var key=Object.keys(fieldTargets).find(function(key){return formFieldLabel('expense_request',key,{entity:'支出法人',applicant:'申請人',department:'組別 / 部門',date:'表單填寫日期',purpose:'申請原因',note:'備註內容',amount:'總金額',attachments:'附件'}[key])===label;});issue('請填寫'+label,fieldTargets[key]);});
@@ -23367,7 +23489,7 @@ window.submitNR=async function(){
     nextStep:requestNextStepLabel(nextStep)
   });
   if(!confirmed)return;
-  var p1=await p1SubmissionPreflight('expense',{label:tL,steps:steps,hasAttachments:!!(S.nrFiles.length||S.nrPassbookFile)});
+  var p1=await p1SubmissionPreflight('expense',{label:tL,steps:steps,hasAttachments:!!(S.nrFiles.length||S.nrPassbookFile||(hrInfo&&hrInfo.digital))});
   if(!p1.ok)return;
   feedbackStarted=true;
   showActionFeedback('正在送出簽核','系統正在上傳附件與建立申請單，請不要重複點擊。');
@@ -23411,10 +23533,13 @@ window.submitNR=async function(){
       var purchaseBundle=await withOperationTimeout(receiptBundleAttachment(prepared,{no:targetNo,typeLabel:tL,app:appName}),'採購附件 PDF 彙整',30000);
       if(purchaseBundle)prepared.unshift(purchaseBundle);
       prepared.unshift(purchaseExcelAttachment(purchaseInfo,{no:targetNo,app:appName,entity:ent.full||ent.s,department:dc+' '+dept.n}));
-    }else if(S.nrType==='hr_expense_request'){
+    }else if(S.nrType==='hr_expense_request'&&!(hrInfo&&hrInfo.digital)){
       var hrBundle=await withOperationTimeout(receiptBundleAttachment(prepared,{no:targetNo,typeLabel:tL,app:appName}),'人事附件 PDF 彙整',30000);
       if(hrBundle)prepared.unshift(hrBundle);
       prepared.unshift(hrExpenseExcelAttachment(hrInfo,{no:targetNo,app:appName,entity:ent.full||ent.s,department:dc+' '+dept.n}));
+    }else if(S.nrType==='hr_expense_request'&&hrInfo&&hrInfo.digital){
+      // The signed source is collected once through the lecturer link, after submission.
+      // Course evidence explicitly uploaded by staff remains attached to the parent request.
     }else{
       var lazyFile=lazyCsvAttachment();
       if(lazyFile)prepared.push(lazyFile);
@@ -23451,7 +23576,7 @@ window.submitNR=async function(){
   }
   uploadCount=attachments.length+passbookAttachments.length;
   var bankFeeAmount=requestBankFeeAmount({eid:eid,dc:dc,bankType:pay.bankType,bankName:pay.bankName,bankAcc:bank,feeBearer:pay.feeBearer});
-  if(S.nrType==='hr_expense_request'&&hrInfo)bankFeeAmount=num(hrInfo.transferFeeTotal);
+  if(S.nrType==='hr_expense_request'&&hrInfo)bankFeeAmount=hrInfo.digital?0:num(hrInfo.transferFeeTotal);
   var applicantProfile=applicantProfileData();
   var newReq={id:submissionContext.requestId,no:no,eid:eid,dc:dc,app:appName,applicantId:appUser.id||applicantProfile.id||'',applicantEmail:appUser.email||applicantProfile.email||'',type:S.nrType,tL:tL,amt:amt,desc:desc,
     payee:pay.payee,bankName:pay.bankName,bankBranch:pay.bankBranch,bankNo:pay.bankNo,expectedPayDate:pay.expectedPayDate?pay.expectedPayDate.replace(/-/g,'/'):'',
@@ -23461,7 +23586,7 @@ window.submitNR=async function(){
     passbookFiles:passbookAttachments,
     steps:steps,voucherId:'',
     dataEnv:activeDataEnvironment(),
-    formPayload:{submissionAttemptId:submissionContext.attemptId,submissionStartedAt:submissionContext.startedAt,clientReleaseContract:currentFinanceReleaseContract(),applicantProfile:applicantProfile,expenseEntity:eid,expenseDepartment:dc,dataEnvironment:activeDataEnvironment(),requestPurpose:purpose,requestNote:note,receiptType:S.nrRec||'',paymentType:S.nrPay||'',isFixedExpense:isFixedExpense,is_fixed_expense:isFixedExpense,lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:S.hrRows||[],hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:passbookAttachments,travelInfo:travelInfo||null,refundInfo:refundInfo||null,purchaseInfo:purchaseInfo||null,hrInfo:hrInfo||null,accountingManualDefaults:accountingResolution.manualDefaults||null}};
+    formPayload:{submissionAttemptId:submissionContext.attemptId,submissionStartedAt:submissionContext.startedAt,clientReleaseContract:currentFinanceReleaseContract(),applicantProfile:applicantProfile,expenseEntity:eid,expenseDepartment:dc,dataEnvironment:activeDataEnvironment(),requestPurpose:purpose,requestNote:note,receiptType:S.nrRec||'',paymentType:S.nrPay||'',isFixedExpense:isFixedExpense,is_fixed_expense:isFixedExpense,lazyRows:S.lazyRows||[],refundRows:S.refundRows||[],purchaseRows:S.purchaseRows||[],hrRows:hrInfo&&hrInfo.digital?[]:(S.hrRows||[]),hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:passbookAttachments,travelInfo:travelInfo||null,refundInfo:refundInfo||null,purchaseInfo:purchaseInfo||null,hrInfo:hrInfo&&hrInfo.digital?{digital:true,item:hrInfo.item,period:hrInfo.period,totalGrossCents:hrInfo.totalGrossCents,serviceLines:hrInfo.serviceLines,plannedPaymentDates:hrInfo.plannedPaymentDates,summary:hrInfo.summary}:(hrInfo||null),electronicLabor:hrInfo&&hrInfo.digital?{version:1,status:'pending_invite',signerName:hrInfo.signerName,inviteEmail:hrInfo.inviteEmail,period:hrInfo.period,plannedPaymentDates:hrInfo.plannedPaymentDates,totalGrossCents:hrInfo.totalGrossCents,serviceLines:hrInfo.serviceLines}:null,accountingManualDefaults:accountingResolution.manualDefaults||null}};
   if(S.nrType==='petty_cash_request'){
     normalizePettyAccounting(newReq);
     newReq.formPayload=Object.assign({},newReq.formPayload||{},{
@@ -23723,6 +23848,7 @@ function requestRejectReason(r){
 }
 function rejectedRequestDraftState(r){
   var fp=(r&&r.formPayload)||{};
+  var labor=fp.electronicLabor||{};
   var fields={
     'nr-app':r.app||'',
     'nr-ent':r.eid||currentUserEntityId(),
@@ -23740,10 +23866,15 @@ function rejectedRequestDraftState(r){
     'nr-desc-purpose':requestPurposeText(r)==='—'?'':requestPurposeText(r),
     'nr-desc':String(r.desc||'')+'\n\n原駁回單：'+(r.no||r.id||'')+'，請依駁回原因修正後重新送出。'
   };
-  return {fields:fields,lazyRows:fp.lazyRows||[],refundRows:fp.refundRows||[],purchaseRows:fp.purchaseRows||[],hrRows:fp.hrRows||[],hrItem:fp.hrItem||'',hrPrivacyMode:(fp.hrRows||[]).some(function(x){return x&&x.__privacyMode;}),pettyMode:fp.pettyMode||'',travelInfo:fp.travelInfo||null,travelRows:(fp.travelInfo&&fp.travelInfo.rows)||[],travelPeople:(fp.travelInfo&&fp.travelInfo.people)||[]};
+  if(String(labor.version)==='1'){
+    fields['labor-signer-name']=labor.signerName||'';fields['labor-invite-email']=labor.inviteEmail||'';fields['hr-period']=labor.period||'';
+    (labor.plannedPaymentDates||[]).forEach(function(date,i){if(i<3)fields['labor-plan-'+(i+1)]=date;});
+  }
+  return {fields:fields,lazyRows:fp.lazyRows||[],refundRows:fp.refundRows||[],purchaseRows:fp.purchaseRows||[],hrRows:fp.hrRows||[],hrItem:fp.hrItem||'',hrPrivacyMode:(fp.hrRows||[]).some(function(x){return x&&x.__privacyMode;}),nrLaborLines:String(labor.version)==='1'?(labor.serviceLines||[]).map(function(line){return Object.assign({},line,{grossValue:laborElectronicAmountText(Number(line.grossCents)||0)});}):[],nrLaborSignerName:labor.signerName||'',nrLaborInviteEmail:labor.inviteEmail||'',nrLaborPlannedDates:labor.plannedPaymentDates||[],pettyMode:fp.pettyMode||'',travelInfo:fp.travelInfo||null,travelRows:(fp.travelInfo&&fp.travelInfo.rows)||[],travelPeople:(fp.travelInfo&&fp.travelInfo.people)||[]};
 }
 function returnedRequestFormState(r){
   var fp=(r&&r.formPayload)||{};
+  var labor=fp.electronicLabor||{};
   var travel=fp.travelInfo||{};
   var originalFiles=normalizeFiles((r&&r.files)||[]);
   var travelFiles={};
@@ -23788,6 +23919,10 @@ function returnedRequestFormState(r){
     'hr-labor-period':fp.hrLaborPeriod||(fp.hrInfo&&fp.hrInfo.laborPeriod)||'',
     'petty-mode':fp.pettyMode||r.pettyMode||'general'
   };
+  if(String(labor.version)==='1'){
+    fields['labor-signer-name']=labor.signerName||'';fields['labor-invite-email']=labor.inviteEmail||'';fields['hr-period']=labor.period||'';
+    (labor.plannedPaymentDates||[]).forEach(function(date,i){if(i<3)fields['labor-plan-'+(i+1)]=date;});
+  }
   var travelPeople=[];
   String(travel.people||'').split(/[、,，]/).forEach(function(label){
     var name=String(label||'').replace(/（.*$/,'').trim();
@@ -23804,6 +23939,8 @@ function returnedRequestFormState(r){
     hrPeriod:fp.hrPeriod||(fp.hrInfo&&fp.hrInfo.period)||'',
     hrLaborPeriod:fp.hrLaborPeriod||(fp.hrInfo&&fp.hrInfo.laborPeriod)||'',
     hrPrivacyMode:!!(fp.hrInfo&&fp.hrInfo.privacyMode)||(fp.hrRows||[]).some(function(row){return row&&row.__privacyMode;}),
+    nrLaborLines:String(labor.version)==='1'?(labor.serviceLines||[]).map(function(line){return Object.assign({},line,{grossValue:laborElectronicAmountText(Number(line.grossCents)||0)});}):[],
+    nrLaborSignerName:labor.signerName||'',nrLaborInviteEmail:labor.inviteEmail||'',nrLaborPlannedDates:labor.plannedPaymentDates||[],
     pettyMode:fp.pettyMode||r.pettyMode||'general',
     travelFiles:travelFiles,
     travelPeople:travelPeople.length?travelPeople:(S.user?[S.user.id]:[]),
@@ -23822,6 +23959,12 @@ window.openReturnedRequestEditor=function(rid,opts){
   opts=opts||{};
   var pendingRevision=loadExpenseRevisionPending();if(pendingRevision){if(!opts.restored)alert('原補件結果尚待確認，請先確認原交易。');openDetail(pendingRevision.recordId);return;}
   var r=REQS.find(function(row){return row.id===rid;});
+  if(laborElectronicMarker(r)){
+    var laborEntry=laborElectronicCached(r);
+    if(!laborElectronicUninvited(laborEntry)){
+      alert('電子勞報已建立邀請或狀態尚未確認時，不能直接修改原單課程與毛額。請先查看簽署進度；已邀請者需撤銷並重建申請。');if(r)openDetail(r.id);return;
+    }
+  }
   var step=r&&activeStep(r);
   if(!r||!step||step.rk!=='applicant_revision'||!requestIsMine(r)||!canActRequest(r)){
     clearExpenseApplicantRevisionMode();
@@ -23850,7 +23993,7 @@ window.openReturnedRequestEditor=function(rid,opts){
   S.nrPassbookFile=null;
   S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;
   S.lazyRows=state.lazyRows||[];S.refundRows=state.refundRows||[];S.purchaseRows=state.purchaseRows||[];
-  S.hrRows=state.hrRows||[];S.hrItem=state.hrItem||S.hrItem;S.hrPeriod=state.hrPeriod||'';S.hrLaborPeriod=state.hrLaborPeriod||'';S.hrPrivacyMode=!!state.hrPrivacyMode;
+  S.hrRows=state.hrRows||[];S.hrItem=state.hrItem||S.hrItem;S.hrPeriod=state.hrPeriod||'';S.hrLaborPeriod=state.hrLaborPeriod||'';S.hrPrivacyMode=!!state.hrPrivacyMode;S.nrLaborLines=state.nrLaborLines||[];S.nrLaborSignerName=state.nrLaborSignerName||'';S.nrLaborInviteEmail=state.nrLaborInviteEmail||'';S.nrLaborPlannedDates=state.nrLaborPlannedDates||[];
   S.pettyMode=state.pettyMode||'general';S.travelFiles=state.travelFiles||{};S.travelPeople=state.travelPeople||[];S.travelRows=state.travelRows||[];
   closeAppr();
   document.querySelectorAll('.pg').forEach(function(page){page.classList.remove('on');});
@@ -24521,18 +24664,322 @@ window.withdrawRequest=async function(rid){
 };
 
 // ══ 詳情（FIX 1+3+4）══
+var LABOR_DETAIL_CACHE={};
+var LABOR_DETAIL_BUSY={};
+var LABOR_INVITE_ONCE={};
+var LABOR_ACTION_NOTICE={};
+var LABOR_ROTATE_CONFIRM={};
+var LABOR_ROTATE_REASON={};
+var LABOR_REVIEW_DRAFT={};
+var LABOR_ACCRUE_DRAFT={};
+var LABOR_PAYMENT_DRAFT={};
+var LABOR_PAYMENT_REQUEST={};
+var LABOR_PAYMENT_UPLOAD_BUSY={};
+var LABOR_EPHEMERAL_IDENTITY='';
+function laborElectronicMarker(r){var marker=r&&r.formPayload&&r.formPayload.electronicLabor;return marker&&String(marker.version)==='1'?marker:null;}
+function laborElectronicIdentity(){return financeStartupReadIdentity()+'|'+financeAuthIdentityEpoch+'|'+currentTenantId()+'|'+activeDataEnvironment()+'|'+currentRoleKey();}
+function laborElectronicEnsureIdentity(){
+  var identity=laborElectronicIdentity();
+  if(LABOR_EPHEMERAL_IDENTITY&&LABOR_EPHEMERAL_IDENTITY!==identity){
+    LABOR_DETAIL_CACHE={};LABOR_DETAIL_BUSY={};LABOR_INVITE_ONCE={};LABOR_ACTION_NOTICE={};
+    LABOR_ROTATE_CONFIRM={};LABOR_ROTATE_REASON={};LABOR_REVIEW_DRAFT={};LABOR_ACCRUE_DRAFT={};
+    LABOR_PAYMENT_DRAFT={};LABOR_PAYMENT_REQUEST={};LABOR_PAYMENT_UPLOAD_BUSY={};
+    if(typeof LABOR_TRACKER==='object'&&LABOR_TRACKER)LABOR_TRACKER={open:false,entityId:'',period:'',status:'',items:[],nextCursor:null,loading:false,error:'',identity:'',seq:0};
+    if(typeof LABOR_EXPORT==='object'&&LABOR_EXPORT)LABOR_EXPORT={preview:null,loading:false,downloading:false,error:'',identity:'',entityId:'',period:''};
+  }
+  LABOR_EPHEMERAL_IDENTITY=identity;
+  return identity;
+}
+function laborElectronicCached(r){laborElectronicEnsureIdentity();var row=LABOR_DETAIL_CACHE[r&&r.id];return row&&row.identity===laborElectronicIdentity()?row:null;}
+function laborElectronicUninvited(entry){return !!(entry&&entry.loaded&&!entry.error&&entry.data&&entry.data.status==='pending_invite'&&!entry.data.statementId);}
+function laborElectronicStatusLabel(status){return {pending_invite:'待建立邀請',invited:'待講師填寫',signed_pending_archive:'簽名文件歸檔中',signed:'已簽署，待會計覆核',returned:'已退回講師補正',reviewed:'會計已覆核，待獨立確認入帳',accrued:'已應計，待實際付款',partially_paid:'部分已付款',paid:'已付款',revoked:'邀請已撤銷'}[status]||'狀態待確認';}
+function laborElectronicCanInvite(){return currentRoleKey()==='accountant'&&isFinance()&&!S.demoLogin&&hasSupabase();}
+function laborElectronicCanReview(){return currentRoleKey()==='accountant'&&isFinance()&&!S.demoLogin&&hasSupabase();}
+function laborElectronicCanAccrue(){return ['ceo','admin_director'].indexOf(currentRoleKey())>-1&&isFinance()&&!S.demoLogin&&hasSupabase();}
+function laborElectronicCanPay(){return laborElectronicCanReview();}
+function laborElectronicCanReadAccounting(){return (laborElectronicCanReview()||laborElectronicCanAccrue())&&!S.demoLogin&&hasSupabase();}
+function laborElectronicDetailHtml(r,entry){
+  laborElectronicEnsureIdentity();
+  var marker=laborElectronicMarker(r);if(!marker)return'';
+  var state=entry&&entry.loaded?entry.data:null,status=state&&state.status||'pending_invite',busy=!!LABOR_DETAIL_BUSY[r.id],linkRow=LABOR_INVITE_ONCE[r.id];
+  var content='';
+  var notice=LABOR_ACTION_NOTICE[r.id];
+  var noticeHtml='<div id="labor-action-notice" role="status" style="'+(notice&&notice.identity===laborElectronicIdentity()?'margin-bottom:9px;padding:8px;border:1px solid '+(notice.error?'#f0b0b0':'#b8dfaa')+';border-radius:8px;background:'+(notice.error?'#fff1f2':'#fff')+';color:'+(notice.error?'#991b1b':'#1a5010'):'display:none')+'">'+escAttr(notice&&notice.identity===laborElectronicIdentity()?notice.text:'')+'</div>';
+  if(!entry||!entry.loaded)content+='<div role="status">正在讀取講師簽署與會計處理狀態…</div>';
+  else if(entry.error)content+='<div role="alert" style="color:#991b1b">電子勞報狀態暫時無法確認；原申請仍可查看，但此時不推進簽核或付款。請稍後重新讀取。</div>';
+  else{
+    var lines=state&&Array.isArray(state.serviceLines)?state.serviceLines:(marker.serviceLines||[]);
+    content='<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><strong>'+escAttr(laborElectronicStatusLabel(status))+'</strong><span>講師：'+escAttr(marker.signerName||'—')+'</span><span>服務月份：'+escAttr(marker.period||'—')+'</span><span>毛額：NT$'+escAttr(laborElectronicAmountText(Number(marker.totalGrossCents)||0))+'</span></div>';
+    content+='<div style="font-size:11px;color:#6a5840;margin-top:8px">共 '+lines.length+' 堂課；所得別、科目、扣繳與實際付款由會計依簽署資料及銀行證據處理。預計日期不代表已付款。</div>';
+    if(state&&state.snapshotHash)content+='<div style="font-size:10px;color:#64748b;margin-top:7px;overflow-wrap:anywhere">簽署快照 SHA-256：'+escAttr(state.snapshotHash)+'</div>';
+    if(state&&state.reviewedAt)content+='<div style="font-size:11px;color:#334155;margin-top:7px">會計覆核：'+escAttr(state.reviewedAt)+'；覆核人：'+escAttr(state.reviewedBy||'依正式紀錄')+'</div>';
+    if(state&&Array.isArray(state.payments)&&state.payments.length)content+='<div style="font-size:11px;color:#334155;margin-top:7px">實際付款 '+state.payments.length+' 筆，累計毛額 NT$'+escAttr(laborElectronicAmountText(Number(state.totalPaidGrossCents)||0))+'；未付 NT$'+escAttr(laborElectronicAmountText(Number(state.outstandingGrossCents)||0))+'</div>';
+    if(status==='pending_invite'&&!(state&&state.statementId)&&r.status==='pending_accountant'&&activeStep(r)&&activeStep(r).rk==='accountant'&&laborElectronicCanInvite())content+='<div style="margin-top:11px"><button type="button" class="btn-p" '+(busy?'disabled aria-busy="true"':'')+' onclick="laborElectronicCreateInvite('+financeInlineJsString(r.id)+')">'+(busy?'正在建立邀請…':'建立講師邀請連結')+'</button><div style="font-size:11px;color:#6a5840;margin-top:5px">主管簽核已完成。連結只會顯示一次，請複製後自行交給講師；系統不會代寄。</div></div>';
+    if(state&&['invited','returned','revoked'].indexOf(status)>-1)content+='<div style="font-size:11px;color:#8a4b0f;margin-top:9px">尚未取得完整簽署來源，不能覆核、付款或入帳。若需重發邀請，須先執行受控換發，不可直接重建第二張單。</div>';
+    if(state&&status==='signed_pending_archive'&&laborElectronicCanReview())content+='<div style="margin-top:10px"><button type="button" class="btn-g" '+(busy?'disabled aria-busy="true"':'')+' onclick="laborElectronicRepairArchive('+financeInlineJsString(r.id)+')">'+(busy?'正在核對簽署歸檔…':'重試封存簽署資料')+'</button><div style="font-size:11px;color:#6a5840;margin-top:5px">僅重新核對與補齊已完成的簽署封存；完成前不能會計覆核或付款。</div></div>';
+    if(state&&status==='invited'&&laborElectronicCanInvite())content+='<div style="margin-top:10px"><div class="fg"><label class="fl" for="labor-rotate-reason">換發邀請理由 *</label><input id="labor-rotate-reason" maxlength="300" value="'+escAttr(LABOR_ROTATE_REASON[r.id]||'')+'" oninput="LABOR_ROTATE_REASON['+financeInlineJsString(r.id)+']=this.value" placeholder="例：先前連結遺失或到期"></div>'+(LABOR_ROTATE_CONFIRM[r.id]?'<button type="button" class="btn-s" onclick="laborElectronicRotateInvite('+financeInlineJsString(r.id)+')" '+(busy?'disabled aria-busy="true"':'')+'>確認撤銷舊連結並換發</button> <button type="button" class="btn-g" onclick="laborElectronicCancelRotate('+financeInlineJsString(r.id)+')">取消</button>':'<button type="button" class="btn-g" onclick="laborElectronicRotateInvite('+financeInlineJsString(r.id)+')" '+(busy?'disabled aria-busy="true"':'')+'>換發邀請連結</button>')+'</div>';
+    if(state&&status==='signed'&&laborElectronicCanReview())content+=laborElectronicReviewHtml(state,r.id,busy);
+    if(state&&status==='reviewed'&&laborElectronicCanAccrue())content+='<div style="margin-top:12px;border-top:1px solid #d9e8d4;padding-top:12px"><label class="fl" for="labor-accrue-reason">獨立確認理由 *</label><textarea id="labor-accrue-reason" rows="2" oninput="LABOR_ACCRUE_DRAFT['+financeInlineJsString(r.id)+']=this.value" placeholder="確認主管簽核、課程毛額及會計覆核">'+escAttr(LABOR_ACCRUE_DRAFT[r.id]||'')+'</textarea><button type="button" class="btn-p" '+(busy?'disabled aria-busy="true"':'')+' onclick="laborElectronicAccrue('+financeInlineJsString(r.id)+')">'+(busy?'正在確認…':'確認應計入帳')+'</button><div style="font-size:11px;color:#6a5840;margin-top:6px">必須由會計覆核以外的授權人確認；實際付款另依銀行對帳證據逐筆登錄。</div></div>';
+    if(state&&['accrued','partially_paid','paid'].indexOf(status)>-1)content+='<div style="font-size:11px;color:#1a5010;margin-top:10px">課程毛額已依獨立流程應計。實際付款與清償只在完成銀行對帳後由受控會計流程記錄，不使用原申請的整筆付款／傳票。</div>';
+    if(state&&['accrued','partially_paid'].indexOf(status)>-1&&laborElectronicCanPay())content+=laborElectronicPaymentFormHtml(state,r.id,busy);
+  }
+  content=noticeHtml+content;
+  if(linkRow&&linkRow.identity===laborElectronicIdentity()&&laborElectronicCanInvite())content+='<div id="labor-once-link" style="margin-top:12px;padding:10px;border:1px solid #b8dfaa;border-radius:8px;background:#fff"><label class="fl" for="labor-invite-link">講師邀請連結（僅此畫面顯示一次）</label><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="labor-invite-link" readonly value="'+escAttr(linkRow.url)+'" style="flex:1;min-width:180px"><button type="button" class="btn-g" onclick="laborElectronicCopyInvite()">複製連結</button><button type="button" class="btn-g" onclick="laborElectronicHideInvite('+financeInlineJsString(r.id)+')">收起</button></div><div id="labor-invite-copy-status" role="status" style="font-size:11px;margin-top:5px">請使用安全管道自行轉交給講師；此處未寄出通知。</div></div>';
+  return'<section class="card detail-full-row" aria-label="電子勞務報酬進度" style="padding:12px;border-color:#b8dfaa;background:#f7fcf4"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><h3 style="font-size:14px;color:#1a5010;margin:0">電子勞務報酬進度</h3><button type="button" class="btn-g" onclick="laborElectronicRefresh('+financeInlineJsString(r.id)+')">重新讀取</button></div><div style="margin-top:9px;line-height:1.65">'+content+'</div></section>';
+}
+function laborElectronicReviewHtml(state,rid,busy){
+  var draft=LABOR_REVIEW_DRAFT[rid]||{lines:{},reason:''};
+  var rows=(state.serviceLines||[]).map(function(line,i){
+    var saved=(draft.lines||{})[line.id]||{};
+    var opts=accountOptionsHtml(saved.account||line.expenseAccount||'','debit',line.departmentCode||'',state.entityId||'');
+    return'<div class="labor-review-line" style="background:#fff;border:1px solid #d9e8d4;border-radius:8px;padding:10px;margin:8px 0"><div style="font-size:12px;font-weight:650">'+escAttr((i+1)+'. '+(line.courseRef||'')+' '+(line.description||''))+' · NT$'+escAttr(laborElectronicAmountText(Number(line.grossCents)||0))+'</div><div class="fr2" style="margin-top:8px"><div class="fg"><label class="fl" for="labor-category-'+i+'">所得類別 *</label><select id="labor-category-'+i+'" data-labor-category="'+i+'" onchange="laborElectronicSaveReviewDraft('+financeInlineJsString(rid)+')"><option value="">會計逐堂判定</option>'+['50','9A','9B'].map(function(v){return'<option value="'+v+'" '+((saved.category||line.incomeCategory)===v?'selected':'')+'>'+v+'</option>';}).join('')+'</select></div><div class="fg"><label class="fl" for="labor-account-'+i+'">費用科目 *</label><select id="labor-account-'+i+'" data-labor-account="'+i+'" onchange="laborElectronicSaveReviewDraft('+financeInlineJsString(rid)+')"><option value="">選擇適用科目</option>'+opts+'</select></div></div><div class="fg"><label class="fl" for="labor-basis-'+i+'">分類依據 *</label><input id="labor-basis-'+i+'" data-labor-basis="'+i+'" maxlength="500" value="'+escAttr(saved.basis||'')+'" oninput="laborElectronicSaveReviewDraft('+financeInlineJsString(rid)+')" placeholder="說明實際工作內容與分類理由"></div></div>';
+  }).join('');
+  return'<div style="margin-top:12px;border-top:1px solid #d9e8d4;padding-top:12px"><strong style="font-size:12px">會計逐堂覆核</strong><div style="font-size:11px;color:#6a5840;margin-top:4px">講座、教學與其他勞務可能有不同所得類別；本表不自動代扣所得稅或補充保費。</div>'+rows+'<div class="fg"><label class="fl" for="labor-review-reason">整體覆核說明 *</label><textarea id="labor-review-reason" rows="2" oninput="laborElectronicSaveReviewDraft('+financeInlineJsString(rid)+')" placeholder="核對講師已簽文件及課程明細">'+escAttr(draft.reason||'')+'</textarea></div><button type="button" class="btn-p" '+(busy?'disabled aria-busy="true"':'')+' onclick="laborElectronicReview('+financeInlineJsString(rid)+')">'+(busy?'正在覆核…':'確認逐堂分類')+'</button></div>';
+}
+function laborElectronicPaymentFormHtml(state,rid,busy){
+  var draft=LABOR_PAYMENT_DRAFT[rid]||{lines:{},paidOn:'',bankRef:'',taxBasis:'',nhiBasis:'',evidence:null};
+  var lines=Array.isArray(state.serviceLines)?state.serviceLines:[],known=lines.length&&lines.every(function(line){return Number.isSafeInteger(Number(line.outstandingGrossCents))&&Number(line.outstandingGrossCents)>=0;});
+  var rows=lines.map(function(line,i){
+    var saved=draft.lines[line.id]||{},remaining=Number(line.outstandingGrossCents)||0;
+    if(!remaining)return'';
+    return'<div class="labor-pay-line" style="padding:10px;margin:8px 0;background:#fff;border:1px solid #d9e8d4;border-radius:8px"><strong style="font-size:12px">'+escAttr((i+1)+'. '+(line.courseRef||'')+' '+(line.description||''))+'</strong><div style="font-size:11px;color:#64748b">本堂尚未付款 NT$'+escAttr(laborElectronicAmountText(remaining))+'</div><div class="fr3" style="margin-top:8px">'+[['gross','本次付款毛額 *'],['tax','本次所得稅扣繳'],['nhi','本次補充保費']].map(function(pair){var key=pair[0];return'<div class="fg"><label class="fl" for="labor-pay-'+key+'-'+i+'">'+pair[1]+'</label><input id="labor-pay-'+key+'-'+i+'" inputmode="decimal" type="text" value="'+escAttr(saved[key]||'')+'" placeholder="0.00" oninput="laborElectronicSavePaymentDraft('+financeInlineJsString(rid)+')"></div>';}).join('')+'</div></div>';
+  }).join('');
+  var proof=draft.evidence&&draft.evidence.path&&/^[a-f0-9]{64}$/.test(draft.evidence.sha256||'')?'<div role="status" style="font-size:11px;color:#1a5010;overflow-wrap:anywhere">銀行對帳佐證已安全上傳並核對：SHA-256 '+escAttr(draft.evidence.sha256)+'</div>':'<div style="font-size:11px;color:#8a4b0f">尚未上傳銀行對帳證據；預計付款日或匯款截圖不能代替實際對帳紀錄。</div>';
+  return'<section aria-label="講師實際付款" style="margin-top:12px;border-top:1px solid #d9e8d4;padding-top:12px"><strong style="font-size:12px">依銀行對帳記錄實際付款</strong><div style="font-size:11px;color:#6a5840;margin-top:5px">每堂填本次毛額與實際代扣；淨付金額由系統計算。可依銀行交易逐次付款，未付款課程保留應付餘額。</div>'
+    +(known?rows:'<div role="alert" style="color:#991b1b;margin-top:9px">正式服務行尚未回傳各堂未付款餘額，暫不開放記錄付款。</div>')
+    +'<div class="fr2"><div class="fg"><label class="fl" for="labor-pay-date">實際銀行付款日 *</label><input type="date" id="labor-pay-date" value="'+escAttr(draft.paidOn||'')+'" oninput="laborElectronicSavePaymentDraft('+financeInlineJsString(rid)+')"></div><div class="fg"><label class="fl" for="labor-pay-bank-ref">銀行對帳交易參考號 *</label><input id="labor-pay-bank-ref" maxlength="120" value="'+escAttr(draft.bankRef||'')+'" oninput="laborElectronicSavePaymentDraft('+financeInlineJsString(rid)+')" placeholder="依銀行明細輸入至少 8 字"></div></div>'
+    +'<div class="fr2"><div class="fg"><label class="fl" for="labor-pay-tax-basis">所得稅扣繳依據 *</label><textarea id="labor-pay-tax-basis" rows="2" oninput="laborElectronicSavePaymentDraft('+financeInlineJsString(rid)+')" placeholder="說明適用所得類別、稅率及計算依據">'+escAttr(draft.taxBasis||'')+'</textarea></div><div class="fg"><label class="fl" for="labor-pay-nhi-basis">補充保費判斷依據 *</label><textarea id="labor-pay-nhi-basis" rows="2" oninput="laborElectronicSavePaymentDraft('+financeInlineJsString(rid)+')" placeholder="說明應扣或不扣的適用依據">'+escAttr(draft.nhiBasis||'')+'</textarea></div></div>'
+    +'<div class="fg"><label class="fl" for="labor-pay-proof">實際銀行對帳佐證（PNG／JPG／PDF，8 MB 以下）*</label><input id="labor-pay-proof" type="file" accept="image/png,image/jpeg,application/pdf"></div><button type="button" class="btn-g" '+(busy||LABOR_PAYMENT_UPLOAD_BUSY[rid]?'disabled aria-busy="true"':'')+' onclick="laborElectronicUploadPaymentProof('+financeInlineJsString(rid)+')">'+(LABOR_PAYMENT_UPLOAD_BUSY[rid]?'正在核對佐證…':'上傳並核對銀行證據')+'</button>'+proof
+    +'<div id="labor-pay-total" role="status" style="font-size:11px;color:#334155;margin:10px 0"></div><button type="button" class="btn-p" '+(!known||busy||LABOR_PAYMENT_UPLOAD_BUSY[rid]?'disabled aria-busy="true"':'')+' onclick="laborElectronicRecordPayment('+financeInlineJsString(rid)+')">'+(busy?'正在確認正式付款…':'確認本次實際付款並產生專用傳票')+'</button></section>';
+}
+function laborElectronicNonnegativeCents(value){
+  var input=String(value==null?'':value).trim().replace(/,/g,'');
+  if(!/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/.test(input))return null;
+  var parts=input.split('.'),cents=Number(parts[0])*100+Number((parts[1]||'').padEnd(2,'0'));
+  return Number.isSafeInteger(cents)&&cents>=0?cents:null;
+}
+window.laborElectronicSavePaymentDraft=function(rid){
+  var r=REQS.find(function(row){return row.id===rid;}),entry=laborElectronicCached(r),state=entry&&entry.data,draft=LABOR_PAYMENT_DRAFT[rid]||{lines:{},evidence:null};
+  if(!state||!Array.isArray(state.serviceLines))return;
+  draft.lines=draft.lines||{};
+  state.serviceLines.forEach(function(line,i){var gross=el('labor-pay-gross-'+i);if(!gross)return;draft.lines[line.id]={gross:gross.value,tax:(el('labor-pay-tax-'+i)||{}).value||'',nhi:(el('labor-pay-nhi-'+i)||{}).value||''};});
+  [['paidOn','labor-pay-date'],['bankRef','labor-pay-bank-ref'],['taxBasis','labor-pay-tax-basis'],['nhiBasis','labor-pay-nhi-basis']].forEach(function(pair){var node=el(pair[1]);if(node)draft[pair[0]]=node.value;});
+  LABOR_PAYMENT_DRAFT[rid]=draft;
+  var amounts=Object.values(draft.lines).reduce(function(sum,line){return{gross:sum.gross+(laborElectronicNonnegativeCents(line.gross)||0),tax:sum.tax+(laborElectronicNonnegativeCents(line.tax||'0')||0),nhi:sum.nhi+(laborElectronicNonnegativeCents(line.nhi||'0')||0)};},{gross:0,tax:0,nhi:0}),total=el('labor-pay-total');
+  if(total)total.textContent='本次毛額 NT$'+laborElectronicAmountText(amounts.gross)+'；所得稅 NT$'+laborElectronicAmountText(amounts.tax)+'；補充保費 NT$'+laborElectronicAmountText(amounts.nhi)+'；淨付 NT$'+laborElectronicAmountText(Math.max(0,amounts.gross-amounts.tax-amounts.nhi));
+};
+window.laborElectronicUploadPaymentProof=async function(rid){
+  var r=REQS.find(function(row){return row.id===rid;}),entry=laborElectronicCached(r),state=entry&&entry.data,file=(el('labor-pay-proof')||{}).files&&el('labor-pay-proof').files[0];
+  if(!laborElectronicCanPay()||!state||['accrued','partially_paid'].indexOf(state.status)<0||LABOR_DETAIL_BUSY[rid]||LABOR_PAYMENT_UPLOAD_BUSY[rid])return;
+  laborElectronicSavePaymentDraft(rid);
+  if(!file||file.size<1||file.size>8*1024*1024||['image/png','image/jpeg','application/pdf'].indexOf(file.type)<0){laborElectronicActionNotice(rid,'請選擇 8 MB 以下的 PNG、JPG 或 PDF 銀行對帳檔。',true);return;}
+  var identity=laborElectronicIdentity(),form=new FormData();form.append('statementId',state.statementId);form.append('file',file,file.name);
+  LABOR_PAYMENT_UPLOAD_BUSY[rid]=true;laborElectronicActionNotice(rid,'正在上傳並核對銀行證據。',false);
+  try{
+    var result=await withOperationTimeout(getSb().functions.invoke('finance-labor-external/staff/evidence/upload',{body:form}),'上傳銀行對帳證據',35000);
+    if(identity!==laborElectronicIdentity())return;
+    if(result.error)throw result.error;
+    var data=result.data||{};
+    if(data.bucket!=='finance-external-labor'||!/^[a-f0-9]{64}$/.test(data.sha256||'')||!data.path||data.sizeBytes!==file.size)throw new Error('銀行佐證回應不完整');
+    LABOR_PAYMENT_DRAFT[rid].evidence={path:data.path,sha256:data.sha256};
+    laborElectronicActionNotice(rid,'銀行證據已上傳且校驗完成；確認實際交易後再登錄付款。',false);
+  }catch(error){if(identity===laborElectronicIdentity())laborElectronicActionNotice(rid,'銀行證據未確認完成；請重新上傳。'+friendlyErrorMessage(error,{action:'上傳銀行對帳證據'}),true);}
+  finally{delete LABOR_PAYMENT_UPLOAD_BUSY[rid];if(identity===laborElectronicIdentity()&&S.page==='detail'&&S.detailRid===rid)openDetail(rid);}
+};
+window.laborElectronicRecordPayment=async function(rid){
+  var r=REQS.find(function(row){return row.id===rid;}),entry=laborElectronicCached(r),state=entry&&entry.data;
+  if(!laborElectronicCanPay()||!entry||entry.error||!state||['accrued','partially_paid'].indexOf(state.status)<0||LABOR_DETAIL_BUSY[rid]||LABOR_PAYMENT_UPLOAD_BUSY[rid])return;
+  laborElectronicSavePaymentDraft(rid);
+  var draft=LABOR_PAYMENT_DRAFT[rid]||{},errors=[],allocations=[],gross=0,net=0;
+  (state.serviceLines||[]).forEach(function(line,i){
+    var values=(draft.lines||{})[line.id]||{},amount=values.gross?laborElectronicCents(values.gross):0,tax=laborElectronicNonnegativeCents(values.tax||'0'),nhi=laborElectronicNonnegativeCents(values.nhi||'0'),remaining=Number(line.outstandingGrossCents);
+    if(amount===null||tax===null||nhi===null){errors.push('第 '+(i+1)+' 堂金額格式');return;}
+    if(amount===0){if(tax||nhi)errors.push('第 '+(i+1)+' 堂未付款不可扣款');return;}
+    if(!Number.isSafeInteger(remaining)||amount>remaining||tax+nhi>=amount)errors.push('第 '+(i+1)+' 堂超過未付毛額或淨付金額不正確');
+    allocations.push({serviceLineId:line.id,grossCents:amount,incomeTaxCents:tax,nhiCents:nhi});gross+=amount;net+=amount-tax-nhi;
+  });
+  if(!allocations.length||gross>Number(state.outstandingGrossCents))errors.push('請填至少一堂尚未支付的毛額，且不得超付');
+  if(!laborElectronicDateValid(draft.paidOn)||draft.paidOn>todayIso())errors.push('請填實際銀行付款日，不得使用未來日期');
+  var bankRef=String(draft.bankRef||'').trim(),taxBasis=String(draft.taxBasis||'').trim(),nhiBasis=String(draft.nhiBasis||'').trim();
+  if(bankRef.length<8||bankRef.length>120)errors.push('銀行對帳交易參考號至少 8 字');
+  if(taxBasis.length<8||nhiBasis.length<8)errors.push('請填所得稅與補充保費計算或免扣依據');
+  if(!draft.evidence||!draft.evidence.path||!/^[a-f0-9]{64}$/.test(draft.evidence.sha256||''))errors.push('請先上傳經核對的銀行證據');
+  if(errors.length){laborElectronicActionNotice(rid,'請修正：'+errors.join('；'),true);return;}
+  var payload={p_statement_id:state.statementId,p_expected_version:state.version,p_paid_on:draft.paidOn,p_bank_ref:bankRef,p_allocations:allocations,p_evidence:{verifiedBankReference:bankRef,bankStatementPath:draft.evidence.path,bankStatementSha256:draft.evidence.sha256,taxBasis:taxBasis,nhiBasis:nhiBasis}};
+  var signature=JSON.stringify(payload),existing=LABOR_PAYMENT_REQUEST[rid],key=existing&&existing.signature===signature?existing.key:membershipOrgDraftUuid();
+  LABOR_PAYMENT_REQUEST[rid]={identity:laborElectronicIdentity(),signature:signature,key:key};
+  payload.p_request_key=key;
+  var identity=laborElectronicIdentity(),before=state.version;LABOR_DETAIL_BUSY[rid]=true;
+  laborElectronicActionNotice(rid,'正在將本次實際付款與銀行證據寫入正式帳冊，請勿重複提交。',false);
+  try{
+    var result=await withOperationTimeout(getSb().rpc('finance_labor_staff_pay_v1',payload),'登錄講師實際付款',30000);
+    if(identity!==laborElectronicIdentity())return;
+    if(result.error)throw result.error;
+    laborElectronicActionNotice(rid,'實際付款已受控寫入；淨付 NT$'+laborElectronicAmountText(net)+'，正在核對正式紀錄。',false);
+    await loadLaborElectronicDetail(rid,true);
+    var after=laborElectronicCached(r);if(after&&after.data&&Number(after.data.version)>Number(before)){delete LABOR_PAYMENT_DRAFT[rid];delete LABOR_PAYMENT_REQUEST[rid];}
+  }catch(error){if(identity===laborElectronicIdentity()){
+    laborElectronicActionNotice(rid,'付款結果尚未確認；請先核對正式紀錄與銀行交易，不可另開新付款。'+friendlyErrorMessage(error,{action:'登錄講師實際付款'}),true);
+    await loadLaborElectronicDetail(rid,true);
+    var verified=laborElectronicCached(r);
+    if(verified&&verified.loaded&&!verified.error&&verified.data&&Number(verified.data.version)>Number(before)){
+      delete LABOR_PAYMENT_DRAFT[rid];delete LABOR_PAYMENT_REQUEST[rid];
+      laborElectronicActionNotice(rid,'正式紀錄已確認本次付款完成；請勿重複登錄銀行交易。',false);
+    }
+  }}
+  finally{delete LABOR_DETAIL_BUSY[rid];if(identity===laborElectronicIdentity()&&S.page==='detail'&&S.detailRid===rid)openDetail(rid);}
+};
+async function loadLaborElectronicDetail(rid,force){
+  var r=REQS.find(function(row){return row.id===rid;});if(!laborElectronicMarker(r))return;
+  var identity=laborElectronicIdentity(),existing=laborElectronicCached(r);
+  if(!force&&existing&&existing.loaded&&Date.now()-existing.at<15000)return;
+  var seq=(existing&&existing.seq||0)+1;
+  LABOR_DETAIL_CACHE[rid]={identity:identity,loaded:false,data:existing&&existing.data||null,seq:seq,at:Date.now()};
+  var result;
+  try{
+    var client=getSb();if(!client||S.demoLogin)throw new Error('正式簽署資料目前無法連線');
+    result=await withOperationTimeout(client.rpc(laborElectronicCanReadAccounting()?'finance_labor_staff_for_request_v1':'finance_labor_request_status_v1',{p_request_id:rid}),'讀取電子勞報進度',12000);
+    if(result.error)throw result.error;
+  }catch(error){result={error:error};}
+  var current=LABOR_DETAIL_CACHE[rid];
+  if(!current||current.identity!==identity||current.seq!==seq||identity!==laborElectronicIdentity())return;
+  var data=result&&result.data;
+  if(Array.isArray(data))data=data[0]||null;
+  LABOR_DETAIL_CACHE[rid]={identity:identity,loaded:true,data:data&&typeof data==='object'?data:null,error:result.error||null,seq:seq,at:Date.now()};
+  if(data&&data.status!=='signed')delete LABOR_REVIEW_DRAFT[rid];
+  if(data&&data.status!=='reviewed')delete LABOR_ACCRUE_DRAFT[rid];
+  if(S.page==='detail'&&S.detailRid===rid)openDetail(rid);
+}
+window.laborElectronicRefresh=function(rid){loadLaborElectronicDetail(rid,true);};
+window.laborElectronicHideInvite=function(rid){delete LABOR_INVITE_ONCE[rid];var row=REQS.find(function(r){return r.id===rid;});if(row&&S.page==='detail')openDetail(rid);};
+window.laborElectronicCopyInvite=async function(){var input=el('labor-invite-link'),status=el('labor-invite-copy-status');if(!input)return;try{await navigator.clipboard.writeText(input.value);if(status)status.textContent='已複製，請自行交給講師。';}catch(error){input.focus();input.select();if(status)status.textContent='瀏覽器未允許自動複製；連結已選取，請手動複製。';}};
+function laborElectronicActionNotice(rid,text,isError){
+  LABOR_ACTION_NOTICE[rid]={identity:laborElectronicIdentity(),text:text,error:!!isError};
+  var box=el('labor-action-notice');if(box&&S.detailRid===rid){box.textContent=text;box.style.display='block';box.style.marginBottom='9px';box.style.padding='8px';box.style.border='1px solid '+(isError?'#f0b0b0':'#b8dfaa');box.style.borderRadius='8px';box.style.background=isError?'#fff1f2':'#fff';box.style.color=isError?'#991b1b':'#1a5010';}
+}
+window.laborElectronicSaveReviewDraft=function(rid){
+  var r=REQS.find(function(row){return row.id===rid;}),entry=laborElectronicCached(r),lines=entry&&entry.data&&entry.data.serviceLines||[];
+  var draft={lines:{},reason:String((el('labor-review-reason')||{}).value||'')};
+  lines.forEach(function(line,i){draft.lines[line.id]={category:String((el('labor-category-'+i)||{}).value||''),account:String((el('labor-account-'+i)||{}).value||''),basis:String((el('labor-basis-'+i)||{}).value||'')};});
+  LABOR_REVIEW_DRAFT[rid]=draft;
+};
+function laborElectronicInviteUrl(url){
+  try{var parsed=new URL(String(url||''));return parsed.protocol==='https:'&&(parsed.hostname===window.location.hostname||parsed.hostname==='finance.suiyuecare.com')?parsed.href:'';}catch(error){return'';}
+}
+async function laborElectronicStaffMutation(rid,rpc,args,action){
+  var entry=laborElectronicCached(REQS.find(function(r){return r.id===rid;}));
+  if(!entry||!entry.loaded||entry.error||!entry.data||LABOR_DETAIL_BUSY[rid])return;
+  var identity=laborElectronicIdentity();LABOR_DETAIL_BUSY[rid]=true;laborElectronicActionNotice(rid,'正在'+action+'；請勿重複送出。',false);
+  try{
+    var result=await withOperationTimeout(getSb().rpc(rpc,args),action,20000);
+    if(identity!==laborElectronicIdentity())return;
+    if(result.error)throw result.error;
+    laborElectronicActionNotice(rid,action+'已送出，正在核對正式紀錄。',false);
+    await loadLaborElectronicDetail(rid,true);
+  }catch(error){
+    if(identity!==laborElectronicIdentity())return;
+    laborElectronicActionNotice(rid,action+'結果尚未確認；請先重新讀取正式狀態，再決定是否重試。'+friendlyErrorMessage(error,{action:action}),true);
+    await loadLaborElectronicDetail(rid,true);
+  }finally{delete LABOR_DETAIL_BUSY[rid];if(identity===laborElectronicIdentity()&&S.page==='detail'&&S.detailRid===rid)openDetail(rid);}
+}
+window.laborElectronicCreateInvite=async function(rid){
+  var r=REQS.find(function(row){return row.id===rid;}),entry=laborElectronicCached(r),marker=laborElectronicMarker(r);
+  if(!marker||!laborElectronicCanInvite()||r.status!=='pending_accountant'||!activeStep(r)||activeStep(r).rk!=='accountant'||!entry||!entry.loaded||entry.error||(entry.data&&entry.data.status!=='pending_invite')||(entry.data&&entry.data.statementId)||LABOR_DETAIL_BUSY[rid])return;
+  var identity=laborElectronicIdentity();LABOR_DETAIL_BUSY[rid]=true;laborElectronicActionNotice(rid,'正在建立一次性邀請連結。',false);
+  try{
+    var client=getSb(),expiresAt=new Date(Date.now()+7*24*60*60*1000).toISOString();
+    var response=await withOperationTimeout(client.functions.invoke('finance-labor-external/invite/create',{body:{requestId:rid,entityId:r.eid,inviteEmail:marker.inviteEmail,expiresAt:expiresAt,lines:marker.serviceLines}}),'建立講師邀請',20000);
+    if(identity!==laborElectronicIdentity())return;
+    if(response.error)throw response.error;
+    var url=laborElectronicInviteUrl(response.data&&response.data.invitationUrl);
+    if(!url||response.data.delivery!=='copy_link')throw new Error('邀請已送出，但安全連結未能確認');
+    LABOR_INVITE_ONCE[rid]={identity:identity,url:url};
+    laborElectronicActionNotice(rid,'邀請已建立；請複製一次性連結並自行交給講師。',false);
+    await loadLaborElectronicDetail(rid,true);
+  }catch(error){
+    if(identity!==laborElectronicIdentity())return;
+    laborElectronicActionNotice(rid,'邀請結果不明，不能直接再次建立；請先重新讀取正式狀態。'+friendlyErrorMessage(error,{action:'建立講師邀請'}),true);
+    await loadLaborElectronicDetail(rid,true);
+  }finally{delete LABOR_DETAIL_BUSY[rid];if(identity===laborElectronicIdentity()&&S.page==='detail'&&S.detailRid===rid)openDetail(rid);}
+};
+window.laborElectronicCancelRotate=function(rid){delete LABOR_ROTATE_CONFIRM[rid];var r=REQS.find(function(row){return row.id===rid;});if(r&&S.page==='detail')openDetail(rid);};
+window.laborElectronicRepairArchive=async function(rid){
+  var r=REQS.find(function(row){return row.id===rid;}),entry=laborElectronicCached(r),state=entry&&entry.data;
+  if(!laborElectronicCanReview()||!entry||!entry.loaded||entry.error||!state||state.status!=='signed_pending_archive'||!state.statementId||LABOR_DETAIL_BUSY[rid])return;
+  var identity=laborElectronicIdentity();LABOR_DETAIL_BUSY[rid]=true;laborElectronicActionNotice(rid,'正在重新核對已簽署文件的封存。',false);
+  try{
+    var response=await withOperationTimeout(getSb().functions.invoke('finance-labor-external/staff/archive/repair',{body:{statementId:state.statementId}}),'修復講師簽署封存',30000);
+    if(identity!==laborElectronicIdentity())return;
+    if(response.error)throw response.error;
+    if(!response.data||response.data.statementId!==state.statementId||response.data.status!=='signed')throw new Error('封存尚未確認完成');
+    await loadLaborElectronicDetail(rid,true);
+    if(identity!==laborElectronicIdentity())return;
+    var after=laborElectronicCached(r);
+    laborElectronicActionNotice(rid,after&&after.loaded&&!after.error&&after.data&&after.data.status==='signed'?'已從正式資料確認簽署歸檔，可交由會計逐堂覆核。':'封存回應已收到，但正式狀態尚待確認，請重新讀取。',false);
+  }catch(error){if(identity===laborElectronicIdentity()){
+    await loadLaborElectronicDetail(rid,true);
+    if(identity!==laborElectronicIdentity())return;
+    var verified=laborElectronicCached(r),recovered=verified&&verified.loaded&&!verified.error&&verified.data&&verified.data.status==='signed';
+    laborElectronicActionNotice(rid,recovered?'正式資料已確認簽署歸檔；請勿重複修復。':'簽署封存仍未完成，請稍後重試；不會建立第二份簽署。'+friendlyErrorMessage(error,{action:'修復講師簽署封存'}),!recovered);
+  }}finally{if(identity===laborElectronicIdentity()){delete LABOR_DETAIL_BUSY[rid];if(S.page==='detail'&&S.detailRid===rid)openDetail(rid);}}
+};
+window.laborElectronicRotateInvite=async function(rid){
+  var r=REQS.find(function(row){return row.id===rid;}),entry=laborElectronicCached(r),state=entry&&entry.data;
+  if(!laborElectronicCanInvite()||!entry||!entry.loaded||entry.error||!state||state.status!=='invited'||LABOR_DETAIL_BUSY[rid])return;
+  var reason=String((el('labor-rotate-reason')||{}).value||'').trim();
+  if(reason.length<5){laborElectronicActionNotice(rid,'請先填至少五字的換發理由。',true);return;}
+  LABOR_ROTATE_REASON[rid]=reason;
+  if(!LABOR_ROTATE_CONFIRM[rid]){LABOR_ROTATE_CONFIRM[rid]=true;laborElectronicActionNotice(rid,'再次按下確認才會撤銷舊連結；舊連結會立即失效。',false);openDetail(rid);return;}
+  var identity=laborElectronicIdentity();LABOR_DETAIL_BUSY[rid]=true;
+  try{
+    var response=await withOperationTimeout(getSb().functions.invoke('finance-labor-external/invite/rotate',{body:{statementId:state.statementId,expectedVersion:state.version,expiresAt:new Date(Date.now()+7*24*60*60*1000).toISOString(),reason:reason}}),'換發講師邀請',20000);
+    if(identity!==laborElectronicIdentity())return;
+    if(response.error)throw response.error;
+    var url=laborElectronicInviteUrl(response.data&&response.data.invitationUrl);
+    if(!url||response.data.delivery!=='copy_link')throw new Error('換發後安全連結未能確認');
+    LABOR_INVITE_ONCE[rid]={identity:identity,url:url};delete LABOR_ROTATE_CONFIRM[rid];delete LABOR_ROTATE_REASON[rid];
+    laborElectronicActionNotice(rid,'舊連結已撤銷；請複製新連結並自行交給講師。',false);
+    await loadLaborElectronicDetail(rid,true);
+  }catch(error){
+    if(identity!==laborElectronicIdentity())return;
+    laborElectronicActionNotice(rid,'換發結果尚未確認；請先重新讀取正式狀態，避免讓講師使用已失效連結。'+friendlyErrorMessage(error,{action:'換發講師邀請'}),true);
+    await loadLaborElectronicDetail(rid,true);
+  }finally{delete LABOR_DETAIL_BUSY[rid];if(identity===laborElectronicIdentity()&&S.page==='detail'&&S.detailRid===rid)openDetail(rid);}
+};
+window.laborElectronicReview=function(rid){
+  var r=REQS.find(function(row){return row.id===rid;}),entry=laborElectronicCached(r),state=entry&&entry.data;if(!laborElectronicCanReview()||!state||state.status!=='signed')return;
+  laborElectronicSaveReviewDraft(rid);
+  var lines=state.serviceLines||[],decisions=[],missing=[];
+  lines.forEach(function(line,i){
+    var category=String((el('labor-category-'+i)||{}).value||''),account=String((el('labor-account-'+i)||{}).value||''),basis=String((el('labor-basis-'+i)||{}).value||'').trim();
+    if(['50','9A','9B'].indexOf(category)<0||!/^\d{4,6}$/.test(account)||!/^[56]/.test(account)||basis.length<5)missing.push('第 '+(i+1)+' 堂課的所得別、費用科目與至少五字分類依據');
+    decisions.push({serviceLineId:line.id,incomeCategory:category,expenseAccount:account,classificationBasis:basis});
+  });
+  var reason=String((el('labor-review-reason')||{}).value||'').trim();if(reason.length<5)missing.push('至少五字整體覆核說明');
+  if(!lines.length||missing.length){laborElectronicActionNotice(rid,'請補齊：'+(missing.length?missing.join('；'):'課程明細'),true);return;}
+  laborElectronicStaffMutation(rid,'finance_labor_staff_review_v1',{p_statement_id:state.statementId,p_expected_version:state.version,p_request_key:membershipOrgDraftUuid(),p_line_decisions:decisions,p_reason:reason},'確認逐堂分類');
+};
+window.laborElectronicAccrue=function(rid){
+  var r=REQS.find(function(row){return row.id===rid;}),entry=laborElectronicCached(r),state=entry&&entry.data;if(!laborElectronicCanAccrue()||!state||state.status!=='reviewed')return;
+  var reason=String((el('labor-accrue-reason')||{}).value||'').trim();
+  LABOR_ACCRUE_DRAFT[rid]=reason;
+  if(reason.length<5){laborElectronicActionNotice(rid,'請填至少五字的獨立確認理由。',true);return;}
+  laborElectronicStaffMutation(rid,'finance_labor_staff_accrue_v1',{p_statement_id:state.statementId,p_expected_version:state.version,p_request_key:membershipOrgDraftUuid(),p_reason:reason},'獨立確認應計');
+};
 window.openRequestModal=function(rid){
   var r=REQS.find(function(x){return x.id===rid;});
   if(!r)return;
+  if(laborElectronicMarker(r)){openDetail(rid);return;}
   normalizeRequestTerminalState(r);
   ensureRequestCashierStep(r);
   showApprD(r);
 };
 window.openDetail=function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
+  var laborMarker=laborElectronicMarker(r),laborEntry=laborMarker?laborElectronicCached(r):null,laborState=laborEntry&&laborEntry.loaded&&!laborEntry.error?laborEntry.data:null;
   S.detailRid=rid;
   normalizeRequestTerminalState(r);
-  ensureRequestCashierStep(r);
+  if(!laborMarker)ensureRequestCashierStep(r);
   if(S.page!=='detail')S.prev=S.page;
   nav('detail',null);
   var d=gD(r.dc);var e=gE(r.eid);
@@ -24560,13 +25007,23 @@ window.openDetail=function(rid){
   var revisionRecovery=expenseRevisionRecoveryHtml(r);if(revisionRecovery)acts=[revisionRecovery];
   var postingRecovery=expensePostingRecoveryHtml(r);if(postingRecovery)acts=[postingRecovery];
   if(r.voucherId)acts.push('<button class="btn-g" onclick="showVoucherById(\''+r.voucherId+'\')">查看傳票 '+r.voucherId+'</button>');
-  if(canWithdrawRequest(r)&&(!curStep||curStep.rk!=='applicant_revision'))acts.push('<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button>');
-  if(requestCashPostedAt(r))acts.push(paymentConcernButtonHtml(r));
+  if(!laborMarker&&canWithdrawRequest(r)&&(!curStep||curStep.rk!=='applicant_revision'))acts.push('<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button>');
+  if(!laborMarker&&requestCashPostedAt(r))acts.push(paymentConcernButtonHtml(r));
+  if(laborMarker){
+    var laborReady=!!laborState&&['reviewed','accrued','partially_paid','paid'].indexOf(laborState.status)>-1;
+    var laborLegacyFinancialStep=!!(curStep&&['cashier','applicant_confirm','voucher','accountant_final'].indexOf(curStep.rk)>-1)||['pending_voucher','pending_applicant_confirm','pending_external_labor_settlement','completed'].indexOf(r.status)>-1;
+    var laborAccountingNotReady=!!(curStep&&curStep.rk==='accountant'&&!laborReady);
+    if(laborAccountingNotReady||laborLegacyFinancialStep){
+      var gateText=!laborEntry||!laborEntry.loaded?'正在確認講師電子簽署與會計覆核狀態；會計關卡暫不前進。':laborEntry.error?'電子勞報狀態尚未讀取成功；會計關卡暫不前進。':laborAccountingNotReady?'主管簽核已完成，接著由會計建立邀請；講師簽署並完成逐堂覆核後，會計才可核准原單。':'原單已交由電子勞報獨立應計與銀行對帳付款；原整批出納、申請人確認及傳票按鈕不適用。';
+      acts=['<div role="status" style="font-size:12px;color:#1a5010;background:#f3fbec;border:1px solid #b8dfaa;border-radius:8px;padding:10px">'+gateText+'</div>'];
+      if(!laborLegacyFinancialStep&&canActRequest(r)&&returnBtn)acts.push(returnBtn);
+    }
+  }
   el('detail-act').innerHTML=acts.join('');
   // FIX 3：顯示匯款欄位
   var feeAmt=r.type==='advance_request'?0:requestBankFeeAmount(r);
   var feeNote=feeAmt?('（自動切分錄 '+fmt(feeAmt)+'）'):(isMegaBankRecipient(r)?'（兆豐收款銀行，不列手續費分錄）':'');
-  var bankDetail=(r.payee||r.bankName||r.bankNo)?('收款人：'+escAttr((r.payee||'—'))+'<br>銀行：'+escAttr((r.bankName||'—'))+(r.bankBranch?' '+escAttr(r.bankBranch):'')+'<br>帳號：<span style="font-family:var(--font-sans)">'+escAttr((r.bankNo||'—'))+'</span><br>預計匯款日：'+escAttr((r.expectedPayDate||'—'))+'<br>手續費：'+(requestFeeBearer(r)||'—')+feeNote):escAttr((r.bankAcc||'—'));
+  var bankDetail=laborMarker?'講師於受控簽署頁提交銀行資料；原申請只記錄預計付款日，尚未發生付款。':((r.payee||r.bankName||r.bankNo)?('收款人：'+escAttr((r.payee||'—'))+'<br>銀行：'+escAttr((r.bankName||'—'))+(r.bankBranch?' '+escAttr(r.bankBranch):'')+'<br>帳號：<span style="font-family:var(--font-sans)">'+escAttr((r.bankNo||'—'))+'</span><br>預計匯款日：'+escAttr((r.expectedPayDate||'—'))+'<br>手續費：'+(requestFeeBearer(r)||'—')+feeNote):escAttr((r.bankAcc||'—')));
   var actualText=(r.type==='purchase_request')?(purchaseActualAmount(r)?'<strong style="font-size:15px;color:#0f766e">'+fmt(purchaseActualAmount(r))+'</strong>':'<span style="color:#94a3b8">待總務填寫</span>'):(r.type==='advance_request'?(r.actualAmt?'<strong style="font-size:15px;color:#0f766e">'+fmt(r.actualAmt)+'</strong>':'<span style="color:#94a3b8">待會計依最後憑據填寫</span>'):'—');
   var amountLabel=r.type==='purchase_request'?'預估付款金額':(r.type==='advance_request'?'原申請金額':'金額');
   var amountValue=r.type==='purchase_request'?purchaseEstimatedAmount(r):(r.estimatedAmt||r.amt);
@@ -24582,17 +25039,26 @@ window.openDetail=function(rid){
   var accountingCard=isFinance()
     ?'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById(\''+r.voucherId+'\')">'+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+escAttr(r.dr)+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+escAttr(r.drN)+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+escAttr(r.cr)+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+escAttr(r.crN)+'</div></div></div>'+(feeAmt?'<div style="font-size:11px;color:#6a5840;margin-top:6px;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:6px">己方支出手續費會自動增加：Dr 6290 手續費 '+fmt(feeAmt)+'，Cr '+escAttr(r.cr)+' 銀行存款合計 '+fmt(r.amt+feeAmt)+'。</div>':'')+'<div style="font-size:11px;color:#94a3b8;margin-top:6px">提醒：數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
     :'<div class="card" style="padding:12px;background:#fff8ed;border-color:#efd7b8"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:5px">會計處理</div><div style="font-size:11px;color:#8b7358;line-height:1.7">這張單完成簽核後，會計會確認憑據與金流並由系統處理入帳。您不用填寫會計科目、分錄或傳票，只需要追蹤簽核狀態與補齊附件。</div></div>';
+  if(laborMarker)accountingCard='<div class="card" style="padding:12px;background:#fff8ed;border-color:#efd7b8"><div style="font-size:12px;font-weight:650;color:#334155">電子勞報獨立入帳</div><div style="font-size:11px;color:#6a5840;line-height:1.7;margin-top:6px">本單顯示毛額申請，原表單的預設科目僅供送件分類，不代表已入帳。簽署、會計逐堂覆核、主管簽核與不同人確認後，才依服務列建立專用應計傳票；實際付款須另有銀行證據。</div></div>';
   var managerCard=(S.user&&['section_chief','dept_manager','admin_director','ceo','general_affairs'].indexOf(currentRoleKey())>-1)?'<div class="detail-full-row">'+supervisorReviewCardHtml(r,false)+'</div>':'';
   if(isFinance()&&requestPostingLocked(r))accountingCard='';
   var infoCard='<div class="card detail-info-card"><div class="chd"><span class="cht">申請資訊</span></div>'+entityDeptEditorHtml('expense',r.id,r.eid,r.dc)+'<div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+cells+'</div><div style="padding:0 12px 12px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;border:1px solid #f0e0c8">'+escAttr(r.desc)+'</div>'+purchaseAmountCompareHtml(r)+advanceTwoEventHtml(r)+pettyAccountingHtml(r)+filesHtml+'</div></div>';
   var progressRows=approvalTimelineRows(r,{includeSubmitFallback:true});
   var progressCard='<div class="card detail-progress-card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">'+approvalTimelineProgressText(r)+(progressRows.length>5?' · 可上下滑動':'')+'</span></div><div class="detail-progress-scroll">'+tl+'</div></div>';
-  el('detail-body').innerHTML=managerCard+infoCard+progressCard+'<div class="detail-full-row">'+paidReturnBoundaryHtml(r)+(typeof accountingCorrectionPanelHtml==='function'?accountingCorrectionPanelHtml(r):'')+'</div>'+(invoiceReviewCard?'<div class="detail-full-row">'+invoiceReviewCard+'</div>':'')+'<div class="detail-full-row">'+accountingCard+'</div>'+(lineAccountingCard?'<div class="detail-full-row">'+lineAccountingCard+'</div>':'');
+  el('detail-body').innerHTML=managerCard+infoCard+(laborMarker?laborElectronicDetailHtml(r,laborEntry):'')+progressCard+'<div class="detail-full-row">'+(laborMarker?'':paidReturnBoundaryHtml(r)+(typeof accountingCorrectionPanelHtml==='function'?accountingCorrectionPanelHtml(r):''))+'</div>'+(invoiceReviewCard&&!laborMarker?'<div class="detail-full-row">'+invoiceReviewCard+'</div>':'')+'<div class="detail-full-row">'+accountingCard+'</div>'+(lineAccountingCard&&!laborMarker?'<div class="detail-full-row">'+lineAccountingCard+'</div>':'');
   hydrateApprovalRuntimeLogsForRecord('expense',r,tlRuntime.slotId);
+  if(laborMarker)loadLaborElectronicDetail(rid,false);
 };
 
 window.doApprove=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
+  if(laborElectronicMarker(r)){
+    var laborEntry=laborElectronicCached(r),laborState=laborEntry&&laborEntry.loaded&&!laborEntry.error?laborEntry.data:null,laborStep=activeStep(r);
+    var laborReviewReady=!!laborState&&['reviewed','accrued','partially_paid','paid'].indexOf(laborState.status)>-1;
+    if(!laborStep||['cashier','applicant_confirm','voucher','accountant_final'].indexOf(laborStep.rk)>-1||['pending_voucher','pending_applicant_confirm','pending_external_labor_settlement','completed'].indexOf(r.status)>-1||(laborStep.rk==='accountant'&&!laborReviewReady)){
+      alert('主管原有簽核可依序進行；會計核准須等講師簽署並完成逐堂覆核。原整批出納和傳票不得用於電子勞報。');openDetail(rid);return;
+    }
+  }
   if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
   var beforeStep=activeStep(r);
   var restrictedReturnedMiddle=isRestrictedReturnedMiddleStep(r);
@@ -24707,6 +25173,7 @@ function showApplicantConfirmationResult(rid,r,announce){
 window.doConfirmPay=async function(rid,trigger,prefix){
   prefix=prefix||'appr';
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
+  if(laborElectronicMarker(r)){alert('電子勞報不得使用原申請的整筆付款確認；實際付款須依銀行證據由專用流程逐筆記錄。');openDetail(rid);return;}
   var revisionStep=activeStep(r);
   if(revisionStep&&revisionStep.rk==='applicant_revision'){
     alert('申請人補件必須回到原申請表單完整修正後重新送出，系統已停止使用舊確認按鈕。');
@@ -24891,6 +25358,7 @@ async function finishExpensePostingTransaction(original,args){
 window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
   prefix=prefix||'appr';advancePrefix=advancePrefix||'advance-final';
   var original=REQS.find(function(x){return x.id===rid;});if(!original)return;
+  if(laborElectronicMarker(original)){alert('電子勞報不得由原申請整筆生成傳票；請使用簽署、逐堂會計覆核及獨立應計流程。');openDetail(rid);return;}
   var postingIdentity=expensePostingIdentity();
   if(!expenseTransactionIdentityCurrent(postingIdentity))return false;
   var pendingPosting=loadExpensePostingPending(rid);
@@ -25228,11 +25696,110 @@ function approvalDataLoadWarningHtml(){
     +'<div style="display:flex;gap:7px;flex-wrap:wrap"><button class="btn-g" onclick="repairCurrentApprovalAccount()">檢查並同步我的登入資料</button><button class="btn-g" onclick="refreshRemoteData(&quot;approval_warning_manual_refresh&quot;)">重新同步</button></div>'
     +'</div></div>';
 }
+var LABOR_TRACKER={open:false,entityId:'',period:'',status:'',items:[],nextCursor:null,loading:false,error:'',identity:'',seq:0};
+var LABOR_EXPORT={preview:null,loading:false,downloading:false,error:'',identity:'',entityId:'',period:''};
+function laborElectronicTrackerAllowed(){laborElectronicEnsureIdentity();return currentRoleKey()==='accountant'&&isFinance()&&!S.demoLogin&&hasSupabase();}
+function laborElectronicTrackerHtml(){
+  if(!laborElectronicTrackerAllowed())return'';
+  var tracker=LABOR_TRACKER;
+  var html='<div style="margin-top:9px"><button type="button" class="btn-g" aria-expanded="'+(tracker.open?'true':'false')+'" aria-controls="labor-tracker-panel" onclick="laborElectronicToggleTracker()">'+(tracker.open?'收起電子勞報追蹤':'電子勞報追蹤')+'</button></div>';
+  if(!tracker.open)return html;
+  html+='<section id="labor-tracker-panel" class="card" aria-label="講師電子勞報追蹤" style="margin-top:9px;padding:12px;border-color:#b8dfaa;background:#f7fcf4"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div><h3 style="font-size:14px;margin:0;color:#1a5010">講師電子勞報追蹤</h3><p style="font-size:11px;color:#6a5840;line-height:1.6">依法人與服務月份查詢；未填完仍列「待講師填寫」，不會誤算已簽署。</p></div><button type="button" class="btn-g" onclick="laborElectronicLoadTracker(true)">重新讀取</button></div>'
+    +'<div class="fr3"><div class="fg"><label class="fl" for="labor-track-entity">法人</label><select id="labor-track-entity" onchange="laborElectronicTrackerFilterChanged()">'+entityOptionsHtml('official',tracker.entityId||currentUserEntityId(),false)+'</select></div><div class="fg"><label class="fl" for="labor-track-period">服務月份</label><input type="month" id="labor-track-period" value="'+escAttr(tracker.period||todayMonth())+'" onchange="laborElectronicTrackerFilterChanged()"></div><div class="fg"><label class="fl" for="labor-track-status">狀態</label><select id="labor-track-status" onchange="laborElectronicTrackerFilterChanged()"><option value="">全部狀態</option>'+['invited','signed_pending_archive','signed','returned','reviewed','accrued','partially_paid','paid','revoked'].map(function(v){return'<option value="'+v+'" '+(tracker.status===v?'selected':'')+'>'+escAttr(laborElectronicStatusLabel(v))+'</option>';}).join('')+'</select></div></div>';
+  if(tracker.error)html+='<div role="alert" style="padding:9px;border:1px solid #f0b0b0;background:#fff1f2;border-radius:8px;color:#991b1b">'+escAttr(tracker.error)+'</div>';
+  html+='<div id="labor-tracker-results" aria-live="polite">';
+  if(tracker.loading&&!tracker.items.length)html+='<div role="status" style="padding:12px">正在讀取正式電子勞報狀態…</div>';
+  else if(!tracker.items.length)html+='<div style="padding:12px;color:#64748b">目前條件沒有已建立邀請的單據；未建立邀請的申請仍可從原申請詳情查看。</div>';
+  else html+=tracker.items.map(function(item){
+    var r=REQS.find(function(row){return row.id===item.requestId;}),no=r&&r.no||item.requestId||'—';
+    return'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-bottom:1px solid #d9e8d4;padding:10px 4px;font-size:12px"><div style="min-width:125px;flex:1;overflow-wrap:anywhere"><strong>'+escAttr(no)+'</strong><div style="color:#64748b;font-size:10px">'+escAttr(item.entityName||item.entityId||'')+'</div></div><div style="min-width:110px;flex:1">'+escAttr(laborElectronicStatusLabel(item.status))+(item.signedAt?'<div style="font-size:10px;color:#64748b">簽署 '+escAttr(item.signedAt)+'</div>':'')+'</div><div style="min-width:90px">NT$'+escAttr(laborElectronicAmountText(Number(item.totalGrossCents)||0))+'</div><button type="button" class="btn-g" onclick="openDetail('+financeInlineJsString(item.requestId||'')+')">查看申請</button></div>';
+  }).join('');
+  html+='</div>';
+  if(tracker.nextCursor)html+='<button type="button" class="btn-g" '+(tracker.loading?'disabled aria-busy="true"':'')+' onclick="laborElectronicLoadTracker(false)">'+(tracker.loading?'讀取中…':'載入更多')+'</button>';
+  var preview=LABOR_EXPORT.preview,same=LABOR_EXPORT.identity===laborElectronicIdentity()&&LABOR_EXPORT.entityId===(tracker.entityId||currentUserEntityId())&&LABOR_EXPORT.period===(tracker.period||todayMonth());
+  html+='<div style="font-size:11px;color:#6a5840;margin-top:11px;padding:10px;border:1px solid #efd7b8;border-radius:8px;background:#fff8ed"><strong>事務所月交包 · 依實際付款月份</strong><div>僅授權會計下載。ZIP 含付款登錄表、未完成清冊、簽署快照、簽名、身分與匯款證明、可列印 HTML 表單及檔案雜湊；內含敏感個資，正式 PDF 尚待產製，請以安全管道交付事務所。</div><button type="button" class="btn-g" style="margin-top:8px" '+(LABOR_EXPORT.loading||LABOR_EXPORT.downloading?'disabled aria-busy="true"':'')+' onclick="laborElectronicPreviewExport()">'+(LABOR_EXPORT.loading?'正在核對完整性…':'檢查本月交付資料')+'</button>';
+  if(LABOR_EXPORT.error)html+='<div role="alert" style="color:#991b1b;margin-top:6px">'+escAttr(LABOR_EXPORT.error)+'</div>';
+  if(same&&preview){
+    var count=Number(preview.incompleteCount)||0,payments=Number(preview.paymentCount)||0,pending=Number(preview.pendingCount)||0,uninvited=Number(preview.uninvitedCount)||0;
+    html+='<div role="status" style="margin-top:6px;color:'+(count||pending||uninvited?'#991b1b':'#1a5010')+'">實際付款 '+payments+' 筆；待完成 '+pending+' 筆（其中未邀請 '+uninvited+' 筆）；'+(count||pending||uninvited?'有 '+count+' 項資料缺漏或流程未完成，不可作為完整月交。':'資料校驗可供產生完整交付包。')+'</div>';
+    if(preview.ready===true&&count===0&&pending===0&&uninvited===0&&payments>0)html+='<button type="button" class="btn-p" style="margin-top:8px" '+(LABOR_EXPORT.downloading?'disabled aria-busy="true"':'')+' onclick="laborElectronicDownloadExport()">'+(LABOR_EXPORT.downloading?'正在下載與檢查…':'下載完整月交 ZIP')+'</button>';
+  }
+  html+='</div></section>';
+  return html;
+}
+function renderLaborElectronicTracker(){var slot=el('labor-tracker-slot');if(slot)slot.innerHTML=laborElectronicTrackerHtml();}
+window.laborElectronicToggleTracker=function(){if(!laborElectronicTrackerAllowed())return;LABOR_TRACKER.open=!LABOR_TRACKER.open;if(LABOR_TRACKER.open&&!LABOR_TRACKER.period)LABOR_TRACKER.period=todayMonth();renderLaborElectronicTracker();if(LABOR_TRACKER.open)laborElectronicLoadTracker(true);};
+window.laborElectronicTrackerFilterChanged=function(){
+  if(!laborElectronicTrackerAllowed())return;
+  LABOR_TRACKER.entityId=String((el('labor-track-entity')||{}).value||currentUserEntityId());
+  LABOR_TRACKER.period=String((el('labor-track-period')||{}).value||todayMonth());
+  LABOR_TRACKER.status=String((el('labor-track-status')||{}).value||'');
+  LABOR_EXPORT.preview=null;LABOR_EXPORT.error='';
+  laborElectronicLoadTracker(true);
+};
+window.laborElectronicPreviewExport=async function(){
+  if(!laborElectronicTrackerAllowed()||LABOR_EXPORT.loading||LABOR_EXPORT.downloading)return;
+  var tracker=LABOR_TRACKER,entity=String((el('labor-track-entity')||{}).value||tracker.entityId||currentUserEntityId()),period=String((el('labor-track-period')||{}).value||tracker.period||todayMonth()),identity=laborElectronicIdentity();
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)||!entity){LABOR_EXPORT.error='請先選擇付款法人與月份。';renderLaborElectronicTracker();return;}
+  LABOR_EXPORT={preview:null,loading:true,downloading:false,error:'',identity:identity,entityId:entity,period:period};renderLaborElectronicTracker();
+  try{
+    var result=await withOperationTimeout(getSb().functions.invoke('finance-labor-external/export/preview',{body:{entityId:entity,paidMonth:period}}),'核對月交資料',30000);
+    if(identity!==laborElectronicIdentity()||LABOR_EXPORT.entityId!==entity||LABOR_EXPORT.period!==period)return;
+    if(result.error)throw result.error;
+    var data=result.data||{};
+    if(data.payerEntityId!==entity||data.actualPaidMonth!==period||['incompleteCount','paymentCount','pendingCount','uninvitedCount'].some(function(key){return !Number.isSafeInteger(Number(data[key]))||Number(data[key])<0;}))throw new Error('月交預覽與所選條件不一致');
+    LABOR_EXPORT.preview=data;
+  }catch(error){if(identity===laborElectronicIdentity())LABOR_EXPORT.error='完整性核對失敗，不提供下載。'+friendlyErrorMessage(error,{action:'核對事務所月交資料'});}
+  finally{if(identity===laborElectronicIdentity()){LABOR_EXPORT.loading=false;renderLaborElectronicTracker();}}
+};
+window.laborElectronicDownloadExport=async function(){
+  if(!laborElectronicTrackerAllowed()||LABOR_EXPORT.loading||LABOR_EXPORT.downloading)return;
+  var job=LABOR_EXPORT,identity=laborElectronicIdentity();
+  if(job.identity!==identity||!job.preview||job.preview.ready!==true||Number(job.preview.incompleteCount)!==0||Number(job.preview.pendingCount)!==0||Number(job.preview.uninvitedCount)!==0||Number(job.preview.paymentCount)<1)return;
+  job.downloading=true;job.error='';renderLaborElectronicTracker();
+  var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},60000);
+  try{
+    var session=await withOperationTimeout(getSb().auth.getSession(),'確認月交下載身分',12000);
+    var token=session&&session.data&&session.data.session&&session.data.session.access_token;
+    if(session.error||!token||identity!==laborElectronicIdentity())throw new Error('登入資料已變更，請重新登入');
+    var endpoint=SUPABASE_URL.replace(/\/$/,'')+'/functions/v1/finance-labor-external/export/month';
+    var response=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+token,apikey:SUPABASE_ANON_KEY,'Content-Type':'application/json'},body:JSON.stringify({entityId:job.entityId,paidMonth:job.period}),signal:controller.signal,cache:'no-store'});
+    if(!response.ok||response.headers.get('content-type')!=='application/zip')throw new Error('月交包伺服器未提供完整 ZIP');
+    var incomplete=response.headers.get('X-Export-Incomplete-Count');
+    if(incomplete!=='0')throw new Error('下載當下仍有 '+(incomplete||'未確認數量')+' 項缺漏，已停止下載');
+    var blob=await response.blob(),head=new Uint8Array(await blob.slice(0,4).arrayBuffer());
+    if(identity!==laborElectronicIdentity()||blob.size<22||head[0]!==80||head[1]!==75||![3,5].includes(head[2]))throw new Error('月交 ZIP 完整性或登入狀態無法確認');
+    var url=URL.createObjectURL(blob),anchor=document.createElement('a');anchor.href=url;anchor.download='external_labor_'+job.entityId+'_'+job.period+'.zip';anchor.style.display='none';document.body.appendChild(anchor);anchor.click();
+    setTimeout(function(){anchor.remove();URL.revokeObjectURL(url);},1000);
+    job.error='';job.preview=null;
+  }catch(error){if(identity===laborElectronicIdentity())job.error='月交包未下載：'+friendlyErrorMessage(error,{action:'下載完整月交 ZIP'})+'。請重新檢查完整性。';job.preview=null;}
+  finally{clearTimeout(timer);if(identity===laborElectronicIdentity()){job.downloading=false;renderLaborElectronicTracker();}}
+};
+window.laborElectronicLoadTracker=async function(reset){
+  if(!laborElectronicTrackerAllowed()||!LABOR_TRACKER.open)return;
+  var tracker=LABOR_TRACKER,identity=laborElectronicIdentity(),seq=++tracker.seq;
+  if(reset){tracker.items=[];tracker.nextCursor=null;tracker.error='';}
+  if(!reset&&!tracker.nextCursor)return;
+  tracker.loading=true;tracker.identity=identity;renderLaborElectronicTracker();
+  try{
+    var result=await withOperationTimeout(getSb().rpc('finance_labor_staff_list_v1',{p_entity_id:tracker.entityId||currentUserEntityId(),p_period:tracker.period||todayMonth(),p_status:tracker.status||null,p_limit:50,p_cursor:reset?null:tracker.nextCursor}),'讀取電子勞報追蹤',15000);
+    if(result.error)throw result.error;
+    if(seq!==tracker.seq||identity!==laborElectronicIdentity()||!tracker.open)return;
+    var data=result.data||{},items=Array.isArray(data.items)?data.items:[];
+    var ids=new Set(tracker.items.map(function(item){return item.statementId;}));
+    items.forEach(function(item){if(item&&item.statementId&&!ids.has(item.statementId)){tracker.items.push(item);ids.add(item.statementId);}});
+    tracker.nextCursor=data.nextCursor||null;tracker.error='';
+  }catch(error){if(seq===tracker.seq&&identity===laborElectronicIdentity())tracker.error='狀態讀取失敗；原有資料不會被當成 0 筆。請重新讀取。';}
+  finally{if(seq===tracker.seq&&identity===laborElectronicIdentity()){tracker.loading=false;renderLaborElectronicTracker();}}
+};
 function buildApprovals(){
   setApprovalTabVisual(S.aT||'p');
   var correctionQueue=el('accounting-correction-queue');
   if(!correctionQueue&&el('appr-list')){correctionQueue=document.createElement('div');correctionQueue.id='accounting-correction-queue';el('appr-list').before(correctionQueue);}
   if(correctionQueue)correctionQueue.innerHTML=canReviseAccountingDetails()||currentRoleKey()==='cashier'?'<button type="button" class="btn-g" onclick="openExpenseAccountingCorrections()">金額更正與差額待辦</button>':'';
+  var laborTrackerSlot=el('labor-tracker-slot');
+  if(!laborTrackerSlot&&el('appr-list')){laborTrackerSlot=document.createElement('div');laborTrackerSlot.id='labor-tracker-slot';el('appr-list').before(laborTrackerSlot);}
+  renderLaborElectronicTracker();
   if(!S.user)return;
   var historyRuntime=approvalHistoryRuntimeForCurrentUser();
   if(S.aT==='h'){
@@ -27837,6 +28404,7 @@ window.deleteDraftFromApprovals=async function(id){
   return window.deleteDraft(id);
 };
 function showApprD(r){
+  if(laborElectronicMarker(r)){openDetail(r.id);return;}
   openApprModal();
   var canAct=canActRequest(r);
   var d=gD(r.dc);var e=gE(r.eid);
@@ -27873,6 +28441,7 @@ function showApprD(r){
   }
   else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+advanceFinalAmtField+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080;margin-bottom:5px" onclick="doConfirmVoucher(\''+r.id+'\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn+'</div>';
   else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+(cur.rk==='cashier'?'<div style="font-size:11px;color:#7a3b00;line-height:1.6;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px;margin-bottom:8px">按下出納放款後，系統會先在現金流量表認列撥款 '+fmt(ceoCashImpactAmount(r))+'；最後一關會計收到憑據後才更新資產負債表與損益表。</div>':'')+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">'+(cur.rk==='cashier'?'出納放款並更新現金流':'核准此申請')+'</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">不通過</button></div>';
+  if(laborElectronicMarker(r))actH='<div style="padding:11px;border-top:1px solid #d9e8d4;background:#f7fcf4"><div style="font-size:11px;color:#1a5010;line-height:1.6;margin-bottom:8px">此申請使用講師電子勞報專用流程；簽署、會計覆核、主管簽核及實際付款請在完整詳情處理。</div><button type="button" class="btn-g" onclick="closeAppr();openDetail('+financeInlineJsString(r.id)+')">開啟電子勞報詳情</button></div>';
   if(!actH&&canWithdrawRequest(r))actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-top:6px">單子尚未進入出納放款關卡，因此申請人可以抽單取消。</div></div>';
   if(requestCashPostedAt(r))actH+=paymentConcernButtonHtml(r);
   actH=approvalActionSectionHtml(actH);
@@ -28011,6 +28580,7 @@ document.addEventListener('keydown',function(event){
 });
 window.apprApprove=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
+  if(laborElectronicMarker(r)){openDetail(rid);return;}
   if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
   if(!requireApprovalRecordsActionAvailability('expense_requests',[r]))return;
   var beforeStep=activeStep(r);
@@ -28928,6 +29498,8 @@ function accountingExpenseStatementGapRecords(eid,period){
   if(typeof expenseStatementScopeRows!=='function'||typeof expenseLedgerRowsForRequest!=='function')return [];
   var periodLedgerRows=ledgerRows(eid,period);
   return expenseStatementScopeRows(eid,period).filter(function(r){
+    // Electronic labor posts through dedicated service-line accruals, not the parent request voucher.
+    if(laborElectronicMarker(r))return false;
     return !expenseLedgerRowsForRequest(r,periodLedgerRows).length;
   }).map(function(r){
     var amount=expenseStatementAmount(r),cashPosted=!!requestCashPostedAt(r),hasPostingFlag=!!(requestLedgerPostedAt(r)||r.voucherId||r.voucher_id),isHr=isPersonnelExpenseRequest(r),typeLabel=expenseStatementTypeLabel(r);
