@@ -8,12 +8,13 @@
   const form = document.getElementById('labor-form');
   const complete = document.getElementById('complete');
   const submitButton = document.getElementById('submit-button');
+  const submitStatus = document.getElementById('submit-status');
   const clearSignatureButton = document.getElementById('clear-signature');
   const canvas = document.getElementById('signature-pad');
   const context = canvas.getContext('2d');
   const state = { token: '', version: 0, submitId: crypto.randomUUID(), uploads: {}, ink: false, busy: false, pendingPayload: null };
   const uploadNames = { identity_front: 'identityFront', identity_back: 'identityBack', bank_proof: 'bankProof', signature: 'signature' };
-  const money = cents => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(cents / 100);
+  const money = cents => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
   const reasons = {
     INVALID_LINK: '連結無效或已失效，請向原邀請承辦人索取新連結。',
     NOT_AVAILABLE: '此連結目前不可使用，可能已過期、撤銷或完成簽署。請聯繫原邀請承辦人。',
@@ -56,7 +57,7 @@
     } finally { clearTimeout(timeout); }
   }
 
-  function displayError(error) {
+  function displayError(error, scroll = true) {
     say(reasons[error.message] || '目前無法完成操作，請稍後重試或聯繫原邀請承辦人。', true);
     if (state.token && formArea.hidden && complete.hidden && ['SERVICE_UNAVAILABLE', 'ARCHIVE_PENDING'].includes(error.message)) {
       const retry = document.createElement('button');
@@ -64,7 +65,7 @@
       retry.addEventListener('click', () => { say('正在重新確認簽署狀態…'); call('/guest/lookup', { token: state.token }).then(renderSummary).catch(displayError); }, { once: true });
       message.append(document.createElement('br'), retry);
     }
-    message.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (scroll) message.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   function renderSummary(data) {
@@ -154,7 +155,8 @@
     if (state.busy) return;
     if (!state.pendingPayload && !form.reportValidity()) return;
     if (!state.pendingPayload && !document.getElementById('consent').checked) { say('請先閱讀並勾選簽署聲明。', true); return; }
-    state.busy = true; submitButton.disabled = true;
+    state.busy = true; submitButton.disabled = true; submitButton.setAttribute('aria-busy', 'true');
+    const progress = (text, buttonText) => { say(text); submitStatus.textContent = text; submitButton.textContent = buttonText; };
     try {
       if (!state.pendingPayload) {
         const profile = {};
@@ -162,10 +164,10 @@
         const files = [...document.querySelectorAll('input[data-kind]')];
         for (let i = 0; i < files.length; i++) {
           const input = files[i];
-          say(`正在安全上傳附件 ${i + 1} / 4…`);
+          progress(`正在安全上傳附件 ${i + 1} / 4…`, `附件 ${i + 1} / 4 上傳中`);
           await upload(input.dataset.kind, input.files[0]);
         }
-        say('正在安全上傳簽名 4 / 4…');
+        progress('正在安全上傳簽名 4 / 4…', '簽名 4 / 4 上傳中');
         await upload('signature', await signatureFile());
         state.pendingPayload = {
           token: state.token, expectedVersion: state.version, submitId: state.submitId,
@@ -173,9 +175,8 @@
         };
         for (const input of form.querySelectorAll('input')) input.disabled = true;
         clearSignatureButton.disabled = true;
-        submitButton.textContent = '重試完成封存';
       }
-      say('正在建立簽署紀錄並封存，請勿關閉頁面…');
+      progress('正在建立簽署紀錄並封存，請勿關閉頁面…', '簽署封存中…');
       const result = await call('/guest/submit', state.pendingPayload, false, 45000);
       if (result.status !== 'signed') throw new Error('ARCHIVE_PENDING');
       state.token = ''; state.uploads = {}; state.pendingPayload = null;
@@ -190,10 +191,11 @@
         clearSignatureButton.disabled = false;
         submitButton.textContent = '確認並送出簽署';
       }
-      displayError(error.message === 'SIGNATURE_REQUIRED' ? new Error('SIGNATURE_REQUIRED') : error);
+      displayError(error.message === 'SIGNATURE_REQUIRED' ? new Error('SIGNATURE_REQUIRED') : error, false);
       if (error.message === 'SIGNATURE_REQUIRED') say('請手寫簽名或上傳簽名 PNG。', true);
-      if (state.pendingPayload) submitButton.textContent = '重試完成封存';
-    } finally { state.busy = false; submitButton.disabled = false; }
+      submitStatus.textContent = error.message === 'SIGNATURE_REQUIRED' ? '請手寫簽名或上傳簽名 PNG。' : reasons[error.message] || '目前無法完成操作，請稍後重試或聯繫原邀請承辦人。';
+      submitButton.textContent = state.pendingPayload ? '重試完成封存' : '確認並送出簽署';
+    } finally { state.busy = false; submitButton.disabled = false; submitButton.removeAttribute('aria-busy'); }
   }
 
   form.addEventListener('submit', send);
