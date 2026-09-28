@@ -29,6 +29,7 @@ function fixture(){
   c.financeReportEngine=()=>null;vm.runInContext(between('function fmt(', 'function fmtMoney('),c);
   c.applySystemSettings=rows=>{c.SYSTEM_SETTINGS=Object.fromEntries(rows.map(row=>[row.key,row.value]));};
   vm.runInContext(between('function adjustmentEntriesFromVoucher(', 'window.createAdjustmentVoucher='),c);
+  vm.runInContext(between('function backupSettingsSnapshot(', 'window.runCustomizationRoundTripSelfCheck='),c);
   vm.runInContext(between('function buildBackupPackage(', 'window.downloadBackupPackage='),c);
   vm.runInContext(between('window.createAdjustmentVoucher=', 'window.archivePeriodDocuments='),c);
   vm.runInContext(between('window.downloadBackupPackage=', 'window.backupFileChange='),c);
@@ -69,7 +70,7 @@ function remoteClient(c,counts={},options={}){
   pc.callAccountingRpc=async(name,payload)=>{rpcCalls.push({name,payload});return {ok:true,data:{voucher_no:'posted-fixture'}};};
   await pc.createAdjustmentVoucher();equal(rpcCalls.at(-1).payload.p_entries.map(e=>e.amt),[10.50,10.50]);equal(auditCalls,1);
   pc.callAccountingRpc=async()=>{pc.identity='another-reviewer';return {ok:true};};await pc.createAdjustmentVoucher();equal(auditCalls,1);
-  let pkg=f.c.buildBackupPackage();pkg.fileHash=await f.c.backupStrictHash(JSON.stringify(pkg,null,2));await f.c.validateBackupPackage(pkg);
+  let pkg=f.c.buildBackupPackage();equal(pkg.data.settings,f.c.backupSettingsSnapshot());pkg.fileHash=await f.c.backupStrictHash(JSON.stringify(pkg,null,2));await f.c.validateBackupPackage(pkg);
   equal(f.c.restoreRows(pkg.data.periodCloses),pkg.data.periodCloses);
   equal(f.c.restoreRows(pkg.data.archives),pkg.data.archives);
   assert(!Object.hasOwn(pkg.data.users[0],'pw'));assertions++;

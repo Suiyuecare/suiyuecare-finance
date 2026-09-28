@@ -15,7 +15,7 @@ async function check(name,work){await work();passed++;console.log('PASS '+name);
 function fixture(){
  const elements=new Map(),node=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',textContent:'',value:'',attributes:{},setAttribute(k,v){this.attributes[k]=v;}});return elements.get(id);};
  const c={window:{},console:{warn(){},error(){}},AbortController,Promise,Date,Set,Map,Number,String,Math,Array,Object,JSON,Error,setTimeout,clearTimeout,
-  S:{user:{id:'FICT',authUserId:'AUTH',role:'accountant'},page:'approvals',aT:'h',apprPage:1,apprQuery:''},REQS:[],BILLS:[],INVS:[],tenant:'T',env:'test',financeWorkspaceIdentityBlocked:false,financeAuthIdentityEpoch:0,CURRENT_PERMISSION_SNAPSHOT:{reports:'edit'},approvalHistorySearchTimer:null,
+  S:{user:{id:'FICT',authUserId:'AUTH',role:'accountant'},page:'approvals',aT:'h',apprPage:1,apprQuery:''},REQS:[],BILLS:[],INVS:[],tenant:'T',env:'test',financeWorkspaceIdentityBlocked:false,financeAuthIdentityEpoch:0,CURRENT_PERMISSION_SNAPSHOT:{reports:'edit'},APPROVAL_SEARCH_COMPOSING:false,approvalHistorySearchTimer:null,
   APPROVAL_HISTORY_RUNTIME:{identity:'',status:'idle',items:[],total:0,allTotal:0,page:1,limit:50,query:'',error:'',updatedAt:'',promise:null,requestSeq:0},calls:[],opened:[],frames:[],measures:[],now:10};
  Object.assign(c,{DEFAULT_TENANT_ID:'T',currentTenantId:()=>c.tenant,activeDataEnvironment:()=>c.env,approvalFastBootstrapIdentity:()=>c.tenant+'|'+c.S.user?.authUserId,
   getSb:()=>({rpc(name,args){let resolve;const p=new Promise(r=>resolve=r),call={name,args,resolve,aborts:0};c.calls.push(call);return{abortSignal(signal){signal.addEventListener('abort',()=>call.aborts++);return this;},then(ok,bad){return p.then(ok,bad);}};}}),
@@ -28,7 +28,7 @@ function fixture(){
   showApprD:r=>c.opened.push({kind:'req',raw:r}),showBillApprD:r=>c.opened.push({kind:'bill',raw:r,rows:c.billGroupRows(r)}),showInvApprD:r=>c.opened.push({kind:'inv',raw:r,rows:c.invoiceGroupRows(r)}),showReceiptTaskD:r=>c.opened.push({kind:'recv',raw:r,rows:c.invoiceGroupRows(r)}),
   invoiceBatchFallbackKey:i=>i.legacy||'',billCreatedBucket:b=>b.legacy||'',syncApprovalWaitTimer(){},approvalShortDate:x=>String(x||'—').slice(0,10),draftTime:x=>x,
   approvalTableHeaderHtml:()=>'<thead><tr><th>選取</th><th>簽核日期</th></tr></thead>',approvalPagerHtml:(total,page,pages)=>'<footer>'+[total,page,pages].join('/')+'</footer>'});
- vm.createContext(c);vm.runInContext([fn('withOperationTimeout'),history,fn('remoteRowKey'),fn('mergeRemoteRowsByKey'),fn('financeReadSourceSnapshot'),fn('invoiceGroupKey'),fn('invoiceGroupRows'),fn('billGroupKey'),fn('billGroupRows'),fn('openApprovalFullItem'),handler('openApprovalItem'),fn('renderApprovalHistorySummaries')].join('\n'),c);
+ vm.createContext(c);vm.runInContext([fn('withOperationTimeout'),history,fn('remoteRowKey'),fn('mergeRemoteRowsByKey'),fn('financeReadSourceSnapshot'),fn('invoiceGroupKey'),fn('invoiceGroupRows'),fn('billGroupKey'),fn('billGroupRows'),fn('openApprovalFullItem'),handler('openApprovalItem'),fn('syncApprovalSearchClear'),fn('renderApprovalHistorySummaries')].join('\n'),c);
  c.node=node;c.respond=async(n,data,error)=>{c.calls[n].resolve(error?{error}:{data});await flush();};
  return c;
 }

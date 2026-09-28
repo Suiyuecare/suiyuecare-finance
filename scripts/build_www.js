@@ -52,6 +52,7 @@ const startupBundle = createStartupBundle(html, root);
 html = startupBundle.html;
 fs.writeFileSync(path.join(out, startupBundle.file), startupBundle.code);
 fs.writeFileSync(path.join(out, startupBundle.sdk.file), startupBundle.sdk.code);
+fs.writeFileSync(path.join(out, startupBundle.main.file), startupBundle.main.code);
 fs.writeFileSync(path.join(out, 'index.html'), html);
 
 let externalHtml = fs.readFileSync(path.join(root, 'external-remuneration.html'), 'utf8');

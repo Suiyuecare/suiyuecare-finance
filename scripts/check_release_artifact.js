@@ -489,7 +489,7 @@ function expectedBuiltIndex() {
   for (const file of ['assets/vendor/supabase-js-2.111.0.LICENSE', 'assets/vendor/supabase-js-2.111.0.provenance.json']) {
     if (!fs.readFileSync(path.join(OUTPUT, file)).equals(fs.readFileSync(path.join(ROOT, file)))) fail('built Supabase SDK evidence differs: ' + file);
   }
-  return bundle.html;
+  return bundle;
 }
 
 function expectedExternalRemunerationPage() {
@@ -517,21 +517,27 @@ removeGeneratedOsMetadata(OUTPUT);
 const builtIndexPath = path.join(OUTPUT, 'index.html');
 if (!fs.existsSync(builtIndexPath)) fail('www/index.html is missing');
 const builtIndex = fs.readFileSync(builtIndexPath, 'utf8');
-if (builtIndex !== expectedBuiltIndex()) fail('www/index.html is not the deterministic build of index.html for the selected build target');
+const expectedBuilt = expectedBuiltIndex();
+if (builtIndex !== expectedBuilt.html) fail('www/index.html is not the deterministic build of index.html for the selected build target');
+const builtMainPath = path.join(OUTPUT, expectedBuilt.main.file);
+if (!fs.existsSync(builtMainPath)) fail('Finance main script is missing from www');
+const builtMain = fs.readFileSync(builtMainPath, 'utf8');
+if (builtMain !== expectedBuilt.main.code) fail('Finance main script is not the deterministic build of index.html for the selected build target');
 const externalPagePath = path.join(OUTPUT, 'external-remuneration.html');
 if (!fs.existsSync(externalPagePath) || fs.readFileSync(externalPagePath, 'utf8') !== expectedExternalRemunerationPage()) {
   fail('www/external-remuneration.html is not the deterministic build of its source');
 }
-if (/__(?:FINANCE_BUILD_TARGET|FINANCE_SUPABASE_URL|FINANCE_SUPABASE_ANON_KEY)__/.test(builtIndex)) {
-  fail('www/index.html still contains a Finance runtime configuration placeholder');
+const builtBrowserSource = builtIndex + '\n' + builtMain;
+if (/__(?:FINANCE_BUILD_TARGET|FINANCE_SUPABASE_URL|FINANCE_SUPABASE_ANON_KEY)__/.test(builtBrowserSource)) {
+  fail('Finance browser artifact still contains a runtime configuration placeholder');
 }
-if (buildConfig.target !== 'production' && /https:\/\/[a-z0-9-]+\.supabase\.co/i.test(builtIndex)) {
+if (buildConfig.target !== 'production' && /https:\/\/[a-z0-9-]+\.supabase\.co/i.test(builtBrowserSource)) {
   fail(`${buildConfig.target} artifact contains a Supabase project URL`);
 }
-if (buildConfig.target !== 'production' && /var\s+SUPABASE_(?:ANON|PUBLISHABLE)_KEY\s*=\s*['"](?:eyJ|sb_)/i.test(builtIndex)) {
+if (buildConfig.target !== 'production' && /var\s+SUPABASE_(?:ANON|PUBLISHABLE)_KEY\s*=\s*['"](?:eyJ|sb_)/i.test(builtBrowserSource)) {
   fail(`${buildConfig.target} artifact contains a Supabase browser key`);
 }
-if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(builtIndex)) {
+if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(builtBrowserSource)) {
   fail('artifact contains a forbidden Supabase elevated key');
 }
 

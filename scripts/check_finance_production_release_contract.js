@@ -2,6 +2,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -244,12 +245,17 @@ const candidateJob = workflow.slice(candidateAt, databaseAt);
 const databaseJob = workflow.slice(databaseAt, promoteAt);
 const promoteJob = workflow.slice(promoteAt);
 assert.match(candidateJob, /pnpm release:preflight[\s\S]+vercel@59\.3\.0 build --prod --standalone[\s\S]+pnpm release:verify-artifact[\s\S]+deploy --prebuilt --prod --skip-domain[\s\S]+verify-frontend-contract[\s\S]+verify-vercel-target[\s\S]+create-receipt[\s\S]+upload-artifact/);
+assert.match(candidateJob, /main-script-path[\s\S]+curl "\$MAIN_ASSET_PATH"[\s\S]+candidate-main\.js[\s\S]+verify-frontend-contract[\s\S]+--main-script "\$RUNNER_TEMP\/candidate-main\.js"[\s\S]+cp "\$RUNNER_TEMP\/candidate-main\.js" "\$BUNDLE\/candidate-main\.js"/, 'candidate must seal the deployed main script with the HTML and manifest');
 assert.doesNotMatch(candidateJob, /supabase db push|vercel@59\.3\.0 promote/);
 assert.match(databaseJob, /needs: candidate/);
 assert.match(databaseJob, /download-artifact[\s\S]+validate-target[\s\S]+supabase link[\s\S]+verify-receipt[\s\S]+verify-candidate[\s\S]+verify-frontend-contract[\s\S]+verify-vercel-target[\s\S]+classify-ledger/);
+assert.match(databaseJob, /database-candidate-main\.js[\s\S]+cmp -s "\$BUNDLE\/candidate-main\.js"[\s\S]+verify-frontend-contract[\s\S]+--main-script "\$RUNNER_TEMP\/database-candidate-main\.js"/, 'database gate must reread the exact candidate main script');
+assert.match(databaseJob, /production-before-db-contract-main\.js[\s\S]+verify-production-baseline[\s\S]+--production-main-script[\s\S]+--candidate-main-script/, 'database baseline must compare candidate and live main script bytes');
 assert.doesNotMatch(databaseJob, /vercel@59\.3\.0 (?:build|deploy|promote)/, 'database job must consume the sealed candidate without rebuilding or promoting it');
 assert.match(promoteJob, /needs: \[candidate, database\]/);
 assert.match(promoteJob, /download-artifact[\s\S]+validate-target[\s\S]+supabase link[\s\S]+verify-receipt[\s\S]+finance_production_db_postflight\.sql[\s\S]+promote "\$DEPLOYMENT_URL" --yes[\s\S]+verify-promotion[\s\S]+verify-frontend-contract/);
+assert.match(promoteJob, /promote-candidate-main\.js[\s\S]+cmp -s "\$BUNDLE\/candidate-main\.js"[\s\S]+verify-frontend-contract[\s\S]+--main-script "\$RUNNER_TEMP\/promote-candidate-main\.js"/, 'promotion gate must reread the exact candidate main script');
+assert.match(promoteJob, /production-main\.js[\s\S]+verify-promotion[\s\S]+verify-frontend-contract[\s\S]+--main-script "\$RUNNER_TEMP\/production-main\.js"/, 'production alias must serve the sealed main script');
 assert.doesNotMatch(promoteJob, /vercel@59\.3\.0 (?:build|deploy)|prepare-apply/, 'retryable promote job must not rebuild, redeploy or reapply DB migrations');
 const compatAt = databaseJob.indexOf('if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then');
 const pendingAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "pending" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then');
@@ -884,37 +890,68 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   fs.writeFileSync(badPipeline, 'create index concurrently bad_idx on bad_table(id);\n');
   assert.throws(() => guard.prepareRehearsal(badPipeline, path.join(temp, 'bad-pipeline-rehearsal.sql'), '20260826155840', rehearsalFingerprint, rehearsalCanary), /outside its atomic migration batch/);
 
+  const mainCode = 'const submissionAttemptId = "test";';
+  const mainHash = crypto.createHash('sha256').update(mainCode).digest('hex');
+  const mainAsset = `assets/finance-main-${mainHash.slice(0, 16)}.js`;
+  const mainScript = path.join(temp, 'candidate-main.js');
+  fs.writeFileSync(mainScript, mainCode);
   const manifest = {
     schema_version: 2, contract: 'finance-release-artifact-v2', build_target: 'production', runtime_mode: 'production-supabase',
-    source_commit: 'a'.repeat(40), source_manifest_sha256: 'b'.repeat(64), artifact_manifest_sha256: 'c'.repeat(64)
+    source_commit: 'a'.repeat(40), source_manifest_sha256: 'b'.repeat(64), artifact_manifest_sha256: 'c'.repeat(64),
+    artifact_files: [{ path: mainAsset, bytes: Buffer.byteLength(mainCode), sha256: mainHash }]
   };
   const localManifest = path.join(temp, 'local.json');
   const remoteManifest = path.join(temp, 'remote.json');
   const candidateIndex = path.join(temp, 'candidate-index.html');
   const productionIndex = path.join(temp, 'production-index.html');
-  const validIndex = '<!doctype html><html><head><meta name="finance-release-contract" content="expense-submit-resilience-v3-20260827"></head><body><script>const submissionAttemptId = "test";</script></body></html>';
+  const validIndex = `<!doctype html><html><head><meta name="finance-release-contract" content="expense-submit-resilience-v3-20260827"><link rel="preload" as="script" href="${mainAsset}"></head><body><script src="${mainAsset}"></script></body></html>`;
   fs.writeFileSync(localManifest, JSON.stringify(manifest)); fs.writeFileSync(remoteManifest, JSON.stringify(manifest));
   fs.writeFileSync(candidateIndex, validIndex); fs.writeFileSync(productionIndex, validIndex);
   guard.verifyCandidate(localManifest, remoteManifest, 'a'.repeat(40), 'https://candidate.vercel.app/');
-  guard.verifyFrontendContract(candidateIndex, localManifest, 'a'.repeat(40));
-  guard.verifyProductionBaseline(remoteManifest, localManifest, productionIndex, candidateIndex, 'a'.repeat(40), 'database_v3', '20260827052447');
-  assert.throws(() => guard.verifyProductionBaseline(remoteManifest, localManifest, productionIndex, candidateIndex, 'a'.repeat(40), 'frontend_compat', 'none'), /only valid before database_v3/);
+  assert.equal(guard.mainScriptPath(candidateIndex), mainAsset);
+  guard.verifyFrontendContract(candidateIndex, localManifest, 'a'.repeat(40), mainScript);
+  guard.verifyProductionBaseline(remoteManifest, localManifest, productionIndex, candidateIndex, 'a'.repeat(40), 'database_v3', '20260827052447', mainScript, mainScript);
+  assert.throws(() => guard.verifyProductionBaseline(remoteManifest, localManifest, productionIndex, candidateIndex, 'a'.repeat(40), 'frontend_compat', 'none', mainScript, mainScript), /only valid before database_v3/);
   fs.writeFileSync(productionIndex, validIndex.replace('</body>', '<script>window.PRODUCTION_DRIFT=true;</script></body>'));
   assert.throws(
-    () => guard.verifyProductionBaseline(remoteManifest, localManifest, productionIndex, candidateIndex, 'a'.repeat(40), 'database_v3', '20260827052447'),
+    () => guard.verifyProductionBaseline(remoteManifest, localManifest, productionIndex, candidateIndex, 'a'.repeat(40), 'database_v3', '20260827052447', mainScript, mainScript),
     /index\.html bytes to match/,
     'database_v3 must reject production HTML drift even when the manifest and feature markers still match'
   );
   fs.writeFileSync(productionIndex, validIndex);
+  const missingAttemptScript = path.join(temp, 'missing-attempt-main.js');
+  const missingAttemptCode = mainCode.replace('submissionAttemptId', 'missingMarker');
+  fs.writeFileSync(missingAttemptScript, missingAttemptCode);
+  assert.throws(() => guard.verifyFrontendContract(candidateIndex, localManifest, 'a'.repeat(40), missingAttemptScript), /differs from the candidate manifest/);
+  const missingAttemptHash = crypto.createHash('sha256').update(missingAttemptCode).digest('hex');
+  const missingAttemptAsset = `assets/finance-main-${missingAttemptHash.slice(0, 16)}.js`;
+  const missingMarkerManifest = path.join(temp, 'missing-marker-manifest.json');
+  const missingMarkerIndex = path.join(temp, 'missing-marker-index.html');
+  fs.writeFileSync(missingMarkerManifest, JSON.stringify({ ...manifest, artifact_files: [{ path: missingAttemptAsset, bytes: Buffer.byteLength(missingAttemptCode), sha256: missingAttemptHash }] }));
+  fs.writeFileSync(missingMarkerIndex, validIndex.replaceAll(mainAsset, missingAttemptAsset));
+  assert.throws(() => guard.verifyFrontendContract(missingMarkerIndex, missingMarkerManifest, 'a'.repeat(40), missingAttemptScript), /submissionAttemptId/);
+  const misnamedAsset = 'assets/finance-main-0000000000000000.js';
+  const misnamedManifest = path.join(temp, 'misnamed-main-manifest.json');
+  const misnamedIndex = path.join(temp, 'misnamed-main-index.html');
+  fs.writeFileSync(misnamedManifest, JSON.stringify({ ...manifest, artifact_files: [{ path: misnamedAsset, bytes: Buffer.byteLength(mainCode), sha256: mainHash }] }));
+  fs.writeFileSync(misnamedIndex, validIndex.replaceAll(mainAsset, misnamedAsset));
+  assert.throws(() => guard.verifyFrontendContract(misnamedIndex, misnamedManifest, 'a'.repeat(40), mainScript), /content-addressed name/);
+  assert.throws(() => guard.verifyFrontendContract(candidateIndex, localManifest, 'a'.repeat(40)), /was not downloaded/);
   const missingAttemptIndex = path.join(temp, 'missing-attempt-index.html');
-  fs.writeFileSync(missingAttemptIndex, '<meta name="finance-release-contract" content="expense-submit-resilience-v3-20260827">');
-  assert.throws(() => guard.verifyFrontendContract(missingAttemptIndex, localManifest, 'a'.repeat(40)), /submissionAttemptId/);
+  fs.writeFileSync(missingAttemptIndex, validIndex.replace(`<script src="${mainAsset}"></script>`, ''));
+  assert.throws(() => guard.verifyFrontendContract(missingAttemptIndex, localManifest, 'a'.repeat(40), mainScript), /synchronously load and preload/);
   const duplicateMetaIndex = path.join(temp, 'duplicate-meta-index.html');
   fs.writeFileSync(duplicateMetaIndex, `${validIndex}<meta name="finance-release-contract" content="expense-submit-resilience-v3-20260827">`);
-  assert.throws(() => guard.verifyFrontendContract(duplicateMetaIndex, localManifest, 'a'.repeat(40)), /exactly one/);
+  assert.throws(() => guard.verifyFrontendContract(duplicateMetaIndex, localManifest, 'a'.repeat(40), mainScript), /exactly one/);
+  const duplicatePreloadIndex = path.join(temp, 'duplicate-preload-index.html');
+  fs.writeFileSync(duplicatePreloadIndex, validIndex.replace('</head>', `<link rel="preload" as="script" href="${mainAsset}"></head>`));
+  assert.throws(() => guard.verifyFrontendContract(duplicatePreloadIndex, localManifest, 'a'.repeat(40), mainScript), /synchronously load and preload/);
+  const wrongMainManifest = path.join(temp, 'wrong-main-manifest.json');
+  fs.writeFileSync(wrongMainManifest, JSON.stringify({ ...manifest, artifact_files: [] }));
+  assert.throws(() => guard.verifyFrontendContract(candidateIndex, wrongMainManifest, 'a'.repeat(40), mainScript), /candidate artifact manifest/);
   const invalidFrontendManifest = path.join(temp, 'invalid-frontend-manifest.json');
   fs.writeFileSync(invalidFrontendManifest, JSON.stringify({ ...manifest, runtime_mode: 'offline-demo' }));
-  assert.throws(() => guard.verifyFrontendContract(candidateIndex, invalidFrontendManifest, 'a'.repeat(40)), /manifest contract/);
+  assert.throws(() => guard.verifyFrontendContract(candidateIndex, invalidFrontendManifest, 'a'.repeat(40), mainScript), /manifest contract/);
 
   const deployment = {
     id: 'dpl_Abc123', name: catalog.vercelProjectName, projectId: catalog.vercelProjectId,

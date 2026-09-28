@@ -27,8 +27,10 @@ const builtIndex=path.join(root,'www/index.html');
 const builtEngine=path.join(root,'www/assets/engines/accounting-engine.js');
 if(fs.existsSync(builtIndex)&&fs.existsSync(builtEngine)){
   const built=fs.readFileSync(builtIndex,'utf8');
+  const mainAsset=built.match(/assets\/finance-main-[a-f0-9]{16}\.js/);
+  const builtMain=mainAsset?fs.readFileSync(path.join(root,'www',mainAsset[0]),'utf8'):'';
   const builtEngineSource=fs.readFileSync(builtEngine,'utf8');
-  check('built frontend contains the same scoped account selector',built.includes('function accountSelectableForContext(account,entityId,departmentCode)'));
+  check('built frontend contains the same scoped account selector',builtMain.includes('function accountSelectableForContext(account,entityId,departmentCode)'));
   check('built accounting engine contains the restricted-scope summary',builtEngineSource.includes("selectionScope(account).mode === 'restricted'"));
 }
 

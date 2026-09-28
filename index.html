@@ -257,7 +257,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
 
   <!-- 新增申請 -->
   <div class="pg" id="pg-newreq">
-    <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
+    <div class="nr-page-head" style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
       <button onclick="newReqBack()" class="btn-g">&#8592;</button>
       <div style="flex:1"><div class="ph">新增申請</div><div class="ps">依申請類型填寫資料 · 完成後送出簽核並由系統產生傳票資料</div></div>
     </div>
@@ -291,7 +291,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
         </div>
         <div class="expense-query-search" role="search">
           <span class="expense-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg></span>
-          <input type="search" id="exp-q" aria-label="搜尋放款申請所有內容與金額" autocomplete="off" placeholder="搜尋單號、申請人、目的、金額、部門、備註…" oninput="scheduleExpenseFilter()" onsearch="filterExp()" onkeydown="if(event.key==='Escape')clearExpenseKeyword()">
+          <input type="search" id="exp-q" aria-label="搜尋放款申請所有內容與金額" autocomplete="off" placeholder="搜尋單號、申請人、目的、金額、部門、備註…" oninput="scheduleExpenseFilter(event)" onsearch="commitExpenseSearch(event)" oncompositionstart="setExpenseSearchComposing(true)" oncompositionend="setExpenseSearchComposing(false)" onkeydown="expenseSearchKeydown(event)">
           <button type="button" id="exp-q-clear" class="expense-search-clear" aria-label="清除搜尋文字" onclick="clearExpenseKeyword()" hidden>&times;</button>
         </div>
       </div>
@@ -343,7 +343,10 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
         </div>
         <p id="approval-tab-description" class="approval-tab-description">輪到你簽核、補件或確認的單據。出納付款與收款請看「出納待辦」。</p>
         <div class="appr-toolbar">
-          <input type="search" id="appr-q" aria-label="搜尋簽核單據與金額" placeholder="搜尋單號、部門、申請人、目的、金額…" oninput="apprSearch(this.value,event)" oncompositionstart="apprSearch(this.value,{isComposing:true})" oncompositionend="apprSearch(this.value)">
+          <div class="approval-search-field">
+            <input type="search" id="appr-q" aria-label="搜尋簽核單據與金額" placeholder="搜尋單號、部門、申請人、目的、金額…" oninput="apprSearch(this.value,event)" oncompositionstart="apprSearch(this.value,event)" oncompositionend="apprSearch(this.value,event)" onkeydown="approvalSearchKeydown(event)">
+            <button type="button" id="appr-q-clear" class="btn-g approval-search-clear" aria-label="清除簽核搜尋文字" onclick="clearApprovalKeyword()" hidden>&times;</button>
+          </div>
           <span id="appr-list-hint" style="font-size:11px;color:#94a3b8">每頁最多 50 筆</span>
         </div>
       </div>
@@ -467,7 +470,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
         </section>
         <section data-mobile-shareholder-step="3" tabindex="-1" aria-label="步驟三：附件與送出">
         <div class="fg"><label class="fl">附件</label><input type="file" id="sh-file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"></div>
-        <div class="fg"><label class="fl">備註</label><textarea id="sh-note" rows="3" placeholder="例：股東匯入公司帳戶作為營運資金 / 增資款"></textarea></div>
+        <div class="fg"><label class="fl">備註</label><textarea class="finance-autogrow resize-none" id="sh-note" rows="3" placeholder="例：股東匯入公司帳戶作為營運資金 / 增資款"></textarea></div>
         <div id="sh-preview" style="background:var(--warm);border:1px solid #f0e0c8;border-radius:9px;padding:9px;font-size:12px;color:#334155;margin-bottom:10px"></div>
         <div id="sh-flow" style="margin-bottom:10px"></div>
         <button class="btn-p" id="sh-submit-btn" style="width:100%;justify-content:center" onclick="submitShareholderTxn()">送出簽核</button>
@@ -499,8 +502,8 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
           <div class="fr2"><div class="fg"><label class="fl">申請人 *</label><input id="inv-app-sel" readonly style="background:var(--warm)"></div><div class="fg"><label class="fl">組別 / 部門 *</label><select id="inv-dept"></select></div></div>
           <div style="font-size:13px;font-weight:800;color:#1f2937;margin:14px 0 9px">2-2. 申請原因</div>
           <div class="fr2">
-            <div class="fg"><label class="fl">開立原因 *</label><textarea id="inv-reason" rows="3" placeholder="例：課程收入、服務費、合作單位請款或其他需開立發票原因"></textarea></div>
-            <div class="fg"><label class="fl">備註</label><textarea id="inv-note" rows="3" placeholder="補充客戶聯絡、請款條件、交付方式或其他注意事項"></textarea></div>
+            <div class="fg"><label class="fl">開立原因 *</label><textarea class="finance-autogrow resize-none" id="inv-reason" rows="3" placeholder="例：課程收入、服務費、合作單位請款或其他需開立發票原因"></textarea></div>
+            <div class="fg"><label class="fl">備註</label><textarea class="finance-autogrow resize-none" id="inv-note" rows="3" placeholder="補充客戶聯絡、請款條件、交付方式或其他注意事項"></textarea></div>
           </div>
           <div style="font-size:13px;font-weight:800;color:#1f2937;margin:14px 0 9px">2-3. 資料上傳</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
@@ -551,8 +554,8 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
         <div class="fg" style="margin-bottom:10px;max-width:280px"><label class="fl">發票月份</label><input type="month" id="b-month" value="2026-05"></div>
         <div style="font-size:13px;font-weight:800;color:#1f2937;margin:14px 0 9px">2-2. 申請原因</div>
         <div class="fr2" style="margin-bottom:10px">
-          <div class="fg"><label class="fl">開立原因 *</label><textarea id="b-reason" rows="3" placeholder="例：整批課程收入、服務收入或合作單位請款"></textarea></div>
-          <div class="fg"><label class="fl">備註</label><textarea id="b-note" rows="3" placeholder="補充收款窗口、交付方式、批次說明或其他注意事項"></textarea></div>
+          <div class="fg"><label class="fl">開立原因 *</label><textarea class="finance-autogrow resize-none" id="b-reason" rows="3" placeholder="例：整批課程收入、服務收入或合作單位請款"></textarea></div>
+          <div class="fg"><label class="fl">備註</label><textarea class="finance-autogrow resize-none" id="b-note" rows="3" placeholder="補充收款窗口、交付方式、批次說明或其他注意事項"></textarea></div>
         </div>
         <div style="font-size:13px;font-weight:800;color:#1f2937;margin:14px 0 9px">2-3. 資料上傳</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
@@ -592,8 +595,8 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
       </div>
       <div style="font-size:13px;font-weight:800;color:#1f2937;margin:14px 0 9px">2-2. 申請原因</div>
       <div class="fr2" style="margin-bottom:10px">
-        <div class="fg"><label class="fl">開立原因 *</label><textarea id="bill-reason" rows="3" placeholder="例：居家服務費、課程費、餐費、耗材費繳費通知"></textarea></div>
-        <div class="fg"><label class="fl">備註</label><textarea id="bill-note" rows="3" placeholder="補充收款窗口、交付方式、批次說明或其他注意事項"></textarea></div>
+        <div class="fg"><label class="fl">開立原因 *</label><textarea class="finance-autogrow resize-none" id="bill-reason" rows="3" placeholder="例：居家服務費、課程費、餐費、耗材費繳費通知"></textarea></div>
+        <div class="fg"><label class="fl">備註</label><textarea class="finance-autogrow resize-none" id="bill-note" rows="3" placeholder="補充收款窗口、交付方式、批次說明或其他注意事項"></textarea></div>
       </div>
 	  <details class="mobile-batch-disclosure bill-batch-disclosure" data-mobile-batch-sheet="bill">
 	    <summary>批次匯入 CSV／Excel</summary>
@@ -1144,7 +1147,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
       </div>
       </details>
     </section>
-    <section id="settings-panel-accounts" class="set-panel settings-flat-panel" style="margin-bottom:12px;display:none"><div class="settings-flat-head"><span class="settings-flat-title">會計科目</span><div class="settings-write" style="display:flex;gap:6px"><button class="btn-g" onclick="saveAcctSettings()">送出科目異動</button><button class="btn-p" onclick="addAcctSetting()">+ 新增科目</button></div></div><div class="settings-flat-notice"><div><strong>目前選擇規則：</strong>所有公司、所有部門都可選全部啟用的借／貸科目。既有範圍會繼續保存，作為未來啟用公司／部門限制時的預留設定，目前不會縮小選單。</div><div>會計科目屬正式帳務設定，新增、編輯、停用或刪除都會產生異動單；非執行長送出後須待執行長核准才會生效。</div><div class="settings-write settings-change-reason"><label class="fl">異動原因 *</label><textarea id="acct-change-reason" rows="2" placeholder="例：配合會計師建議新增科目、停用不再使用科目、修正科目名稱…" style="font-size:12px"></textarea></div></div><div class="settings-list-scroll"><table class="settings-list-table settings-account-list"><thead><tr><th>代號</th><th>名稱</th><th>借/貸</th><th>預留部門限制（目前不生效）</th><th>啟用</th><th class="settings-action-head">操作</th></tr></thead><tbody id="settings-accts"></tbody></table></div></section>
+    <section id="settings-panel-accounts" class="set-panel settings-flat-panel" style="margin-bottom:12px;display:none"><div class="settings-flat-head"><span class="settings-flat-title">會計科目</span><div class="settings-write" style="display:flex;gap:6px"><button class="btn-g" onclick="saveAcctSettings()">送出科目異動</button><button class="btn-p" onclick="addAcctSetting()">+ 新增科目</button></div></div><div class="settings-flat-notice"><div><strong>目前選擇規則：</strong>所有公司、所有部門都可選全部啟用的借／貸科目。既有範圍會繼續保存，作為未來啟用公司／部門限制時的預留設定，目前不會縮小選單。</div><div>會計科目屬正式帳務設定，新增、編輯、停用或刪除都會產生異動單；非執行長送出後須待執行長核准才會生效。</div><div class="settings-write settings-change-reason"><label class="fl">異動原因 *</label><textarea class="finance-autogrow resize-none" id="acct-change-reason" rows="2" placeholder="例：配合會計師建議新增科目、停用不再使用科目、修正科目名稱…" style="font-size:12px"></textarea></div></div><div class="settings-list-scroll"><table class="settings-list-table settings-account-list"><thead><tr><th>代號</th><th>名稱</th><th>借/貸</th><th>預留部門限制（目前不生效）</th><th>啟用</th><th class="settings-action-head">操作</th></tr></thead><tbody id="settings-accts"></tbody></table></div></section>
     <div id="settings-panel-fees" class="set-panel card" style="margin-bottom:12px;display:none"><div class="chd"><span class="cht">手續費金額</span><span style="font-size:10px;color:#94a3b8">每間公司可各自設定；非兆豐且己方支出時套用</span></div><div style="overflow-x:auto"><table><thead><tr><th>公司別</th><th>單筆銀行手續費</th><th>說明</th></tr></thead><tbody id="settings-fees"></tbody></table></div><div class="settings-write" style="padding:10px 12px;border-top:1px solid #f0e6d6;justify-content:flex-end"><button class="btn-p" onclick="saveFeeSetting()">儲存手續費</button></div></div>
     <div id="settings-panel-permissions" class="set-panel card" style="display:none">
       <div class="chd"><span class="cht">功能權限設定</span><span style="font-size:10px;color:#94a3b8">先選擇職位，再於同一張功能表勾選可使用的項目</span></div>
@@ -1329,7 +1332,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
           </div>
           <div class="fg">
             <label class="fl" for="user-offboarding-reason">離職／交接原因 *</label>
-            <textarea id="user-offboarding-reason" rows="3" maxlength="500" placeholder="例如：人員離職，待簽單與主管關係交由王小明接手" oninput="userOffboardingInputChanged()"></textarea>
+            <textarea class="finance-autogrow resize-none" id="user-offboarding-reason" rows="3" maxlength="500" placeholder="例如：人員離職，待簽單與主管關係交由王小明接手" oninput="userOffboardingInputChanged()"></textarea>
             <div class="user-field-help">至少 3 個字；原因會保存在不可修改的交接稽核紀錄。</div>
           </div>
           <label class="user-offboarding-confirm">
@@ -4263,11 +4266,13 @@ function customizationSettingUpsertPayload(key,value){
     updated_by:S.user?S.user.email:null
   });
 }
+function backupSettingsSnapshot(){
+  return Object.assign({},SYSTEM_SETTINGS,currentSystemSettings());
+}
 window.runCustomizationRoundTripSelfCheck=function(){
   var keys=customizationSettingKeys();
   var current=currentSystemSettings();
-  var backup=buildBackupPackage();
-  var backupSettings=(backup.data&&backup.data.settings)||{};
+  var backupSettings=backupSettingsSnapshot();
   var version={snapshot:settingsSnapshotWith('default_customer_profile_id',current.default_customer_profile_id)};
   var rows=keys.map(function(key){
     var value=current[key];
@@ -4784,24 +4789,107 @@ function uploadAttachmentWithTrackedTimeout(att,ctx,label,timeoutMs){
     });
   });
 }
-async function uploadAttachmentsToSupabase(files,ctx){
-  files=await preflightAttachmentsForSupabase(files,ctx);
-  var out=[];
-  var startedAt=Date.now();
-  for(var i=0;i<(files||[]).length;i++){
-    try{
-      if(Date.now()-startedAt>ATTACHMENT_BATCH_TIMEOUT_MS){
-        await cleanupUploadedSupabaseAttachments([out],'附件批次逾時清理');
-        throw attachmentUploadError('附件批次上傳超過 '+Math.round(ATTACHMENT_BATCH_TIMEOUT_MS/1000)+' 秒，系統已停止並清理已上傳檔案。請確認網路穩定後重新送出。',{reason:'attachment_batch_timeout'});
-      }
-      out.push(await uploadAttachmentWithTrackedTimeout(files[i],ctx,'第 '+(i+1)+' 個附件上傳',ATTACHMENT_UPLOAD_TIMEOUT_MS));
-    }catch(err){
-      var meta=normalizeFileMeta(files[i]);
-      var msg=formatStorageUploadError(err);
-      await cleanupUploadedSupabaseAttachments([out],'附件批次上傳中斷清理');
-      throw attachmentUploadError('第 '+(i+1)+' 個附件「'+(meta.n||'附件')+'」上傳失敗：'+msg,{reason:(err&&err.reason)||'attachment_upload_failed',fileName:meta.n,sourceError:err});
+var attachmentUploadFeedbackToken=0;
+function attachmentUploadFeedback(total){
+  if(typeof document==='undefined'||!document.body||!total)return null;
+  var token=++attachmentUploadFeedbackToken;
+  var panel=document.getElementById('attachment-upload-feedback');
+  if(!panel){
+    panel=document.createElement('div');
+    panel.id='attachment-upload-feedback';
+    panel.className='attachment-upload-feedback';
+    panel.setAttribute('role','status');
+    panel.setAttribute('aria-live','polite');
+    panel.innerHTML='<button type="button" class="attachment-upload-feedback-close" aria-label="關閉附件上傳狀態">×</button><strong class="attachment-upload-feedback-title"></strong><span class="attachment-upload-feedback-detail"></span>';
+    document.body.appendChild(panel);
+    panel.querySelector('button').addEventListener('click',function(){panel.hidden=true;});
+    if(typeof MutationObserver==='function'){
+      new MutationObserver(function(){
+        if(document.body.getAttribute('data-finance-identity-blocked')==='true'){
+          attachmentUploadFeedbackToken++;
+          panel.hidden=true;
+        }
+      }).observe(document.body,{attributes:true,attributeFilter:['data-finance-identity-blocked']});
     }
   }
+  panel.hidden=true;
+  panel.classList.remove('is-error');
+  panel.setAttribute('role','status');
+  var shown=false;
+  var timer=setTimeout(function(){
+    if(token!==attachmentUploadFeedbackToken)return;
+    shown=true;
+    panel.hidden=false;
+  },350);
+  function update(done,activeName){
+    if(token!==attachmentUploadFeedbackToken)return;
+    panel.querySelector('.attachment-upload-feedback-title').textContent='正在保存附件 '+done+' / '+total;
+    panel.querySelector('.attachment-upload-feedback-detail').textContent=activeName?'目前處理：'+activeName:'檔案與歸檔資料確認中';
+  }
+  update(0,'');
+  return {
+    update:update,
+    finish:function(error){
+      clearTimeout(timer);
+      if(token!==attachmentUploadFeedbackToken)return;
+      if(error){
+        panel.hidden=false;
+        panel.classList.add('is-error');
+        panel.setAttribute('role','alert');
+        panel.querySelector('.attachment-upload-feedback-title').textContent='附件未完成保存';
+        panel.querySelector('.attachment-upload-feedback-detail').textContent=error;
+        return;
+      }
+      if(!shown){panel.hidden=true;return;}
+      panel.querySelector('.attachment-upload-feedback-title').textContent='附件已保存 '+total+' / '+total;
+      panel.querySelector('.attachment-upload-feedback-detail').textContent='檔案與歸檔資料均已確認';
+      setTimeout(function(){if(token===attachmentUploadFeedbackToken)panel.hidden=true;},1400);
+    }
+  };
+}
+async function uploadAttachmentsToSupabase(files,ctx){
+  files=await preflightAttachmentsForSupabase(files,ctx);
+  if(!files||!files.length)return [];
+  var out=new Array(files.length);
+  var feedback=attachmentUploadFeedback(files.length);
+  var startedAt=Date.now();
+  var nextIndex=0;
+  var completed=0;
+  var firstFailure=null;
+  async function worker(){
+    while(!firstFailure){
+      var index=nextIndex++;
+      if(index>=files.length)return;
+      if(Date.now()-startedAt>ATTACHMENT_BATCH_TIMEOUT_MS){
+        firstFailure={index:index,error:attachmentUploadError('附件批次上傳超過 '+Math.round(ATTACHMENT_BATCH_TIMEOUT_MS/1000)+' 秒，系統已停止並清理已上傳檔案。請確認網路穩定後重新送出。',{reason:'attachment_batch_timeout'})};
+        return;
+      }
+      try{
+        var meta=normalizeFileMeta(files[index]);
+        if(feedback)feedback.update(completed,meta.n||'附件');
+        out[index]=await uploadAttachmentWithTrackedTimeout(files[index],ctx,'第 '+(index+1)+' 個附件上傳',ATTACHMENT_UPLOAD_TIMEOUT_MS);
+        completed++;
+        if(feedback)feedback.update(completed,'');
+      }catch(error){
+        if(!firstFailure)firstFailure={index:index,error:error};
+        return;
+      }
+    }
+  }
+  await Promise.all([worker(),worker()]);
+  if(firstFailure){
+    var failedMeta=normalizeFileMeta(files[firstFailure.index]);
+    var message='第 '+(firstFailure.index+1)+' 個附件「'+(failedMeta.n||'附件')+'」上傳失敗：'+formatStorageUploadError(firstFailure.error);
+    try{
+      await cleanupUploadedSupabaseAttachments([out.filter(Boolean)],'附件批次上傳中斷清理');
+    }catch(cleanupError){
+      if(feedback)feedback.finish(message+'；已上傳檔案未能完整清理，請通知系統管理員。');
+      throw cleanupError;
+    }
+    if(feedback)feedback.finish(message+'。請確認後重新送出。');
+    throw attachmentUploadError(message,{reason:(firstFailure.error&&firstFailure.error.reason)||'attachment_upload_failed',fileName:failedMeta.n,sourceError:firstFailure.error});
+  }
+  if(feedback)feedback.finish();
   return out;
 }
 function attachmentStoragePath(f){
@@ -9168,6 +9256,7 @@ function ensureApprovalHistoryCurrent(options){
   if(S.page!=='approvals'||S.aT!=='h'||!S.user)return Promise.resolve({ok:false,skipped:true});
   if(approvalHistoryReadOwnerIdentity()&&!approvalHistoryPageAllowed())return Promise.resolve(rejectApprovalHistoryPageAccess());
   var runtime=approvalHistoryRuntimeForCurrentUser(),query=String(S.apprQuery||'').trim(),page=Math.max(1,Number(S.apprPage)||1);
+  if(runtime.searchComposing===true||APPROVAL_SEARCH_COMPOSING)return Promise.resolve({ok:false,composing:true});
   if(!options&&runtime.status==='ready'&&runtime.page===page&&runtime.query===query)return Promise.resolve({ok:true,reused:true});
   return loadApprovalHistoryPage(Object.assign({page:page,query:query},options||{}));
 }
@@ -17953,7 +18042,7 @@ function newRequestStepHelpHtml(){
     :t==='travel_request'
       ?'請先選同行人員與差旅天數，再依住宿、交通、停車、其他費用上傳附件；膳什費會依規則計算。'
       :'依序完成附件、費用明細、支出與匯款資訊。可分段展開填寫，完成後暫存或送出給主管。';
-  return '<div class="employee-step-help"><div class="step-no">3</div><div><div class="step-title">填寫「'+typeName+'」資料</div><div class="step-copy">'+copy+'</div><div class="step-next">送出前系統會跳確認頁，送出後請到「簽核管理 → 我的申請」追蹤。</div></div></div>';
+  return '<div class="employee-step-help is-compact"><div class="step-no">3</div><div><div class="step-title">'+typeName+' · 填寫與送出</div><div class="step-copy">'+copy+'</div><details class="employee-step-more"><summary>送出後如何追蹤？</summary><div class="step-next">送出前系統會顯示確認頁；送出後可到「簽核管理 → 我的申請」查看進度。</div></details></div></div>';
 }
 
 // ══ 儀表板 ══
@@ -18579,7 +18668,7 @@ function renderLazyExpensePage(){
     :'';
   var advanceTemplateHtml='';
   c.innerHTML=
-    '<div class="card" style="margin-bottom:10px;padding:12px;border-left:4px solid var(--br)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="ph" style="font-size:17px">'+(isExpenseApplicantRevisionMode()?'補件修正原申請':'申請內容')+'</div><div class="ps">'+(isExpenseApplicantRevisionMode()?'保留原單號與簽核歷史；請依退回原因修正後重新送出。':'已選擇申請類型與情境；目前是步驟 3：填寫資料、核對並送出')+'</div></div><button class="btn-g" onclick="newReqBack()">'+(isExpenseApplicantRevisionMode()?'返回申請單':'切回申請類型')+'</button></div></div>'
+    '<div class="employee-step-context">'+(isExpenseApplicantRevisionMode()?'<p class="employee-step-revision-note">補件會保留原單號與簽核歷史；請依退回原因修正後重新送出。</p>':'')+'<button type="button" class="btn-g" onclick="newReqBack()">'+(isExpenseApplicantRevisionMode()?'返回原申請':'切換申請類型')+'</button></div>'
     +'<div style="display:flex;flex-direction:column;gap:10px">'
       +'<div class="card"><div class="chd"><span class="cht">2-1. 上傳附件</span></div><div style="padding:12px"><div class="fr2">'
         +(S.nrType==='advance_request'?advanceRequestUploadPanelHtml():receiptUploadPanelHtml({ocr:true,kind:'receipt'}))
@@ -19327,6 +19416,7 @@ function mountEmployeeFormUX(){
   var engine=window.FinanceEmployeeFormUX,root=el('nr-content');
   if(!engine||!root)return;
   if(S.nrType&&(S.lazyMode||S.nrStep===3))engine.mountSections(root,[S.user&&S.user.id,S.nrDraftId||'',S.nrType].join('|'));
+  engine.associateCoreLabels(root);
   renderNRFList();
   renderEmployeePassbookFile();
 }
@@ -23805,6 +23895,7 @@ window.submitNR=async function(){
 var EXPENSE_SEARCH_CACHE=typeof WeakMap==='function'?new WeakMap():null;
 var EXPENSE_FILTER_TIMER=null;
 var EXPENSE_LAST_FILTER_STATE=null;
+var EXPENSE_SEARCH_COMPOSING=false;
 function buildExp(){
   renderDrafts();
   EXPENSE_SEARCH_CACHE=typeof WeakMap==='function'?new WeakMap():null;
@@ -24295,21 +24386,44 @@ window.toggleExpenseAdvancedFilters=function(){
   setExpenseAdvancedOpen(!!(panel&&panel.hidden));
 };
 window.clearExpenseKeyword=function(){
+  if(EXPENSE_FILTER_TIMER){clearTimeout(EXPENSE_FILTER_TIMER);EXPENSE_FILTER_TIMER=null;}
+  EXPENSE_SEARCH_COMPOSING=false;
   var input=el('exp-q');if(input){input.value='';input.focus();}
   filterExp();
 };
 window.clearExpenseFilters=function(){
+  if(EXPENSE_FILTER_TIMER){clearTimeout(EXPENSE_FILTER_TIMER);EXPENSE_FILTER_TIMER=null;}
+  EXPENSE_SEARCH_COMPOSING=false;
   ['exp-q','exp-ef','exp-sf','exp-tf','exp-dcf','exp-date-from','exp-date-to','exp-amount-min','exp-amount-max'].forEach(function(id){var node=el(id);if(node)node.value='';});
   var dateKind=el('exp-date-kind');if(dateKind)dateKind.value='request';
   setExpenseAdvancedOpen(false);
   filterExp();
   var input=el('exp-q');if(input)input.focus();
 };
-window.scheduleExpenseFilter=function(){
+window.setExpenseSearchComposing=function(composing){
+  EXPENSE_SEARCH_COMPOSING=!!composing;
+  if(EXPENSE_FILTER_TIMER){clearTimeout(EXPENSE_FILTER_TIMER);EXPENSE_FILTER_TIMER=null;}
+  if(!EXPENSE_SEARCH_COMPOSING)filterExp();
+};
+window.commitExpenseSearch=function(event){
+  if(EXPENSE_SEARCH_COMPOSING||(event&&event.isComposing))return;
+  if(EXPENSE_FILTER_TIMER){clearTimeout(EXPENSE_FILTER_TIMER);EXPENSE_FILTER_TIMER=null;}
+  filterExp();
+};
+window.expenseSearchKeydown=function(event){
+  if(event.key==='Escape'&&!EXPENSE_SEARCH_COMPOSING&&!event.isComposing&&event.keyCode!==229){
+    var input=el('exp-q');if(input&&input.value){event.preventDefault();clearExpenseKeyword();}
+  }
+};
+window.scheduleExpenseFilter=function(event){
+  if(EXPENSE_SEARCH_COMPOSING||(event&&event.isComposing))return;
+  if(event&&event.target&&event.target.id==='exp-q'&&EXPENSE_LAST_FILTER_STATE
+    &&EXPENSE_LAST_FILTER_STATE.q===((el('exp-q')||{}).value||'').trim())return;
   if(EXPENSE_FILTER_TIMER)clearTimeout(EXPENSE_FILTER_TIMER);
   EXPENSE_FILTER_TIMER=setTimeout(function(){EXPENSE_FILTER_TIMER=null;filterExp();},90);
 };
 window.filterExp=function(){
+  if(EXPENSE_SEARCH_COMPOSING)return;
   var state=expenseFilterState(),errors=[];
   var invalidDate=!!(state.dateFrom&&state.dateTo&&state.dateFrom>state.dateTo);
   var validMin=state.amountMin==null||isFinite(state.amountMin);
@@ -25818,6 +25932,7 @@ window.laborElectronicLoadTracker=async function(reset){
 };
 function buildApprovals(){
   setApprovalTabVisual(S.aT||'p');
+  syncApprovalSearchClear();
   var correctionQueue=el('accounting-correction-queue');
   if(!correctionQueue&&el('appr-list')){correctionQueue=document.createElement('div');correctionQueue.id='accounting-correction-queue';el('appr-list').before(correctionQueue);}
   if(correctionQueue)correctionQueue.innerHTML=canReviseAccountingDetails()||currentRoleKey()==='cashier'?'<button type="button" class="btn-g" onclick="openExpenseAccountingCorrections()">金額更正與差額待辦</button>':'';
@@ -26705,13 +26820,44 @@ function approvalPagerHtml(total,page,pages){
   btns.push('<button class="btn-g" '+(page>=pages?'disabled':'')+' onclick="apprPage('+(page+1)+')">下一頁</button>');
   return '<div class="appr-pager"><span style="font-size:11px;color:#8b7358;margin-right:auto">顯示 '+start+'-'+end+' / 共 '+total+' 筆，每頁最多 50 筆</span>'+btns.join('')+'</div>';
 }
+var APPROVAL_SEARCH_COMPOSING=false;
+function syncApprovalSearchClear(){
+  var input=el('appr-q'),button=el('appr-q-clear');
+  if(button)button.hidden=!(input&&input.value);
+}
+window.clearApprovalKeyword=function(){
+  var input=el('appr-q');if(input){input.value='';input.focus();}
+  APPROVAL_SEARCH_COMPOSING=false;
+  syncApprovalSearchClear();
+  apprSearch('',{historyRefresh:true,historyDebounceMs:0});
+};
+window.approvalSearchKeydown=function(event){
+  if(event.key!=='Escape'||APPROVAL_SEARCH_COMPOSING||event.isComposing||event.keyCode===229)return;
+  var input=el('appr-q');
+  if(input&&input.value){event.preventDefault();clearApprovalKeyword();}
+};
 window.apprSearch=function(v,event){
+  var eventType=event&&event.type||'';
+  if(eventType==='compositionstart')APPROVAL_SEARCH_COMPOSING=true;
+  if(eventType==='compositionend')APPROVAL_SEARCH_COMPOSING=false;
+  syncApprovalSearchClear();
+  if(APPROVAL_SEARCH_COMPOSING||(eventType!=='compositionend'&&event&&event.isComposing)){
+    if(S.aT==='h'){
+      cancelApprovalHistorySearchTimer();
+      var composingRuntime=approvalHistoryRuntimeForCurrentUser();
+      composingRuntime.searchComposing=true;
+      cancelApprovalHistoryRequest(composingRuntime);
+    }
+    var composingHint=el('appr-list-hint');if(composingHint)composingHint.textContent='輸入完成後開始搜尋';
+    return;
+  }
+  if(eventType==='input'&&S.apprQuery===String(v||''))return;
   S.apprQuery=v||'';
   S.apprPage=1;
   if(S.aT==='h'){
     cancelApprovalHistorySearchTimer();
     var runtime=approvalHistoryRuntimeForCurrentUser(),identity=approvalHistoryIdentity();
-    var query=String(S.apprQuery).trim(),composing=!!(event&&event.isComposing);
+    var query=String(S.apprQuery).trim(),composing=false;
     if(!identity){buildApprovals();return;}
     if(!approvalHistoryPageAllowed()){rejectApprovalHistoryPageAccess();return;}
     runtime.searchComposing=composing;
@@ -26828,7 +26974,8 @@ function renderApprovalHistorySummaries(runtime){
   if(typeof canAccessPage==='function'&&!canAccessPage('approvals')&&runtime.accessDenied!==true){rejectApprovalHistoryPageAccess();return;}
   var list=el('appr-list');if(!list)return;
   S.apprItemMap={};
-  var queryInput=el('appr-q');if(queryInput&&queryInput.value!==(S.apprQuery||''))queryInput.value=S.apprQuery||'';
+  var queryInput=el('appr-q');if(queryInput&&!APPROVAL_SEARCH_COMPOSING&&queryInput.value!==(S.apprQuery||''))queryInput.value=S.apprQuery||'';
+  syncApprovalSearchClear();
   var ready=runtime.status==='ready',known=!!runtime.updatedAt;
   var counts=runtime.accessDenied?'簽核頁面的權限已變更，目前無法讀取紀錄':ready?'全部曾參與 '+runtime.allTotal+' 組 · '+(runtime.query?'符合搜尋 '+runtime.total+' 組':'目前顯示全部 '+runtime.total+' 組'):
     runtime.status==='error'?'搜尋尚未完成，請重新載入':'正在查詢曾參與流程…';
@@ -26873,7 +27020,8 @@ function renderApprList(data){
   var guardSlot=el('approval-manager-summary');
   if(guard&&guardSlot&&!String(guardSlot.innerHTML||'').trim())guardSlot.innerHTML=guard;
   S.apprItemMap={};
-  var qInput=el('appr-q');if(qInput&&qInput.value!==(S.apprQuery||''))qInput.value=S.apprQuery||'';
+  var qInput=el('appr-q');if(qInput&&!APPROVAL_SEARCH_COMPOSING&&qInput.value!==(S.apprQuery||''))qInput.value=S.apprQuery||'';
+  syncApprovalSearchClear();
   var isHistory=S.aT==='h',historyRuntime=isHistory?approvalHistoryRuntimeForCurrentUser():null;
   var filtered=approvalApplySearchSort(data);
   var total=isHistory?Math.max(0,Number(historyRuntime.total)||0):filtered.length;
@@ -26949,7 +27097,8 @@ function renderApprDraftList(){
   syncApprovalWaitTimer();
   var l=el('appr-list');l.innerHTML='';
   closeAppr();
-  var qInput=el('appr-q');if(qInput&&qInput.value!==(S.apprQuery||''))qInput.value=S.apprQuery||'';
+  var qInput=el('appr-q');if(qInput&&!APPROVAL_SEARCH_COMPOSING&&qInput.value!==(S.apprQuery||''))qInput.value=S.apprQuery||'';
+  syncApprovalSearchClear();
   var draftItems=DRAFTS.map(function(d){return{kind:'draft',raw:d};});
   var filtered=approvalApplySearchSort(draftItems);
   var total=filtered.length,pages=Math.max(1,Math.ceil(total/50)),page=Math.min(Math.max(1,S.apprPage||1),pages);
@@ -29888,7 +30037,7 @@ function buildBackupPackage(){
     note:'此備份包不包含 Supabase Auth 密碼、Storage 原始檔二進位，只保存附件路徑、簽核紀錄與分類帳資料。',
     data:{
       users:(USERS||[]).map(function(u){var x=Object.assign({},u);delete x.pw;return x;}),
-      settings:Object.assign({},SYSTEM_SETTINGS,currentSystemSettings()),
+      settings:backupSettingsSnapshot(),
       requests:(REQS||[]).filter(inActiveDataEnvironment).map(sanitizeLocalReq),
       invoices:(INVS||[]).filter(inActiveDataEnvironment),
       vouchers:(VOUCHERS||[]).filter(inActiveDataEnvironment),

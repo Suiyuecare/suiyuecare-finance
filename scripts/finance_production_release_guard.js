@@ -1869,7 +1869,22 @@ function htmlAttribute(tag, name) {
   const match = String(tag).match(new RegExp(`\\b${name}\\s*=\\s*(["'])((?:(?!\\1).)*)\\1`, 'i'));
   return match ? match[2] : null;
 }
-function verifyFrontendContract(indexPath, manifestPath, candidate) {
+function mainScriptPath(indexPath) {
+  const source = fs.readFileSync(indexPath, 'utf8');
+  const scripts = (source.match(/<script\b[^>]*>/gi) || [])
+    .map((tag) => htmlAttribute(tag, 'src'))
+    .filter((src) => src && /(?:^|\/)finance-main-/.test(src));
+  const preloads = (source.match(/<link\b[^>]*>/gi) || [])
+    .filter((tag) => htmlAttribute(tag, 'rel') === 'preload' && htmlAttribute(tag, 'as') === 'script')
+    .map((tag) => htmlAttribute(tag, 'href'))
+    .filter((href) => href && /(?:^|\/)finance-main-/.test(href));
+  if (scripts.length !== 1 || !/^assets\/finance-main-[a-f0-9]{16}\.js$/.test(scripts[0])
+      || preloads.length !== 1 || preloads[0] !== scripts[0]) {
+    fail('frontend must synchronously load and preload exactly one versioned Finance main script');
+  }
+  return scripts[0];
+}
+function verifyFrontendContract(indexPath, manifestPath, candidate, mainScriptFile) {
   candidate = canonicalSha(candidate);
   const manifest = readJson(manifestPath);
   if (manifest.schema_version !== 2
@@ -1886,7 +1901,22 @@ function verifyFrontendContract(indexPath, manifestPath, candidate) {
   if (values.length !== 1 || values[0] !== FRONTEND_RELEASE_CONTRACT) {
     fail(`frontend must contain exactly one finance-release-contract=${FRONTEND_RELEASE_CONTRACT} meta`);
   }
-  if (!/\bsubmissionAttemptId\b/.test(source)) {
+  const mainAsset = mainScriptPath(indexPath);
+  const records = Array.isArray(manifest.artifact_files) ? manifest.artifact_files.filter((item) => item.path === mainAsset) : [];
+  if (records.length !== 1 || !Number.isSafeInteger(records[0].bytes) || records[0].bytes <= 0
+      || !/^[a-f0-9]{64}$/.test(records[0].sha256 || '')) {
+    fail('frontend main script is missing or malformed in the candidate artifact manifest');
+  }
+  if (!mainScriptFile || !fs.existsSync(mainScriptFile)) {
+    fail('deployed Finance main script was not downloaded for frontend verification');
+  }
+  const actual = fs.readFileSync(mainScriptFile);
+  const actualSha = crypto.createHash('sha256').update(actual).digest('hex');
+  if (actual.length !== records[0].bytes || actualSha !== records[0].sha256
+      || mainAsset !== `assets/finance-main-${actualSha.slice(0, 16)}.js`) {
+    fail('deployed Finance main script differs from the candidate manifest and content-addressed name');
+  }
+  if (!/\bsubmissionAttemptId\b/.test(actual.toString('utf8'))) {
     fail('frontend does not contain the required submissionAttemptId contract');
   }
   return true;
@@ -1918,7 +1948,7 @@ function verifyVercelTarget(deploymentPath, projectPath, domainsPath, candidate,
   return true;
 }
 
-function verifyProductionBaseline(productionPath, candidatePath, productionIndexPath, candidateIndexPath, candidate, releasePhase, versionsText) {
+function verifyProductionBaseline(productionPath, candidatePath, productionIndexPath, candidateIndexPath, candidate, releasePhase, versionsText, productionMainPath, candidateMainPath) {
   const plan = releasePlan(releasePhase, versionsText);
   if (plan.releasePhase !== RELEASE_PHASE_DATABASE_V3) {
     fail('production frontend baseline is only valid before database_v3 mutation');
@@ -1928,10 +1958,13 @@ function verifyProductionBaseline(productionPath, candidatePath, productionIndex
   const candidateManifest = readJson(candidatePath);
   if (production.source_commit !== candidate) fail('database_v3 requires the exact candidate SHA to already be live from frontend_compat');
   assert.deepStrictEqual(production, candidateManifest, 'database_v3 requires the exact deterministic candidate manifest to already be live');
-  verifyFrontendContract(candidateIndexPath, candidatePath, candidate);
-  verifyFrontendContract(productionIndexPath, productionPath, candidate);
+  verifyFrontendContract(candidateIndexPath, candidatePath, candidate, candidateMainPath);
+  verifyFrontendContract(productionIndexPath, productionPath, candidate, productionMainPath);
   if (sha256File(productionIndexPath) !== sha256File(candidateIndexPath)) {
     fail('database_v3 requires production index.html bytes to match the exact frontend_compat candidate');
+  }
+  if (sha256File(productionMainPath) !== sha256File(candidateMainPath)) {
+    fail('database_v3 requires production Finance main script bytes to match the exact frontend_compat candidate');
   }
   return true;
 }
@@ -2044,7 +2077,7 @@ const api = {
   ledgerSha256, readLedgerVersions, assertProductionLedgerBaseline, assertReviewedAdoptedMigrations, assertCliAtomicMigration,
   prepareRehearsal, prepareGateQuery, preparePhaseQuery, prepareReadOnlyQuery, prepareApply, normalizeQueryRows,
   verifyAuthenticatedCanary,
-  verifyCandidate, verifyFrontendContract, verifyVercelTarget, verifyProductionBaseline, verifyPromotion,
+  verifyCandidate, mainScriptPath, verifyFrontendContract, verifyVercelTarget, verifyProductionBaseline, verifyPromotion,
   createReceipt, verifyReceipt, manifestSha
 };
 module.exports = api;
@@ -2124,14 +2157,15 @@ if (require.main === module) {
     else if (command === 'verify-authenticated-canary') verifyAuthenticatedCanary(arg('input'));
     else if (command === 'verify-supabase-public-key') verifySupabasePublicKey(arg('api-keys-json'), process.env.FINANCE_SUPABASE_ANON_KEY);
     else if (command === 'verify-candidate') verifyCandidate(arg('local-manifest'), arg('remote-manifest'), arg('candidate-sha'), arg('deployment-url'));
-    else if (command === 'verify-frontend-contract') verifyFrontendContract(arg('index'), arg('manifest'), arg('candidate-sha'));
+    else if (command === 'main-script-path') process.stdout.write(`/${mainScriptPath(arg('index'))}\n`);
+    else if (command === 'verify-frontend-contract') verifyFrontendContract(arg('index'), arg('manifest'), arg('candidate-sha'), arg('main-script'));
     else if (command === 'verify-vercel-target') verifyVercelTarget(arg('deployment-json'), arg('project-json'), arg('domains-json'), arg('candidate-sha'), arg('deployment-url'), optionalBooleanArg('allow-production-alias'));
-    else if (command === 'verify-production-baseline') verifyProductionBaseline(arg('production-manifest'), arg('candidate-manifest'), arg('production-index'), arg('candidate-index'), arg('candidate-sha'), arg('release-phase'), arg('migration-versions'));
+    else if (command === 'verify-production-baseline') verifyProductionBaseline(arg('production-manifest'), arg('candidate-manifest'), arg('production-index'), arg('candidate-index'), arg('candidate-sha'), arg('release-phase'), arg('migration-versions'), arg('production-main-script'), arg('candidate-main-script'));
     else if (command === 'verify-promotion') verifyPromotion(arg('candidate-deployment-json'), arg('promoted-deployment-json'), arg('production-alias-json'), arg('production-manifest'), arg('candidate-manifest'));
     else if (command === 'create-receipt') createReceipt(arg('output'), arg('deployment-json'), arg('manifest'), arg('index'), arg('candidate-sha'), arg('release-phase'), arg('migration-versions'), arg('deployment-url'), arg('repository'), arg('run-id'));
     else if (command === 'verify-receipt') verifyReceipt(arg('receipt'), arg('deployment-json'), arg('manifest'), arg('index'), arg('candidate-sha'), arg('release-phase'), arg('migration-versions'), arg('deployment-url'), arg('repository'), arg('run-id'));
     else if (command === 'manifest-sha') process.stdout.write(`${manifestSha(arg('manifest'))}\n`);
     else fail('unknown command');
-    if (!['manifest-sha','classify-ledger'].includes(command)) process.stdout.write(`PASS finance production release guard: ${command}\n`);
+    if (!['manifest-sha','classify-ledger','main-script-path'].includes(command)) process.stdout.write(`PASS finance production release guard: ${command}\n`);
   } catch (error) { process.stderr.write(`FAIL ${error.message}\n`); process.exit(1); }
 }

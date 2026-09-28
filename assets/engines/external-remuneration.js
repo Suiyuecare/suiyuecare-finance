@@ -113,12 +113,12 @@
     const p = position(event); context.lineTo(p.x, p.y); context.stroke();
   });
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(type, () => { drawing = false; });
-  clearSignatureButton.addEventListener('click', () => {
+  window.clearExternalRemunerationSignature = () => {
     if (state.busy || state.pendingPayload) return;
     context.clearRect(0, 0, canvas.width, canvas.height); state.ink = false;
     document.getElementById('signature-file').value = '';
     delete state.uploads.signature;
-  });
+  };
   document.getElementById('signature-file').addEventListener('change', event => {
     if (event.target.files.length) {
       context.clearRect(0, 0, canvas.width, canvas.height); state.ink = false;

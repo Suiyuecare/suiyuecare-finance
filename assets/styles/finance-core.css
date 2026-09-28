@@ -4624,3 +4624,24 @@ input:focus,select:focus,textarea:focus{
 .finance-leave-dialog button{min-width:44px;min-height:44px}
 .approval-table .approval-sort-button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;width:100%;border:0;background:transparent;color:inherit;font:inherit;text-align:inherit;padding:2px 4px;cursor:pointer}
 .approval-table .approval-sort-button:focus-visible,.finance-leave-dialog button:focus-visible{outline:3px solid var(--br);outline-offset:2px}
+
+/* Storage confirms complete files, so this status deliberately reports files rather than an estimated byte percentage. */
+.attachment-upload-feedback{position:fixed;right:20px;bottom:20px;z-index:12000;display:grid;gap:4px;width:min(340px,calc(100vw - 32px));box-sizing:border-box;padding:15px 50px 15px 18px;border:1px solid #e9c397;border-radius:14px;background:#fffdf8;box-shadow:0 14px 38px rgba(75,42,13,.17);color:#49311b;line-height:1.45}
+.attachment-upload-feedback[hidden]{display:none!important}
+body[data-finance-identity-blocked="true"] .attachment-upload-feedback{display:none!important}
+.attachment-upload-feedback.is-error{border-color:#e2a4a0;background:#fff8f7;color:#8b2926}
+.attachment-upload-feedback-title{font-size:15px;font-weight:700}
+.attachment-upload-feedback-detail{font-size:13px;overflow-wrap:anywhere}
+.attachment-upload-feedback-close{position:absolute;right:8px;top:7px;display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:22px;cursor:pointer}
+.attachment-upload-feedback-close:hover{background:rgba(89,52,17,.08)}
+.attachment-upload-feedback-close:focus-visible{outline:3px solid var(--br);outline-offset:2px}
+@media(max-width:600px){.attachment-upload-feedback{right:12px;bottom:max(12px,env(safe-area-inset-bottom));width:calc(100vw - 24px)}}
+
+/* Native scrollbar properties are inherited by nested scroll regions; the
+   existing WebKit rules above remain as a fallback for older browsers. */
+:root{scrollbar-color:#bea687 transparent;scrollbar-width:thin}
+nav{scrollbar-color:#607086 transparent;scrollbar-width:thin}
+
+/* Long notes expand as the user types in current browsers and remain
+   internally scrollable when field-sizing is unavailable. */
+textarea.finance-autogrow.resize-none{resize:none;field-sizing:content;min-height:76px;max-height:40vh;overflow-y:auto;line-height:1.5}

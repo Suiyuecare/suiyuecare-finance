@@ -53,6 +53,14 @@ function equal(actual,expected,message){assert.deepEqual(actual,expected,message
   await run(`(async()=>{window.__role='section_chief';S.user.role='section_chief';await loadLaborElectronicDetail('labor-req',true);})()`);
   equal(await run("window.__calls.at(-1).name"),'finance_labor_request_status_v1','manager only reads low sensitivity status');
   equal(await page.getByRole('button',{name:'確認本次實際付款並產生專用傳票'}).count(),0,'manager has no payment action');
+  for(const role of ['hr','general_affairs']){
+    await run(`(async()=>{window.__role=${JSON.stringify(role)};S.user.role=${JSON.stringify(role)};window.__serverState.status='accrued';await loadLaborElectronicDetail('labor-req',true);})()`);
+    equal(await run("window.__calls.at(-1).name"),'finance_labor_request_status_v1',role+' uses low-sensitivity status RPC');
+    equal(await page.getByRole('button',{name:'確認本次實際付款並產生專用傳票'}).count(),0,role+' has no accounting payment action');
+    await run("(async()=>{window.__serverState.status='reviewed';await loadLaborElectronicDetail('labor-req',true);})()");
+    equal(await page.getByRole('button',{name:'確認應計入帳'}).count(),0,role+' has no independent accrual action');
+  }
+  await run("(async()=>{window.__role='section_chief';S.user.role='section_chief';window.__serverState.status='accrued';await loadLaborElectronicDetail('labor-req',true);})()");
   equal(await run("(async()=>{REQS[0].status='pending_section_chief';REQS[0].steps=[{rk:'section_chief',a:''}];canActRequest=function(){return true;};window.__managerReached=false;approvalActionPayload=async function(){window.__managerReached=true;throw new Error('fixture_stop_after_manager_gate');};await doApprove('labor-req').catch(function(){});return window.__managerReached;})()"),true,'manager approval is not blocked by unsigned lecturer');
   equal(await run("(async()=>{REQS[0].status='pending_accountant';REQS[0].steps=[{rk:'accountant',a:''}];LABOR_DETAIL_CACHE['labor-req']={identity:laborElectronicIdentity(),loaded:true,data:{status:'invited'}};window.__managerReached=false;await doApprove('labor-req').catch(function(){});return window.__managerReached;})()"),false,'accountant legacy step stays blocked before signature and review');
   await run("REQS[0].status='pending_external_labor_settlement';REQS[0].steps=[];window.__serverState.status='accrued';");

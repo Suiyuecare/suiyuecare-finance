@@ -82,10 +82,12 @@
 
 .workflow-simplification-v1 #pg-approvals .approval-tabs-scroll{
   flex-wrap:nowrap!important;
-  scrollbar-width:none;
+  scrollbar-width:thin;
+  scrollbar-color:#cfa971 transparent;
 }
 
-.workflow-simplification-v1 #pg-approvals .approval-tabs-scroll::-webkit-scrollbar{display:none}
+.workflow-simplification-v1 #pg-approvals .approval-tabs-scroll::-webkit-scrollbar{height:5px}
+.workflow-simplification-v1 #pg-approvals .approval-tabs-scroll::-webkit-scrollbar-thumb{background:#cfa971;border-radius:99px}
 
 .workflow-simplification-v1 #approval-bulk-slot.workflow-bulk-empty{opacity:.72}
 .workflow-simplification-v1 #approval-bulk-slot.workflow-bulk-active{opacity:1}
