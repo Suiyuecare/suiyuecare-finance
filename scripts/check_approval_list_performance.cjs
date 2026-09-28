@@ -11,7 +11,7 @@ let checks=0;function pass(name){checks++;console.log('PASS '+name);}
 function fixture(){
  const c={Date,Promise,Object,Array,String,Number,Math,Set,Map,Error,JSON,console:{warn(){}},setTimeout,clearTimeout,S:{user:{id:'owner-a',email:'a@example.invalid',n:'匿名本人'},demoLogin:false,aT:'p'},REQS:[],INVS:[],BILLS:[],VOUCHERS:[],APPROVAL_HISTORY_MODAL_CONTEXT:null,APPROVAL_FAST_BOOTSTRAP:{summaryItems:[]},queries:[],issues:[],active:0,max:0,nodes:{},window:{FinanceDocumentSearch:search}};
  Object.assign(c,{recordRemoteReadIssue:(label,error)=>c.issues.push({label,error}),approvalFastSummarySourceIds:(items,table)=>items.filter(x=>x.source_table===table).flatMap(x=>x.source_ids),withOperationTimeout:q=>q,
-  num:x=>Number(x)||0,normDate:x=>String(x||'').replaceAll('/','-'),normalizeFiles:x=>x||[],invoiceIsReceivable:x=>!!x.receivable,approvalReceiptItemCandidate:x=>!!x.receiptCandidate,
+  num:x=>Number(x)||0,normDate:x=>String(x||'').replaceAll('/','-'),normalizeFiles:x=>x||[],invoiceIsReceivable:x=>!!x.receivable,approvalReceiptItemCandidate:x=>!!x.receiptCandidate,renderLaborElectronicTracker(){},
   currentFinanceAuthUserId:()=>c.S.user&&c.S.user.auth||'auth-a',currentTenantId:()=>c.tenant||'tenant-a',activeDataEnvironment:()=>c.env||'production',fmt:n=>String(n),voucherBadgeClass:()=>'',voucherKind:()=> '一般傳票',
   el(id){return c.nodes[id]||(c.nodes[id]={value:'',innerHTML:'',textContent:'',before(){},setAttribute(name,value){this[name]=value;}})}
  });

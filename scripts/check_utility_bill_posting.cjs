@@ -37,6 +37,7 @@ function makeContext(spec){
  const dom={'advance-final-amt':{value:spec.finalAmount===undefined?actual:spec.finalAmount},'advance-final-dr':{value:spec.finalAccount||'6202'},'advance-final-settlement-confirm':{checked:true}};
  const c={window:{},console:{log(){},warn(){},error(e){trace.errors.push(e&&e.message||String(e));}},Date,Math,JSON,Set,Map,Number,
   BUSINESS_TAX_RATE:0.05,num:v=>Number(v||0),fmt:v=>String(v),cloneSettingValue:clone,
+  laborElectronicMarker:()=>null,
   S:{demoLogin:true,user:{id:'fictional-accountant',n:'虛構會計',role:'accountant'}},REQS:[r],POSTING_IN_FLIGHT:{},VOUCHERS:[],LEDGER:[],
   loadExpensePostingPending:()=>null,expenseTransactionIdentityCurrent:()=>true,expensePostingIdentity:()=>'anonymous-tax-fixture',withOperationTimeout:async p=>p,
   el:id=>dom[id]||null,alert:message=>trace.alerts.push(message),canActRequest:()=>true,requestLedgerRowsExist:()=>false,ensureOpenPostingPeriod:()=>true,

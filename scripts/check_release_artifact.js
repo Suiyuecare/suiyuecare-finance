@@ -197,6 +197,20 @@ function releaseSourceFiles() {
   'scripts/finance_portal_session_logout_postflight.sql',
   'scripts/finance_portal_session_canary.sql',
   'scripts/finance_portal_session_fingerprint.sql',
+  'external-remuneration.html',
+  'assets/engines/external-remuneration.js',
+  'assets/styles/external-remuneration.css',
+  'supabase/functions/finance-labor-external/index.ts',
+  'supabase/functions/finance-labor-external/handler.mjs',
+  'supabase/migrations/20260928090000_finance_external_labor_v1.sql',
+  'scripts/check_external_labor_gateway.mjs',
+  'scripts/test_external_labor_v1.mjs',
+  'scripts/check_external_labor_release.cjs',
+  'scripts/finance_external_labor_postflight.sql',
+  'scripts/finance_external_labor_canary.sql',
+  'scripts/finance_external_labor_fingerprint.sql',
+  'scripts/check_electronic_labor_ui_20260928.cjs',
+  'scripts/check_external_labor_browser.cjs',
   'supabase/migrations/20260927180201_finance_portal_session_logout.sql',
   'supabase/migrations/20260927175827_finance_hr_native_contractor_bridge.sql',
   'supabase/migrations/20260927180005_finance_hr_contractor_settlement_caption.sql',
@@ -478,12 +492,36 @@ function expectedBuiltIndex() {
   return bundle.html;
 }
 
+function expectedExternalRemunerationPage() {
+  const source = fs.readFileSync(path.join(ROOT, 'external-remuneration.html'), 'utf8');
+  if (source.split('__FINANCE_EXTERNAL_API_URL__').length !== 2) {
+    fail('external remuneration page must contain exactly one API URL placeholder');
+  }
+  const assets = ['assets/engines', 'assets/styles']
+    .flatMap((directory) => fs.readdirSync(path.join(ROOT, directory))
+      .filter((file) => file.endsWith(directory.endsWith('engines') ? '.js' : '.css'))
+      .map((file) => ({ key: `${directory.split('/')[1]}/${file}`, file: path.join(ROOT, directory, file) })))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  const hash = crypto.createHash('sha256');
+  for (const asset of assets) hash.update(asset.key).update(fs.readFileSync(asset.file));
+  const assetVersion = hash.digest('hex').slice(0, 16);
+  const apiUrl = buildConfig.supabaseUrl
+    ? `${buildConfig.supabaseUrl}/functions/v1/finance-labor-external`
+    : '';
+  return source.replace('__FINANCE_EXTERNAL_API_URL__', apiUrl)
+    .replace(/__FINANCE_ASSET_VERSION__/g, assetVersion);
+}
+
 if (!fs.existsSync(OUTPUT) || !fs.statSync(OUTPUT).isDirectory()) fail('www does not exist; build first');
 removeGeneratedOsMetadata(OUTPUT);
 const builtIndexPath = path.join(OUTPUT, 'index.html');
 if (!fs.existsSync(builtIndexPath)) fail('www/index.html is missing');
 const builtIndex = fs.readFileSync(builtIndexPath, 'utf8');
 if (builtIndex !== expectedBuiltIndex()) fail('www/index.html is not the deterministic build of index.html for the selected build target');
+const externalPagePath = path.join(OUTPUT, 'external-remuneration.html');
+if (!fs.existsSync(externalPagePath) || fs.readFileSync(externalPagePath, 'utf8') !== expectedExternalRemunerationPage()) {
+  fail('www/external-remuneration.html is not the deterministic build of its source');
+}
 if (/__(?:FINANCE_BUILD_TARGET|FINANCE_SUPABASE_URL|FINANCE_SUPABASE_ANON_KEY)__/.test(builtIndex)) {
   fail('www/index.html still contains a Finance runtime configuration placeholder');
 }

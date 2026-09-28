@@ -20,7 +20,7 @@ function fixture(){
  Object.assign(c,{DEFAULT_TENANT_ID:'T',currentTenantId:()=>c.tenant,activeDataEnvironment:()=>c.env,approvalFastBootstrapIdentity:()=>c.tenant+'|'+c.S.user?.authUserId,
   getSb:()=>({rpc(name,args){let resolve;const p=new Promise(r=>resolve=r),call={name,args,resolve,aborts:0};c.calls.push(call);return{abortSignal(signal){signal.addEventListener('abort',()=>call.aborts++);return this;},then(ok,bad){return p.then(ok,bad);}};}}),
   performance:{now:()=>c.now,measure:(name,options)=>c.measures.push({name,...options})},requestAnimationFrame:f=>c.frames.push(f),
-  canAccessPage:()=>true,buildApprovals(){},updateApprovalTodoBadge(){},remoteReadIssueText:e=>e.message,recordRemoteReadIssue(){},el:node,
+  canAccessPage:()=>true,buildApprovals(){},renderLaborElectronicTracker(){},updateApprovalTodoBadge(){},remoteReadIssueText:e=>e.message,recordRemoteReadIssue(){},el:node,
   escAttr:x=>String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'),
   mapReq:x=>({...x,formPayload:x.form_payload}),mapBill:x=>({...x,batchId:x.batch_id}),mapInv:x=>({...x,batchId:x.batch_id}),
   document:{querySelectorAll:()=>[]},setTopSyncStatus(){},approvalItemAvailability:item=>{assert(item.historyTrusted&&!item.historySummary,'only full validated detail enters original read gate');return{ok:true};},

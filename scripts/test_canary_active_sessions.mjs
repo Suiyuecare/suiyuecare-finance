@@ -131,7 +131,7 @@ try {
     }
     verified++;
   }
-  assert.equal(verified, 26, 'every protected authenticated/report/finalize/utility final SQL result is covered');
-  pass('all 26 actual final SQL result shapes satisfy their unchanged protected release parsers');
+  assert.equal(verified, 27, 'every protected authenticated/report/finalize/utility final SQL result is covered');
+  pass('all 27 actual final SQL result shapes satisfy their unchanged protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);
