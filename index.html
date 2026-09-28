@@ -18667,7 +18667,7 @@ function renderNR(){
       +refundHtml
       +purchaseHtml
       +hrHtml
-      +'<div class="fg"><label class="fl">申請說明 * （請詳述費用用途）</label><textarea id="nr-desc" rows="3" placeholder="例：2026/05 居服部門薪資" onkeydown="handleTextareaLineDelete(event)">'+(S.nrType==='hr_expense_request'?'2026/05 居服部門薪資':'')+'</textarea></div>'
+      +'<div class="fg"><label class="fl">申請說明 * （請詳述費用用途）</label><textarea id="nr-desc" rows="3" placeholder="'+(laborElectronicSelected()?'例：講師授課費用（課程名稱、服務月份）':'例：2026/05 居服部門薪資')+'" onkeydown="handleTextareaLineDelete(event)">'+(S.nrType==='hr_expense_request'&&!laborElectronicSelected()?'2026/05 居服部門薪資':'')+'</textarea></div>'
       +aoHtml;
     var rightPayHtml=S.nrType==='hr_expense_request'?(laborElectronicSelected()?laborElectronicPaymentHtml():hrBatchPaymentFieldsHtml()):(S.nrType==='purchase_request'?'<div style="font-size:12px;color:#334155;line-height:1.7;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:10px">採購申請由申請人先提出商品項目、數量與商品連結即可。總務會在下一關填寫預估匯款金額、收款人、銀行分行帳號與預計匯款日。</div>':paymentFieldsHtml());
     var submitActions=nrSubmitActionsHtml(S.nrType==='travel_request');
@@ -23284,6 +23284,11 @@ function nrTravelValidationTarget(kind,field){
   if(target){if(!target.id)target.id='nr-invalid-travel-'+index+'-'+field;return target.id;}
   return box.id;
 }
+function expenseDescriptionValidationValues(purpose,note,hrInfo){
+  var generated=hrInfo&&hrInfo.digital?String(hrInfo.summary||'').trim():'';
+  if(!generated)return{purpose:purpose||note,note:note};
+  return{purpose:String(purpose||'').trim()||String(note||'').trim()||generated,note:String(note||'').trim()||generated};
+}
 window.submitNR=async function(){
   if(POSTING_IN_FLIGHT.shareholderApproval)return;
   if(loadExpenseRevisionPending()){await window.reconcilePendingExpenseRevision();return;}
@@ -23390,13 +23395,14 @@ window.submitNR=async function(){
   var appIdInput=el('nr-app-id');if(appIdInput)appIdInput.value=appUser.id||'';
   var requestDateIso=String(((el('nr-date')||{}).value||todayIso())).replace(/\//g,'-').slice(0,10)||todayIso();
   var eid=(el('nr-ent')||{}).value||'E1';var dc=(el('nr-dept')||{}).value||(S.user&&S.user.dc)||'A1101';
+  var descriptionRequiredValues=expenseDescriptionValidationValues(purpose,note,hrInfo);
   var expenseMissing=requiredMissingItems('expense_request',[
     {key:'entity',value:eid,label:formFieldLabel('expense_request','entity','支出法人')},
     {key:'applicant',value:appName,label:formFieldLabel('expense_request','applicant','申請人')},
     {key:'department',value:dc,label:formFieldLabel('expense_request','department','組別 / 部門')},
     {key:'date',value:requestDateIso,label:formFieldLabel('expense_request','date','表單填寫日期')},
-    {key:'purpose',value:purpose||note,label:formFieldLabel('expense_request','purpose','申請原因')},
-    {key:'note',value:note,label:formFieldLabel('expense_request','note','備註內容')},
+    {key:'purpose',value:descriptionRequiredValues.purpose,label:formFieldLabel('expense_request','purpose','申請原因')},
+    {key:'note',value:descriptionRequiredValues.note,label:formFieldLabel('expense_request','note','備註內容')},
     {key:'amount',value:S.nrType==='purchase_request'?'採購需求階段':(amt?String(amt):''),label:formFieldLabel('expense_request','amount','總金額')},
     {key:'attachments',value:hrInfo&&hrInfo.digital?'講師電子簽署待取得':((S.nrFiles||[]).length?String(S.nrFiles.length):''),label:formFieldLabel('expense_request','attachments','附件')}
   ]);
@@ -30709,6 +30715,15 @@ function applyExpenseFormFieldCustomizations(){
     applyFormControlMeta('nr-desc','expense_request','note','備註內容','補充說明，可由 Excel 明細自動帶入',false);
   }else{
     applyFormControlMeta('nr-desc','expense_request','purpose','申請說明','請詳述費用用途',true);
+  }
+  if(laborElectronicSelected()){
+    var laborDescription=el('nr-desc');
+    if(laborDescription){
+      laborDescription.placeholder='例：講師授課費用（課程名稱、服務月份）';
+      var laborDescriptionGroup=laborDescription.closest?laborDescription.closest('.fg'):null;
+      var laborDescriptionLabel=laborDescriptionGroup?laborDescriptionGroup.querySelector('label.fl'):null;
+      if(laborDescriptionLabel)laborDescriptionLabel.textContent='申請說明（可選填補充）';
+    }
   }
 }
 window.invApplicantChanged=function(prefix){
