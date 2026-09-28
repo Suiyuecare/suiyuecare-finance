@@ -484,7 +484,7 @@ function expectedBuiltIndex() {
         .filter((file) => file.endsWith('.css'))
         .map((file) => ({ key: `styles/${file}`, file: path.join(styleDirectory, file) }))
     )
-    .sort((a, b) => a.key.localeCompare(b.key));
+    .sort((a, b) => comparePathBytes(a.key, b.key));
   const hash = crypto.createHash('sha256');
   for (const asset of versionedAssets) hash.update(asset.key).update(fs.readFileSync(asset.file));
   html = html.replace(/__FINANCE_ASSET_VERSION__/g, hash.digest('hex').slice(0, 16));
@@ -506,7 +506,7 @@ function expectedExternalRemunerationPage() {
     .flatMap((directory) => fs.readdirSync(path.join(ROOT, directory))
       .filter((file) => file.endsWith(directory.endsWith('engines') ? '.js' : '.css'))
       .map((file) => ({ key: `${directory.split('/')[1]}/${file}`, file: path.join(ROOT, directory, file) })))
-    .sort((a, b) => a.key.localeCompare(b.key));
+    .sort((a, b) => comparePathBytes(a.key, b.key));
   const hash = crypto.createHash('sha256');
   for (const asset of assets) hash.update(asset.key).update(fs.readFileSync(asset.file));
   const assetVersion = hash.digest('hex').slice(0, 16);
