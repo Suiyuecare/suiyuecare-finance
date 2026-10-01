@@ -1,4 +1,3 @@
-\set ON_ERROR_STOP on
 -- Rollback-only, read-only equivalence probe for all three supported JSON path
 -- spellings. It uses two existing attachment paths without revealing them.
 begin isolation level repeatable read;

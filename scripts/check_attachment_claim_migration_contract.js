@@ -104,6 +104,8 @@ assert(canary.includes('FINANCE_ATTACHMENT_CLAIM_CANARY_ROLLED_BACK') &&
   canary.includes('attachment_claim_canary_result') &&
   canary.includes('rollback;'),
   'rollback-only attachment claim canary is incomplete');
+assert(!canary.split(/\r?\n/).some(line => line.trimStart().startsWith('\\')),
+  'attachment claim canary must contain SQL only for direct Supabase db query');
 assert(fingerprint.includes('FINANCE_ATTACHMENT_CLAIM_FINGERPRINT'),
   'attachment claim schema fingerprint is missing');
 
