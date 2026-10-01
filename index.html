@@ -9814,7 +9814,7 @@ async function refreshRemoteData(reason,payload){
   var identity=remoteDataReadIdentity();
   if(!identity)return false;
   if(remoteRefreshPromise&&remoteRefreshIdentity&&remoteRefreshIdentity!==identity){
-    // Retire the old account's refresh immediately. Its in-flight requests
+    // Retire the refresh for the previous account immediately. Its in-flight requests
     // still have their own scope checks; the new account must not await them.
     if(syncTimer)clearTimeout(syncTimer);
     if(remoteRefreshTimerResolve)remoteRefreshTimerResolve();
