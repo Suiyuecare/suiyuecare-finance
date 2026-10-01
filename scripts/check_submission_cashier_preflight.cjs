@@ -155,26 +155,29 @@ testEarlyRoleRead().then(() => {
     .replace('window.submitNR=async function(){', 'async function testPendingGate(){')
     + '  return "continue";\n}';
   let pendingState = 'deterministic_failure';
-  let status = '';
+  let pendingVisible = true;
+  const recoveryOptions = [];
   const gateContext = {
     POSTING_IN_FLIGHT: {},
     S: { nrSubmissionConfirmationPending: true },
     loadExpenseRevisionPending: () => null,
-    loadExpenseSubmissionPending: () => ({ requestId: 'prior-attempt' }),
-    guardSubmissionIdentityDirectory: async () => true,
-    reconcilePendingExpenseSubmission: async () => ({ state: pendingState }),
-    setTopSyncStatus: (value) => { status = value; },
+    loadExpenseSubmissionPending: () => pendingVisible ? ({ requestId: 'prior-attempt' }) : null,
+    reconcilePendingExpenseSubmission: async (options) => { recoveryOptions.push(options); return { state: pendingState }; },
+    refreshExpenseSubmissionRecoveryActions: () => {},
     alert: () => {},
   };
   vm.createContext(gateContext);
   vm.runInContext(gateSource, gateContext);
   return gateContext.testPendingGate().then(async (outcome) => {
-    assert.equal(outcome, 'continue', 'Confirmed absent prior attempt must not consume the new click');
-    assert.match(status, /前次送件未建立/);
+    assert.equal(outcome, undefined, 'A failed confirmation must retain the durable attempt and block a fresh request');
+    assert.equal(recoveryOptions[0].retainAttachmentsOnFailure, true);
+    assert.equal(recoveryOptions[0].requireDirectoryForRetry, true);
     pendingState = 'committed';
     assert.equal(await gateContext.testPendingGate(), undefined, 'Confirmed committed prior attempt must stop duplicate creation');
     pendingState = 'unknown';
     assert.equal(await gateContext.testPendingGate(), undefined, 'Unknown outcome must remain blocked');
+    pendingVisible = false;
+    assert.equal(await gateContext.testPendingGate(), 'continue', 'Only a cleared owner-scoped pending marker permits a fresh request');
   });
 }).then(() => {
   console.log('PASS: formal cashier preview and submission recovery keep authorized sends available without duplicate attempts');

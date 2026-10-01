@@ -87,7 +87,12 @@ const incomeAndShareholderGuards = [
   ['issueBatchCore', '批次開立發票'],
   ['submitBillCore', '申請繳費單'],
   ['submitShareholderApprovalRequest', '公司往來簽核單']
-].every(([fn, label]) => new RegExp(`function ${fn}\\([^)]*\\)\\{[\\s\\S]{0,500}guardSubmissionIdentityDirectory\\('${label}'\\)`).test(index));
+].every(([fn, label]) => {
+  const body = extractNamedFunction(index, fn);
+  const guard = body.indexOf(`guardSubmissionIdentityDirectory('${label}')`);
+  const applicant = body.indexOf('var appUser=');
+  return guard >= 0 && (applicant < 0 || guard < applicant);
+});
 check('invoice, batch invoice, bill, and shareholder submissions use the same identity gate', incomeAndShareholderGuards);
 
 const prepare = functionBlock('prepareApprovalRouteForSubmit', 'approvalRuntimeSourceTableForRecord');

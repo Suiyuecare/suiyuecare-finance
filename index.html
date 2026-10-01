@@ -262,6 +262,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
       <div style="flex:1"><div class="ph">新增申請</div><div class="ps">依申請類型填寫資料 · 完成後送出簽核並由系統產生傳票資料</div></div>
     </div>
     <div id="nr-ok" style="display:none;padding:9px 13px;border-radius:8px;background:#eaf8d8;border:1px solid #a0d870;color:#1a5010;font-size:12px;font-weight:500;margin-bottom:10px"></div>
+    <section id="nr-submission-recovery" hidden aria-live="polite"></section>
     <div style="display:flex;align-items:center;gap:5px;padding:9px 13px;background:#fff;border:1px solid #eedfc8;border-radius:12px;margin-bottom:12px;flex-wrap:wrap">
       <div class="si-dot si-cur" id="sd1">1</div><span style="font-size:11px;font-weight:500;color:var(--brtxt)" id="sl1">費用性質</span>
       <div style="height:1px;background:#e0d0b8;flex:1;min-width:8px"></div>
@@ -15200,6 +15201,9 @@ function clearFinanceLoginState(){
   if(window.FinanceHrBridge)window.FinanceHrBridge.dispose();
   clearApprovalFastBootstrapState();
   resetFinanceUsersDirectoryReadiness();
+  // The durable snapshot remains scoped to its original owner in browser
+  // storage; never carry its in-memory lock into another account's session.
+  S.nrSubmissionConfirmationPending=null;
   S.user=null;
   FINANCE_NOTIFICATION_STATE=null;NOTIFS=[];
   S.demoLogin=false;
@@ -18595,6 +18599,7 @@ function renderLazyExpensePage(){
   if(!S.nrRec)S.nrRec=def.rec;
   if(!S.nrPay)S.nrPay=def.pay;
   S.nrStep=3;
+  syncExpenseSubmissionRecoveryBanner();
   var typeLabel=requestTypeLabel(S.nrType||'expense_reimbursement');
   var dOpts='<option value="">請選擇目前有效任職課／組</option>'+applicantDeptSelectRows('',currentUserEntityId()).map(function(d){return'<option value="'+d.c+'">'+'　'.repeat(d.lv-1)+d.c+' '+d.n+'</option>';}).join('');
   var entOpts=entityOptionsHtml('official',currentUserEntityId(),false);
@@ -18644,10 +18649,21 @@ function nrTypeCardHtml(t){
     +'<div class="type-copy"><div class="type-title">'+t.n+'</div><div class="type-desc">'+t.d+'</div><div class="type-employee-note">'+requestTypeEmployeeNote(t.id)+'</div></div>'
     +'</button>';
 }
-function buildNR(){S.nrPettyGeneralRows=[];S.nrPettyGeneralReceiptType='';S.nrFileIssues=[];if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();clearExpenseApplicantRevisionMode();S.nrStep=1;S.nrType=null;S.nrRec=null;S.nrPay=null;S.nrFiles=[];S.nrPassbookFile=null;S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;S.lazyRows=[];S.refundRows=[];S.purchaseRows=[];S.hrRows=[];S.hrPeriod='';S.hrLaborPeriod='';S.hrPrivacyMode=false;S.nrLaborLines=[];S.nrLaborSignerName='';S.nrLaborInviteEmail='';S.nrLaborPlannedDates=[];S.pettyMode='general';S.nrFixedExpense=false;S.lazyBusy=false;S.lazyMode=false;S.nrDraftId='';renderNR();markNRClean();}
+function buildNR(){
+  if(loadExpenseSubmissionPending()){
+    // Returning to New Request must not wipe an unresolved original form.
+    // A fresh page has no form DOM yet; render its scoped recovery control.
+    var existing=el('nr-content');
+    if(existing&&existing.childElementCount)refreshExpenseSubmissionRecoveryActions();
+    else renderNR();
+    return;
+  }
+  S.nrPettyGeneralRows=[];S.nrPettyGeneralReceiptType='';S.nrFileIssues=[];if(window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();clearExpenseApplicantRevisionMode();S.nrStep=1;S.nrType=null;S.nrRec=null;S.nrPay=null;S.nrFiles=[];S.nrPassbookFile=null;S.nrDraftFileNotice='';S.nrDraftMissingFileCount=0;S.lazyRows=[];S.refundRows=[];S.purchaseRows=[];S.hrRows=[];S.hrPeriod='';S.hrLaborPeriod='';S.hrPrivacyMode=false;S.nrLaborLines=[];S.nrLaborSignerName='';S.nrLaborInviteEmail='';S.nrLaborPlannedDates=[];S.pettyMode='general';S.nrFixedExpense=false;S.lazyBusy=false;S.lazyMode=false;S.nrDraftId='';renderNR();markNRClean();
+}
 function renderNR(){
   var c=el('nr-content');if(!c)return;
   if(S.nrStep>3)S.nrStep=3;
+  syncExpenseSubmissionRecoveryBanner();
   var grid=el('nr-main-grid'),side=el('nr-side-panel');
   if(grid)grid.style.gridTemplateColumns='';
   if(side)side.style.display='flex';
@@ -19315,6 +19331,31 @@ function travelApprovalOverviewHtml(){
     return'<div class="flow-step"><div class="flow-dot'+(isCurrent?' me':'')+'">'+(i+1)+'</div><div class="flow-body"><div class="flow-label">'+r[0]+(isCurrent?' <span class="flow-badge">您在此</span>':'')+'</div><div class="flow-sub">'+r[1]+'</div></div></div>';
   }).join('')+'</div></div></div>';
 }
+function expenseSubmissionRecoveryPanelHtml(pending){
+  var attempt=escAttr(String(pending&&pending.attemptId||''));
+  return'<div class="nr-submit-panel" data-expense-submission-recovery="pending" role="status" style="border-color:#e8b86e;background:#fffaf1">'
+    +'<div><div class="nr-submit-panel-title">前次送件待確認</div>'
+      +'<div class="nr-submit-panel-sub">這筆申請可能已建立。請用原帳號、原瀏覽器確認前次結果；系統只會查詢或以原識別碼安全重試，不會另建新單。</div>'
+      +(attempt?'<div class="nr-submit-panel-sub" style="overflow-wrap:anywhere">事件識別：'+attempt+'</div>':'')+'</div>'
+    +'<div class="nr-submit-buttons" style="grid-template-columns:1fr"><button type="button" class="btn-p" onclick="confirmPendingExpenseSubmission()">確認前次送件</button></div>'
+  +'</div>';
+}
+function syncExpenseSubmissionRecoveryBanner(){
+  var banner=el('nr-submission-recovery');if(!banner)return;
+  var pending=loadExpenseSubmissionPending();
+  var show=!!(pending&&!isExpenseApplicantRevisionMode()&&S.nrStep!==3);
+  banner.hidden=!show;
+  banner.innerHTML=show?expenseSubmissionRecoveryPanelHtml(pending):'';
+  if(show)banner.style.marginBottom='12px';
+}
+function refreshExpenseSubmissionRecoveryActions(){
+  var root=el('nr-content'),actions=root&&root.querySelector('.nr-submit-actions');
+  if(actions&&!isExpenseApplicantRevisionMode()){
+    actions.outerHTML=nrSubmitActionsHtml(S.nrType==='travel_request');
+    if(!loadExpenseSubmissionPending())setTimeout(updateNRRouteHealth,0);
+  }
+  syncExpenseSubmissionRecoveryBanner();
+}
 function nrSubmitActionsHtml(includeTravelStep){
   if(isExpenseApplicantRevisionMode()){
     return'<div class="nr-submit-actions">'
@@ -19322,6 +19363,13 @@ function nrSubmitActionsHtml(includeTravelStep){
       +'<div class="nr-submit-panel"><div><div class="nr-submit-panel-title">完成補件</div><div class="nr-submit-panel-sub">原附件會保留；這次選擇的附件會追加到原單。</div></div>'
       +'<div class="nr-submit-buttons"><button type="button" class="btn-s" onclick="newReqBack()">返回申請單</button><button type="button" class="btn-p" onclick="submitNR()">補件完成並重新送出</button></div></div>'
       +'</div>';
+  }
+  var pending=loadExpenseSubmissionPending();
+  if(pending){
+    return'<div class="nr-submit-actions" data-expense-submission-recovery="actions">'
+      +'<div class="nr-submit-main"><div><div class="nr-submit-eyebrow">前次送件待確認</div><div class="nr-submit-copy">請先確認前次結果，原送件識別碼與已上傳附件仍保留；目前不要另開申請或再上傳附件。</div></div></div>'
+      +expenseSubmissionRecoveryPanelHtml(pending)
+    +'</div>';
   }
   var msg=S.nrType==='purchase_request'?'確認採購品項、數量、商品連結與申請原因後，再暫存或送出簽核。':includeTravelStep?'確認差旅行程、費用明細、憑據與匯款資訊後，再暫存或送出簽核。':'確認附件、費用明細、申請與匯款資訊後，再暫存或送出簽核。';
   return'<div class="nr-submit-actions">'
@@ -22679,7 +22727,14 @@ async function readExpenseSubmissionCommitWithDelays(record,delays){
     if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
     latest=await readExpenseSubmissionCommit(record);
     if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
-    if(latest.state==='committed'||latest.state==='unknown')return latest;
+    if(latest.state==='committed'||latest.identityChanged)return latest;
+    if(latest.state==='unknown'){
+      // A transient read failure does not establish whether the same request
+      // committed. Give the exact-ID readback its remaining scheduled chances;
+      // never retry a conflicting ID or an authorization/validation failure.
+      if(latest.error&&latest.error.code==='EXPENSE_SUBMISSION_ID_COLLISION')return latest;
+      if(!expenseApplicantRevisionRpcErrorIsAmbiguous(latest.error))return latest;
+    }
   }
   return latest;
 }
@@ -22705,11 +22760,19 @@ function saveExpenseSubmissionPending(record,error){
   else{safeRemoveItem(key);sessionRemoveItem(key);S.nrSubmissionConfirmationPending=null;}
   return{ok:!!(localSaved&&sessionSaved),pending:pending,localSaved:!!localSaved,sessionSaved:!!sessionSaved};
 }
+function expenseSubmissionPendingInCurrentScope(pending){
+  return !!(pending&&String(pending.tenantId||'')===String(currentTenantId()||DEFAULT_TENANT_ID)
+    &&String(pending.dataEnv||'')===String(activeDataEnvironment())
+    &&String(pending.applicantId||'')===String(S.user&&S.user.id||''));
+}
 function loadExpenseSubmissionPending(){
   var key=expenseSubmissionPendingStorageKey(),pending=null,sessionRaw=sessionGetItem(key);
   try{pending=sessionRaw?JSON.parse(sessionRaw):null;}catch(_){pending=null;}
   if(!pending)pending=safeJsonGet(key,null);
-  if(!pending||String(pending.tenantId||'')!==String(currentTenantId()||DEFAULT_TENANT_ID)||String(pending.dataEnv||'')!==String(activeDataEnvironment())||String(pending.applicantId||'')!==String(S.user&&S.user.id||''))return null;
+  if(!expenseSubmissionPendingInCurrentScope(pending)){
+    var cached=S.nrSubmissionConfirmationPending;
+    pending=expenseSubmissionPendingInCurrentScope(cached)?cached:null;
+  }
   S.nrSubmissionConfirmationPending=pending;
   return pending;
 }
@@ -22717,6 +22780,7 @@ function clearExpenseSubmissionPending(){
   var key=expenseSubmissionPendingStorageKey();
   S.nrSubmissionConfirmationPending=null;
   safeRemoveItem(key);sessionRemoveItem(key);
+  refreshExpenseSubmissionRecoveryActions();
 }
 var EXPENSE_POST_COMMIT_OUTBOX_KEY_BASE='finance_expense_post_commit_outbox_v1';
 var EXPENSE_POST_COMMIT_OUTBOX_RUNNING=false;
@@ -22929,7 +22993,7 @@ async function finalizeRecoveredExpenseSubmission(pending,record,options){
 async function reconcilePendingExpenseSubmission(options){
   options=options||{};
   var identity=expenseSubmissionOperationIdentity();
-  var pending=S.nrSubmissionConfirmationPending||loadExpenseSubmissionPending();
+  var pending=loadExpenseSubmissionPending();
   if(!pending||!pending.expected||!pending.requestId)return{state:'none'};
   var current=function(){return expenseSubmissionOperationCurrent(identity,pending.expected)&&String(pending.tenantId||'')===String(currentTenantId())&&String(pending.dataEnv||'')===String(activeDataEnvironment())&&(!S.nrSubmissionConfirmationPending||S.nrSubmissionConfirmationPending.requestId===pending.requestId&&S.nrSubmissionConfirmationPending.attemptId===pending.attemptId);};
   if(!current())return expenseSubmissionIdentityChanged();
@@ -22942,6 +23006,10 @@ async function reconcilePendingExpenseSubmission(options){
   if(readback.state==='absent'){
     if(options.allowRetry!==true)return{state:'unknown',pending:pending,reason:'readback_absent_retry_deferred'};
     if(!pending.retryRecord)return{state:'unknown',pending:pending,reason:'missing_durable_retry_record'};
+    if(options.requireDirectoryForRetry===true){
+      if(!await guardSubmissionIdentityDirectory('確認前次費用申請'))return{state:'unknown',pending:pending,reason:'directory_unavailable_retry_deferred'};
+      if(!current())return expenseSubmissionIdentityChanged();
+    }
     var retryOutcome=await submitExpenseRequestWithAmbiguousRecovery(pending.retryRecord,'待確認申請原識別重試');
     if(!current()||retryOutcome.identityChanged)return expenseSubmissionIdentityChanged();
     if(retryOutcome.ok){
@@ -22952,21 +23020,56 @@ async function reconcilePendingExpenseSubmission(options){
       return finalized;
     }
     if(!retryOutcome.unknown){
-      try{await cleanupUploadedSupabaseAttachments([pending.retryRecord.files||[],pending.retryRecord.passbookFiles||[]],'待確認送件已確認失敗清理');}
-      catch(cleanupError){
-        if(!current())return expenseSubmissionIdentityChanged();
-        console.error('pending expense deterministic failure cleanup failed',cleanupError);
-        try{recordOpsEvent('expense_staged_attachment_cleanup_failed','warn','待確認送件附件清理未完成','正式建單已確認失敗，但附件清理未完成',{recordId:pending.requestId,recordNo:pending.requestNo,retryable:true,dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});}catch(_){ }
+      if(options.retainAttachmentsOnFailure!==true){
+        try{await cleanupUploadedSupabaseAttachments([pending.retryRecord.files||[],pending.retryRecord.passbookFiles||[]],'待確認送件已確認失敗清理');}
+        catch(cleanupError){
+          if(!current())return expenseSubmissionIdentityChanged();
+          console.error('pending expense deterministic failure cleanup failed',cleanupError);
+          try{recordOpsEvent('expense_staged_attachment_cleanup_failed','warn','待確認送件附件清理未完成','正式建單已確認失敗，但附件清理未完成',{recordId:pending.requestId,recordNo:pending.requestNo,retryable:true,dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});}catch(_){ }
+        }
       }
       if(!current())return expenseSubmissionIdentityChanged();
-      clearExpenseSubmissionPending();
-      return{state:'deterministic_failure',error:retryOutcome.error};
+      // Explicit confirmation must leave the durable original request intact.
+      // The browser's visible form is not guaranteed to survive a reload, so
+      // clearing this marker here could orphan the uploaded attachments.
+      if(options.retainAttachmentsOnFailure!==true)clearExpenseSubmissionPending();
+      else S.nrSubmissionConfirmationPending=pending;
+      return{state:'deterministic_failure',error:retryOutcome.error,pending:options.retainAttachmentsOnFailure===true?pending:null};
     }
     return{state:'unknown',error:retryOutcome.error,pending:pending,reason:'retry_ambiguous'};
   }
   S.nrSubmissionConfirmationPending=pending;
   return{state:'unknown',error:readback.error,pending:pending};
 }
+window.confirmPendingExpenseSubmission=async function(){
+  if(S.nrSubmitting)return;
+  var pending=loadExpenseSubmissionPending();
+  if(!pending){refreshExpenseSubmissionRecoveryActions();return;}
+  var identity=expenseSubmissionOperationIdentity();
+  if(!expenseSubmissionOperationCurrent(identity,pending.expected))return;
+  S.nrSubmitting=true;
+  try{
+    showActionFeedback('正在確認前次送件','只會讀回或重試原申請識別碼，不會建立新申請。');
+    var result=await reconcilePendingExpenseSubmission({notify:true,allowRetry:true,retainAttachmentsOnFailure:true,requireDirectoryForRetry:true});
+    if(!expenseSubmissionOperationCurrent(identity,pending.expected))return;
+    if(result.state==='committed'){
+      completeActionFeedback('已確認前次申請','正式申請已建立；不需再次送件。');
+      openApprovalTab('mine');
+    }else if(result.state==='deterministic_failure'){
+      failActionFeedback('前次申請未建立','原送件識別碼與已上傳附件已保留，請聯絡系統管理員處理。');
+      alert('已確認前次送件尚未建立正式申請。系統保留原送件識別碼與附件，請勿另開新申請或重新上傳；請將畫面上的事件識別提供給系統管理員處理，再於原帳號、原瀏覽器按「確認前次送件」。');
+    }else{
+      failActionFeedback('前次送件仍待確認','請稍後在原帳號、原瀏覽器再次確認。');
+      alert('前次送件仍無法確認。系統已保留原送件識別碼與附件，請稍後在目前的原帳號、原瀏覽器按「確認前次送件」。請勿另開新申請。');
+    }
+  }catch(error){
+    failActionFeedback('前次送件仍待確認','請稍後在原帳號、原瀏覽器再次確認。');
+    alert('前次送件確認暫時無法完成。請在目前的原帳號、原瀏覽器稍後按「確認前次送件」；請勿另開新申請。');
+  }finally{
+    S.nrSubmitting=false;
+    refreshExpenseSubmissionRecoveryActions();
+  }
+};
 async function submitExpenseRequestWithAmbiguousRecovery(record,label){
   var identity=expenseSubmissionOperationIdentity();
   if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
@@ -23320,20 +23423,20 @@ function expenseDescriptionValidationValues(purpose,note,hrInfo){
 window.submitNR=async function(){
   if(POSTING_IN_FLIGHT.shareholderApproval)return;
   if(loadExpenseRevisionPending()){await window.reconcilePendingExpenseRevision();return;}
-  if(S.nrSubmissionConfirmationPending||loadExpenseSubmissionPending()){
-    if(!await guardSubmissionIdentityDirectory('確認上一筆費用申請'))return;
-    var pendingResolution=await reconcilePendingExpenseSubmission({notify:true,allowRetry:true});
+  if(loadExpenseSubmissionPending()){
+    var pendingResolution=await reconcilePendingExpenseSubmission({notify:true,allowRetry:true,retainAttachmentsOnFailure:true,requireDirectoryForRetry:true});
     if(pendingResolution.state==='committed')return;
     if(pendingResolution.state==='deterministic_failure'){
-      // Readback and the same-ID retry both confirmed no formal request. The
-      // pending marker has been cleared; this click can validate the current
-      // form and start a new attempt without creating a duplicate.
-      setTopSyncStatus('前次送件未建立，正在檢查目前表單');
-    }
-    if(pendingResolution.state==='unknown'){
-      alert('上一筆送件結果仍在確認中，為避免建立重複申請，現在不能再次送出。\n\n請先到「簽核管理 → 我的申請」重新整理確認；若仍看不到，請把事件編號交給系統管理員。');
+      refreshExpenseSubmissionRecoveryActions();
+      alert('前次送件尚未建立正式申請，原送件資料與附件已保留。請將事件識別提供給系統管理員處理；請勿另開新申請或重新上傳附件。');
       return;
     }
+    if(pendingResolution.state==='unknown'){
+      refreshExpenseSubmissionRecoveryActions();
+      alert('前次送件仍待確認，現在不能建立另一張申請。\n\n請在目前的原帳號、原瀏覽器，於原申請面板按「確認前次送件」。原送件識別碼與已上傳附件仍保留，請勿另開新申請。');
+      return;
+    }
+    return;
   }
   if(S.nrSubmitting)return;
   S.nrSubmitting=true;
@@ -23742,7 +23845,8 @@ window.submitNR=async function(){
     S.nrSubmissionConfirmationPending=durablePending.pending;
     try{recordOpsEvent('expense_submission_result_unknown','warn','費用送件結果待確認',submitOutcome.error.message,{recordId:newReq.id,recordNo:newReq.no,idempotencyKey:submissionContext.attemptId,retryable:false,dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});}catch(_){ }
     if(feedbackStarted)failActionFeedback('送件結果待確認','請勿重複送出；附件與表單內容已保留。');
-    alert('送件結果目前仍在確認中。\n\n為避免建立重複申請，請勿再次送出；系統沒有清除附件或表單內容。請到「簽核管理 → 我的申請」重新整理確認。\n\n事件識別：'+submissionContext.attemptId);
+    refreshExpenseSubmissionRecoveryActions();
+    alert('送件結果目前仍待確認。\n\n請在目前的原帳號、原瀏覽器，於原申請面板按「確認前次送件」。系統會沿用原單與原識別碼確認；請勿另開新申請，附件與表單內容仍保留。\n\n事件識別：'+submissionContext.attemptId);
     return;
   }
   if(!submitOutcome.ok){
@@ -23820,7 +23924,8 @@ window.submitNR=async function(){
     }else if(submissionPhase==='rpc_started'||submissionPhase==='rpc_unknown'){
       if(typeof durablePending!=='undefined'&&durablePending)S.nrSubmissionConfirmationPending=durablePending.pending;
       if(feedbackStarted)failActionFeedback('送件結果待確認','請勿重複送出；附件與表單內容已保留。');
-      alert('送件交易已開始，但系統目前無法安全確認結果。\n\n為避免重複建單，請勿再次送出；系統不會清理附件。請到「簽核管理 → 我的申請」重新整理確認。');
+      refreshExpenseSubmissionRecoveryActions();
+      alert('送件交易已開始，但系統目前無法安全確認結果。\n\n請在目前的原帳號、原瀏覽器，於原申請面板按「確認前次送件」。原表單與附件仍保留，請勿另開新申請。');
     }else{
       if(submissionPhase==='uploaded_pre_rpc')await cleanupStagedUploadsBestEffort('正式送件前中斷清理');
       if(feedbackStarted)failActionFeedback('送出簽核失敗',(err&&err.message)||'請稍後再試。');
@@ -32621,13 +32726,13 @@ async function submitShareholderApprovalRequest(){
   if(!canAccessPage('shareholder')){alert('只有執行長、行政部門主任、會計可以操作');return false;}
   if(POSTING_IN_FLIGHT.shareholderApproval){alert('公司往來簽核單正在送出中，請勿重複送出。');return false;}
   if(S.nrSubmitting)return false;
-  if(!await guardSubmissionIdentityDirectory('公司往來簽核單'))return false;
-  if(S.nrSubmissionConfirmationPending||loadExpenseSubmissionPending()){
-    var previous=await reconcilePendingExpenseSubmission({notify:true,allowRetry:true});
+  if(loadExpenseSubmissionPending()){
+    var previous=await reconcilePendingExpenseSubmission({notify:true,allowRetry:true,retainAttachmentsOnFailure:true,requireDirectoryForRetry:true});
     if(previous.state==='unknown')alert('上一筆送件結果仍待確認，附件與原識別碼已保留；請勿另建重複單據。');
-    else if(previous.state==='deterministic_failure')alert('上一筆送件已確認沒有建立正式申請，請檢查內容後再送出。');
+    else if(previous.state==='deterministic_failure')alert('上一筆送件尚未建立正式申請，原識別碼與附件已保留；請聯絡系統管理員處理。');
     return false;
   }
+  if(!await guardSubmissionIdentityDirectory('公司往來簽核單'))return false;
   var submissionIdentity=expenseSubmissionOperationIdentity();
   var submissionEpoch=financeAuthIdentityEpoch;
   function currentSubmission(record){return submissionEpoch===financeAuthIdentityEpoch&&expenseSubmissionOperationCurrent(submissionIdentity,record);}
@@ -32662,7 +32767,7 @@ async function submitShareholderApprovalRequest(){
   shareholderStepsForPreflight=shareholderRouteReady.steps;
   var p1=await p1SubmissionPreflight('shareholder',{label:'公司往來簽核單',steps:shareholderStepsForPreflight,hasAttachments:!!(shFileInput&&shFileInput.files&&shFileInput.files.length)});
   if(!p1.ok||!currentSubmission())return false;
-  if(POSTING_IN_FLIGHT.shareholderApproval||S.nrSubmitting||S.nrSubmissionConfirmationPending||loadExpenseSubmissionPending())return false;
+  if(POSTING_IN_FLIGHT.shareholderApproval||S.nrSubmitting||loadExpenseSubmissionPending())return false;
   var no='';
   POSTING_IN_FLIGHT.shareholderApproval=true;
   try{

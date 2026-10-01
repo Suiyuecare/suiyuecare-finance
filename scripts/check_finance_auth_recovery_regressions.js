@@ -117,6 +117,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
       normalizeHrMonthStrict: value => value, financeAuthRecoveryDraft: () => draft, canAccessPage: () => true,
       FINANCE_AUTH_RECOVERY_DRAFT_KEY: 'fixture', financeAuthRecoveryRestorePendingKey:'', financeWorkspaceIdentityBlocked:false, sessionRemoveItem: () => removed++, console,
       guardedNav: async () => { ctx.buildNR(); ctx.S.page = 'newreq'; }, clearExpenseApplicantRevisionMode() {},
+      loadExpenseSubmissionPending: () => null,
       renderNR() { ctx.S.lazyRows = []; fields.forEach(n => { n.value = ''; }); }, markNRClean() {},
       applicantSelectChanged() {}, renderLazySheet() {}, renderRefundSheet() {}, renderPurchaseSheet() {}, renderHrExpenseSheet() {},
       renderLaborElectronicLines() {}, renderLaborElectronicPaymentDates() {}, laborElectronicSelected: () => false,
