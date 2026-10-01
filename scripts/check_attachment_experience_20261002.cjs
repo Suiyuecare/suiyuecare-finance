@@ -95,7 +95,8 @@ async function main(){
     const client={storage:{from:()=>({upload:async(path,blob,options)=>{trace.uploads.push({path,blob,options});return{data:{path}};}})},
       from:()=>({insert:async row=>{trace.rows.push(row);return{data:row};}})};
     const c={Date,Math,Promise,Blob,console:{warn(){}},SUPABASE_ATTACHMENT_BUCKET:'finance-attachments',
-      S:{demoLogin:false,user:{id:'fictional-user'}},ATTACHMENT_UPLOAD_TIMEOUT_MS:30000,ATTACHMENT_BATCH_TIMEOUT_MS:120000,
+      S:{demoLogin:false,user:{id:'fictional-user'}},ATTACHMENT_UPLOAD_TIMEOUT_MS:30000,ATTACHMENT_RESUMABLE_THRESHOLD_BYTES:6*1024*1024,ATTACHMENT_LARGE_UPLOAD_TIMEOUT_MS:1200000,
+      num:value=>Number(value)||0,financeAttachmentUploadScope:()=> 'fictional-user|fictional-tenant|production',
       normalizeFileMeta:att=>({n:att.n||att.name,t:att.t||'pdf',mime:att.mime||att.type||'',size:att.size||0,url:att.url||'',path:att.path||'',kind:att.kind||'',bucket:att.bucket||'finance-attachments'}),
       attachmentStoragePath:att=>att.path||'',financeAttachmentEngine:()=>({needsRemoteUpload:att=>/^data:/i.test(att.url||'')}),attachmentEngineOptions:()=>({}),
       attachmentNeedsArchivePromotion:()=>false,dataUrlToBlob:()=>{throw Error('unexpected base64 decoding');},

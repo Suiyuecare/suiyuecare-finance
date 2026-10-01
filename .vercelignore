@@ -145,6 +145,7 @@ supabase/.temp
 # Bill attachment regression checks retained in the sealed source.
 !scripts/check_bill_approval_attachment_flow.cjs
 !scripts/check_attachment_experience_20261002.cjs
+!scripts/check_formal_resumable_upload.cjs
 !scripts/check_bill_attachment_browser.cjs
 
 # Reporting source integrity and reconciliation protected release
@@ -283,6 +284,9 @@ supabase/.temp
 !assets/vendor/supabase-js-2.111.0.umd.js
 !assets/vendor/supabase-js-2.111.0.LICENSE
 !assets/vendor/supabase-js-2.111.0.provenance.json
+!assets/vendor/tus-4.3.1.min.js
+!assets/vendor/tus-4.3.1-LICENSE
+!assets/vendor/tus-4.3.1.provenance.json
 !scripts/check_startup_sdk.cjs
 !docs/finance-startup-sdk.md
 

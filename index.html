@@ -3053,8 +3053,9 @@ var FINANCE_APPROVAL_DEEP_LINK_KEY='suiyuecare.finance.approvalDeepLink';
 var FINANCE_APPROVAL_DEEP_LINK_TTL_MS=30*60*1000;
 var FINANCE_AUTH_RECOVERY_DRAFT_KEY='suiyuecare.finance.authRecoveryDraft.v1';
 var ATTACHMENT_MAX_BYTES=50*1024*1024;
-var ATTACHMENT_UPLOAD_TIMEOUT_MS=30000;
-var ATTACHMENT_BATCH_TIMEOUT_MS=120000;
+var ATTACHMENT_UPLOAD_TIMEOUT_MS=90000;
+var ATTACHMENT_RESUMABLE_THRESHOLD_BYTES=6*1024*1024;
+var ATTACHMENT_LARGE_UPLOAD_TIMEOUT_MS=20*60*1000;
 var ATTACHMENT_STAGED_CLEANUP_AGE_MS=10*60*1000;
 var ATTACHMENT_STAGED_CLEANUP_LIMIT=50;
 var FINANCE_ATTACHMENT_MIME_ALLOW={
@@ -4370,7 +4371,7 @@ function uniqueAttachments(files){
     return true;
   });
 }
-function fileToAttachment(file){
+function fileToAttachment(file,opts){
   if(file&&(file.url||file.path||file.storagePath||file.storage_path)){
     var path=file.path||file.storagePath||file.storage_path||'';
     return Promise.resolve({
@@ -4386,6 +4387,11 @@ function fileToAttachment(file){
       kind:file.kind||file.category||'',
       dataEnv:file.dataEnv||file.data_environment||activeDataEnvironment()
     });
+  }
+  // Native Blobs avoid a 4/3-size base64 copy and the later decode pass.
+  // OCR and other callers retain the original data URL behavior.
+  if(opts&&opts.directLarge&&typeof Blob!=='undefined'&&file instanceof Blob&&file.size>=ATTACHMENT_RESUMABLE_THRESHOLD_BYTES){
+    return Promise.resolve({n:file.name||'附件',t:fileExt(file.name||''),mime:file.type||'',size:file.size||0,url:'',uploadedAt:new Date().toISOString(),kind:file.kind||file.category||'',dataEnv:activeDataEnvironment(),uploadBlob:file});
   }
   return new Promise(function(resolve,reject){
     var reader=new FileReader();
@@ -4647,7 +4653,114 @@ async function verifyUploadedAttachmentReadable(client,path){
   if(!signed.data||!signed.data.signedUrl)throw new Error('Supabase 未回傳附件下載連結');
   return true;
 }
+var FINANCE_TUS_LIBRARY_READ=null;
+function ensureFinanceTusLibrary(){
+  if(window.tus&&typeof window.tus.Upload==='function')return Promise.resolve(window.tus);
+  if(FINANCE_TUS_LIBRARY_READ)return FINANCE_TUS_LIBRARY_READ;
+  var script=document.createElement('script');
+  script.src='assets/vendor/tus-4.3.1.min.js';
+  script.async=true;
+  FINANCE_TUS_LIBRARY_READ=new Promise(function(resolve,reject){
+    var timer=setTimeout(function(){reject(new Error('大附件分段上傳元件讀取逾時；原始檔案仍保留，請確認網路後重試。'));},15000);
+    script.onload=function(){clearTimeout(timer);if(window.tus&&typeof window.tus.Upload==='function')resolve(window.tus);else reject(new Error('大附件分段上傳元件無法啟動。'));};
+    script.onerror=function(){clearTimeout(timer);reject(new Error('大附件分段上傳元件讀取失敗，請確認網路後重試。'));};
+    document.head.appendChild(script);
+  }).catch(function(error){FINANCE_TUS_LIBRARY_READ=null;script.remove();throw error;});
+  return FINANCE_TUS_LIBRARY_READ;
+}
+function financeStorageResumableEndpoint(){
+  var url=new URL(SUPABASE_URL);
+  if(/^[a-z0-9-]+\.supabase\.co$/i.test(url.hostname))url.hostname=url.hostname.replace(/\.supabase\.co$/i,'.storage.supabase.co');
+  return url.origin+'/storage/v1/upload/resumable';
+}
+function financeAttachmentUploadScope(){
+  return [S.user&&S.user.id||'',currentTenantId(),activeDataEnvironment()].join('|');
+}
+async function uploadAttachmentResumable(client,path,blob,contentType,ctx,scope){
+  var tusLibrary=await ensureFinanceTusLibrary();
+  var sessionResult=await client.auth.getSession();
+  var token=sessionResult&&sessionResult.data&&sessionResult.data.session&&sessionResult.data.session.access_token;
+  if((sessionResult&&sessionResult.error)||!token)throw attachmentUploadError('大附件上傳需要有效的 Google 登入狀態，請重新登入後重試。',{reason:'resumable_auth_required'});
+  if(financeAttachmentUploadScope()!==scope)throw attachmentUploadError('登入身分已切換，已停止上傳；請切回本人帳號後重新選擇附件。',{reason:'attachment_upload_identity_changed'});
+  return new Promise(function(resolve,reject){
+    var settled=false,stopping=false,lateCleanupStarted=false,upload=null,lastProgress=Date.now(),watch=null;
+    var signal=ctx&&ctx.abortSignal;
+    function cleanLateCompletion(){
+      if(lateCleanupStarted)return;
+      lateCleanupStarted=true;
+      cleanupAttachmentPersistence(client,path,{objectOnly:true}).catch(function(error){
+        stagedAttachmentCleanupDiagnostic('attachment_resumable_late_cleanup_failed','中止後附件清理失敗','儲存路徑 '+path+' 的分段上傳在中止後仍完成；請由管理員查核。',{storagePath:path,error:formatStorageUploadError(error)});
+      });
+    }
+    function finish(error){
+      if(settled)return;
+      settled=true;
+      if(watch)clearInterval(watch);
+      if(signal)signal.removeEventListener('abort',onAbort);
+      if(error)reject(error);else resolve();
+    }
+    function stop(reason,message){
+      if(stopping||settled)return;
+      stopping=true;
+      // Wait for the active HTTP request to stop before the outer layer may
+      // remove its Storage path. A final-chunk callback can race with abort.
+      Promise.resolve().then(function(){return upload?upload.abort():null;}).then(function(){
+        finish(attachmentUploadError(message,{reason:reason,storagePath:path}));
+      },function(error){
+        finish(attachmentUploadError('附件傳輸中止尚未確認，系統已保留紀錄供查核；請勿重複送單。',{reason:'attachment_abort_unconfirmed',storagePath:path,sourceError:error}));
+      });
+    }
+    function onAbort(){stop('attachment_upload_timeout','附件上傳超過期限，已中止分段傳輸；請確認網路後重試。');}
+    if(signal){
+      if(signal.aborted){onAbort();return;}
+      signal.addEventListener('abort',onAbort,{once:true});
+    }
+    if(stopping||settled)return;
+    upload=new tusLibrary.Upload(blob,{
+      endpoint:financeStorageResumableEndpoint(),
+      retryDelays:[0,3000,5000,10000,20000],
+      headers:{apikey:SUPABASE_ANON_KEY},
+      onBeforeRequest:async function(request){
+        // Supabase may refresh a short-lived JWT during a long upload. Read
+        // the current token for every POST/HEAD/PATCH and every retry.
+        if(financeAttachmentUploadScope()!==scope)throw attachmentUploadError('登入身分已切換，已停止附件上傳。',{reason:'attachment_upload_identity_changed',storagePath:path});
+        var current=await client.auth.getSession();
+        var currentToken=current&&current.data&&current.data.session&&current.data.session.access_token;
+        if((current&&current.error)||!currentToken)throw attachmentUploadError('登入狀態已過期，大附件上傳已停止；請重新登入後再試。',{reason:'resumable_auth_required',storagePath:path});
+        if(financeAttachmentUploadScope()!==scope)throw attachmentUploadError('登入身分已切換，已停止附件上傳。',{reason:'attachment_upload_identity_changed',storagePath:path});
+        request.setHeader('authorization','Bearer '+currentToken);
+      },
+      uploadDataDuringCreation:true,
+      removeFingerprintOnSuccess:true,
+      // Persisted TUS URL fingerprints must never be reusable after a tenant,
+      // environment, user, or destination-path change.
+      fingerprint:function(file){return Promise.resolve(['finance-v4',scope,path,file.size||0,contentType||''].join('|'));},
+      chunkSize:6*1024*1024,
+      metadata:{bucketName:SUPABASE_ATTACHMENT_BUCKET,objectName:path,contentType:contentType||'application/octet-stream',cacheControl:'3600'},
+      onProgress:function(sent,total){
+        if(financeAttachmentUploadScope()!==scope){stop('attachment_upload_identity_changed','登入身分已切換，已停止附件上傳。');return;}
+        lastProgress=Date.now();
+        if(ctx&&typeof ctx.onProgress==='function')ctx.onProgress(sent,total,{path:path});
+      },
+      onError:function(error){if(!stopping)finish(error);},
+      onSuccess:function(){
+        if(stopping){if(settled)cleanLateCompletion();return;}
+        if(financeAttachmentUploadScope()!==scope){finish(attachmentUploadError('登入身分已切換，附件不得寫入原帳號申請。',{reason:'attachment_upload_identity_changed',storagePath:path}));return;}
+        finish();
+      }
+    });
+    watch=setInterval(function(){
+      if(settled)return;
+      if(financeAttachmentUploadScope()!==scope)stop('attachment_upload_identity_changed','登入身分已切換，已停止附件上傳。');
+      else if(Date.now()-lastProgress>180000)stop('attachment_upload_stalled','附件上傳已超過 3 分鐘沒有進度，請確認網路後重試；已選檔案仍保留。');
+    },5000);
+    if(stopping||settled)return;
+    try{upload.start();}catch(error){finish(error);}
+  });
+}
 async function uploadAttachmentToSupabase(att,ctx){
+  var uploadScope=financeAttachmentUploadScope();
+  var uploadUserId=S.user&&S.user.id||null;
   var prepared=preflightAttachmentForUpload(att,ctx);
   att=normalizeFileMeta(att);
   if(!prepared.needsUpload&&!prepared.needsPromotion)return att;
@@ -4670,6 +4783,7 @@ async function uploadAttachmentToSupabase(att,ctx){
     }
     return att;
   }
+  if(financeAttachmentUploadScope()!==uploadScope)throw attachmentUploadError('登入身分已切換，請用本人帳號重新送出附件。',{reason:'attachment_upload_identity_changed'});
   var archive=prepared.archive;
   var recordType=archive.recordType;
   var recordNo=archive.recordNo;
@@ -4684,17 +4798,45 @@ async function uploadAttachmentToSupabase(att,ctx){
     blob=source.data;
     assertAttachmentUploadable(att,blob);
   }
-  var up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:blob.type||att.mime||'application/octet-stream',upsert:false});
-  if(up.error&&/invalid.?key/i.test(up.error.message||up.error.error||'')){
-    path=safeStoragePath(path);
-    assertSafeStorageObjectPath(path);
-    up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:blob.type||att.mime||'application/octet-stream',upsert:false});
+  if(financeAttachmentUploadScope()!==uploadScope)throw attachmentUploadError('登入身分已切換，請用本人帳號重新送出附件。',{reason:'attachment_upload_identity_changed'});
+  if(blob.size>=ATTACHMENT_RESUMABLE_THRESHOLD_BYTES){
+    try{await uploadAttachmentResumable(client,path,blob,blob.type||att.mime||'application/octet-stream',ctx,uploadScope);}
+    catch(uploadError){
+      if(uploadError&&uploadError.reason==='attachment_abort_unconfirmed'){
+        stagedAttachmentCleanupDiagnostic('attachment_abort_unconfirmed','大附件傳輸中止未確認','儲存路徑 '+path+' 的傳輸中止未獲確認，系統未刪除可能仍在寫入的檔案；請由管理員查核。',{storagePath:path,error:formatStorageUploadError(uploadError)});
+        throw uploadError;
+      }
+      // This path was freshly generated for this attempt. Never remove the
+      // source draft attachment or an object from a previous submission.
+      try{await cleanupAttachmentPersistence(client,path,{objectOnly:true});}
+      catch(cleanupError){
+        console.error('Incomplete resumable upload cleanup:',path,cleanupError);
+        stagedAttachmentCleanupDiagnostic('attachment_resumable_cleanup_failed','大附件上傳中斷後清理失敗','儲存路徑 '+path+' 的大附件續傳失敗後未能清理；請由管理員查核。',{storagePath:path,error:formatStorageUploadError(cleanupError)});
+      }
+      throw uploadError;
+    }
+  }else{
+    var up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:blob.type||att.mime||'application/octet-stream',upsert:false});
+    if(up.error&&/invalid.?key/i.test(up.error.message||up.error.error||'')){
+      path=safeStoragePath(path);
+      assertSafeStorageObjectPath(path);
+      up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:blob.type||att.mime||'application/octet-stream',upsert:false});
+    }
+    if(up.error&&/mime|not allowed|unsupported/i.test(up.error.message||'')){
+      blob=new Blob([await blob.arrayBuffer()],{type:'application/octet-stream'});
+      up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:'application/octet-stream',upsert:false});
+    }
+    if(up.error)throw up.error;
   }
-  if(up.error&&/mime|not allowed|unsupported/i.test(up.error.message||'')){
-    blob=new Blob([await blob.arrayBuffer()],{type:'application/octet-stream'});
-    up=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).upload(path,blob,{contentType:'application/octet-stream',upsert:false});
+  if(financeAttachmentUploadScope()!==uploadScope){
+    try{await cleanupAttachmentPersistence(client,path,{objectOnly:true});}
+    catch(cleanupError){
+      console.error('Identity switch upload cleanup failed:',path,cleanupError);
+      stagedAttachmentCleanupDiagnostic('attachment_identity_cleanup_failed','帳號切換後附件清理失敗','儲存路徑 '+path+' 的附件在帳號切換後未能清理；請由管理員查核。',{storagePath:path,error:formatStorageUploadError(cleanupError)});
+      throw attachmentUploadError('登入身分已切換，附件未能完整清理；請通知系統管理員。',{reason:'attachment_identity_cleanup_failed',storagePath:path,cleanupError:cleanupError});
+    }
+    throw attachmentUploadError('登入身分已切換，已停止將附件寫入原帳號申請。',{reason:'attachment_upload_identity_changed'});
   }
-  if(up.error)throw up.error;
   try{
     var metaRow={
       bucket_id:SUPABASE_ATTACHMENT_BUCKET,
@@ -4706,7 +4848,7 @@ async function uploadAttachmentToSupabase(att,ctx){
       file_type:blob.type||att.mime||'',
       file_size:att.size||blob.size||0,
       data_environment:archive.dataEnvironment,
-      uploaded_by:S.user?S.user.id:null,
+      uploaded_by:uploadUserId,
       archive_year:archive.year,
       archive_month:archive.ym,
       entity_id:archive.entityId,
@@ -4733,6 +4875,14 @@ async function uploadAttachmentToSupabase(att,ctx){
     var metaMessage=formatStorageUploadError(metaErr);
     throw attachmentUploadError('附件「'+(att.n||att.name||name)+'」已上傳但歸檔資料寫入失敗，系統已取消該檔案並停止送單：'+metaMessage,{reason:'metadata_insert_failed',fileName:att.n||att.name||name,storagePath:path});
   }
+  if(financeAttachmentUploadScope()!==uploadScope){
+    try{await cleanupAttachmentPersistence(client,path,{metadataFirst:true});}
+    catch(cleanupError){
+      stagedAttachmentCleanupDiagnostic('attachment_identity_cleanup_failed','帳號切換後附件清理失敗','儲存路徑 '+path+' 的附件在帳號切換後未能清理；請由管理員查核。',{storagePath:path,error:formatStorageUploadError(cleanupError)});
+      throw attachmentUploadError('登入身分已切換，附件未能完整清理；請通知系統管理員。',{reason:'attachment_identity_cleanup_failed',storagePath:path,cleanupError:cleanupError});
+    }
+    throw attachmentUploadError('登入身分已切換，已停止將附件寫入原帳號申請。',{reason:'attachment_upload_identity_changed',storagePath:path});
+  }
   try{
     await verifyUploadedAttachmentReadable(client,path);
   }catch(readErr){
@@ -4742,7 +4892,10 @@ async function uploadAttachmentToSupabase(att,ctx){
     }
     throw attachmentUploadError('附件「'+(att.n||att.name||name)+'」已上傳但無法產生下載連結，系統已停止送單：'+formatStorageUploadError(readErr),{reason:'signed_url_failed',fileName:att.n||att.name||name,storagePath:path});
   }
-  return Object.assign({},att,{url:'',bucket:SUPABASE_ATTACHMENT_BUCKET,path:path,storagePath:path,archivePath:path,archiveYear:archive.year,archiveMonth:archive.ym,entityId:archive.entityId,departmentCode:archive.departmentCode,recordDate:archive.recordDate,retentionUntil:archive.retentionUntil,uploadedAt:new Date().toISOString(),kind:prepared.needsPromotion?kind:(att.kind||kind),dataEnv:archive.dataEnvironment,tenantId:archive.tenantId,promotedFromPath:prepared.needsPromotion?prepared.sourcePath:''});
+  var uploaded=Object.assign({},att,{url:'',bucket:SUPABASE_ATTACHMENT_BUCKET,path:path,storagePath:path,archivePath:path,archiveYear:archive.year,archiveMonth:archive.ym,entityId:archive.entityId,departmentCode:archive.departmentCode,recordDate:archive.recordDate,retentionUntil:archive.retentionUntil,uploadedAt:new Date().toISOString(),kind:prepared.needsPromotion?kind:(att.kind||kind),dataEnv:archive.dataEnvironment,tenantId:archive.tenantId,promotedFromPath:prepared.needsPromotion?prepared.sourcePath:''});
+  delete uploaded.uploadBlob;
+  Object.defineProperty(uploaded,'__uploadCreatedThisAttempt',{value:true});
+  return uploaded;
 }
 function recordLateAttachmentCleanupFailure(uploaded,error,label){
   var path=attachmentStoragePath(uploaded);
@@ -4765,10 +4918,13 @@ function recordLateAttachmentCleanupFailure(uploaded,error,label){
 function uploadAttachmentWithTrackedTimeout(att,ctx,label,timeoutMs){
   var timedOut=false;
   var timer=null;
-  var uploadPromise=Promise.resolve().then(function(){return uploadAttachmentToSupabase(att,ctx);});
+  var abortController=typeof AbortController!=='undefined'?new AbortController():null;
+  var uploadContext=abortController?Object.assign({},ctx||{},{abortSignal:abortController.signal}):ctx;
+  var uploadPromise=Promise.resolve().then(function(){return uploadAttachmentToSupabase(att,uploadContext);});
   return new Promise(function(resolve,reject){
     timer=setTimeout(function(){
       timedOut=true;
+      if(abortController)abortController.abort();
       var error=new Error((label||'附件上傳')+'逾時，系統已停止等待；若上傳稍後完成，系統會自動清理。');
       error.code='CLIENT_TIMEOUT';
       error.reason='attachment_upload_timeout';
@@ -4780,6 +4936,7 @@ function uploadAttachmentWithTrackedTimeout(att,ctx,label,timeoutMs){
         resolve(uploaded);
         return;
       }
+      if(!uploaded||!uploaded.__uploadCreatedThisAttempt)return;
       cleanupUploadedSupabaseAttachments([[uploaded]],(label||'附件上傳')+'逾時晚到清理').then(function(cleaned){
         if(cleaned<1)throw attachmentUploadError('逾時附件晚到後沒有完成清理。',{reason:'late_upload_cleanup_empty',storagePath:attachmentStoragePath(uploaded)});
         console.info('Late attachment upload cleaned:',attachmentStoragePath(uploaded));
@@ -4799,22 +4956,25 @@ function uploadAttachmentWithTrackedTimeout(att,ctx,label,timeoutMs){
 async function uploadAttachmentsToSupabase(files,ctx){
   files=await preflightAttachmentsForSupabase(files,ctx);
   var out=[];
-  var startedAt=Date.now();
+  var created=[];
   for(var i=0;i<(files||[]).length;i++){
     try{
-      if(Date.now()-startedAt>ATTACHMENT_BATCH_TIMEOUT_MS){
-        await cleanupUploadedSupabaseAttachments([out],'附件批次逾時清理');
-        throw attachmentUploadError('附件批次上傳超過 '+Math.round(ATTACHMENT_BATCH_TIMEOUT_MS/1000)+' 秒，系統已停止並清理已上傳檔案。請確認網路穩定後重新送出。',{reason:'attachment_batch_timeout'});
-      }
-      out.push(await uploadAttachmentWithTrackedTimeout(files[i],ctx,'第 '+(i+1)+' 個附件上傳',ATTACHMENT_UPLOAD_TIMEOUT_MS));
+      var size=num(files[i]&&files[i].size);
+      var timeout=size>=ATTACHMENT_RESUMABLE_THRESHOLD_BYTES?ATTACHMENT_LARGE_UPLOAD_TIMEOUT_MS:ATTACHMENT_UPLOAD_TIMEOUT_MS;
+      var uploaded=await uploadAttachmentWithTrackedTimeout(files[i],ctx,'第 '+(i+1)+' 個附件上傳',timeout);
+      out.push(uploaded);
+      if(uploaded&&uploaded.__uploadCreatedThisAttempt)created.push(uploaded);
     }catch(err){
       var meta=normalizeFileMeta(files[i]);
       var msg=formatStorageUploadError(err);
-      await cleanupUploadedSupabaseAttachments([out],'附件批次上傳中斷清理');
+      await cleanupUploadedSupabaseAttachments([created],'附件批次上傳中斷清理');
       throw attachmentUploadError('第 '+(i+1)+' 個附件「'+(meta.n||'附件')+'」上傳失敗：'+msg,{reason:(err&&err.reason)||'attachment_upload_failed',fileName:meta.n,sourceError:err});
     }
   }
   return out;
+}
+function newlyUploadedAttachmentResults(files){
+  return (files||[]).filter(function(file){return !!(file&&file.__uploadCreatedThisAttempt);});
 }
 function attachmentStoragePath(f){
   var engine=financeAttachmentEngine();
@@ -20537,6 +20697,7 @@ function dataUrlToUint8Array(dataUrl){
 }
 async function attachmentBytes(f){
   f=normalizeFileMeta(f);
+  if(f.uploadBlob&&typeof Blob!=='undefined'&&f.uploadBlob instanceof Blob)return new Uint8Array(await f.uploadBlob.arrayBuffer());
   var readableUrl=f.url||'';
   if(!readableUrl&&attachmentStoragePath(f))readableUrl=await signAttachmentUrl(f,300);
   if(!readableUrl)return null;
@@ -20574,17 +20735,21 @@ async function addImagePageToPdfLib(doc,f){
   if(!bytes)return false;
   var readableUrl=f.url||'';
   if(!readableUrl&&attachmentStoragePath(f))readableUrl=await signAttachmentUrl(f,300);
+  var localObjectUrl=!readableUrl&&f.uploadBlob?URL.createObjectURL(f.uploadBlob):'';
+  if(localObjectUrl)readableUrl=localObjectUrl;
   var ext=fileExt(f.n||f.name||'');
   var mime=String(f.mime||'');
   var img;
-  if(ext==='png'||/png/i.test(mime)){
-    try{img=await doc.embedPng(bytes);}catch(err){bytes=await imageToJpegBytes(readableUrl);img=await doc.embedJpg(bytes);}
-  }else if(ext==='jpg'||ext==='jpeg'||/jpe?g/i.test(mime)){
-    img=await doc.embedJpg(bytes);
-  }else{
-    bytes=await imageToJpegBytes(readableUrl);
-    img=await doc.embedJpg(bytes);
-  }
+  try{
+    if(ext==='png'||/png/i.test(mime)){
+      try{img=await doc.embedPng(bytes);}catch(err){bytes=await imageToJpegBytes(readableUrl);img=await doc.embedJpg(bytes);}
+    }else if(ext==='jpg'||ext==='jpeg'||/jpe?g/i.test(mime)){
+      img=await doc.embedJpg(bytes);
+    }else{
+      bytes=await imageToJpegBytes(readableUrl);
+      img=await doc.embedJpg(bytes);
+    }
+  }finally{if(localObjectUrl)URL.revokeObjectURL(localObjectUrl);}
   var page=doc.addPage([595.28,841.89]);
   var margin=28,maxW=595.28-margin*2,maxH=841.89-margin*2;
   var scale=Math.min(maxW/img.width,maxH/img.height,1);
@@ -20603,9 +20768,12 @@ async function addPdfPagesToPdfLib(doc,f){
 async function receiptPdfAttachment(files,meta){
   meta=meta||{};
   files=normalizeFiles(files||[]).filter(function(f){
-    return (f.url||attachmentStoragePath(f))&&(attachmentLooksPdf(f)||attachmentLooksImage(f));
+    return (f.url||f.uploadBlob||attachmentStoragePath(f))&&(attachmentLooksPdf(f)||attachmentLooksImage(f));
   });
   if(!files.length)return null;
+  // The originals are authoritative. A large native file should not be
+  // duplicated in memory merely to create an optional preview bundle.
+  if(files.some(function(f){return f.uploadBlob&&f.size>=ATTACHMENT_RESUMABLE_THRESHOLD_BYTES;}))return null;
   await ensureFinanceDocumentLibrary('pdf');
   if(window.PDFLib&&PDFLib.PDFDocument){
     var merged=await PDFLib.PDFDocument.create();
@@ -20633,6 +20801,13 @@ async function receiptPdfAttachment(files,meta){
     }
     if(added){
       var pdfBytes=await merged.save();
+      if(pdfBytes.length>ATTACHMENT_MAX_BYTES){
+        console.warn('Receipt bundle exceeds attachment limit; original receipt files remain authoritative and will be uploaded.');
+        return null;
+      }
+      if(pdfBytes.length>=ATTACHMENT_RESUMABLE_THRESHOLD_BYTES){
+        return {n:'憑據照片彙整_'+(meta.no||todayIso())+'.pdf',t:'pdf',mime:'application/pdf',size:pdfBytes.length,url:'',uploadBlob:new Blob([pdfBytes],{type:'application/pdf'}),uploadedAt:new Date().toISOString(),kind:'receipt_bundle',sourceCount:mergedSourceCount,pageCount:added};
+      }
       var bin='',chunk=0x8000;
       for(var p=0;p<pdfBytes.length;p+=chunk){
         bin+=String.fromCharCode.apply(null,pdfBytes.subarray(p,p+chunk));
@@ -20688,6 +20863,9 @@ function receiptBundleSourceFiles(record,currentBundle){
 async function receiptBundleAttachment(files,meta){
   var pdf=await receiptPdfAttachment(files,meta);
   if(pdf)return pdf;
+  // The HTML fallback cannot embed a native Blob as a durable receipt. The
+  // original files are still submitted, so omit the optional bundle entirely.
+  if((files||[]).some(function(file){return !!(file&&file.uploadBlob);}))return null;
   files=normalizeFiles(files||[]).filter(function(f){return f.url;});
   if(!files.length)return null;
   meta=meta||{};
@@ -24050,9 +24228,9 @@ window.submitNR=async function(){
   var attachments=[];
   var passbookAttachments=[];
   try{
-    attachments=await Promise.all(S.nrFiles.map(fileToAttachment));
+    attachments=await Promise.all(S.nrFiles.map(function(file){return fileToAttachment(file,{directLarge:true});}));
     if(S.nrPassbookFile){
-      var passbookAtt=await fileToAttachment(S.nrPassbookFile);
+      var passbookAtt=await fileToAttachment(S.nrPassbookFile,{directLarge:true});
       passbookAtt.kind='passbook';
       passbookAtt.n='存摺封面_'+(passbookAtt.n||S.nrPassbookFile.name||'附件');
       passbookAttachments=[passbookAtt];
@@ -24104,14 +24282,21 @@ window.submitNR=async function(){
   var uploadPreparedAttachmentSet=async function(targetNo){
     var uploadedFiles=[];
     var uploadedPassbook=[];
+    var lastProgressAt=0;
+    var onProgress=function(sent,total){
+      var now=Date.now();
+      if(now-lastProgressAt<350&&sent<total)return;
+      lastProgressAt=now;
+      setActionFeedback('loading','正在上傳附件','目前檔案 '+Math.min(100,Math.round(sent/Math.max(1,total)*100))+'% · 請保留此頁，網路中斷會自動重試。');
+    };
     try{
       var preparedRequestAttachments=await prepareRequestAttachmentsForNo(targetNo);
       var preparedPassbookAttachments=sourcePassbookAttachments.map(function(f){return Object.assign({},f);});
-      uploadedFiles=await uploadAttachmentsToSupabase(preparedRequestAttachments,{recordType:'expense_requests',recordNo:targetNo,kind:'request_files',date:requestDateIso,entityId:eid,departmentCode:dc});
-      uploadedPassbook=await uploadAttachmentsToSupabase(preparedPassbookAttachments,{recordType:'expense_requests',recordNo:targetNo,kind:'passbook',date:requestDateIso,entityId:eid,departmentCode:dc});
+      uploadedFiles=await uploadAttachmentsToSupabase(preparedRequestAttachments,{recordType:'expense_requests',recordNo:targetNo,kind:'request_files',date:requestDateIso,entityId:eid,departmentCode:dc,onProgress:onProgress});
+      uploadedPassbook=await uploadAttachmentsToSupabase(preparedPassbookAttachments,{recordType:'expense_requests',recordNo:targetNo,kind:'passbook',date:requestDateIso,entityId:eid,departmentCode:dc,onProgress:onProgress});
       return{files:uploadedFiles,passbookFiles:uploadedPassbook};
     }catch(setErr){
-      stagedUploads={files:uploadedFiles,passbookFiles:uploadedPassbook};
+      stagedUploads={files:newlyUploadedAttachmentResults(uploadedFiles),passbookFiles:newlyUploadedAttachmentResults(uploadedPassbook)};
       await cleanupStagedUploadsBestEffort('附件組上傳中斷清理');
       throw setErr;
     }
@@ -24120,7 +24305,7 @@ window.submitNR=async function(){
     var uploadedSet=await uploadPreparedAttachmentSet(no);
     attachments=uploadedSet.files;
     passbookAttachments=uploadedSet.passbookFiles;
-    stagedUploads={files:attachments,passbookFiles:passbookAttachments};
+    stagedUploads={files:newlyUploadedAttachmentResults(attachments),passbookFiles:newlyUploadedAttachmentResults(passbookAttachments)};
     submissionPhase='uploaded_pre_rpc';
   }catch(uploadErr){
     console.error(uploadErr);
@@ -24207,7 +24392,7 @@ window.submitNR=async function(){
         if(!expenseSubmissionOperationCurrent(submissionIdentity,newReq))return;
         newReq.files=retryUploaded.files;
         newReq.passbookFiles=retryUploaded.passbookFiles;
-        stagedUploads={files:newReq.files,passbookFiles:newReq.passbookFiles};
+        stagedUploads={files:newlyUploadedAttachmentResults(newReq.files),passbookFiles:newlyUploadedAttachmentResults(newReq.passbookFiles)};
         newReq.formPayload=Object.assign({},newReq.formPayload||{},{passbookFiles:newReq.passbookFiles});
         newReq.formPayload.accountingLines=principalAccountingLines(buildAccountingLines(newReq));
         var retryDurablePending=saveExpenseSubmissionPending(newReq,null);

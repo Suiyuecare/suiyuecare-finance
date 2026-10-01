@@ -217,6 +217,7 @@ function releaseSourceFiles() {
   'scripts/finance_attachment_claim_fingerprint.sql',
   'scripts/finance_audit_security_canary_20261001.sql',
   'scripts/check_attachment_claim_migration_contract.js',
+  'scripts/check_formal_resumable_upload.cjs',
   'scripts/check_submission_cashier_preflight.cjs',
   'supabase/migrations/20260927180201_finance_portal_session_logout.sql',
   'supabase/migrations/20260927175827_finance_hr_native_contractor_bridge.sql',
@@ -248,6 +249,9 @@ function releaseSourceFiles() {
   'assets/vendor/supabase-js-2.111.0.umd.js',
   'assets/vendor/supabase-js-2.111.0.LICENSE',
   'assets/vendor/supabase-js-2.111.0.provenance.json',
+  'assets/vendor/tus-4.3.1.min.js',
+  'assets/vendor/tus-4.3.1-LICENSE',
+  'assets/vendor/tus-4.3.1.provenance.json',
   'scripts/check_startup_sdk.cjs',
   'docs/finance-startup-sdk.md',
   'scripts/check_admin_action_browser.cjs',
@@ -494,7 +498,7 @@ function expectedBuiltIndex() {
   const bundle = createStartupBundle(applyBuildEnvironment(html, buildConfig), ROOT);
   if (fs.readFileSync(path.join(OUTPUT, bundle.file), 'utf8') !== bundle.code) fail('startup bundle is not the deterministic concatenation of source engines');
   if (!fs.readFileSync(path.join(OUTPUT, bundle.sdk.file)).equals(bundle.sdk.code)) fail('built Supabase SDK differs from the fixed official UMD');
-  for (const file of ['assets/vendor/supabase-js-2.111.0.LICENSE', 'assets/vendor/supabase-js-2.111.0.provenance.json']) {
+  for (const file of ['assets/vendor/supabase-js-2.111.0.LICENSE', 'assets/vendor/supabase-js-2.111.0.provenance.json', 'assets/vendor/tus-4.3.1.min.js', 'assets/vendor/tus-4.3.1-LICENSE', 'assets/vendor/tus-4.3.1.provenance.json']) {
     if (!fs.readFileSync(path.join(OUTPUT, file)).equals(fs.readFileSync(path.join(ROOT, file)))) fail('built Supabase SDK evidence differs: ' + file);
   }
   const app = createAppBundle(bundle.html);

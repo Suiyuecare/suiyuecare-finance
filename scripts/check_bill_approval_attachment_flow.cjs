@@ -20,7 +20,7 @@ function fixture(opts={}){
  let identity='fictional-uuid-1';
  class Reader{readAsDataURL(file){trace.reads.push(file.name);if(opts.readFail){this.error=new Error('fictional file read failure');this.onerror();}else{this.result='data:'+file.type+';base64,UEZERklDVFVSRQ==';this.onload();}}}
  const c={console:{warn(){},info(){},error(){}},URL,Blob,FileReader:Reader,setTimeout,clearTimeout,Date,Math,JSON,Number,Promise,
-  SUPABASE_ATTACHMENT_BUCKET:'finance-attachments',SUPABASE_URL:origin,SUPABASE_ANON_KEY:'fictional',ATTACHMENT_UPLOAD_TIMEOUT_MS:30000,ATTACHMENT_BATCH_TIMEOUT_MS:60000,
+  SUPABASE_ATTACHMENT_BUCKET:'finance-attachments',SUPABASE_URL:origin,SUPABASE_ANON_KEY:'fictional',ATTACHMENT_UPLOAD_TIMEOUT_MS:30000,ATTACHMENT_RESUMABLE_THRESHOLD_BYTES:6*1024*1024,ATTACHMENT_LARGE_UPLOAD_TIMEOUT_MS:1200000,
   APPROVAL_HISTORY_MODAL_CONTEXT:null,APPROVAL_FROZEN_EXPECTED_STEPS:{identity:'',modal:null,bulk:{}},APPROVAL_ACTION_IN_FLIGHT:{},ATTACHMENT_DOWNLOAD_HEALTH:{},STEP_DOWNLOADS:[],REQS:[],INVS:[],BILLS:[bill],
   financeWorkspaceIdentityBlocked:false,financeLogoutInProgress:false,financeGoogleAccountSwitchInProgress:false,financeAuthIdentityEpoch:0,CURRENT_PERMISSION_SNAPSHOT:{},currentTenantId:()=> 'fictional-tenant',
   S:{demoLogin:false,user:{id:'FICT-ACCOUNTANT',authUserId:identity,email:'fictional-accountant@example.invalid',role:'accountant',n:'虛構會計'}},el:id=>dom[id]||null,num:x=>Number(x||0),cloneSettingValue:clone,escAttr:x=>String(x||'').replace(/[&<>"']/g,'_'),normDate:x=>x,
