@@ -144,6 +144,7 @@ supabase/.temp
 
 # Bill attachment regression checks retained in the sealed source.
 !scripts/check_bill_approval_attachment_flow.cjs
+!scripts/check_attachment_experience_20261002.cjs
 !scripts/check_bill_attachment_browser.cjs
 
 # Reporting source integrity and reconciliation protected release
@@ -207,6 +208,7 @@ supabase/.temp
 !scripts/check_approval_navigation_browser.cjs
 !scripts/check_invoice_table_layout_browser.cjs
 !scripts/check_startup_read_coordination.cjs
+!scripts/check_realtime_scoped_refresh.cjs
 !scripts/check_startup_read_coordination_browser.cjs
 !scripts/check_approval_history_loading.cjs
 !scripts/check_approval_history_page_first.cjs
@@ -371,6 +373,7 @@ supabase/.temp
 !scripts/check_payroll_accrual_browser.cjs
 !scripts/check_approval_search_selection_regressions.cjs
 !scripts/check_approval_search_selection_browser.cjs
+!scripts/check_mobile_role_navigation_browser_20261002.cjs
 !scripts/test_payroll_accrual_v1.mjs
 !scripts/check_payroll_accrual_engine.cjs
 !scripts/check_audit_controls_release_20260927.cjs
