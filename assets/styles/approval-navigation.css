@@ -16,6 +16,12 @@
 #pg-approvals .approval-tab-description{margin:13px 0 12px;color:#685a4b;font-size:13px;line-height:1.65;white-space:normal!important;min-width:0;width:100%;overflow-wrap:anywhere}
 #pg-approvals .approval-tabs-bar .appr-toolbar{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;width:100%!important;margin:0!important;padding-top:12px;border-top:1px solid #eee2d5}
 #pg-approvals .approval-tabs-bar .appr-toolbar input{flex:1;min-width:180px!important;width:auto!important;max-width:620px!important;min-height:44px!important;font-size:14px}
+#pg-approvals .approval-search-field{position:relative;flex:1 1 360px;min-width:180px;max-width:620px}
+#pg-approvals .approval-search-field input{display:block;width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box;padding-right:52px!important}
+#pg-approvals .approval-search-field input::-webkit-search-cancel-button{display:none}
+#pg-approvals .approval-search-field .approval-search-clear{position:absolute;right:2px;top:0;width:44px;min-width:44px!important;height:44px;min-height:44px!important;border:0;background:transparent!important;color:#65584b!important;font-size:22px;line-height:1;box-shadow:none!important}
+#pg-approvals .approval-search-field .approval-search-clear[hidden]{display:none!important}
+#pg-approvals .approval-search-field .approval-search-clear:focus-visible{outline:3px solid #1167bb;outline-offset:1px}
 #pg-approvals .approval-tabs-bar #appr-list-hint{display:block!important;white-space:normal}
 @media(max-width:1000px){
   #pg-approvals .approval-tabs-scroll{grid-template-columns:1fr;gap:8px!important}
@@ -26,5 +32,6 @@
   #pg-approvals .approval-tabs-bar{padding:12px!important}
   #pg-approvals .approval-tabs-bar .appr-toolbar{gap:7px}
   #pg-approvals .approval-tabs-bar .appr-toolbar input{flex-basis:100%;max-width:100%!important;font-size:16px}
+  #pg-approvals .approval-search-field{flex-basis:100%;max-width:100%}
   #pg-approvals .approval-tab-description{font-size:12px}
 }

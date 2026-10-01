@@ -5,7 +5,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 const db=new PGlite();let checks=0;
 const tenant=randomUUID(),accountant=randomUUID(),ceo=randomUUID(),director=randomUUID(),
- employee=randomUUID(),manager=randomUUID(),cashier=randomUUID();
+ employee=randomUUID(),manager=randomUUID(),cashier=randomUUID(),hr=randomUUID(),generalAffairs=randomUUID();
 const eq=(a,b,m)=>{assert.deepEqual(a,b,m);checks++};
 const reject=async(fn,re)=>{await assert.rejects(fn,re);checks++};
 async function role(name,id=''){
@@ -87,8 +87,9 @@ try{
   ('accountant',$1,$2,'Accounting',true,'accountant'),('ceo',$1,$3,'CEO',true,'ceo'),
   ('director',$1,$4,'Director',true,'admin_director'),
   ('employee',$1,$5,'Employee',true,'employee'),('manager',$1,$6,'Manager',true,'dept_manager'),
-  ('cashier',$1,$7,'Cashier',true,'cashier')`,
-  [tenant,accountant,ceo,director,employee,manager,cashier]);
+  ('cashier',$1,$7,'Cashier',true,'cashier'),
+  ('hr',$1,$8,'HR',true,'hr'),('general_affairs',$1,$9,'General Affairs',true,'general_affairs')`,
+  [tenant,accountant,ceo,director,employee,manager,cashier,hr,generalAffairs]);
  await db.query(`insert into public.system_settings values
   ($1,'entities','[{"id":"E1","full":"測試法人"}]'),
   ($1,'departments','[{"c":"D1","eid":"E1","active":true},{"c":"D2","eid":"E1","active":true}]'),
@@ -125,6 +126,28 @@ try{
  await reject(()=>rpc('finance_labor_staff_pay_v1',{p_statement_id:created.statementId,
   p_expected_version:1,p_request_key:randomUUID(),p_paid_on:'2026-09-15',
   p_bank_ref:'SYNTHETIC-DENIED',p_allocations:[],p_evidence:{}}),/FORBIDDEN/);
+ // HR and general affairs may see only the status of a request naming them as
+ // an approval participant; neither role obtains accounting detail or actions.
+ await role('postgres');
+ await db.query(`insert into public.expense_requests(id,no,tenant_id,data_environment,entity_id,
+  department_code,applicant_id,type,amount,status,step,steps,form_payload)
+  values('SYNTHETIC-ROLE-STATUS','SYNTHETIC-ROLE-STATUS',$1,'production','E1',
+   'D1','employee','hr_expense_request',31000,'pending_accountant',2,$2,$3)`,
+  [tenant,JSON.stringify([{rk:'hr',uid:'hr',a:'approved'},
+   {rk:'general_affairs',uid:'general_affairs',a:'approved'}]),
+   JSON.stringify({electronicLabor:{...marker,plannedPaymentDates:['2026-10-15']}})]);
+ for(const [userId,authId] of [['hr',hr],['general_affairs',generalAffairs]]){
+  await role('authenticated',authId);
+  const visible=await rpc('finance_labor_request_status_v1',{p_request_id:'SYNTHETIC-ROLE-STATUS'});
+  eq(visible.status,'pending_invite',`${userId} sees assigned low-sensitivity status`);
+  eq(Object.hasOwn(visible,'signerName')||Object.hasOwn(visible,'inviteEmail'),false,
+   `${userId} cannot read lecturer identity from status`);
+  await reject(()=>rpc('finance_labor_request_status_v1',{p_request_id:'SYNTHETIC-REQ'}),/FORBIDDEN/);
+  await reject(()=>rpc('finance_labor_staff_for_request_v1',{p_request_id:'SYNTHETIC-ROLE-STATUS'}),/FORBIDDEN/);
+  await reject(()=>rpc('finance_labor_staff_list_v1',{p_entity_id:'E1',p_period:'2026-09',
+   p_status:null,p_limit:10,p_cursor:null}),/FORBIDDEN/);
+  await reject(()=>rpc('finance_labor_create_invite_v1',invite),/FORBIDDEN/);
+ }
  await role('authenticated',accountant);
  await reject(()=>rpc('finance_labor_create_invite_v1',{...invite,p_token_hash:'f'.repeat(64)}),/USE_ROTATE/);
  await reject(()=>db.query("update public.expense_requests set amount=1 where id='SYNTHETIC-REQ'"),/IMMUTABLE/);

@@ -10,7 +10,7 @@ function fn(name){const start=html.indexOf('function '+name+'(');assert(start>=0
 function handler(name){const start=html.indexOf('window.'+name+'=function(');assert(start>=0,name);const end=html.indexOf('\n};',start);return html.slice(start,end+3);}
 function fixture(){
   const nodes={};
-  const c={window:{FinanceDocumentSearch:search},console,
+  const c={window:{FinanceDocumentSearch:search},console,APPROVAL_SEARCH_COMPOSING:false,
     S:{aT:'p',apprPage:1,apprQuery:'',apprSelected:{},apprItemMap:{},user:{id:'fixture'}},
     frozen:{},cleared:[],paint:0,alerts:[],INVS:[],BILLS:[],
     el:id=>nodes[id]||(nodes[id]={innerHTML:'',textContent:'',value:''}),
@@ -49,7 +49,7 @@ function fixture(){
     'billGroupApprovalRows','invoiceGroupApprovalRows','financeDocumentMatchesQuery','requestSearchAmounts',
     'approvalSearchRowText','approvalSearchText','approvalMatchesQuery','approvalApplySearchSort',
     'approvalItemKey','selectedApprovalItems','approvalBulkBarHtml','refreshApprovalBulkCount',
-    'resetApprovalPageSelection','reconcileApprovalPageSelection','approvalPagerHtml','renderApprList'])vm.runInContext(fn(name),c);
+    'resetApprovalPageSelection','reconcileApprovalPageSelection','approvalPagerHtml','syncApprovalSearchClear','renderApprList'])vm.runInContext(fn(name),c);
   for(const name of ['toggleApprovalSelection','toggleAllApprovalSelection','apprSearch','apprSort','apprPage'])vm.runInContext(handler(name),c);
   return c;
 }

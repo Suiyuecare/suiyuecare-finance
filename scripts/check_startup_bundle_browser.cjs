@@ -13,19 +13,27 @@ const out = path.resolve(process.env.FINANCE_STARTUP_EVIDENCE_DIR || '/tmp/finan
 const measure = process.argv.includes('--measure');
 fs.mkdirSync(out, { recursive: true });
 let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-assert(html.includes('var FINANCE_BUILD_TARGET="local";'), 'Browser fixture requires an offline local build');
 assert.match(html, /assets\/finance-startup-[a-f0-9]{16}\.js/);
+const mainFile = html.match(/assets\/finance-main-[a-f0-9]{16}\.js/)?.[0];
+assert(mainFile, 'Built Finance main script is missing');
+let mainJs = fs.readFileSync(path.join(root, mainFile), 'utf8');
+assert(mainJs.includes('var FINANCE_BUILD_TARGET="local";'), 'Browser fixture requires an offline local build');
+assert.equal(crypto.createHash('sha256').update(mainJs).digest('hex').slice(0, 16), mainFile.match(/finance-main-([a-f0-9]{16})\.js/)[1]);
+assert(html.includes('<link rel="preload" as="script" href="' + mainFile + '">'));
+assert(html.includes('<script src="' + mainFile + '"></script>'));
 assert(html.includes('<script src="' + sdk.file + '"></script>'));
 assert(html.includes('<link rel="preload" as="script" href="' + sdk.file + '">'));
 assert(!html.includes(SDK.url), 'Built startup must not depend on external Supabase SDK transport');
-html = html.replace('bootAuthGate();\n\n})();', 'window.__startupQA={run:function(code){return eval(code)}};\nbootAuthGate();\n\n})();');
+mainJs = mainJs.replace('bootAuthGate();\n\n})();', 'window.__startupQA={run:function(code){return eval(code)}};\nbootAuthGate();\n\n})();');
+assert(mainJs.includes('window.__startupQA='));
 const server = http.createServer((req, res) => {
   const file = path.resolve(root, '.' + new URL(req.url, 'http://local').pathname);
   if (file !== root && !file.startsWith(root + path.sep)) { res.writeHead(403); return res.end(); }
   try {
     const isHtml = file === root || file === path.join(root, 'index.html');
-    const bytes = isHtml ? Buffer.from(html) : fs.readFileSync(file);
-    res.writeHead(200, { 'content-type': isHtml ? 'text/html' : file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'image/png', 'content-encoding': 'gzip', 'cache-control': 'no-store' });
+    const bytes = isHtml ? Buffer.from(html) : file === path.join(root, mainFile) ? Buffer.from(mainJs) : fs.readFileSync(file);
+    const immutable = /\/assets\/(?:finance-startup-[a-f0-9]{16}|finance-main-[a-f0-9]{16}|supabase-js-2\.111\.0-[a-f0-9]{16})\.js$/.test(new URL(req.url, 'http://local').pathname);
+    res.writeHead(200, { 'content-type': isHtml ? 'text/html' : file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'image/png', 'content-encoding': 'gzip', 'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-store' });
     res.end(zlib.gzipSync(bytes));
   } catch (_) { res.writeHead(404); res.end(); }
 });
@@ -38,9 +46,13 @@ const server = http.createServer((req, res) => {
       const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
       const page = await context.newPage(), errors = [], denied = [], requested = [], externalScripts = [];
       page.on('pageerror', e => errors.push(e.message));
-      await context.route('**/*', route => {
-        const r = route.request(), url = new URL(r.url()); requested.push(url.pathname);
-        if (r.resourceType() === 'script' && url.hostname !== '127.0.0.1') externalScripts.push(url.origin + url.pathname);
+      page.on('request', request => {
+        const url = new URL(request.url());
+        requested.push(url.pathname);
+        if (request.resourceType() === 'script' && url.hostname !== '127.0.0.1') externalScripts.push(url.origin + url.pathname);
+      });
+      if (!measure) await context.route('**/*', route => {
+        const r = route.request(), url = new URL(r.url());
         if (!['GET', 'HEAD'].includes(r.method()) || /\/(auth|rest)\/v1\//.test(url.pathname)) { denied.push(r.method() + ' ' + url.pathname); return route.abort(); }
         if (!measure && url.hostname !== '127.0.0.1') return route.abort();
         return route.continue();
@@ -49,19 +61,33 @@ const server = http.createServer((req, res) => {
       if (measure) {
         const cdp = await context.newCDPSession(page);
         await cdp.send('Network.enable');
-        await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
         await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: 4 * 1024 * 1024 / 8, uploadThroughput: 1024 * 1024 / 8, connectionType: 'cellular4g' });
         await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
       }
       const sdkResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/' + sdk.file);
+      const mainResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/' + mainFile);
       await page.goto('http://127.0.0.1:' + server.address().port, { waitUntil: 'load' });
       await page.waitForFunction(() => window.__readyMs > 0);
       const timing = await page.evaluate(() => ({ readyMs: window.__readyMs, firstPaintMs: performance.getEntriesByType('paint').find(p => p.name === 'first-contentful-paint')?.startTime, blockingHeadScripts: Array.from(document.head.querySelectorAll('script[src]')).filter(s => !s.async && !s.defer).length, resources: performance.getEntriesByType('resource').map(r => ({name:r.name,startTime:r.startTime,responseStart:r.responseStart,responseEnd:r.responseEnd,duration:r.duration,transferSize:r.transferSize})) }));
       assert.equal(crypto.createHash('sha256').update(await (await sdkResponse).body()).digest('hex'), SDK.sha256, 'Actual browser SDK response is the official pinned UMD');
+      assert.equal(crypto.createHash('sha256').update(await (await mainResponse).body()).digest('hex'), crypto.createHash('sha256').update(mainJs).digest('hex'), 'Actual browser main response matches the instrumented fixture');
       assert.equal(timing.blockingHeadScripts, 1);
       assert.equal(requested.filter(p => /finance-startup-[a-f0-9]+\.js/.test(p)).length, 1);
+      assert.equal(requested.filter(p => p === '/' + mainFile).length, 1, 'Main script must be fetched once');
       assert(!requested.some(p => /\/engines\/(reporting-workspace|approval-engine|permission-engine)\.js/.test(p)), 'Engines must not be fetched twice');
       assert.equal(requested.filter(p => p === '/' + sdk.file).length, 1, 'Preload and script consume exactly one SDK response');
+      let warm = null;
+      if (measure) {
+        await page.reload({ waitUntil: 'load' });
+        await page.waitForFunction(() => window.__readyMs > 0);
+        warm = await page.evaluate(() => ({
+          readyMs: window.__readyMs,
+          mainTransferSize: performance.getEntriesByType('resource').filter(r => /finance-main-[a-f0-9]{16}\.js/.test(r.name)).reduce((sum, r) => sum + (r.transferSize || 0), 0),
+          transferBytes: performance.getEntriesByType('navigation').concat(performance.getEntriesByType('resource')).reduce((sum, r) => sum + (r.transferSize || 0), 0)
+        }));
+        assert.equal(warm.mainTransferSize, 0, 'A same-version revisit must reuse the immutable main script');
+        assert(warm.readyMs < timing.readyMs, 'A same-version revisit should reach a usable login faster than cold load');
+      }
       const sdkAuth = await page.evaluate(async () => {
         const client = window.supabase.createClient('https://sdk-fixture.invalid','fictional-public-key',{auth:{autoRefreshToken:false,persistSession:false,detectSessionInUrl:false}});
         const response = await client.auth.signInWithOAuth({provider:'google',options:{skipBrowserRedirect:true,redirectTo:location.origin+'/callback'}});
@@ -90,11 +116,11 @@ const server = http.createServer((req, res) => {
       })()`));
       assert.equal(smoke.pages, 10); assert(smoke.reporting && smoke.approval);
       assert.deepEqual(errors, []); assert.deepEqual(denied, []); assert.deepEqual(externalScripts, []);
-      runs.push({ run: i + 1, ...timing, sdkSha256: SDK.sha256, sdkAuth, oauthFailureRecovered:true, externalScripts, smoke, errors, denied });
+      runs.push({ run: i + 1, ...timing, warm, sdkSha256: SDK.sha256, sdkAuth, oauthFailureRecovered:true, externalScripts, smoke, errors, denied });
       await page.screenshot({ path: path.join(out, 'built-mobile-' + (i + 1) + '.png'), fullPage: true });
       await context.close();
     }
-    fs.writeFileSync(path.join(out, 'evidence.json'), JSON.stringify({ scope: measure ? 'Local built artifact, cold cache, 150ms RTT,4Mbps,CPU4x. Synthetic fixture; not real employee timing.' : 'Offline built artifact: actual startup and ten workspace navigations; all remote writes blocked.', runs }, null, 2));
+    fs.writeFileSync(path.join(out, 'evidence.json'), JSON.stringify({ scope: measure ? 'Local built artifact, cold first load and same-version warm revisit, 150ms RTT,4Mbps,CPU4x. Synthetic fixture; not real employee timing.' : 'Offline built artifact: actual startup and ten workspace navigations; all remote writes blocked.', runs }, null, 2));
     console.log(JSON.stringify({ passed: true, runs }));
   } finally { await browser.close(); server.close(); }
 })().catch(error => { console.error(error); server.close(); process.exitCode = 1; });

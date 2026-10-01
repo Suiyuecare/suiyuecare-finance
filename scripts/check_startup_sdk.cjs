@@ -12,7 +12,7 @@ let count=0;function check(name,fn){fn();count++;console.log('PASS '+name);}
  check('official license and npm integrity proof are present',()=>{assert.match(sdk.license.toString(),/MIT License/);assert.equal(sdk.provenance.dist.integrity,'sha512-9q0\/AULthQnWeiDh1vGyjoJZbSY04bu6qHcWit70pqEYn5Kv/dkCPY62Ja1123jEnJbB9Vd2pjY7Kvk/lK3peA==');});
  check('only content-hash startup paths gain immutable caching',()=>{
   const headers=JSON.parse(fs.readFileSync(path.join(root,'vercel.json'),'utf8')).headers;
-  for(const source of ['/assets/finance-startup-:hash([a-f0-9]{16}).js','/assets/supabase-js-2.111.0-:hash([a-f0-9]{16}).js'])assert.equal(headers.find(h=>h.source===source).headers.find(h=>h.key==='Cache-Control').value,'public, max-age=31536000, immutable');
+  for(const source of ['/assets/finance-startup-:hash([a-f0-9]{16}).js','/assets/finance-main-:hash([a-f0-9]{16}).js','/assets/supabase-js-2.111.0-:hash([a-f0-9]{16}).js'])assert.equal(headers.find(h=>h.source===source).headers.find(h=>h.key==='Cache-Control').value,'public, max-age=31536000, immutable');
   for(const source of ['/','/:path*.html'])assert.equal(headers.find(h=>h.source===source).headers.find(h=>h.key==='Cache-Control').value,'no-store, max-age=0');
   assert(!headers.some(h=>h.source.includes('release-manifest')&&h.headers.some(v=>/immutable/.test(v.value))));
  });
@@ -20,9 +20,16 @@ let count=0;function check(name,fn){fn();count++;console.log('PASS '+name);}
   const source=applyBuildEnvironment(html,{target,runtimeMode:target==='production'?'production-supabase':'local-test',supabaseUrl:target==='production'?'https://fixture.supabase.co':'',supabaseAnonKey:target==='production'?'fictional-public-key':''});
   const first=createStartupBundle(source,root),second=createStartupBundle(source,root);
   check(target+' uses deterministic same-origin preload and one synchronous SDK before app',()=>{
-   assert.equal(first.html,second.html);assert.equal(first.file,second.file);assert.equal(first.code,second.code);assert(first.sdk.code.equals(second.sdk.code));
+   assert.equal(first.html,second.html);assert.equal(first.file,second.file);assert.equal(first.code,second.code);assert.deepEqual(first.main,second.main);assert(first.sdk.code.equals(second.sdk.code));
    assert(!first.html.includes(SDK.url));assert.equal(first.html.split('src="'+sdk.file+'"').length-1,1);assert.equal(first.html.split('href="'+sdk.file+'"').length-1,1);
-   assert(first.html.indexOf('href="'+sdk.file+'"')<first.html.indexOf('</head>'));assert(first.html.includes('<script src="'+sdk.file+'"></script>\n<script>\n(function(){'));
+   assert(first.html.indexOf('href="'+sdk.file+'"')<first.html.indexOf('</head>'));
+   assert(first.html.indexOf('href="'+first.main.file+'"')<first.html.indexOf('</head>'));
+   assert(first.html.indexOf('<script src="'+sdk.file+'"></script>')<first.html.indexOf('<script src="'+first.main.file+'"></script>'));
+   assert(first.html.indexOf('<script src="'+first.main.file+'"></script>')<first.html.indexOf('<script src="assets/engines/mobile-ux-engine.js'));
+   assert.match(first.main.file,/^assets\/finance-main-[a-f0-9]{16}\.js$/);
+   assert.equal(first.main.file,'assets/finance-main-'+crypto.createHash('sha256').update(first.main.code).digest('hex').slice(0,16)+'.js');
+   assert(first.main.code.includes('bootAuthGate();\n\n})();'));
+   assert(!first.html.includes("<script>\n(function(){\n'use strict';"));
    assert(first.html.indexOf('finance-v4-engine-registry.js')<0);assert.equal(first.sources[0],'assets/engines/finance-v4-engine-registry.js');
   });
  }

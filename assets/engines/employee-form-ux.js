@@ -122,8 +122,35 @@
     if (!target.matches('input,select,textarea,button,a,[tabindex]')) target.setAttribute('tabindex','-1');
     target.focus({preventScroll:true}); target.scrollIntoView({block:'center',behavior:'smooth'});
   }
+  function associateCoreLabels(root) {
+    if (!root) return;
+    var names = {'nr-desc-purpose':'申請原因','nr-amt':'總金額','nr-payee':'收款人','nr-bank-no':'帳號','nr-paydate':'預計匯款日'};
+    Object.keys(names).forEach(function (id) {
+      var field = document.getElementById(id);
+      if (!field || !root.contains(field) || (field.labels && field.labels.length)) return;
+      var group = field.closest('.fg');
+      var label = group && group.querySelector('label.fl');
+      if (label && !label.htmlFor) label.htmlFor = id;
+      else if (!label) {
+        label = document.createElement('label');
+        label.className = 'finance-visually-hidden';
+        label.htmlFor = id;
+        label.textContent = names[id];
+        field.before(label);
+      }
+    });
+  }
   function clearIssues(root) {
-    root.querySelectorAll('[data-efux-invalid]').forEach(function (node) { node.removeAttribute('aria-invalid'); node.removeAttribute('data-efux-invalid'); });
+    root.querySelectorAll('[data-efux-invalid]').forEach(function (node) {
+      node.removeAttribute('aria-invalid'); node.removeAttribute('data-efux-invalid');
+      var added = (node.dataset.efuxErrorIds || '').split(/\s+/).filter(Boolean);
+      if (added.length) {
+        var remaining = (node.getAttribute('aria-describedby') || '').split(/\s+/).filter(function (id) { return id && added.indexOf(id) === -1; });
+        if (remaining.length) node.setAttribute('aria-describedby', remaining.join(' '));
+        else node.removeAttribute('aria-describedby');
+      }
+      delete node.dataset.efuxErrorIds;
+    });
     var old = root.querySelector('#nr-validation-summary'); if (old) old.remove();
   }
   function showIssues(root, issues) {
@@ -133,10 +160,17 @@
     var box = document.createElement('section'); box.id='nr-validation-summary'; box.className='efux-validation'; box.tabIndex=-1; box.setAttribute('role','alert');
     box.innerHTML='<h3>尚有 '+issues.length+' 項需要確認，這張單尚未送出</h3><p>點選項目可前往欄位；已填資料與合法附件均保留。</p>';
     var list = document.createElement('ul');
-    issues.forEach(function (issue) {
+    issues.forEach(function (issue, index) {
       var item=document.createElement('li'),button=document.createElement('button'); button.type='button'; button.textContent=issue.message;
+      item.id='nr-validation-issue-'+index;
       button.addEventListener('click',function () { focusTarget(issue.target); }); item.append(button);list.append(item);
-      var target=document.getElementById(issue.target);if(target){target.setAttribute('aria-invalid','true');target.setAttribute('data-efux-invalid','true');}
+      var target=document.getElementById(issue.target);if(target){
+        target.setAttribute('aria-invalid','true');target.setAttribute('data-efux-invalid','true');
+        var describedBy=(target.getAttribute('aria-describedby')||'').split(/\s+/).filter(Boolean);
+        if (describedBy.indexOf(item.id)===-1) describedBy.push(item.id);
+        target.setAttribute('aria-describedby',describedBy.join(' '));
+        target.dataset.efuxErrorIds=((target.dataset.efuxErrorIds||'')+' '+item.id).trim();
+      }
     });
     box.append(list);root.prepend(box);box.focus({preventScroll:true});box.scrollIntoView({block:'start'});return true;
   }
@@ -165,7 +199,7 @@
     var mobile=global.matchMedia('(max-width: 700px)').matches;
     document.querySelectorAll('.efux-section').forEach(function (node,index) { node.open=!mobile || (Object.prototype.hasOwnProperty.call(sectionState,node.dataset.efuxKey)?sectionState[node.dataset.efuxKey]:index===0); });
   }
-  var api={MAX_BYTES:MAX_BYTES,sizeLabel:sizeLabel,selectFiles:selectFiles,safePreviewBlob:safePreviewBlob,renderFiles:renderFiles,fileIssues:fileIssues,showIssues:showIssues,clearIssues:clearIssues,focusTarget:focusTarget,mountSections:mountSections,closePreview:closePreview};
+  var api={MAX_BYTES:MAX_BYTES,sizeLabel:sizeLabel,selectFiles:selectFiles,safePreviewBlob:safePreviewBlob,renderFiles:renderFiles,fileIssues:fileIssues,showIssues:showIssues,clearIssues:clearIssues,focusTarget:focusTarget,associateCoreLabels:associateCoreLabels,mountSections:mountSections,closePreview:closePreview};
   if (typeof module === 'object' && module.exports) module.exports=api;
   global.FinanceEmployeeFormUX=api;
   if(global.addEventListener){global.addEventListener('resize',syncViewport);global.addEventListener('pagehide',closePreview);}

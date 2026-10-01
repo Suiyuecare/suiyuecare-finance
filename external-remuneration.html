@@ -56,9 +56,9 @@
           <div class="section-title"><span class="step-num">03</span><div><p class="eyebrow">確認後送出</p><h2 id="signature-title">簽名與聲明</h2></div></div>
           <p class="signature-help" id="signature-help">請用手指或滑鼠在下方簽名。使用鍵盤時，可改用下方的「上傳簽名 PNG」。</p>
           <div class="signature-box"><canvas id="signature-pad" width="960" height="240" aria-label="手寫簽名區" aria-describedby="signature-help"></canvas></div>
-          <div class="signature-actions"><button type="button" class="secondary" id="clear-signature">清除重簽</button><label class="signature-upload">改以上傳簽名 PNG<input id="signature-file" type="file" accept="image/png"></label></div>
+          <div class="signature-actions"><button type="button" class="secondary" id="clear-signature" onclick="clearExternalRemunerationSignature()">清除重簽</button><label class="signature-upload">改以上傳簽名 PNG<input id="signature-file" type="file" accept="image/png"></label></div>
           <label class="consent"><input id="consent" type="checkbox" required><span>我已核對上列服務明細、本人及銀行資料，同意以此電子簽名作為本份勞務報酬單的簽署紀錄。我了解持有專屬連結不等於身分驗證，提交後若要修正，須聯絡承辦人重新邀請。</span></label>
-          <div class="submit-row"><div><strong>送出前請再次核對資料</strong><small>送出後此連結不可再修改，也不會顯示個資或下載原始檔。</small></div><button type="submit" id="submit-button" class="primary">確認並送出簽署</button></div>
+          <div class="submit-row"><div><strong>送出前請再次核對資料</strong><small>送出後此連結不可再修改，也不會顯示個資或下載原始檔。</small><small id="submit-status" class="submit-status"></small></div><button type="submit" id="submit-button" class="primary">確認並送出簽署</button></div>
         </section>
       </form>
     </div>

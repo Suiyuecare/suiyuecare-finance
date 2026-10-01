@@ -60,6 +60,17 @@ let browser;
   await sort.press('Space');check(width+' Space reverses ordering',(await page.locator('#appr-list tbody tr').first().innerText()).includes('UI-1')&&await page.locator('#appr-list tbody tr').count()===2);
   }else{await page.waitForFunction(()=>document.querySelector('#appr-list table')?.classList.contains('mobile-native-card-table'));check(width+' mobile card list retains both documents',await page.locator('#appr-list tbody tr').count()===2);}
   check(width+' sort preserves documents',await run('JSON.stringify(REQS)===window.__originalRequests'));
+  for(const tab of ['p','cashier','mine','drafts','rejected']){
+   await run(`S.aT=${JSON.stringify(tab)};S.apprQuery='';el('appr-q').value='';buildApprovals();`);
+   const search=page.locator('#appr-q'),beforeRows=await page.locator('#appr-list tbody tr').count();
+   await search.evaluate(input=>{input.focus();input.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));input.value='不';input.dispatchEvent(new InputEvent('input',{bubbles:true,data:'不',isComposing:true}));input.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,key:'Escape',isComposing:true}));});
+   await page.waitForTimeout(120);
+   check(width+' '+tab+' search waits for Chinese composition',await run('S.apprQuery')===''&&await search.inputValue()==='不'&&await page.locator('#appr-list tbody tr').count()===beforeRows);
+   await search.evaluate(input=>{input.value='不存在';input.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'不存在'}));input.dispatchEvent(new InputEvent('input',{bubbles:true,data:'存在',isComposing:false}));});
+   check(width+' '+tab+' search commits completed Chinese query',await run('S.apprQuery')==='不存在');
+   await page.locator('#appr-q-clear').click();
+   check(width+' '+tab+' clear restores query and focus',await run('S.apprQuery')===''&&await search.inputValue()===''&&await search.evaluate(input=>document.activeElement===input));
+  }
   await run(`(function(){
    window.__arItems=[{invoiceId:'ar1',invoiceNo:'AR001',entityId:'F1',departmentCode:'DAYCARE',buyer:'甲客戶',originalAmount:100,recognizedAmount:100,receivedAmount:0,outstandingAmount:100,allowanceAmount:0,status:'unpaid',balanceStatus:'unpaid',invoiceDate:'2026-09-01',rowVersion:1,metadataVersion:0},{invoiceId:'ar2',invoiceNo:'AR002',entityId:'F1',departmentCode:'DAYCARE',buyer:'乙客戶',originalAmount:200,recognizedAmount:200,receivedAmount:0,outstandingAmount:200,allowanceAmount:0,status:'unpaid',balanceStatus:'unpaid',invoiceDate:'2026-09-01',rowVersion:1,metadataVersion:0}];
    hasSupabase=function(){return true};getSb=function(){return{rpc:async function(name,args){window.__rpcCalls.push(name);if(name==='finance_receivables_v1')return{data:{version:1,asOf:args.p_as_of,complete:true,totalCount:2,items:window.__arItems,summary:{outstandingAmount:300,receivedAmount:0,allowanceAmount:0,overdueAmount:0},buckets:[],reconciliation:{bankVisible:false}}};return{data:null,error:{message:'Blocked fixture RPC '+name}}}}};S.recvEntity='F1';nav('recv');

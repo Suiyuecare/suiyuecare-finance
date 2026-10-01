@@ -9,7 +9,7 @@ const clone=x=>JSON.parse(JSON.stringify(x)),delay=ms=>new Promise(r=>setTimeout
 function deferred(){let resolve;const promise=new Promise(r=>resolve=r);return{promise,resolve};}
 let checks=0;function pass(name){checks++;console.log('PASS '+name);}
 function fixture(){
- const c={Date,Promise,Object,Array,String,Number,Math,Set,Map,Error,JSON,console:{warn(){}},setTimeout,clearTimeout,S:{user:{id:'owner-a',email:'a@example.invalid',n:'匿名本人'},demoLogin:false,aT:'p'},REQS:[],INVS:[],BILLS:[],VOUCHERS:[],APPROVAL_HISTORY_MODAL_CONTEXT:null,APPROVAL_FAST_BOOTSTRAP:{summaryItems:[]},queries:[],issues:[],active:0,max:0,nodes:{},window:{FinanceDocumentSearch:search}};
+ const c={Date,Promise,Object,Array,String,Number,Math,Set,Map,Error,JSON,console:{warn(){}},setTimeout,clearTimeout,S:{user:{id:'owner-a',email:'a@example.invalid',n:'匿名本人'},demoLogin:false,aT:'p'},REQS:[],INVS:[],BILLS:[],VOUCHERS:[],APPROVAL_SEARCH_COMPOSING:false,APPROVAL_HISTORY_MODAL_CONTEXT:null,APPROVAL_FAST_BOOTSTRAP:{summaryItems:[]},queries:[],issues:[],active:0,max:0,nodes:{},window:{FinanceDocumentSearch:search}};
  Object.assign(c,{recordRemoteReadIssue:(label,error)=>c.issues.push({label,error}),approvalFastSummarySourceIds:(items,table)=>items.filter(x=>x.source_table===table).flatMap(x=>x.source_ids),withOperationTimeout:q=>q,
   num:x=>Number(x)||0,normDate:x=>String(x||'').replaceAll('/','-'),normalizeFiles:x=>x||[],invoiceIsReceivable:x=>!!x.receivable,approvalReceiptItemCandidate:x=>!!x.receiptCandidate,renderLaborElectronicTracker(){},
   currentFinanceAuthUserId:()=>c.S.user&&c.S.user.auth||'auth-a',currentTenantId:()=>c.tenant||'tenant-a',activeDataEnvironment:()=>c.env||'production',fmt:n=>String(n),voucherBadgeClass:()=>'',voucherKind:()=> '一般傳票',
@@ -19,7 +19,7 @@ function fixture(){
  c.client={from(table){const q={table,filters:[],select(){return q},in(key,ids){q.ids=ids;return q},eq(key,value){q.filters.push([key,value]);return q},limit(limit){q.limitValue=limit;return q},then(resolve,reject){c.queries.push(q);c.active++;c.max=Math.max(c.max,c.active);let result;try{result=c.transport(q,c);}catch(e){result=Promise.reject(e);}return Promise.resolve(result||{data:(q.ids||[]).map(id=>({id}))}).then(value=>{c.active--;return resolve(value)},error=>{c.active--;return reject(error)});}};return q}};
  vm.createContext(c);
  const names=['escAttr','financeInlineJsString','remoteRowKey','mergeRemoteRowsByKey','uniqueRemoteStrings','runRemoteJobsWithConcurrency','safeRemoteRows','loadRowsByIdsForApprovalFallback','loadRowsForCurrentApplicant','approvalFallbackSourceIds','approvalFastMergeSummaryIdsIntoFallback','remoteRowsMissingIds','loadRemoteApprovalFallbackData','approvalHistoryItemsFromPayload','approvalHistoryValidatePage','approvalHistoryExactGroupRows','renderApprovalHistorySummaries','invoiceBatchFallbackKey','invoiceGroupKey','invoiceGroupRows','uniqueInvoiceGroups','billCreatedBucket','billGroupKey','billGroupRows','billGroupLeader','uniqueBillGroups','approvalGroupRowsIndex','approvalAllItems','financeDocumentMatchesQuery','voucherMonthKey','voucherFilteredRows','refreshVoucherMonths','voucherListPage','voucherPagerHtml'];
- vm.runInContext(names.map(x=>fn(x)).join('\n'),c);
+ vm.runInContext(names.concat('syncApprovalSearchClear').map(x=>fn(x)).join('\n'),c);
  return c;
 }
 async function run(){

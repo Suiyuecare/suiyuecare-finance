@@ -41,7 +41,7 @@ const versionedAssets = fs.readdirSync(engineDir)
       .filter((file) => file.endsWith('.css'))
       .map((file) => ({ key: `styles/${file}`, path: path.join(styleDir, file) }))
   )
-  .sort((a, b) => a.key.localeCompare(b.key));
+  .sort((a, b) => Buffer.compare(Buffer.from(a.key), Buffer.from(b.key)));
 const assetVersion = versionedAssets
   .reduce((hash, asset) => hash.update(asset.key).update(fs.readFileSync(asset.path)), crypto.createHash('sha256'))
   .digest('hex')
@@ -52,6 +52,7 @@ const startupBundle = createStartupBundle(html, root);
 html = startupBundle.html;
 fs.writeFileSync(path.join(out, startupBundle.file), startupBundle.code);
 fs.writeFileSync(path.join(out, startupBundle.sdk.file), startupBundle.sdk.code);
+fs.writeFileSync(path.join(out, startupBundle.main.file), startupBundle.main.code);
 fs.writeFileSync(path.join(out, 'index.html'), html);
 
 let externalHtml = fs.readFileSync(path.join(root, 'external-remuneration.html'), 'utf8');

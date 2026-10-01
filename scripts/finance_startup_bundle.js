@@ -47,7 +47,28 @@ function createStartupBundle(html, root) {
   const version = crypto.createHash('sha256').update(code).digest('hex').slice(0, 16);
   const file = 'assets/finance-startup-' + version + '.js';
   head = head.replace('<!-- FINANCE_STARTUP_BUNDLE -->', '<link rel="preload" as="script" href="' + sdk.file + '">\n<script src="' + file + '"></script>');
-  return { html: head + html.slice(end), file, code, sdk, sources: scripts.map(item => item.file) };
+  html = head + html.slice(end);
+  // Keep the editable source unchanged. At build time only, move the large
+  // main IIFE to a content-addressed asset.
+  // The ordinary script stays after the SDK and before the two tail engines.
+  const mainStartTag = "<script>\n(function(){\n'use strict';";
+  const mainEndTag = 'bootAuthGate();\n\n})();\n</script>';
+  const mainStart = html.indexOf(mainStartTag);
+  const mainEndAnchor = html.indexOf(mainEndTag, mainStart);
+  if (mainStart < 0 || mainStart !== html.lastIndexOf(mainStartTag)
+      || mainEndAnchor < 0 || mainEndAnchor !== html.lastIndexOf(mainEndTag)) {
+    throw new Error('Expected exactly one Finance main IIFE with the approved bootstrap boundary');
+  }
+  const mainEnd = mainEndAnchor + mainEndTag.length;
+  if (html.indexOf('</script>', mainStart) !== mainEnd - '</script>'.length) {
+    throw new Error('Finance main IIFE is not one uninterrupted script');
+  }
+  const mainCode = html.slice(mainStart + '<script>'.length, mainEnd - '</script>'.length);
+  const mainVersion = crypto.createHash('sha256').update(mainCode).digest('hex').slice(0, 16);
+  const mainFile = 'assets/finance-main-' + mainVersion + '.js';
+  html = html.slice(0, mainStart) + '<script src="' + mainFile + '"></script>' + html.slice(mainEnd);
+  html = html.replace('</head>', '<link rel="preload" as="script" href="' + mainFile + '">\n</head>');
+  return { html, file, code, main: { file: mainFile, code: mainCode }, sdk, sources: scripts.map(item => item.file) };
 }
 
 module.exports = { createStartupBundle, pinnedSupabaseSdk, SDK };

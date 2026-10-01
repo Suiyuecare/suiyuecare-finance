@@ -35,6 +35,7 @@ function fixture(opts={}){
   preflightAttachmentsForSupabase:async files=>files,uploadAttachmentToSupabase:async(file,ctx)=>{trace.uploads.push({file:clone(file),ctx:clone(ctx)});if(opts.uploadFail)throw new Error('fictional storage denied');
    return {...file,url:'',bucket:'finance-attachments',path:'bills/test/FICT-BILL-001/bill_approval/uploaded.pdf',storagePath:'bills/test/FICT-BILL-001/bill_approval/uploaded.pdf'};},
   cleanupUploadedSupabaseAttachments:async(groups,label)=>{trace.cleanup.push({groups:clone(groups),label});return 0;},
+  attachmentUploadFeedback:()=>null,
   attachmentUploadError:(message,meta)=>Object.assign(new Error(message),meta),formatStorageUploadError:e=>e.message||String(e),
   incomeActionContext:()=>({key:'fictional-idempotent-key'}),clearIncomeActionContext(){},readbackApprovalStepMutation(){},
   financeMutationRpcWithAmbiguousRetry:async(name,args,length,readback,context,meta,call)=>({response:await call()}),
