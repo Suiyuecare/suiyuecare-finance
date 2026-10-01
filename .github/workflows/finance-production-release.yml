@@ -218,6 +218,10 @@ jobs:
           pnpm dlx vercel@59.3.0 curl / --deployment "$DEPLOYMENT_URL" -- \
             --fail --silent --show-error --output "$RUNNER_TEMP/candidate-index.html"
           test -s "$RUNNER_TEMP/candidate-index.html"
+          APP_ASSET_PATH="$(node scripts/finance_production_release_guard.js frontend-app-path --index "$RUNNER_TEMP/candidate-index.html")"
+          pnpm dlx vercel@59.3.0 curl "/$APP_ASSET_PATH" --deployment "$DEPLOYMENT_URL" -- \
+            --fail --silent --show-error --output "$RUNNER_TEMP/candidate-app.js"
+          cmp -s "www/$APP_ASSET_PATH" "$RUNNER_TEMP/candidate-app.js"
           node scripts/finance_production_release_guard.js verify-candidate \
             --local-manifest www/release-manifest.json \
             --remote-manifest "$RUNNER_TEMP/candidate-release-manifest.json" \
@@ -252,6 +256,7 @@ jobs:
           cp "$RUNNER_TEMP/candidate-deployment.json" "$BUNDLE/candidate-deployment.json"
           cp "$RUNNER_TEMP/candidate-release-manifest.json" "$BUNDLE/candidate-release-manifest.json"
           cp "$RUNNER_TEMP/candidate-index.html" "$BUNDLE/candidate-index.html"
+          cp "$RUNNER_TEMP/candidate-app.js" "$BUNDLE/candidate-app.js"
           cp www/release-manifest.json "$BUNDLE/local-release-manifest.json"
           cp scripts/finance_production_release_guard.js "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_production_db_preflight.sql "$BUNDLE/release-tools/scripts/"
@@ -1555,6 +1560,10 @@ jobs:
                 --fail --silent --show-error --output "$RUNNER_TEMP/production-release-manifest.json" \
               && pnpm dlx vercel@59.3.0 curl / --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
                 --fail --silent --show-error --output "$RUNNER_TEMP/production-index.html" \
+              && APP_ASSET_PATH="$(node "$GUARD" frontend-app-path --index "$RUNNER_TEMP/production-index.html")" \
+              && pnpm dlx vercel@59.3.0 curl "/$APP_ASSET_PATH" --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
+                --fail --silent --show-error --output "$RUNNER_TEMP/production-app.js" \
+              && cmp -s "$BUNDLE/candidate-app.js" "$RUNNER_TEMP/production-app.js" \
               && node "$GUARD" verify-promotion \
                 --candidate-deployment-json "$BUNDLE/candidate-deployment.json" \
                 --promoted-deployment-json "$RUNNER_TEMP/promoted-deployment.json" \

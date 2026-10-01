@@ -95,18 +95,48 @@ async function run(){
   pass('all legacy candidates paginate before exact NULL-owner trim/email filtering; nonowners never appear and payload cannot claim ownership/environment');
  }
  {
+  const second=deferred(),foreign=Array.from({length:100},(_,i)=>row('candidate-'+i,{owner_id:null,owner_email:'prefix-a@example.invalid',payload:{ownerId:'finance-a'}}));
+  const c=fixture({transport:q=>q.start===0?{data:foreign,count:101}:second.promise}),pending=c.loadCurrentUserDrafts();await tick();
+  assert.equal(c.FINANCE_DRAFT_READ_RUNTIME.status,'loading');assert.equal(c.FINANCE_DRAFT_READ_RUNTIME.total,null);assert.equal(c.DRAFTS.length,0);
+  second.resolve({data:[row('owned')],count:101});assert((await pending).complete);assert.deepEqual(clone(c.DRAFTS.map(d=>d.id)),['owned']);
+  pass('a provisional page applies exact owner checks before painting; broad ILIKE legacy candidates never leak into another account view');
+ }
+ {
   const c=fixture();const text=c.financeDraftOwnerFilter('id"\\),foreign','a_%*"\\@example.invalid');assert(text.includes('owner_id.eq."id\\"\\\\),foreign"'));
   assert(text.includes('owner_email.ilike."%a\\\\_\\\\%\\\\*\\"\\\\\\\\@example.invalid%"'));
   pass('owner/email filter quotes delimiters and escapes literal ILIKE wildcard characters');
  }
  {
-  const c=fixture({transport:q=>q.start===0?{data:Array.from({length:100},(_,i)=>row('p'+i)),count:101}:{data:[row('last')],count:102}});await expectError(c);assert.equal(c.DRAFTS.length,0);
-  pass('count change between pages rejects a mixed snapshot instead of publishing 101 of 102');
+  const c=fixture({transport:q=>q.start===0?{data:Array.from({length:100},(_,i)=>row('p'+i)),count:101}:{data:[row('last')],count:102}});await expectError(c);assert.equal(c.DRAFTS.length,100);assert.equal(expectUnknown(c).loadedCount,100);
+  pass('count change between pages leaves only the labelled first page visible and never verifies a mixed total');
  }
  {
-  const second=deferred(),c=fixture({transport:q=>q.start===0?{data:Array.from({length:100},(_,i)=>row('p'+i)),count:101}:second.promise});const p=c.loadCurrentUserDrafts();await tick();assert.equal(c.queries.length,2);assert.equal(c.timers.length,1);c.expire();assert((await p).error);assert(c.queries.every(q=>q.signal.aborted));assert.equal(c.DRAFTS.length,0);
-  second.resolve({data:[row('last')],count:101});await tick();assert.equal(c.DRAFTS.length,0);
-  pass('pagination shares a single overall deadline; late final page cannot publish a partial timed-out set');
+  const second=deferred(),c=fixture({transport:q=>q.start===0?{data:Array.from({length:100},(_,i)=>row('p'+i)),count:101}:second.promise});const p=c.loadCurrentUserDrafts();await tick();assert.equal(c.queries.length,2);assert.equal(c.timers.length,1);
+  assert.equal(c.FINANCE_DRAFT_READ_RUNTIME.status,'loading');assert.equal(expectUnknown(c).loadedCount,100);assert.equal(c.DRAFTS.length,100);
+  assert(c.paints.some(paint=>paint.status==='loading'&&paint.ids.length===100&&paint.total===null));
+  c.expire();assert((await p).error);assert(c.queries.every(q=>q.signal.aborted));assert.equal(c.DRAFTS.length,100);assert.equal(expectUnknown(c).status,'error');
+  second.resolve({data:[row('last')],count:101});await tick();assert.equal(c.DRAFTS.length,100);assert(!c.DRAFTS.some(d=>d.id==='last'));
+  pass('100+ drafts show an owner-verified first page before the final page; timeout keeps an unverified count and late completion is ignored');
+ }
+ {
+  const second=deferred(),c=fixture({transport:q=>q.start===0?{data:Array.from({length:100},(_,i)=>row('p'+i)),count:101}:second.promise});const p=c.loadCurrentUserDrafts();await tick();assert.equal(c.DRAFTS.length,100);
+  second.resolve({data:[row('last')],count:101});const result=await p;assert(result.complete);assert.equal(result.count,101);assert.equal(c.DRAFTS.length,101);assert.equal(c.FINANCE_DRAFT_READ_RUNTIME.loadedCount,101);
+  assert.equal(c.FINANCE_DRAFT_READ_RUNTIME.total,101);assert(c.approvalDraftsCompleteForCurrentUser());
+  pass('the final page replaces the provisional first page with the complete 101-draft result and certified count');
+ }
+ {
+  const second=deferred(),c=fixture({transport:q=>q.start===0?{data:Array.from({length:100},(_,i)=>row('p'+i)),count:101}:second.promise});const p=c.loadCurrentUserDrafts();await tick();assert.equal(c.DRAFTS.length,100);
+  c.S.user=Object.assign({},c.S.user,{id:'finance-b',authUserId:'auth-b',email:'b@example.invalid'});assert.equal(expectUnknown(c).status,'idle');assert.equal(c.DRAFTS.length,0);assert((await p).stale);assert(c.queries.every(q=>q.signal.aborted));
+  const paints=c.paints.length;second.resolve({data:[row('last')],count:101});await tick();assert.equal(c.DRAFTS.length,0);assert.equal(c.paints.length,paints);
+  pass('switching accounts after the first page immediately clears those drafts and ignores a late final page');
+ }
+ {
+  const c=fixture();await c.seed([row('old')]);const second=deferred();c.transport=q=>q.start===0?{data:Array.from({length:100},(_,i)=>row('p'+i)),count:101}:second.promise;
+  const pending=c.loadCurrentUserDrafts({force:true});await tick();assert.equal(c.DRAFTS.length,100);
+  assert(c.notifyDraftMutation({id:'saved',ownerId:'finance-a',dataEnv:'production',files:[]},'saved',c.financeDraftReadIdentity()));
+  assert((await pending).stale);assert.equal(expectUnknown(c).status,'idle');assert.equal(c.DRAFTS.length,101);assert.equal(c.FINANCE_DRAFT_READ_RUNTIME.total,null);
+  second.resolve({data:[row('last')],count:101});await tick();assert(!c.DRAFTS.some(d=>d.id==='last'));
+  pass('saving during a provisional refresh cannot inherit an older complete flag or certify a truncated first page');
  }
  {
   const attachment={name:'原件.pdf',type:'application/pdf',size:136,path:'tenant-a/fictional/private.pdf',bucket:'finance-attachments',uploadedAt:'2026-09-13T01:00:00Z',kind:'draft_file'};

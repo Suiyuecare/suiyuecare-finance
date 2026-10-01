@@ -50,4 +50,29 @@ function createStartupBundle(html, root) {
   return { html: head + html.slice(end), file, code, sdk, sources: scripts.map(item => item.file) };
 }
 
-module.exports = { createStartupBundle, pinnedSupabaseSdk, SDK };
+// Keep index.html as the testable source of truth while moving the large main
+// IIFE into a content-addressed, same-origin asset in the built artifact.
+// The script tag stays after the synchronous SDK tag, preserving execution order.
+function createAppBundle(html) {
+  const opening = "<script>\n(function(){\n'use strict';";
+  const start = html.indexOf(opening);
+  if (start < 0 || html.indexOf(opening, start + opening.length) >= 0) {
+    throw new Error('Expected exactly one Finance main app IIFE');
+  }
+  const bodyStart = start + '<script>'.length;
+  const end = html.indexOf('</script>', bodyStart);
+  if (end < 0) throw new Error('Finance main app script is unterminated');
+  const code = html.slice(bodyStart, end);
+  if (!code.endsWith('\n})();\n') || !code.includes('bootAuthGate();')) {
+    throw new Error('Finance main app bootstrap order is invalid');
+  }
+  const file = 'assets/finance-app-' + crypto.createHash('sha256').update(code).digest('hex').slice(0, 16) + '.js';
+  const sdkPreload = '<link rel="preload" as="script" href="assets/supabase-js-' + SDK.version + '-' + SDK.sha256.slice(0, 16) + '.js">';
+  if (html.split(sdkPreload).length !== 2) throw new Error('Expected exactly one pinned SDK preload before the app');
+  const preload = '<link rel="preload" as="script" href="' + file + '">';
+  const script = '<script src="' + file + '"></script>';
+  const builtHtml = html.slice(0, start) + script + html.slice(end + '</script>'.length);
+  return { html: builtHtml.replace(sdkPreload, sdkPreload + '\n' + preload), file, code };
+}
+
+module.exports = { createStartupBundle, createAppBundle, pinnedSupabaseSdk, SDK };

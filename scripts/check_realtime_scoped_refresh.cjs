@@ -27,6 +27,7 @@ function fixture(options={}){
   const client={from(table){const q={table,select(){return this},order(){return this},limit(){return this},then(resolve,reject){c.calls.push(table);return Promise.resolve().then(()=>c.transport(table,c)).then(resolve,reject)}};return q;},channel(){return{on(_,filter,fn){c.handlers[filter.table]=fn;return this},subscribe(){return this}}},removeChannel:async()=>{}};
   Object.assign(c,{window:{},hasSupabase:()=>true,getSb:()=>client,currentTenantId:()=>c.tenant,activeDataEnvironment:()=>c.environment,
     statementDataIdentity:()=>[c.S.user&&c.S.user.authUserId,c.tenant,c.environment].join('|'),approvalFastBootstrapIdentity:()=>[c.tenant,'auth:'+(c.S.user&&c.S.user.authUserId)].join('|'),normalizedRoleKey:user=>user.role,
+    dashboardFinancialSourceIdentity:()=>[c.S.user&&c.S.user.authUserId,c.S.user&&c.S.user.id,c.S.user&&c.S.user.role,c.tenant,c.environment,c.financeWorkspaceIdentityBlocked].join('|'),
     financeNotificationState:()=>c.notificationState,draftReadinessForCurrentUser:()=>c.draftState,
     loadFinanceNotifications:()=>{const pending=Promise.resolve(client.from('notifications').select('*')).then(result=>result.error?{error:result.error}:{data:result.data,error:null});c.notificationState.promise=pending;return pending.finally(()=>{if(c.notificationState.promise===pending)c.notificationState.promise=null})},
     loadCurrentUserDrafts:opts=>{c.draftOptions.push(opts);const pending=Promise.resolve(client.from('draft_requests').select('*')).then(result=>result.error?{error:result.error,complete:false}:{data:result.data,error:null,complete:true});c.draftState.promise=pending;return pending.finally(()=>{if(c.draftState.promise===pending)c.draftState.promise=null})},
@@ -38,7 +39,7 @@ function fixture(options={}){
     loadRemoteData:async()=>{c.broad++;c.calls.push('ledger_entries');return true},loadApprovalFastBootstrap:async()=>{c.recovery++;return{hydrated:true}},approvalMutationRuntimeReady:()=>true,
     initFilters:()=>{},buildAll:()=>{c.built++},buildApprovals:()=>{},approvalFastShouldHoldSkeleton:()=>false,clearRemoteRecovery:()=>{},scheduleRemoteRecovery:()=>{},approvalRenderLoadingStateIfAvailable:()=>{}});
   vm.createContext(c);
-  vm.runInContext(['syncWarningCount','realtimeScopedRefreshKind','realtimeEventInCurrentScope','realtimeScopedRefreshIdentity','readRealtimeScopedSource','refreshRealtimeScopedSource','refreshRemoteData','startRealtime','stopRealtime'].map(extract).join('\n'),c);
+  vm.runInContext(['syncWarningCount','realtimeScopedRefreshKind','realtimeEventInCurrentScope','realtimeScopedRefreshIdentity','readRealtimeScopedSource','refreshRealtimeScopedSource','remoteDataReadIdentity','refreshRemoteData','startRealtime','stopRealtime'].map(extract).join('\n'),c);
   c.startRealtime();
   c.emit=(table,payload={new:{id:'event',tenant_id:c.tenant,data_environment:c.environment}})=>{assert(c.handlers[table],table);c.handlers[table](payload)};
   return c;

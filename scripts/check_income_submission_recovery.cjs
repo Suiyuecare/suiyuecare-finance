@@ -7,15 +7,15 @@ const html=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 function fn(name){const match=new RegExp('^(?:async )?function '+name+'\\(','m').exec(html);assert(match,name);return html.slice(match.index,html.indexOf('\n}',match.index)+2);}
 const clone=x=>JSON.parse(JSON.stringify(x));let checks=0;function check(name,condition){assert(condition,name);checks++;}
 function fixture(shared={}){
- const storage=shared.storage||new Map(),server=shared.server||new Map(),calls=shared.calls||[],hooks={};
- const state={lost:0,statementTimeouts:0,deny:false,hang:false,sourceRead:false,storageOk:true,uploads:0,cleanup:0,notifications:0,reads:0,readbacks:0,events:[],alerts:[],hooks};
+ const storage=shared.storage||new Map(),durable=shared.durable||new Map(),server=shared.server||new Map(),calls=shared.calls||[],hooks={};
+ const state={lost:0,statementTimeouts:0,deny:false,hang:false,sourceRead:false,storageOk:true,durableOk:true,uploads:0,cleanup:0,notifications:0,reads:0,readbacks:0,readbackFilters:[],events:[],alerts:[],hooks};
  const user={id:'fictional-A',n:'Fictional A',email:'a@example.invalid',role:'accountant',dc:'FICT-D'};
  const fields={'inv-buyer':'Fictional buyer','inv-amt':'100','inv-identifier-type':'電子發票','inv-desc':'Fictional service','inv-tax':'5','inv-ent':'FICT-E','inv-date':'2026-09-22','bill-reason':'Fictional reason','bill-dept':'FICT-D','b-ent2':'FICT-E','b-ent':'FICT-E','b-month':'2026-09'};
  const nodes=Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{value,style:{},classList:{remove(){}}}]));
  nodes['batch-pw']={style:{}};nodes['batch-dz']={classList:{remove(){}}};
  const c={S:{user,demoLogin:false,invOcrFile:null,bRows:[{buyer:'Fictional buyer',total:105,amt:100,rate:5,itemType:'home_care',identifierType:'電子發票',desc:'Service'}]},USERS:[user],INVS:[],BILLS:[],BILL_ROWS:[{payer:'Fictional payer',item:'Service',amt:100,period:'2026-09'}],INCOME_SUBMISSION_RETRY_STATE:{},POSTING_IN_FLIGHT:{},FINANCE_DRAFT_IDENTITY_EPOCH:0,financeAuthIdentityEpoch:0,CURRENT_PERMISSION_SNAPSHOT:{},financeLogoutInProgress:false,financeGoogleAccountSwitchInProgress:false,financeWorkspaceIdentityBlocked:false,
   currentFinanceAuthUserId:()=> 'auth-'+c.S.user.id,currentTenantId:()=> 'fictional-tenant',activeDataEnvironment:()=> 'test',hasSupabase:()=>true,
-  sessionGetItem:key=>storage.get(key),sessionSetItem:(key,value)=>{if(!state.storageOk)return false;storage.set(key,value);return true;},sessionRemoveItem:key=>storage.delete(key),crypto:require('node:crypto').webcrypto,
+  sessionGetItem:key=>storage.get(key),sessionSetItem:(key,value)=>{if(!state.storageOk)return false;storage.set(key,value);return true;},sessionRemoveItem:key=>storage.delete(key),safeGetItem:key=>durable.get(key)||null,safeJsonSet:(key,value)=>{if(!state.durableOk)return false;durable.set(key,JSON.stringify(value));return true;},safeRemoveItem:key=>durable.delete(key),crypto:require('node:crypto').webcrypto,
   guardSubmissionIdentityDirectory:async()=>{if(hooks.directory)await hooks.directory();return true;},el:key=>nodes[key],document:{getElementById:key=>nodes[key]},invoiceReasonMeta:()=>({reason:'Fictional reason'}),invoiceIdentifierType:value=>value||'電子發票',invoiceItemTypeByKey:k=>({k}),invoiceItemTypeFromText:()=> 'home_care',selectedInvoiceApplicant:()=>({user:c.S.user,name:c.S.user.n,dc:'FICT-D'}),requiredMissingItems:(_type,items)=>items.filter(x=>!x.value&&['buyer','total'].includes(x.key)).map(x=>x.label),formFieldLabel:(_a,_b,value)=>value,invoiceIdentifierRequiresCode:()=>false,requireIncomeEntityDepartment:()=>true,entityTrackById:()=> 'AA',invoiceRateValue:value=>Number(value)/100,
   applicantSubmitStep:u=>({rk:'applicant_submit',uid:u.id,a:'approved'}),buildInvoiceApprovalSteps:()=>[{rk:'accountant',uid:'C',a:'',status:'pending_accountant'}],buildBillApprovalSteps:()=>[{rk:'accountant',uid:'C',a:'',status:'pending_accountant'}],
   prepareApprovalRouteForSubmit:async(_u,_a,_dc,_opts,steps)=>{if(hooks.route)await hooks.route();return {ok:true,steps};},p1SubmissionPreflight:async()=>{if(hooks.preflight)await hooks.preflight();return {ok:true};},gE:()=>({s:'Fictional entity',full:'Fictional entity'}),gD:()=>({n:'Fictional dept'}),
@@ -32,14 +32,14 @@ function fixture(shared={}){
    const key=args.p_idempotency_key;if(server.has(key)){assert.equal(server.get(key).payload,JSON.stringify(args),'same key binds same immutable request');}else server.set(key,{payload:JSON.stringify(args),data:{ok:true,rows:args.p_items.map((item,index)=>({client_item_key:item.client_item_key,id:'saved-'+server.size+'-'+index,no:'INV-'+server.size+'-'+index,batch_id:args.p_items.length>1?'saved-batch':'',approval_status:'pending_accountant',approval_step:2}))}});
    if(shared.sqlCommit){const result=await shared.sqlCommit(args,server.get(key).data);server.get(key).data=result;}
    if(state.hang)return new Promise(()=>{});if(state.lost>0){state.lost--;return {error:{code:'NETWORK',message:'Failed to fetch after commit'}};}return {data:clone(server.get(key).data)};
-  },from(){const filters={};return {select(){return this;},eq(k,v){filters[k]=v;return this;},limit(){state.readbacks++;state.events.push('readback');const found=server.get(filters.submission_idempotency_key);return Promise.resolve({data:state.sourceRead&&found?found.data.rows.map(row=>({...row,submission_item_key:row.client_item_key})):[]});}};}};
+  },from(){const filters={};return {select(){return this;},eq(k,v){filters[k]=v;return this;},limit(){state.readbacks++;state.readbackFilters.push({...filters});state.events.push('readback');const found=server.get(filters.submission_idempotency_key);return Promise.resolve({data:state.sourceRead&&found?found.data.rows.map(row=>({...row,submission_item_key:row.client_item_key})):[]});}};}};
  c.getSb=()=>transport;vm.createContext(c);
  ['expenseSubmissionOperationIdentity','withOperationTimeout','supabaseAuthErrorInfo','incomeSubmissionRpcItem','incomeFileSignature','incomeFieldValues','incomeDirtySnapshot'].forEach(name=>vm.runInContext(fn(name),c));
  c.withAbortableOperationTimeout=(pending,label,ms)=>c.withOperationTimeout(pending,label,ms);
  const start=html.indexOf('var INCOME_SUBMISSION_PENDING={}'),end=html.indexOf('\nasync function insertMembershipOrgSubmittedRecord',start);assert(start>=0&&end>start);vm.runInContext(html.slice(start,end),c);
  ['reloadInvoicesByIds','reloadBillsByIds','insertMembershipOrgSubmittedRecord','insertMembershipOrgSubmittedBatch','issueInvCore','issueBatchCore','submitBillCore'].forEach(name=>vm.runInContext(fn(name),c));
  for(const name of ['issueInv','issueBatch','submitBill']){const start=html.indexOf('window.'+name+'=async function(){'),end=html.indexOf('\n};',start)+3;assert(start>=0);vm.runInContext(html.slice(start,end),c);}
- return {c,state,storage,server,calls,nodes,shared:{storage,server,calls},switchIdentity(){c.S.user={id:'fictional-B',n:'Fictional B',email:'b@example.invalid',role:'employee'};c.FINANCE_DRAFT_IDENTITY_EPOCH++;c.INVS=[];c.BILLS=[];}};
+ return {c,state,storage,durable,server,calls,nodes,shared:{storage,durable,server,calls},switchIdentity(){c.S.user={id:'fictional-B',n:'Fictional B',email:'b@example.invalid',role:'employee'};c.FINANCE_DRAFT_IDENTITY_EPOCH++;c.INVS=[];c.BILLS=[];}};
 }
 (async()=>{
  for(const [caller,type,total] of [['issueInv','invoice',1],['issueBatch','invoice',1],['submitBill','bill',1]]){
@@ -70,6 +70,15 @@ function fixture(shared={}){
   check(caller+': page refresh recovers persisted key/files without another upload',refreshed.server.size===1&&refreshed.calls.length===3&&refreshed.state.uploads===0&&!refreshed.c.loadIncomeSubmissionPending(type));
   check(caller+': restored unchanged original form clears after confirmed recovery',caller==='issueInv'?refreshed.nodes['inv-buyer'].value==='':caller==='issueBatch'?!refreshed.c.S.bRows[0].buyer:!refreshed.c.BILL_ROWS[0].payer);
   const afterRecoverCalls=refreshed.calls.length;await refreshed.c[caller]();check(caller+': next Send without new data does not recreate the old transaction',refreshed.calls.length===afterRecoverCalls);
+  f=fixture();if(caller==='issueBatch')f.c.S.bRows.push({...f.c.S.bRows[0],buyer:'Second buyer'});f.state.lost=2;await f.c[caller]();const marker=f.c.incomeSubmissionRecoveryMarker(type);
+  check(caller+': durable closed-tab marker contains only exact operation and item keys',!!marker&&marker.itemKeys.length===expected&&!JSON.stringify(marker).includes('Fictional buyer')&&!JSON.stringify(marker).includes('Fictional payer')&&!JSON.stringify(marker).includes('fictional/'));
+  const closed=fixture({...f.shared,storage:new Map()});closed.state.sourceRead=false;await closed.c[caller]();
+  check(caller+': closed tab without a confirmed source read blocks a new submission',closed.calls.length===2&&closed.server.size===1&&!!closed.c.incomeSubmissionRecoveryMarker(type)&&closed.state.uploads===0&&closed.state.alerts.some(text=>text.includes('請勿重送')));
+  closed.state.sourceRead=true;await closed.c[caller]();
+  check(caller+': closed tab confirms original authorized rows without replay or duplicate',closed.calls.length===2&&closed.server.size===1&&(type==='bill'?closed.c.BILLS:closed.c.INVS).length===expected&&!closed.c.incomeSubmissionRecoveryMarker(type)&&closed.state.uploads===0);
+  check(caller+': closed-tab source read scopes original tenant, environment, operation, and actor',closed.state.readbackFilters.some(filters=>filters.tenant_id==='fictional-tenant'&&filters.data_environment==='test'&&filters.submission_idempotency_key===marker.operationKey&&filters.submission_actor_finance_user_id==='fictional-A'));
+  f=fixture();f.state.lost=2;await f.c[caller]();f.switchIdentity();
+  check(caller+': original marker is invisible to a different signed-in account',f.c.incomeSubmissionRecoveryMarker(type)===null);
   for(const stage of ['directory','route','preflight',...(type==='invoice'?['upload']:[]),'rpc']){
    f=fixture();f.state.hooks[stage]=async()=>f.switchIdentity();const staleOutcome=await f.c[caller]();
    check(caller+': '+stage+' stale caller returns false to suppress success feedback',staleOutcome===false);
@@ -84,6 +93,8 @@ function fixture(shared={}){
  f=fixture();f.state.hooks.rpc=async()=>{f.c.CURRENT_PERMISSION_SNAPSHOT={restricted:true};};await f.c.issueInv();check('Permission change during submission prevents old result UI',f.c.INVS.length===0&&f.state.notifications===0);
  f=fixture();f.state.hooks.rpc=async()=>{f.nodes['inv-buyer'].value='New draft while sending';};await f.c.issueInv();check('Changed form during initial acknowledged submission is preserved',f.nodes['inv-buyer'].value==='New draft while sending'&&f.c.INVS.length===1);
  f=fixture();f.state.storageOk=false;await f.c.issueInv();check('Storage failure blocks dispatch and permits cleanup of uncommitted attachment',f.calls.length===0&&f.server.size===0&&f.state.cleanup===1);
+ f=fixture();f.state.durableOk=false;await f.c.issueInv();check('Unavailable persistent receipt blocks formal dispatch before any RPC',f.calls.length===0&&f.server.size===0&&f.state.cleanup===1);
+ f=fixture();f.durable.set(f.c.incomeSubmissionRecoveryMarkerKey('invoice'),'{broken');await assert.rejects(()=>f.c.issueInv(),/前次送件識別碼/);check('Corrupt closed-tab marker fails closed before any new RPC',f.calls.length===0&&f.server.size===0);
  f=fixture();f.storage.set(f.c.incomeSubmissionStorageKey('invoice'),'{broken');await assert.rejects(()=>f.c.issueInv(),/原送單記錄/);check('Corrupt recovery record fails closed, unlocks button and dispatches nothing',f.calls.length===0&&Object.keys(f.c.POSTING_IN_FLIGHT).length===0);
  f=fixture();f.state.deny=true;await f.c.issueInv();check('First definitive rejection clears pending and cleans only unclaimed upload',f.calls.length===1&&f.server.size===0&&!f.c.loadIncomeSubmissionPending('invoice')&&f.state.cleanup===1);
  f.state.deny=false;await f.c.issueInv();check('Correction after definitive rejection is a new valid operation',f.server.size===1&&f.calls[0].p_idempotency_key!==f.calls[1].p_idempotency_key);

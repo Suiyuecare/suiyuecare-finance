@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { createStartupBundle } = require('./finance_startup_bundle');
+const { createStartupBundle, createAppBundle } = require('./finance_startup_bundle');
 const {
   applyBuildEnvironment,
   resolveBuildConfig
@@ -49,9 +49,11 @@ const assetVersion = versionedAssets
 html = html.replace(/__FINANCE_ASSET_VERSION__/g, assetVersion);
 html = applyBuildEnvironment(html, buildConfig);
 const startupBundle = createStartupBundle(html, root);
-html = startupBundle.html;
+const appBundle = createAppBundle(startupBundle.html);
+html = appBundle.html;
 fs.writeFileSync(path.join(out, startupBundle.file), startupBundle.code);
 fs.writeFileSync(path.join(out, startupBundle.sdk.file), startupBundle.sdk.code);
+fs.writeFileSync(path.join(out, appBundle.file), appBundle.code);
 fs.writeFileSync(path.join(out, 'index.html'), html);
 
 let externalHtml = fs.readFileSync(path.join(root, 'external-remuneration.html'), 'utf8');

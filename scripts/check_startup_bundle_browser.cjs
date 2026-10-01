@@ -13,18 +13,28 @@ const out = path.resolve(process.env.FINANCE_STARTUP_EVIDENCE_DIR || '/tmp/finan
 const measure = process.argv.includes('--measure');
 fs.mkdirSync(out, { recursive: true });
 let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-assert(html.includes('var FINANCE_BUILD_TARGET="local";'), 'Browser fixture requires an offline local build');
 assert.match(html, /assets\/finance-startup-[a-f0-9]{16}\.js/);
 assert(html.includes('<script src="' + sdk.file + '"></script>'));
 assert(html.includes('<link rel="preload" as="script" href="' + sdk.file + '">'));
 assert(!html.includes(SDK.url), 'Built startup must not depend on external Supabase SDK transport');
-html = html.replace('bootAuthGate();\n\n})();', 'window.__startupQA={run:function(code){return eval(code)}};\nbootAuthGate();\n\n})();');
+const appTags = [...html.matchAll(/<script src="(assets\/finance-app-[a-f0-9]{16}\.js)"><\/script>/g)];
+assert.equal(appTags.length, 1, 'Built HTML must load one content-addressed app');
+const appFile = appTags[0][1];
+const appSource = fs.readFileSync(path.join(root, appFile), 'utf8');
+assert(appSource.includes('var FINANCE_BUILD_TARGET="local";'), 'Browser fixture requires an offline local build');
+assert.equal(crypto.createHash('sha256').update(appSource).digest('hex').slice(0, 16), appFile.match(/finance-app-([a-f0-9]{16})\.js/)[1]);
+assert(!html.includes("<script>\n(function(){\n'use strict';"), 'Built HTML must not inline the main application');
+assert(Buffer.byteLength(html) < (Buffer.byteLength(html) + Buffer.byteLength(appSource)) / 4, 'HTML must be a small fraction of the original payload');
+assert(html.includes('<link rel="preload" as="script" href="' + appFile + '">'));
+const appQaAnchor = 'bootAuthGate();\n\n})();';
+assert(appSource.includes(appQaAnchor));
+const appFixture = appSource.replace(appQaAnchor, 'window.__startupQA={run:function(code){return eval(code)}};\n' + appQaAnchor);
 const server = http.createServer((req, res) => {
   const file = path.resolve(root, '.' + new URL(req.url, 'http://local').pathname);
   if (file !== root && !file.startsWith(root + path.sep)) { res.writeHead(403); return res.end(); }
   try {
     const isHtml = file === root || file === path.join(root, 'index.html');
-    const bytes = isHtml ? Buffer.from(html) : fs.readFileSync(file);
+    const bytes = isHtml ? Buffer.from(html) : file === path.join(root, appFile) ? Buffer.from(appFixture) : fs.readFileSync(file);
     res.writeHead(200, { 'content-type': isHtml ? 'text/html' : file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'image/png', 'content-encoding': 'gzip', 'cache-control': 'no-store' });
     res.end(zlib.gzipSync(bytes));
   } catch (_) { res.writeHead(404); res.end(); }
@@ -60,6 +70,7 @@ const server = http.createServer((req, res) => {
       assert.equal(crypto.createHash('sha256').update(await (await sdkResponse).body()).digest('hex'), SDK.sha256, 'Actual browser SDK response is the official pinned UMD');
       assert.equal(timing.blockingHeadScripts, 1);
       assert.equal(requested.filter(p => /finance-startup-[a-f0-9]+\.js/.test(p)).length, 1);
+      assert.equal(requested.filter(p => p === '/' + appFile).length, 1, 'Preloaded app is fetched once');
       assert(!requested.some(p => /\/engines\/(reporting-workspace|approval-engine|permission-engine)\.js/.test(p)), 'Engines must not be fetched twice');
       assert.equal(requested.filter(p => p === '/' + sdk.file).length, 1, 'Preload and script consume exactly one SDK response');
       const sdkAuth = await page.evaluate(async () => {

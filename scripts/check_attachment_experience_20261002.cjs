@@ -48,30 +48,44 @@ function draftFixture(){
 }
 function viewerFixture(){
   const files=[{n:'first.png',path:'private/first.png',url:'https://old.invalid/first.png'},{n:'second.png',path:'private/second.png'}];
+  const timers=new Map(),probes=[];
+  let nextTimer=0,probeCancels=0,downloading=0;
   const nodes={
     'm-receipt-viewer':{style:{display:'none'}},
     'receipt-viewer-title':{textContent:''},
     'receipt-viewer-toolbar':{innerHTML:''},
     'receipt-viewer-body':{innerHTML:'',querySelector(selector){
+      if(selector==='[data-receipt-viewer-loading]'){
+        if(!this.innerHTML.includes('data-receipt-viewer-loading'))return null;
+        return{set textContent(value){nodes['receipt-viewer-body'].innerHTML=nodes['receipt-viewer-body'].innerHTML.replace(/正在載入[^<]*/,value);},remove(){nodes['receipt-viewer-body'].innerHTML=nodes['receipt-viewer-body'].innerHTML.replace(/<div class="receipt-viewer-empty" role="status" data-receipt-viewer-loading[^>]*>[^<]*<\/div>/,'');}};
+      }
       if(!/<(?:img|iframe)\b/.test(this.innerHTML))return null;
       if(selector.indexOf('receipt-viewer-img')<0)return null;
       return this.media||(this.media={style:{}});
     }}
   };
   let identity='auth-a',allowed=true,signer=async file=>'https://signed.invalid/'+file.n;
+  let fetcher=async()=>({ok:true,status:206,body:{cancel(){probeCancels++;}}});
   const signed=[];
-  const c={console:{warn(){}},REQS:[{id:'REQ-1',no:'REQ-1',files}],S:{},
+  const c={console:{warn(){}},REQS:[{id:'REQ-1',no:'REQ-1',files}],S:{},Date,Promise,Math,AbortController,
+    setTimeout(fn,ms){const id=++nextTimer;timers.set(id,{fn,ms});return id;},clearTimeout(id){timers.delete(id);},
+    fetch(url,options){probes.push({url,options});return fetcher(url,options);},
     normalizeFiles:list=>list||[],attachmentStoragePath:file=>file.path||'',isReceiptBundleAttachment:()=>false,
     attachmentLooksImage:file=>/\.png$/.test(file.n),attachmentLooksPdf:file=>/\.pdf$/.test(file.n),fileIdentity:file=>file.path,
     attachmentDownloadIdentity:()=>identity,canDownloadAttachment:()=>allowed,
     signAttachmentUrl:file=>{signed.push(file.n);return signer(file);},
-    attachmentDownloadFailureKind:()=> 'permission',attachmentDownloadFailureMessage:()=> '附件權限不足',
+    attachmentDownloadFailureKind:error=>error.status===404?'missing':error.status===403?'permission':'transient',
+    attachmentDownloadFailureMessage:kind=>({permission:'附件權限不足',missing:'附件缺失',transient:'附件讀取逾時'})[kind]||'附件載入失敗',
     escAttr:value=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),
-    downloadFileMeta(){},alert(){},el:id=>nodes[id]||null};
+    downloadFileMeta(){downloading++;},alert(){},el:id=>nodes[id]||null};
   c.window=c;
   vm.createContext(c);
+  vm.runInContext(between('function withOperationTimeout(','async function withAbortableOperationTimeout('),c);
   vm.runInContext(between('var RECEIPT_VIEWER_STATE=','function lazyExcelAttachment('),c);
-  return{c,nodes,files,signed,setSigner:next=>signer=next,setIdentity:next=>identity=next,setAllowed:next=>allowed=next};
+  return{c,nodes,files,signed,probes,get probeCancels(){return probeCancels;},get downloading(){return downloading;},
+    setSigner:next=>signer=next,setFetch:next=>fetcher=next,setIdentity:next=>identity=next,setAllowed:next=>allowed=next,
+    fireTimers(maxMs){for(const [id,timer] of [...timers])if(timer.ms<=maxMs){timers.delete(id);timer.fn();}},
+    get timers(){return [...timers.values()].map(timer=>timer.ms);}};
 }
 async function main(){
   {
@@ -170,6 +184,7 @@ async function main(){
   {
     const x=viewerFixture(),late=deferred();x.setSigner(()=>late.promise);
     x.c.openReceiptViewerForRequest('REQ-1');x.c.closeReceiptViewer();
+    assert.equal(x.timers.length,0,'closing the viewer cancels its pending signed-link deadline');
     late.resolve('https://signed.invalid/first.png');await tick();
     assert.equal(x.nodes['receipt-viewer-body'].innerHTML,'','closed viewer cannot be repainted by a late result');
     console.log('PASS closed viewer ignores late signatures');
@@ -197,6 +212,108 @@ async function main(){
     x.c.receiptViewerMediaFailed(x.c.RECEIPT_VIEWER_RENDER_GENERATION);
     assert.match(x.nodes['receipt-viewer-body'].innerHTML,/重新載入附件/);
     console.log('PASS denied, failed and media-error previews give safe retry states');
+  }
+  {
+    const x=viewerFixture();
+    x.files.push({n:'proof.pdf',path:'private/proof.pdf'});
+    x.c.openReceiptViewerForRequest('REQ-1');x.c.RECEIPT_VIEWER_STATE.index=2;
+    await x.c.renderReceiptViewer();
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/<iframe\b/);
+    assert.equal(x.probes.length,1,'private PDF alone receives the status probe');
+    assert.equal(x.probes[0].options.headers.Range,'bytes=0-0','probe asks for one byte rather than another full PDF');
+    assert.equal(x.probeCancels,1,'probe cancels even when the storage server ignores Range');
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/正在載入 PDF/);
+    x.fireTimers(15000);
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/預覽仍在載入/,'slow PDF offers a download while keeping the preview alive');
+    x.c.receiptViewerMediaLoaded(x.c.RECEIPT_VIEWER_RENDER_GENERATION);
+    assert.doesNotMatch(x.nodes['receipt-viewer-body'].innerHTML,/data-receipt-viewer-loading/);
+    assert.equal(x.timers.length,0);
+    x.c.receiptViewerDownload();assert.equal(x.downloading,1);
+    console.log('PASS private PDF status probe reads only a bounded range and slow media keeps a download fallback');
+  }
+  {
+    const x=viewerFixture(),pendingProbe=deferred();x.files.push({n:'proof.pdf',path:'private/proof.pdf'});
+    x.setFetch(()=>pendingProbe.promise);
+    x.c.openReceiptViewerForRequest('REQ-1');x.c.RECEIPT_VIEWER_STATE.index=2;
+    const pending=x.c.renderReceiptViewer();await tick();
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/<iframe\b/,'PDF preview starts before the status probe finishes');
+    x.c.receiptViewerMediaLoaded(x.c.RECEIPT_VIEWER_RENDER_GENERATION);
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/正在確認原檔狀態/,'iframe load alone does not prove the PDF response was healthy');
+    pendingProbe.resolve({ok:true,status:206,body:{cancel(){}}});await pending;
+    assert.doesNotMatch(x.nodes['receipt-viewer-body'].innerHTML,/data-receipt-viewer-loading/,'verified probe clears the status after media load');
+    console.log('PASS private PDF opens immediately while its bounded status probe runs concurrently');
+  }
+  for(const [status,label] of [[403,'附件權限不足'],[404,'附件缺失']]){
+    const x=viewerFixture();x.files.push({n:'proof.pdf',path:'private/proof.pdf'});
+    x.setFetch(async()=>({ok:false,status,body:{cancel(){}}}));
+    x.c.openReceiptViewerForRequest('REQ-1');x.c.RECEIPT_VIEWER_STATE.index=2;
+    await x.c.renderReceiptViewer();
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,new RegExp(label));
+    assert.doesNotMatch(x.nodes['receipt-viewer-body'].innerHTML,/<iframe\b/,'HTTP error never becomes a blank PDF iframe');
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/重新載入附件/);
+    console.log('PASS private PDF HTTP '+status+' produces a readable retry state');
+  }
+  {
+    const x=viewerFixture();x.files.push({n:'proof.pdf',path:'private/proof.pdf'});
+    x.setFetch(async()=>{throw TypeError('CORS is unavailable');});
+    x.c.openReceiptViewerForRequest('REQ-1');x.c.RECEIPT_VIEWER_STATE.index=2;
+    await x.c.renderReceiptViewer();
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/<iframe\b/,'a CORS-only probe failure does not hide a usable PDF');
+    x.c.receiptViewerMediaLoaded(x.c.RECEIPT_VIEWER_RENDER_GENERATION);
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/無法確認原檔狀態/,'a cross-origin iframe load does not falsely prove file health');
+    console.log('PASS CORS probe uncertainty keeps the PDF attempt and a visible download fallback');
+  }
+  {
+    const x=viewerFixture(),late=deferred();x.setSigner(()=>late.promise);
+    x.c.openReceiptViewerForRequest('REQ-1');
+    x.fireTimers(12000);await tick();
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/附件讀取逾時/);
+    assert.doesNotMatch(x.nodes['receipt-viewer-body'].innerHTML,/<img\b/);
+    late.resolve('https://signed.invalid/late.png');await tick();
+    assert.doesNotMatch(x.nodes['receipt-viewer-body'].innerHTML,/<img\b/,'late signature cannot repaint a timed-out preview');
+    console.log('PASS private preview signing timeout stays recoverable and ignores a late URL');
+  }
+  {
+    const x=viewerFixture();x.files.push({n:'proof.pdf',path:'private/proof.pdf'});
+    x.setFetch((url,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(Error('aborted')))));
+    x.c.openReceiptViewerForRequest('REQ-1');x.c.RECEIPT_VIEWER_STATE.index=2;
+    const pending=x.c.renderReceiptViewer();await tick();
+    x.fireTimers(10000);await pending;
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/無法確認原檔狀態/);
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/<iframe\b/,'probe timeout must not discard a PDF the browser may still load');
+    x.c.receiptViewerMediaLoaded(x.c.RECEIPT_VIEWER_RENDER_GENERATION);
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/無法確認原檔狀態/,'iframe load remains unverified after probe timeout');
+    console.log('PASS private PDF probe timeout aborts while retaining preview and download fallback');
+  }
+  {
+    const x=viewerFixture();x.files.push({n:'proof.pdf',path:'private/proof.pdf'});
+    x.setFetch(()=>new Promise(()=>{}));
+    x.c.openReceiptViewerForRequest('REQ-1');x.c.RECEIPT_VIEWER_STATE.index=2;
+    const pending=x.c.renderReceiptViewer();await tick();
+    x.fireTimers(10000);await pending;
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/無法確認原檔狀態/,'a transport ignoring AbortSignal cannot stall the viewer forever');
+    console.log('PASS PDF probe has a hard deadline even if fetch ignores abort');
+  }
+  {
+    const x=viewerFixture(),late=deferred();x.files.push({n:'proof.pdf',path:'private/proof.pdf'});
+    x.setFetch(()=>late.promise);
+    x.c.openReceiptViewerForRequest('REQ-1');x.c.RECEIPT_VIEWER_STATE.index=2;
+    const pending=x.c.renderReceiptViewer();await tick();
+    assert.equal(x.timers.includes(10000),true,'PDF status probe has a bounded deadline');
+    x.c.receiptViewerMove(-1);late.resolve({ok:true,status:206,body:{cancel(){}}});await pending;
+    assert.doesNotMatch(x.nodes['receipt-viewer-body'].innerHTML,/<iframe\b/,'old PDF probe cannot replace selected image');
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/second\.png/);
+    console.log('PASS file switch aborts the old private PDF probe without painting a stale iframe');
+  }
+  {
+    const x=viewerFixture(),late=deferred();x.files.push({n:'proof.pdf',path:'private/proof.pdf'});
+    x.setFetch(()=>late.promise);
+    x.c.openReceiptViewerForRequest('REQ-1');x.c.RECEIPT_VIEWER_STATE.index=2;
+    const pending=x.c.renderReceiptViewer();await tick();
+    x.setIdentity('auth-b');late.resolve({ok:true,status:206,body:{cancel(){}}});await pending;
+    assert.doesNotMatch(x.nodes['receipt-viewer-body'].innerHTML,/<iframe\b/);
+    assert.match(x.nodes['receipt-viewer-body'].innerHTML,/登入身分/);
+    console.log('PASS account switch during PDF status probe blocks stale private media');
   }
   {
     const nodes={'batch-pw':{style:{}},'batch-prog':{style:{}},'batch-pl':{textContent:''},'batch-fn':{textContent:''},'batch-dz':{classList:{add(){}}}};

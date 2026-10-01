@@ -1944,6 +1944,17 @@ function htmlAttribute(tag, name) {
   const match = String(tag).match(new RegExp(`\\b${name}\\s*=\\s*(["'])((?:(?!\\1).)*)\\1`, 'i'));
   return match ? match[2] : null;
 }
+function frontendAppAssetPath(indexSource) {
+  const source = String(indexSource);
+  const scripts = (source.match(/<script\b[^>]*><\/script>/gi) || [])
+    .map((tag) => htmlAttribute(tag, 'src'))
+    .filter(Boolean);
+  const appScripts = scripts.filter((src) => src.includes('finance-app-'));
+  if (appScripts.length !== 1 || !/^assets\/finance-app-[a-f0-9]{16}\.js$/.test(appScripts[0])) {
+    fail('frontend must load exactly one same-origin content-addressed Finance app script');
+  }
+  return appScripts[0];
+}
 function verifyFrontendContract(indexPath, manifestPath, candidate) {
   candidate = canonicalSha(candidate);
   const manifest = readJson(manifestPath);
@@ -1961,7 +1972,9 @@ function verifyFrontendContract(indexPath, manifestPath, candidate) {
   if (values.length !== 1 || values[0] !== FRONTEND_RELEASE_CONTRACT) {
     fail(`frontend must contain exactly one finance-release-contract=${FRONTEND_RELEASE_CONTRACT} meta`);
   }
-  if (!/\bsubmissionAttemptId\b/.test(source)) {
+  if (source.includes('finance-app-')) {
+    frontendAppAssetPath(source);
+  } else if (!/\bsubmissionAttemptId\b/.test(source)) {
     fail('frontend does not contain the required submissionAttemptId contract');
   }
   return true;
@@ -2120,7 +2133,7 @@ const api = {
   ledgerSha256, readLedgerVersions, assertProductionLedgerBaseline, assertReviewedAdoptedMigrations, assertCliAtomicMigration,
   prepareRehearsal, prepareGateQuery, preparePhaseQuery, prepareReadOnlyQuery, prepareApply, normalizeQueryRows,
   verifyAuthenticatedCanary,
-  verifyCandidate, verifyFrontendContract, verifyVercelTarget, verifyProductionBaseline, verifyPromotion,
+  verifyCandidate, verifyFrontendContract, frontendAppAssetPath, verifyVercelTarget, verifyProductionBaseline, verifyPromotion,
   createReceipt, verifyReceipt, manifestSha
 };
 module.exports = api;
@@ -2203,6 +2216,7 @@ if (require.main === module) {
     else if (command === 'verify-supabase-public-key') verifySupabasePublicKey(arg('api-keys-json'), process.env.FINANCE_SUPABASE_ANON_KEY);
     else if (command === 'verify-candidate') verifyCandidate(arg('local-manifest'), arg('remote-manifest'), arg('candidate-sha'), arg('deployment-url'));
     else if (command === 'verify-frontend-contract') verifyFrontendContract(arg('index'), arg('manifest'), arg('candidate-sha'));
+    else if (command === 'frontend-app-path') process.stdout.write(`${frontendAppAssetPath(fs.readFileSync(arg('index'), 'utf8'))}\n`);
     else if (command === 'verify-vercel-target') verifyVercelTarget(arg('deployment-json'), arg('project-json'), arg('domains-json'), arg('candidate-sha'), arg('deployment-url'), optionalBooleanArg('allow-production-alias'));
     else if (command === 'verify-production-baseline') verifyProductionBaseline(arg('production-manifest'), arg('candidate-manifest'), arg('production-index'), arg('candidate-index'), arg('candidate-sha'), arg('release-phase'), arg('migration-versions'));
     else if (command === 'verify-promotion') verifyPromotion(arg('candidate-deployment-json'), arg('promoted-deployment-json'), arg('production-alias-json'), arg('production-manifest'), arg('candidate-manifest'));
@@ -2210,6 +2224,6 @@ if (require.main === module) {
     else if (command === 'verify-receipt') verifyReceipt(arg('receipt'), arg('deployment-json'), arg('manifest'), arg('index'), arg('candidate-sha'), arg('release-phase'), arg('migration-versions'), arg('deployment-url'), arg('repository'), arg('run-id'));
     else if (command === 'manifest-sha') process.stdout.write(`${manifestSha(arg('manifest'))}\n`);
     else fail('unknown command');
-    if (!['manifest-sha','classify-ledger'].includes(command)) process.stdout.write(`PASS finance production release guard: ${command}\n`);
+    if (!['manifest-sha','classify-ledger','frontend-app-path'].includes(command)) process.stdout.write(`PASS finance production release guard: ${command}\n`);
   } catch (error) { process.stderr.write(`FAIL ${error.message}\n`); process.exit(1); }
 }

@@ -50,18 +50,19 @@ REQS=[];INVS=[];BILLS=[];NOTIFS=[];VOUCHERS=[];LEDGER=[];DRAFTS=[];ORG_CHART=[];
 quickLogin('employee');S.user.authUserId=USERS[0].authUserId;S.demoLogin=false;FINANCE_BUILD_TARGET='production';S.aT='drafts';
 window.__mode=mode;window.__reads=[];window.__writes=[];window.__blockedDiagnostics=[];window.__late=[];window.__aborts=[];window.__alerts=[];window.__broadDone=false;window.__started=performance.now();
 // Keep real source-page and applicant-fallback deadline paths; accelerate only the offline clock.
-var nativeTimer=window.setTimeout;window.setTimeout=function(fn,ms){return nativeTimer(fn,ms===8000?200:ms===12000?500:ms===15000?700:ms===20000?1000:ms===120000?1600:ms)};
+var nativeTimer=window.setTimeout;window.setTimeout=function(fn,ms){return nativeTimer(fn,ms===8000?200:ms===12000?(mode==='draft-tail-hang'?5000:500):ms===15000?700:ms===20000?1000:ms===120000?1600:ms)};
 window.fetch=function(){throw Error('External network is disabled in this offline fixture')};window.alert=function(message){window.__alerts.push(String(message))};
 var tenant=currentTenantId(),environment=activeDataEnvironment();
 function row(id,title){return{id:id,owner_id:'qa-employee',owner_email:'employee@example.invalid',owner_name:'許晴川',tenant_id:tenant,data_environment:environment,application_type:'expense_reimbursement',title:title,amount:1050,applicant:'許晴川',updated_at:'2026-09-13T02:00:00Z',files:[{name:'虛構發票.pdf',type:'application/pdf',size:320,path:'fixture-private/draft/'+id+'/receipt.pdf',storagePath:'fixture-private/draft/'+id+'/receipt.pdf',bucket:'finance-attachments',kind:'draft_file'}],payload:{type:'expense_reimbursement',rec:'invoice',pay:'bank',step:3,lazyMode:true,state:{fields:{'nr-app':'許晴川','nr-app-id':'qa-employee','nr-dept':'D1','nr-ent':'F1','nr-date':'2026-09-13','nr-amt':'1050','nr-desc-purpose':'虛構文具採購','nr-desc':'這是離線測試草稿'},lazyRows:[{item:'文具用品',desc:'虛構文具',qty:1,unitPrice:1050,amount:1050,tax:50,receiptType:'invoice',receiptNo:'AA00000001'}]}}};}
 window.__draftRows=[row('fixture-draft-one','虛構文具採購草稿'),row('fixture-draft-two','虛構第二份草稿')];
+if(mode==='draft-tail-hang')window.__draftRows=Array.from({length:101},function(_,i){return row('fixture-page-'+i,'虛構草稿 '+i)});
 var data={finance_users:[{id:'qa-employee',name:'許晴川',email:'employee@example.invalid',auth_user_id:S.user.authUserId,tenant_id:tenant,role:'employee',department_code:'D1',entity_id:'F1',active:true}],system_settings:[],expense_requests:[],invoices:[],bills:[],notifications:[],vouchers:[]};
 function transport(name,args,payload){
  var entry={name:name,args:args,started:performance.now()-window.__started};window.__reads.push(entry);
  var requestedMode=window.__mode;
  return{abortSignal:function(signal){signal.addEventListener('abort',function(){window.__aborts.push(name)});return this;},then:function(resolve,reject){
    var promise;
-   if(name==='draft_requests'&&(requestedMode==='draft-hang'||requestedMode==='late'))promise=new Promise(function(r){window.__late.push({resolve:r,payload:payload,name:name})});
+   if(name==='draft_requests'&&(requestedMode==='draft-hang'||requestedMode==='late'||requestedMode==='draft-tail-hang'&&args.range[0]>=100))promise=new Promise(function(r){window.__late.push({resolve:r,payload:payload,name:name})});
    else if(requestedMode==='source-hang'&&['expense_requests','bills','invoices'].indexOf(name==='finance_statement_source_page_v1'?args.p_source:name)>-1)promise=new Promise(function(){});
    else promise=new Promise(function(r){nativeTimer(function(){r(name==='draft_requests'&&requestedMode==='error'?{error:{code:'57014',message:'虛構測試：草稿同步逾時'}}:payload)},15)});
    return promise.then(function(value){entry.ended=performance.now()-window.__started;return value}).then(resolve,reject);
@@ -137,6 +138,16 @@ check('broad repaint preserves the ready draft count',await scope('el("draft-app
 evidence.blockedDiagnostics=await scope('window.__blockedDiagnostics');
 check('operational diagnostic attempts remain explicitly blocked',evidence.blockedDiagnostics.every(x=>x.table==='compliance_audit_logs'&&x.method==='insert'&&x.blocked===true));
 await noErrors('cold draft readiness');
+await open('draft-tail-hang');
+check('101-draft first page appears while the second page is still pending',await until('window.__late.length===1&&DRAFTS.length===100&&draftReadinessForCurrentUser().status==="loading"'));
+check('partial draft UI keeps the tab count unknown and labels the visible rows as incomplete',await scope('el("draft-appr-cnt").textContent==="—"&&el("appr-list").querySelectorAll("tbody tr").length===50&&el("appr-list").innerText.includes("虛構草稿 0")&&el("appr-list").innerText.includes("草稿仍在讀取")&&document.querySelector("[data-draft-state=loading]")!==null'));
+check('second-page timeout retains the visible first page without certifying the total',await until('draftReadinessForCurrentUser().status==="error"&&DRAFTS.length===100&&draftReadinessForCurrentUser().total===null&&el("draft-appr-cnt").textContent==="—"',400));
+await noErrors('progressive draft first page and timeout');
+await open('draft-tail-hang');
+check('a second 101-draft read reaches the provisional first page',await until('window.__late.length===1&&DRAFTS.length===100&&draftReadinessForCurrentUser().status==="loading"'));
+await scope('(async function(){window.__oldDraftPromise=draftReadinessForCurrentUser().promise;S.user=Object.assign({},S.user,{id:"qa-other",authUserId:"10000000-0000-0000-0000-000000000009",email:"other@example.invalid",n:"第二位虛構員工"});draftReadinessForCurrentUser();window.__late.splice(0).forEach(x=>x.resolve(x.payload));await window.__oldDraftPromise;return true})()');
+check('account switch clears a provisional first page and rejects its late second page',await scope('DRAFTS.length===0&&draftReadinessForCurrentUser().total===null&&draftReadinessForCurrentUser().rows.length===0'));
+await noErrors('provisional draft identity switch');
 await open('draft-hang');
 check('initial draft load is unknown and never a verified zero',await scope('draftReadinessForCurrentUser().total===null&&el("draft-appr-cnt").textContent==="—"&&!el("appr-list").innerText.includes("目前沒有暫存表單")'));
 check('hung draft read settles as an explicit error',await until('draftReadinessForCurrentUser().status==="error"'));

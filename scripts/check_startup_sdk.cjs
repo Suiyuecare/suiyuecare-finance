@@ -2,7 +2,7 @@
 // Real build transform and official UMD; all Auth targets are fictional and no
 // network request is allowed. Mutations apply only to a temporary source fixture.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
-const {createStartupBundle,pinnedSupabaseSdk,SDK}=require('./finance_startup_bundle');
+const {createStartupBundle,createAppBundle,pinnedSupabaseSdk,SDK}=require('./finance_startup_bundle');
 const {applyBuildEnvironment}=require('./finance_build_environment');
 const root=path.resolve(__dirname,'..'),html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 let count=0;function check(name,fn){fn();count++;console.log('PASS '+name);}
@@ -12,7 +12,7 @@ let count=0;function check(name,fn){fn();count++;console.log('PASS '+name);}
  check('official license and npm integrity proof are present',()=>{assert.match(sdk.license.toString(),/MIT License/);assert.equal(sdk.provenance.dist.integrity,'sha512-9q0\/AULthQnWeiDh1vGyjoJZbSY04bu6qHcWit70pqEYn5Kv/dkCPY62Ja1123jEnJbB9Vd2pjY7Kvk/lK3peA==');});
  check('only content-hash startup paths gain immutable caching',()=>{
   const headers=JSON.parse(fs.readFileSync(path.join(root,'vercel.json'),'utf8')).headers;
-  for(const source of ['/assets/finance-startup-:hash([a-f0-9]{16}).js','/assets/supabase-js-2.111.0-:hash([a-f0-9]{16}).js'])assert.equal(headers.find(h=>h.source===source).headers.find(h=>h.key==='Cache-Control').value,'public, max-age=31536000, immutable');
+  for(const source of ['/assets/finance-startup-:hash([a-f0-9]{16}).js','/assets/finance-app-:hash([a-f0-9]{16}).js','/assets/supabase-js-2.111.0-:hash([a-f0-9]{16}).js'])assert.equal(headers.find(h=>h.source===source).headers.find(h=>h.key==='Cache-Control').value,'public, max-age=31536000, immutable');
   for(const source of ['/','/:path*.html'])assert.equal(headers.find(h=>h.source===source).headers.find(h=>h.key==='Cache-Control').value,'no-store, max-age=0');
   assert(!headers.some(h=>h.source.includes('release-manifest')&&h.headers.some(v=>/immutable/.test(v.value))));
  });
@@ -25,7 +25,27 @@ let count=0;function check(name,fn){fn();count++;console.log('PASS '+name);}
    assert(first.html.indexOf('href="'+sdk.file+'"')<first.html.indexOf('</head>'));assert(first.html.includes('<script src="'+sdk.file+'"></script>\n<script>\n(function(){'));
    assert(first.html.indexOf('finance-v4-engine-registry.js')<0);assert.equal(first.sources[0],'assets/engines/finance-v4-engine-registry.js');
   });
+  const app=createAppBundle(first.html),again=createAppBundle(first.html);
+  check(target+' seals the exact main IIFE as one preloaded, hashed app asset',()=>{
+   assert.equal(app.html,again.html);assert.equal(app.file,again.file);assert.equal(app.code,again.code);
+   assert.match(app.file,/^assets\/finance-app-[a-f0-9]{16}\.js$/);
+   assert.equal(app.file.match(/finance-app-([a-f0-9]{16})\.js/)[1],crypto.createHash('sha256').update(app.code).digest('hex').slice(0,16));
+   assert(app.code.startsWith("\n(function(){\n'use strict';"));assert(app.code.endsWith('\n})();\n'));
+   assert(!app.html.includes("<script>\n(function(){\n'use strict';"));
+   assert.equal(app.html.split('<script src="'+app.file+'"></script>').length-1,1);
+   assert.equal(app.html.split('<link rel="preload" as="script" href="'+app.file+'">').length-1,1);
+   assert(app.html.indexOf('href="'+app.file+'"')<app.html.indexOf('src="'+first.file+'"'));
+   assert(app.html.indexOf('src="'+first.file+'"')<app.html.indexOf('src="'+sdk.file+'"'));
+   assert(app.html.indexOf('src="'+sdk.file+'"')<app.html.indexOf('src="'+app.file+'"'));
+   assert(Buffer.byteLength(app.html)<Buffer.byteLength(first.html)/4,'HTML must no longer carry the application payload');
+  });
  }
+ check('missing or duplicate main app IIFE refuses externalization',()=>{
+  const built=createStartupBundle(applyBuildEnvironment(html,{target:'local',supabaseUrl:'',supabaseAnonKey:''}),root).html;
+  const marker="<script>\n(function(){\n'use strict';";
+  assert.throws(()=>createAppBundle(built.replace(marker,'<script>\n(function(){\n"use strict";')),/exactly one/);
+  assert.throws(()=>createAppBundle(built+marker),/exactly one/);
+ });
  for(const changed of [html.replace(SDK.url,SDK.url.replace('2.111.0','2.112.0')),html.replace('<script src="'+SDK.url+'"></script>',''),html+'<script src="'+SDK.url+'"></script>'])check('missing/duplicate/upgraded CDN source refuses build',()=>assert.throws(()=>createStartupBundle(changed,root),/exactly one pinned/));
  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'finance-sdk-fixture-'));
  try{

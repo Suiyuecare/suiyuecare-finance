@@ -219,12 +219,14 @@ check(
 
 if (fs.existsSync(builtPath) && fs.existsSync(builtCssPath)) {
   const built = fs.readFileSync(builtPath, 'utf8');
+  const appPath = built.match(/<script src="(assets\/finance-app-[a-f0-9]{16}\.js)"><\/script>/)?.[1];
+  const builtRuntime = appPath ? fs.readFileSync(path.join(root, 'www', appPath), 'utf8') : built;
   const builtCss = fs.readFileSync(builtCssPath, 'utf8');
   check(
     'production artifact contains the same login safeguards',
     built.includes('id="login-account-guide"') &&
-      built.includes('window.switchFinanceGoogleAccount=async function()') &&
-      built.includes('queryParams.login_hint=expectedEmail') &&
+      builtRuntime.includes('window.switchFinanceGoogleAccount=async function()') &&
+      builtRuntime.includes('queryParams.login_hint=expectedEmail') &&
       builtCss.includes('.login-account-guide[data-state="mismatch"]')
   );
 } else {

@@ -42,5 +42,30 @@ let checks=0;async function check(name,fn){await fn();checks++;console.log('PASS
  await check('canonical PostgreSQL numeric strings retain exact AR totals',async()=>{const f=fixture(),p=payload();p.receivables.total='120.00';p.receivables.items[0].balance='120.00';p.previousReceivables.total='20.00';f.transport(()=>Promise.resolve({data:p}));await f.run('ensureRemoteDashboardAggregate(scope)');const b=f.run('dashboardBundleFromRemote(DASH_REMOTE_AGGREGATES[dashboardRemoteKey(scope)],scope,{officialSource:"local_bootstrap"})');assert.equal(b.receivables.total,120);assert.equal(b.previousReceivables.total,20);assert.equal(b.officialSource,'remote_full');});
  await check('client unavailable becomes explicit retryable failure, never silent idle',async()=>{const f=fixture();f.c.getSb=()=>null;await f.run('ensureRemoteDashboardAggregate(scope)');assert.match(Object.values(f.c.DASH_REMOTE_ERRORS)[0],/連線尚未就緒/);assert.equal(Object.keys(f.c.DASH_REMOTE_PENDING).length,0);});
  await check('render exception does not turn successful transport into false data error',async()=>{const f=fixture();f.c.buildDash=()=>{throw Error('paint failure');};assert.equal((await f.run('ensureRemoteDashboardAggregate(scope)')).receivables.total,120);assert.equal(Object.keys(f.c.DASH_REMOTE_ERRORS).length,0);assert.equal(Object.keys(f.c.DASH_REMOTE_PENDING).length,0);});
+ await check('online dashboard never scans provisional receivables during ledger paging',async()=>{
+  let scans=0,ready=false;
+  const c={
+   LEDGER:Array.from({length:5000},(_,i)=>({id:'ledger-'+i})),INVS:Array.from({length:2500},(_,i)=>({id:'invoice-'+i})),
+   DASH_REMOTE_AGGREGATES:{},DASH_FINANCIAL_CACHE:{key:'',value:null},S:{dashDataVersion:0,demoLogin:false},
+   window:{FinanceFinancialStatements:{normalizeRows:()=>[],cashFlow:()=>({net:0})}},
+   dashboardRemoteKey:()=> 'fixture-scope',dashboardFinancialReadState:()=>({ready,message:ready?'':'讀取中'}),
+   statementMappingsFor:()=>({}),statementDataIdentity:()=> 'fixture-identity',
+   dashLedgerRows:()=>[],statementScopedLedger:()=>[],statementCashFlowOverrides:()=>({}),
+   dashTotals:()=>({revenue:0,expense:0,net:0}),dashEntityMetrics:()=>[],dashDepartmentMetrics:()=>[],dashboardTrend:()=>[],
+   dashboardReceivablesAsOf:()=>{scans++;return{total:12,count:1};},hasSupabase:()=>true,
+   dashboardBundleFromRemote:(payload,requestScope,local)=>Object.assign({},local,{officialSource:'remote_full',receivables:{total:88,count:2},previousReceivables:{total:44}})
+  };
+  vm.createContext(c);vm.runInContext(extract('dashboardFinancialBundle'),c);
+  for(let i=0;i<30;i++){c.S.dashDataVersion++;const b=c.dashboardFinancialBundle(scope);assert.equal(b.receivables,null);}
+  assert.equal(scans,0,'loading 5,000 ledger rows must not repeatedly calculate hidden local AR');
+  ready=true;c.S.dashDataVersion++;assert.equal(c.dashboardFinancialBundle(scope).receivables,null);
+  assert.equal(scans,0,'completed online ledger still uses the authorized AR aggregate');
+  c.DASH_REMOTE_AGGREGATES['fixture-scope']={generatedAt:'2026-10-02T00:00:00Z'};
+  assert.equal(c.dashboardFinancialBundle(scope).receivables.total,88);
+  assert.equal(scans,0,'validated remote AR must not do redundant local invoice matching');
+  delete c.DASH_REMOTE_AGGREGATES['fixture-scope'];c.S.demoLogin=true;c.S.dashDataVersion++;
+  assert.equal(c.dashboardFinancialBundle(scope).receivables.total,12,'offline demo still computes local AR');
+  assert.equal(scans,2,'offline demo computes current and previous AR once each');
+ });
  console.log('PASS dashboard aggregate '+checks+' real handler, deadline, retry, scope and payload checks');
 })().catch(error=>{console.error(error);process.exitCode=1;});
