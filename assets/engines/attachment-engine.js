@@ -154,7 +154,7 @@
       };
     }
     var name = file.n || file.name || file.file_name || '附件';
-    return {
+    var normalized = {
       n: name,
       t: (file.t || file.type_ext || fileExtension(file.n || file.name || file.file_name || '') || 'file').toLowerCase(),
       mime: file.mime || file.file_type || file.type || '',
@@ -177,6 +177,10 @@
       pageCount: coerceMoney(file.pageCount || file.page_count),
       promotedFromPath: file.promotedFromPath || file.promoted_from_path || '',
     };
+    // A native File/Blob is kept only until Storage confirms the upload. It is
+    // never part of a persisted attachment row or an expense request payload.
+    if (typeof Blob !== 'undefined' && file.uploadBlob instanceof Blob) normalized.uploadBlob = file.uploadBlob;
+    return normalized;
   }
 
   function normalizeFiles(files, options) {

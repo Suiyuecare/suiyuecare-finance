@@ -26,11 +26,12 @@ let count=0;function check(name,fn){fn();count++;console.log('PASS '+name);}
    assert(first.html.indexOf('finance-v4-engine-registry.js')<0);assert.equal(first.sources[0],'assets/engines/finance-v4-engine-registry.js');
   });
   const app=createAppBundle(first.html),again=createAppBundle(first.html);
-  check(target+' seals the exact main IIFE as one preloaded, hashed app asset',()=>{
+  check(target+' seals one minified main IIFE as a preloaded, hashed app asset',()=>{
    assert.equal(app.html,again.html);assert.equal(app.file,again.file);assert.equal(app.code,again.code);
    assert.match(app.file,/^assets\/finance-app-[a-f0-9]{16}\.js$/);
    assert.equal(app.file.match(/finance-app-([a-f0-9]{16})\.js/)[1],crypto.createHash('sha256').update(app.code).digest('hex').slice(0,16));
-   assert(app.code.startsWith("\n(function(){\n'use strict';"));assert(app.code.endsWith('\n})();\n'));
+   assert(app.sourceCode.startsWith("\n(function(){\n'use strict';"));assert(app.sourceCode.endsWith('\n})();\n'));
+   assert(Buffer.byteLength(app.code)<Buffer.byteLength(app.sourceCode)*0.85,'built app must be materially smaller than its readable source');
    assert(!app.html.includes("<script>\n(function(){\n'use strict';"));
    assert.equal(app.html.split('<script src="'+app.file+'"></script>').length-1,1);
    assert.equal(app.html.split('<link rel="preload" as="script" href="'+app.file+'">').length-1,1);

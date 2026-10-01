@@ -178,6 +178,8 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/check_electronic_labor_ui_20260928.cjs',
   'scripts/check_external_labor_browser.cjs',
   'supabase/migrations/20261001030323_fix_attachment_claim_path_lookup.sql',
+  'supabase/migrations/20261001202434_finance_attachment_owner_staged_cleanup_select_v3.sql',
+  'scripts/finance_attachment_staged_cleanup_postflight.sql',
   'scripts/finance_attachment_claim_postflight.sql',
   'scripts/finance_attachment_claim_canary.sql',
   'scripts/finance_attachment_claim_fingerprint.sql',
@@ -241,6 +243,9 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/finance_ar_mapping_canary.sql',
   'scripts/finance_ar_mapping_postflight.sql',
   'assets/styles/approval-navigation.css',
+  'assets/vendor/tus-4.3.1.min.js',
+  'assets/vendor/tus-4.3.1-LICENSE',
+  'assets/vendor/tus-4.3.1.provenance.json',
   'docs/finance-invoice-table-layout.md',
   'docs/finance-approval-performance.md',
   'scripts/check_approval_navigation_browser.cjs',
@@ -274,6 +279,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/test_reports_release_batch.mjs',
   'scripts/check_bill_approval_attachment_flow.cjs',
   'scripts/check_attachment_experience_20261002.cjs',
+  'scripts/check_formal_resumable_upload.cjs',
   'scripts/check_bill_attachment_browser.cjs',
   'scripts/check_document_amount_search.cjs',
   'scripts/check_document_amount_search_browser.cjs',
@@ -366,6 +372,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'index.html',
   'package.json',
   'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
   'privacy.html',
   'scripts/build_www.js',
   'scripts/finance_build_environment.js',
@@ -469,6 +476,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'test:external-labor-browser': 'node scripts/check_electronic_labor_ui_20260928.cjs && node scripts/check_external_labor_browser.cjs',
   'test:submission-cashier-preflight': 'node scripts/check_submission_cashier_preflight.cjs',
   'test:attachment-claim-migration': 'node scripts/check_attachment_claim_migration_contract.js',
+  'test:formal-resumable-upload': 'node scripts/check_formal_resumable_upload.cjs',
   'test:hr-contractor-native': 'node scripts/test_hr_contractor_concurrency.mjs',
   'test:hr-contractor-browser': 'HR_BRIDGE_BROWSER=1 node scripts/test_hr_contractor_bridge.mjs',
   'test:audit-controls-native-concurrency': 'node scripts/test_finance_period_close_concurrency_20260927.mjs',
@@ -496,7 +504,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   "test:finance-ui-interactions": "node scripts/check_finance_ui_interaction_browser.cjs",
   'test:hr-bridge-release': 'node scripts/test_hr_bridge_release_batch.mjs',
   'test:hr-bridge-browser': 'HR_BRIDGE_BROWSER=1 node scripts/test_hr_private_bridge.mjs',
-  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor && pnpm test:submission-cashier-preflight && pnpm test:attachment-claim-migration",
+  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor && pnpm test:submission-cashier-preflight && pnpm test:attachment-claim-migration && pnpm test:formal-resumable-upload",
   'release:verify-artifact': 'node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js',
   'release:build': 'pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact'
 });
@@ -953,6 +961,8 @@ try {
 }
 if (pkg) {
   check('release runtime is pinned to Node 22', pkg.engines && pkg.engines.node === '>=22 <23');
+  check('app minifier is pinned to a locked build dependency', pkg.devDependencies && pkg.devDependencies.esbuild === '0.28.2');
+  check('only pinned app minifier may run an install script', fs.readFileSync(path.join(ROOT, 'pnpm-workspace.yaml'), 'utf8').trim() === 'allowBuilds:\n  esbuild: true');
   for (const [name, command] of Object.entries(EXPECTED_RELEASE_SCRIPTS)) {
     check(`package release script is exact: ${name}`, pkg.scripts && pkg.scripts[name] === command);
   }

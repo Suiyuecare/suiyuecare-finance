@@ -5,6 +5,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { transformSync } = require('esbuild');
 
 const SDK = Object.freeze({
   version: '2.111.0',
@@ -62,17 +63,26 @@ function createAppBundle(html) {
   const bodyStart = start + '<script>'.length;
   const end = html.indexOf('</script>', bodyStart);
   if (end < 0) throw new Error('Finance main app script is unterminated');
-  const code = html.slice(bodyStart, end);
-  if (!code.endsWith('\n})();\n') || !code.includes('bootAuthGate();')) {
+  const sourceCode = html.slice(bodyStart, end);
+  if (!sourceCode.endsWith('\n})();\n') || !sourceCode.includes('bootAuthGate();')) {
     throw new Error('Finance main app bootstrap order is invalid');
   }
+  // Keep index.html readable for audit and fixture hooks. Only the sealed
+  // build asset is minified; the content hash covers the actual browser bytes.
+  const code = transformSync(sourceCode, {
+    loader: 'js',
+    minify: true,
+    target: 'es2020',
+    charset: 'utf8',
+    legalComments: 'none'
+  }).code;
   const file = 'assets/finance-app-' + crypto.createHash('sha256').update(code).digest('hex').slice(0, 16) + '.js';
   const sdkPreload = '<link rel="preload" as="script" href="assets/supabase-js-' + SDK.version + '-' + SDK.sha256.slice(0, 16) + '.js">';
   if (html.split(sdkPreload).length !== 2) throw new Error('Expected exactly one pinned SDK preload before the app');
   const preload = '<link rel="preload" as="script" href="' + file + '">';
   const script = '<script src="' + file + '"></script>';
   const builtHtml = html.slice(0, start) + script + html.slice(end + '</script>'.length);
-  return { html: builtHtml.replace(sdkPreload, sdkPreload + '\n' + preload), file, code };
+  return { html: builtHtml.replace(sdkPreload, sdkPreload + '\n' + preload), file, code, sourceCode };
 }
 
 module.exports = { createStartupBundle, createAppBundle, pinnedSupabaseSdk, SDK };

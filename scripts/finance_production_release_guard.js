@@ -104,6 +104,9 @@ const RELEASE_PHASE_DATABASE_EXTERNAL_LABOR='database_external_labor_20260928';
 const ATTACHMENT_CLAIM_MIGRATIONS=Object.freeze(['20261001030323']);
 const ATTACHMENT_CLAIM_SOURCE_SHA256=Object.freeze({'20261001030323':'7d535b9cfc293a710baeaa2984bfe2761bc275b9027a91acdf6d80acb7b18052'});
 const RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM='database_attachment_claim_20261001';
+// Applied as a narrowly scoped, backward-compatible Supabase migration before
+// frontend promotion; its SELECT predicate mirrors the existing DELETE rule.
+const ATTACHMENT_STAGED_CLEANUP_MIGRATIONS=Object.freeze(['20261001202434']);
 const AR_READ_SCOPE_MIGRATIONS = Object.freeze(['20260922072737']);
 const RELEASE_PHASE_DATABASE_AR_READ_SCOPE = 'database_ar_read_scope_20260922';
 const AR_READ_SCOPE_POSTFLIGHT_FILES = Object.freeze(['finance_ar_verified_accounting_scope_postflight.sql']);
@@ -148,7 +151,8 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...HR_CONTRACTOR_MIGRATIONS,
   ...PORTAL_SESSION_MIGRATIONS,
   ...EXTERNAL_LABOR_MIGRATIONS,
-  ...ATTACHMENT_CLAIM_MIGRATIONS
+  ...ATTACHMENT_CLAIM_MIGRATIONS,
+  ...ATTACHMENT_STAGED_CLEANUP_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -614,6 +618,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(PORTAL_SESSION_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete portal session logout batch');
     if(EXTERNAL_LABOR_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete external labor batch');
     if(ATTACHMENT_CLAIM_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete attachment claim batch');
+    if(ATTACHMENT_STAGED_CLEANUP_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the verified owner staged-attachment cleanup policy');
     return 'compat';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
@@ -2104,6 +2109,7 @@ const api = {
   PORTAL_SESSION_MIGRATIONS, PORTAL_SESSION_SOURCE_SHA256, RELEASE_PHASE_DATABASE_PORTAL_SESSION, preparePortalSessionRehearsal,
   EXTERNAL_LABOR_MIGRATIONS, EXTERNAL_LABOR_SOURCE_SHA256, RELEASE_PHASE_DATABASE_EXTERNAL_LABOR, prepareExternalLaborRehearsal,
   ATTACHMENT_CLAIM_MIGRATIONS, ATTACHMENT_CLAIM_SOURCE_SHA256, RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM, prepareAttachmentClaimRehearsal,
+  ATTACHMENT_STAGED_CLEANUP_MIGRATIONS,
   INVOICE_READ_SCOPE_MIGRATIONS, RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE, INVOICE_READ_SCOPE_POSTFLIGHT_FILES, pendingInvoiceReadScopeBatch, prepareInvoiceReadScopePrerequisiteQuery, prepareInvoiceReadScopeRehearsal,
   AR_READ_SCOPE_MIGRATIONS, RELEASE_PHASE_DATABASE_AR_READ_SCOPE, AR_READ_SCOPE_POSTFLIGHT_FILES, pendingArReadScopeBatch, prepareArReadScopePrerequisiteQuery, prepareArReadScopeRehearsal,
   HISTORY_SUMMARY_MIGRATIONS, RELEASE_PHASE_DATABASE_HISTORY_SUMMARY, HISTORY_SUMMARY_POSTFLIGHT_FILES, pendingHistorySummaryBatch, prepareHistorySummaryPrerequisiteQuery, prepareHistorySummaryRehearsal,

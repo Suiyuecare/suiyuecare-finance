@@ -1,0 +1,9 @@
+{
+  "package": "tus-js-client",
+  "version": "4.3.1",
+  "source": "https://registry.npmjs.org/tus-js-client/-/tus-js-client-4.3.1.tgz",
+  "file": "package/dist/tus.min.js",
+  "sha256": "8cbb1b63fccc3bba0ae73ad1deb160ce046c3750851d0c3e94921ae3ef070eb8",
+  "license_file": "package/LICENSE",
+  "purpose": "Lazy-loaded, same-origin resumable Supabase Storage uploads for attachments of 6 MiB or more."
+}

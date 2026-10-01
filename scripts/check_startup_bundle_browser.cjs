@@ -6,7 +6,8 @@ const http = require('node:http');
 const zlib = require('node:zlib');
 const crypto = require('node:crypto');
 const { chromium } = require('playwright');
-const { pinnedSupabaseSdk, SDK } = require('./finance_startup_bundle');
+const { createStartupBundle, createAppBundle, pinnedSupabaseSdk, SDK } = require('./finance_startup_bundle');
+const { applyBuildEnvironment } = require('./finance_build_environment');
 const root = path.resolve(__dirname, '../www');
 const sdk = pinnedSupabaseSdk(path.resolve(__dirname, '..'));
 const out = path.resolve(process.env.FINANCE_STARTUP_EVIDENCE_DIR || '/tmp/finance-startup-bundle-browser');
@@ -21,20 +22,26 @@ const appTags = [...html.matchAll(/<script src="(assets\/finance-app-[a-f0-9]{16
 assert.equal(appTags.length, 1, 'Built HTML must load one content-addressed app');
 const appFile = appTags[0][1];
 const appSource = fs.readFileSync(path.join(root, appFile), 'utf8');
-assert(appSource.includes('var FINANCE_BUILD_TARGET="local";'), 'Browser fixture requires an offline local build');
+const sourceHtml = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
+const configuredHtml = applyBuildEnvironment(sourceHtml, { target: 'local', runtimeMode: 'offline-demo', supabaseUrl: '', supabaseAnonKey: '' });
+const expectedApp = createAppBundle(createStartupBundle(configuredHtml, path.resolve(__dirname, '..')).html);
+assert.equal(appSource, expectedApp.code, 'Built app must be the deterministic minification of local source');
+assert(expectedApp.sourceCode.includes('var FINANCE_BUILD_TARGET="local";'), 'Browser fixture requires an offline local build');
 assert.equal(crypto.createHash('sha256').update(appSource).digest('hex').slice(0, 16), appFile.match(/finance-app-([a-f0-9]{16})\.js/)[1]);
 assert(!html.includes("<script>\n(function(){\n'use strict';"), 'Built HTML must not inline the main application');
 assert(Buffer.byteLength(html) < (Buffer.byteLength(html) + Buffer.byteLength(appSource)) / 4, 'HTML must be a small fraction of the original payload');
 assert(html.includes('<link rel="preload" as="script" href="' + appFile + '">'));
 const appQaAnchor = 'bootAuthGate();\n\n})();';
-assert(appSource.includes(appQaAnchor));
-const appFixture = appSource.replace(appQaAnchor, 'window.__startupQA={run:function(code){return eval(code)}};\n' + appQaAnchor);
+assert(expectedApp.sourceCode.includes(appQaAnchor));
+const instrumentedHtml = configuredHtml.replace(appQaAnchor, 'window.__startupQA={run:function(code){return eval(code)}};\n' + appQaAnchor);
+const appFixture = createAppBundle(createStartupBundle(instrumentedHtml, path.resolve(__dirname, '..')).html).code;
+let serveExactApp = false;
 const server = http.createServer((req, res) => {
   const file = path.resolve(root, '.' + new URL(req.url, 'http://local').pathname);
   if (file !== root && !file.startsWith(root + path.sep)) { res.writeHead(403); return res.end(); }
   try {
     const isHtml = file === root || file === path.join(root, 'index.html');
-    const bytes = isHtml ? Buffer.from(html) : file === path.join(root, appFile) ? Buffer.from(appFixture) : fs.readFileSync(file);
+    const bytes = isHtml ? Buffer.from(html) : file === path.join(root, appFile) ? Buffer.from(serveExactApp ? appSource : appFixture) : fs.readFileSync(file);
     res.writeHead(200, { 'content-type': isHtml ? 'text/html' : file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'image/png', 'content-encoding': 'gzip', 'cache-control': 'no-store' });
     res.end(zlib.gzipSync(bytes));
   } catch (_) { res.writeHead(404); res.end(); }
@@ -105,7 +112,30 @@ const server = http.createServer((req, res) => {
       await page.screenshot({ path: path.join(out, 'built-mobile-' + (i + 1) + '.png'), fullPage: true });
       await context.close();
     }
-    fs.writeFileSync(path.join(out, 'evidence.json'), JSON.stringify({ scope: measure ? 'Local built artifact, cold cache, 150ms RTT,4Mbps,CPU4x. Synthetic fixture; not real employee timing.' : 'Offline built artifact: actual startup and ten workspace navigations; all remote writes blocked.', runs }, null, 2));
+    // Also execute the exact sealed bytes, without the QA hook. This catches
+    // identifier-minification regressions in real inline navigation handlers.
+    serveExactApp = true;
+    const exactContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+    const exactPage = await exactContext.newPage(), exactErrors = [], exactDenied = [];
+    exactPage.on('pageerror', error => exactErrors.push(error.message));
+    await exactContext.route('**/*', route => {
+      const request = route.request(), url = new URL(request.url());
+      if (!['GET', 'HEAD'].includes(request.method()) || /\/(auth|rest)\/v1\//.test(url.pathname)) { exactDenied.push(request.method() + ' ' + url.pathname); return route.abort(); }
+      if (url.hostname !== '127.0.0.1') return route.abort();
+      return route.continue();
+    });
+    await exactPage.goto('http://127.0.0.1:' + server.address().port, { waitUntil: 'load' });
+    await exactPage.locator('#demo-login-panel button').nth(1).click();
+    await exactPage.locator('#main-wrap').waitFor({ state: 'visible' });
+    await exactPage.locator('#nav-approvals').click();
+    await exactPage.waitForFunction(() => document.querySelector('#page-title')?.textContent === '簽核管理');
+    await exactPage.locator('#nav-rpt').click();
+    await exactPage.waitForFunction(() => document.querySelector('#page-title')?.textContent === '財務報表');
+    assert.deepEqual(exactErrors, [], 'Exact built app must have no JavaScript errors after CEO login and navigation');
+    assert.deepEqual(exactDenied, [], 'Exact built app smoke must not attempt writes');
+    const exactAppSmoke = { demoLogin: true, approvals: true, reports: true, errors: exactErrors, denied: exactDenied };
+    await exactContext.close();
+    fs.writeFileSync(path.join(out, 'evidence.json'), JSON.stringify({ scope: measure ? 'Local built artifact, cold cache, 150ms RTT,4Mbps,CPU4x. Synthetic fixture; not real employee timing.' : 'Offline built artifact: actual startup and ten workspace navigations; all remote writes blocked.', runs, exactAppSmoke }, null, 2));
     console.log(JSON.stringify({ passed: true, runs }));
   } finally { await browser.close(); server.close(); }
 })().catch(error => { console.error(error); server.close(); process.exitCode = 1; });

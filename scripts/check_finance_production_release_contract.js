@@ -34,7 +34,7 @@ assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
   '20260826070814', '20260826155840', '20260827052447', '20260828015718',
   '20260831042040', '20260831043517', '20260901024020', '20260901073241',
-  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS, ...guard.OPERATIONAL_STABILITY_MIGRATIONS, ...guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, ...guard.AUDIT_CONTROLS_20260927_MIGRATIONS, ...guard.HR_CONTRACTOR_MIGRATIONS, ...guard.PORTAL_SESSION_MIGRATIONS, ...guard.EXTERNAL_LABOR_MIGRATIONS, ...guard.ATTACHMENT_CLAIM_MIGRATIONS
+  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS, ...guard.OPERATIONAL_STABILITY_MIGRATIONS, ...guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, ...guard.AUDIT_CONTROLS_20260927_MIGRATIONS, ...guard.HR_CONTRACTOR_MIGRATIONS, ...guard.PORTAL_SESSION_MIGRATIONS, ...guard.EXTERNAL_LABOR_MIGRATIONS, ...guard.ATTACHMENT_CLAIM_MIGRATIONS, ...guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS
 ]);
 assert.deepEqual(guard.RELEASE_PHASES, {
   frontend_compat: 'none',
@@ -129,10 +129,15 @@ const root = path.resolve(__dirname, '..');
 const auditPostflight=fs.readFileSync(path.join(root,'scripts/finance_audit_20260907_postflight.sql'),'utf8');
 for(const name of ['finance_org_integrity_postflight.sql','finance_approval_audit_postflight.sql'])assert.ok(auditPostflight.includes(fs.readFileSync(path.join(root,'scripts',name),'utf8').trim()),'combined postflight must include exact domain contract: '+name);
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/finance-production-release.yml'), 'utf8');
+const cleanupPostflight=fs.readFileSync(path.join(root,'scripts/finance_attachment_staged_cleanup_postflight.sql'),'utf8');
+assert.match(cleanupPostflight,/b7552f6a6199614a0ac46c6854402a95/);
+assert.match(cleanupPostflight,/delete_policy\.qual is distinct from select_policy\.qual/);
+assert.equal((workflow.match(/supabase db query --linked --file scripts\/finance_attachment_staged_cleanup_postflight\.sql/g)||[]).length,2,
+  'protected frontend release checks the exact cleanup policy before and after promotion');
 const attachmentClaimTemp=fs.mkdtempSync(path.join(os.tmpdir(),'finance-attachment-claim-release-'));
 try {
   const migrationDir=path.join(root,'supabase/migrations');
-  const prior=['20260825000000',...guard.REVIEWED_MIGRATION_CATALOG.slice(0,-1)];
+  const prior=['20260825000000',...guard.REVIEWED_MIGRATION_CATALOG.filter(version=>version<guard.ATTACHMENT_CLAIM_MIGRATIONS[0])];
   const baseline={count:1,lastVersion:prior[0],sha256:guard.ledgerSha256([prior[0]])};
   const ledger=path.join(attachmentClaimTemp,'ledger.txt');
   fs.writeFileSync(ledger,prior.join('\n')+'\n');
@@ -172,6 +177,8 @@ try {
   assert.throws(()=>guard.readAuditBatch(tampered,versions,phase),/sealed SHA256/);
   fs.appendFileSync(ledger,versions+'\n');
   assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'applied');
+  assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/staged-attachment cleanup policy/);
+  fs.appendFileSync(ledger,guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
 } finally {fs.rmSync(attachmentClaimTemp,{recursive:true,force:true});}
 assert.deepEqual(guard.REPORT_POSTFLIGHT_FILES,['finance_production_db_postflight.sql','finance_audit_20260907_postflight.sql','finance_finalize_accounting_lines_postflight.sql','finance_utility_tax_postflight.sql','finance_production_human_accounting_canary.sql','finance_canonical_receivables_postflight.sql','finance_reporting_profiles_postflight.sql'],'Reports must retain every inherited/new postflight in its transaction');
@@ -362,7 +369,7 @@ for(const name of [...guard.HISTORY_PERFORMANCE_POSTFLIGHT_FILES,'finance_approv
 // Execute the real shell conditions as a latest-phase contract: none of the
 // inherited post-apply or promotion checks may be silently skipped.
 const {spawnSync}=require('node:child_process');
-for(const job of [databaseJob,promoteJob])for(const line of job.split('\n').filter(l=>l.trimStart().startsWith('if test "$RELEASE_PHASE"')&&l.includes('frontend_compat')&&!l.includes('database_read_latency_20260913')&&!l.includes('database_ar_mapping_20260913')&&!l.includes('database_audit_remediation_20260914')&&!l.includes('database_approval_search_20260914')&&!l.includes('database_history_summary_20260915')&&!l.includes('database_invoice_read_scope_20260915')&&!l.includes('database_ar_read_scope_20260922')&&!l.includes('database_audit_security_20260922')&&!l.includes('database_operational_stability_20260924')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_audit_controls_20260927"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_hr_contractor_20260928"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_portal_session_20260928"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_external_labor_20260928"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_attachment_claim_20261001"'))){
+for(const job of [databaseJob,promoteJob])for(const line of job.split('\n').filter(l=>l.trimStart().startsWith('if test "$RELEASE_PHASE"')&&l.includes('frontend_compat')&&!l.includes('database_read_latency_20260913')&&!l.includes('database_ar_mapping_20260913')&&!l.includes('database_audit_remediation_20260914')&&!l.includes('database_approval_search_20260914')&&!l.includes('database_history_summary_20260915')&&!l.includes('database_invoice_read_scope_20260915')&&!l.includes('database_ar_read_scope_20260922')&&!l.includes('database_audit_security_20260922')&&!l.includes('database_operational_stability_20260924')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "frontend_compat"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_audit_controls_20260927"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_hr_contractor_20260928"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_portal_session_20260928"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_external_labor_20260928"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_attachment_claim_20261001"'))){
  const condition=line.trim().replace(/; then$/,'');
  const evaluated=spawnSync('sh',['-c',condition+'; then exit 0; else exit 1; fi'],{env:{...process.env,RELEASE_PHASE:guard.RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE},encoding:'utf8'});
  assert.equal(evaluated.status,0,'History phase must retain gate: '+line+' '+evaluated.stderr);
@@ -442,7 +449,7 @@ guard.validateTarget(exactEnvironment,'a'.repeat(40),guard.RELEASE_PHASE_DATABAS
 for(const selected of [guard.RELEASE_PHASE_DATABASE_AUDIT_SECURITY,'frontend_compat'])for(const job of [databaseJob,promoteJob])for(const line of job.split('\n').filter(l=>l.trimStart().startsWith('if test "$RELEASE_PHASE"'))){
  const condition=line.trim().replace(/; then$/,'');
  const evaluated=spawnSync('sh',['-c',condition+'; then exit 0; else exit 1; fi'],{env:{...process.env,RELEASE_PHASE:selected}});
- assert.equal(evaluated.status,(line.includes('= "database_audit_security_20260922"')&&!line.includes('!= "database_audit_security_20260922"'))||(selected==='frontend_compat'&&(line.includes('= "database_audit_controls_20260927"')||line.includes('= "database_hr_contractor_20260928"')||line.includes('= "database_portal_session_20260928"')||line.includes('= "database_external_labor_20260928"')||line.includes('= "database_attachment_claim_20261001"')))?0:1,selected+' executes its required readonly canaries without employee claims: '+line);
+ assert.equal(evaluated.status,(line.includes('= "database_audit_security_20260922"')&&!line.includes('!= "database_audit_security_20260922"'))||(selected==='frontend_compat'&&(line.trimStart().startsWith('if test "$RELEASE_PHASE" = "frontend_compat"')||line.includes('= "database_audit_controls_20260927"')||line.includes('= "database_hr_contractor_20260928"')||line.includes('= "database_portal_session_20260928"')||line.includes('= "database_external_labor_20260928"')||line.includes('= "database_attachment_claim_20261001"')))?0:1,selected+' executes its required readonly canaries without employee claims: '+line);
 }
 assert.ok(candidateJob.indexOf('pnpm test:finance-ui-interactions')>candidateJob.indexOf('pnpm exec playwright install')&&candidateJob.indexOf('pnpm test:finance-ui-interactions')<candidateJob.indexOf('vercel@59.3.0 build --prod'));
 assert.ok(JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).scripts['release:preflight'].includes('pnpm test:audit-security'));
@@ -773,10 +780,12 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   fs.appendFileSync(ledger,guard.EXTERNAL_LABOR_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/attachment claim batch/);
   fs.appendFileSync(ledger,guard.ATTACHMENT_CLAIM_MIGRATIONS.join('\n')+'\n');
+  assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/staged-attachment cleanup policy/);
+  fs.appendFileSync(ledger,guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), 'compat');
   guard.verifyLedger('pre', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
   guard.verifyLedger('post', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
-  fs.appendFileSync(ledger, '20261001040000\n');
+  fs.appendFileSync(ledger, '20261002000000\n');
   assert.throws(() => guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), /unreviewed post-baseline migration/);
   const duplicateDir = path.join(temp, 'duplicate'); fs.mkdirSync(duplicateDir);
   fs.writeFileSync(path.join(duplicateDir, '20260826070814_a.sql'), 'begin;\ncommit;\n');
