@@ -108,10 +108,13 @@ check('production preflight cannot judge route Auth before canonical sync comple
   productionGate > -1 && productionRouteCheck > productionGate);
 
 const realtime = functionBlock('startRealtime', 'stopRealtime');
+const scopedRealtimeKind = extractNamedFunction(index, 'realtimeScopedRefreshKind');
 check('a live finance_users change invalidates the verified directory before refreshing',
   realtime.indexOf("if(table==='finance_users')") > -1
     && realtime.indexOf('invalidateFinanceUsersDirectoryReadiness') > realtime.indexOf("if(table==='finance_users')")
-    && realtime.indexOf('invalidateFinanceUsersDirectoryReadiness') < realtime.indexOf('refreshRemoteData(table)'));
+    && realtime.indexOf('invalidateFinanceUsersDirectoryReadiness') < realtime.indexOf('refreshRemoteData(table,payload)')
+    && /if\(realtimeScopedRefreshKind\(reason\)\)return refreshRealtimeScopedSource\(reason,payload\)/.test(extractNamedFunction(index, 'refreshRemoteData'))
+    && !scopedRealtimeKind.includes('finance_users'));
 
 const formalWrite = functionBlock('insertMembershipOrgSubmittedRecord', 'insertMembershipOrgSubmittedBatch');
 const formalBatchWrite = functionBlock('insertMembershipOrgSubmittedBatch', 'membershipOrgHeadForUnit');

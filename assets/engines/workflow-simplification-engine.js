@@ -3,8 +3,14 @@
 
   var ROOT_CLASS='workflow-simplification-v1';
   var queued=false;
+  var pendingAreas=0;
   var expenseSignature='';
   var observer=null;
+  var AREA_NEW_REQUEST=1;
+  var AREA_EXPENSES=2;
+  var AREA_APPROVALS=4;
+  var AREA_APPROVAL_DETAIL=8;
+  var AREA_ALL=AREA_NEW_REQUEST|AREA_EXPENSES|AREA_APPROVALS|AREA_APPROVAL_DETAIL;
   var TYPE_LABELS={
     expense_reimbursement:'費用報銷',
     payment_request:'付款申請',
@@ -192,17 +198,55 @@
     });
   }
 
-  function enhance(){
+  function enhance(areas){
     if(!document.documentElement.classList.contains(ROOT_CLASS))return;
-    enhanceNewRequest();
-    enhanceExpenses();
-    enhanceApprovals();
-    classifyApprovalDetail();
+    if(areas&AREA_NEW_REQUEST)enhanceNewRequest();
+    if(areas&AREA_EXPENSES)enhanceExpenses();
+    if(areas&AREA_APPROVALS)enhanceApprovals();
+    if(areas&AREA_APPROVAL_DETAIL)classifyApprovalDetail();
   }
-  function queueEnhance(){
+  function areaForNode(node){
+    if(!node||node.nodeType!==1)return 0;
+    if(node.closest){
+      if(node.closest('#workflow-expense-summary'))return 0;
+      if(node.closest('#m-appr'))return AREA_APPROVAL_DETAIL;
+      if(node.closest('#pg-newreq'))return AREA_NEW_REQUEST;
+      if(node.closest('#pg-expenses'))return AREA_EXPENSES;
+      if(node.closest('#pg-approvals'))return AREA_APPROVALS;
+    }
+    // Toasts, notifications and navigation often mutate the page root. Only
+    // an actual workflow subtree replacement below should trigger a rescan.
+    return 0;
+  }
+  function areasForMutations(records){
+    var areas=0;
+    records.forEach(function(record){
+      areas|=areaForNode(record.target);
+      if(areas===AREA_ALL)return;
+      // Page roots can be replaced by a redraw; a mutation on their parent
+      // matters only when it actually contains one of the workflow roots.
+      [record.addedNodes,record.removedNodes].forEach(function(nodes){
+        Array.prototype.forEach.call(nodes||[],function(node){
+          if(node.nodeType!==1)return;
+          if(node.id==='pg-newreq'||node.id==='pg-expenses'||node.id==='pg-approvals'||node.id==='m-appr'
+            ||node.querySelector&&node.querySelector('#pg-newreq,#pg-expenses,#pg-approvals,#m-appr'))areas|=AREA_ALL;
+        });
+      });
+    });
+    return areas;
+  }
+  function queueEnhance(source){
+    var areas=Array.isArray(source)?areasForMutations(source):(source&&source.target?areaForNode(source.target):AREA_ALL);
+    if(!areas)return;
+    pendingAreas|=areas;
     if(queued)return;
     queued=true;
-    requestAnimationFrame(function(){queued=false;enhance();});
+    requestAnimationFrame(function(){
+      queued=false;
+      var currentAreas=pendingAreas;
+      pendingAreas=0;
+      enhance(currentAreas);
+    });
   }
   function enable(){
     document.documentElement.classList.add(ROOT_CLASS);

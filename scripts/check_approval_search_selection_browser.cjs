@@ -31,6 +31,12 @@ async function b(command,...args){
  if(command==='errors')return errors.join('\n');
 }
 async function scope(code){return page.evaluate(code=>window.__selectionTest.run(code),code);}
+async function waitForSearchResults(){
+  await page.waitForFunction(()=>{
+    const hint=document.getElementById('appr-list-hint');
+    return hint&&hint.textContent.startsWith('搜尋後');
+  });
+}
 (async()=>{
   fs.mkdirSync(output,{recursive:true});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const chrome=process.env.CHROME_PATH||(fs.existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')?'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':null);
@@ -61,15 +67,18 @@ async function scope(code){return page.evaluate(code=>window.__selectionTest.run
     assert.equal(await scope("el('appr-bulk-count').textContent"),'已選 1 筆');
     await b('fill','#appr-q','A&B');await b('snapshot','-i');
     assert.equal(await scope("el('appr-bulk-count').textContent"),'已選 0 筆');
+    await waitForSearchResults();
     assert.deepEqual(await scope("Array.from(document.querySelectorAll('#appr-list tbody tr')).map(function(row){return row.dataset.apprKey;})"),['req:fixture-1']);
     assert.equal(await scope("document.querySelector('#appr-list .summary-cell').querySelector('img')===null"),true);
     await b('screenshot',path.join(output,'raw-search-'+width+'.png'));
     await scope("window.__fixtureItems=[{kind:'inv',raw:INVS[0],rows:INVS.slice(0,2)}];S.aT='mine';S.apprQuery='';S.apprPage=1;buildApprovals();true");
     for(const query of ['後續單獨有描述','客戶乙','INV-002','A&B','550.00']){
       await b('fill','#appr-q',query);
+      await waitForSearchResults();
       assert.equal(await scope("document.querySelectorAll('#appr-list tbody tr').length"),1,query);
     }
     await b('fill','#appr-q','不屬於此清單客戶');
+    await waitForSearchResults();
     assert.equal(await scope("document.querySelectorAll('#appr-list tbody tr').length"),0,'Only the explicit permitted members are indexed');
     const size=await scope('({width:innerWidth,scrollWidth:document.documentElement.scrollWidth})');assert(size.scrollWidth<=width,JSON.stringify(size));
     evidence.push({width,pageSelection:true,searchClearsSelection:true,rawCharacters:true,escapedDisplay:true,laterBatchFields:true,hiddenSiblingExcluded:true,noOverflow:true});

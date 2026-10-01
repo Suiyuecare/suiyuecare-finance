@@ -10,9 +10,16 @@ function fn(name){const start=html.indexOf('function '+name+'(');assert(start>=0
 function handler(name){const start=html.indexOf('window.'+name+'=function(');assert(start>=0,name);const end=html.indexOf('\n};',start);return html.slice(start,end+3);}
 function fixture(){
   const nodes={};
+  let now=0,nextTimer=0;
+  const timers=new Map();
   const c={window:{FinanceDocumentSearch:search},console,
-    S:{aT:'p',apprPage:1,apprQuery:'',apprSelected:{},apprItemMap:{},user:{id:'fixture'}},
+    S:{page:'approvals',aT:'p',apprPage:1,apprQuery:'',apprSelected:{},apprItemMap:{},user:{id:'fixture'}},
     frozen:{},cleared:[],paint:0,alerts:[],INVS:[],BILLS:[],
+    timers,
+    setTimeout(callback,delay){const id=++nextTimer;timers.set(id,{callback,at:now+delay});return id;},
+    clearTimeout(id){timers.delete(id);},
+    advance(ms){now+=ms;for(const [id,timer] of [...timers])if(timer.at<=now){timers.delete(id);timer.callback();}},
+    approvalHistoryIdentity:()=> 'fixture-approval-identity',
     el:id=>nodes[id]||(nodes[id]={innerHTML:'',textContent:'',value:''}),
     document:{activeElement:null,querySelectorAll:()=>[],querySelector:()=>null},
     alert(message){c.alerts.push(message);},
@@ -50,6 +57,9 @@ function fixture(){
     'approvalSearchRowText','approvalSearchText','approvalMatchesQuery','approvalApplySearchSort',
     'approvalItemKey','selectedApprovalItems','approvalBulkBarHtml','refreshApprovalBulkCount',
     'resetApprovalPageSelection','reconcileApprovalPageSelection','approvalPagerHtml','renderApprList'])vm.runInContext(fn(name),c);
+  const timerStart=html.indexOf('var approvalLocalSearchTimer=null;'),timerEnd=html.indexOf('window.apprSearch=function(',timerStart);
+  assert(timerStart>=0&&timerEnd>timerStart,'local search timer uses the production implementation');
+  vm.runInContext(html.slice(timerStart,timerEnd),c);
   for(const name of ['toggleApprovalSelection','toggleAllApprovalSelection','apprSearch','apprSort','apprPage'])vm.runInContext(handler(name),c);
   return c;
 }
@@ -97,6 +107,41 @@ for(const change of ['search','sort','empty refresh'])check(change+' clears hidd
   if(change==='sort')f.window.apprSort('amount');
   if(change==='empty refresh'){f.data=[];f.buildApprovals();}
   assert.equal(f.selectedApprovalItems().length,0);assert.equal(Object.keys(f.S.apprSelected).length,0);assert.equal(Object.keys(f.frozen).length,0);assert.equal(f.el('appr-bulk-count').textContent,'已選 0 筆');
+});
+check('Local search waits for a quiet interval and paints only the latest completed query',()=>{
+  const f=fixture();f.data=[{kind:'req',raw:row('a','第一張')},{kind:'req',raw:row('b','第二張')}];
+  f.buildApprovals();const baseline=f.paint;
+  f.window.apprSearch('第');f.advance(100);f.window.apprSearch('第二張');f.advance(199);
+  assert.equal(f.paint,baseline);assert.equal(f.timers.size,1);
+  f.advance(1);assert.equal(f.paint,baseline+1);
+  assert.match(f.el('appr-list').innerHTML,/REQ-00b/);assert.doesNotMatch(f.el('appr-list').innerHTML,/REQ-00a/);
+});
+check('IME input never starts a local search until composition completes',()=>{
+  const f=fixture();f.data=[{kind:'req',raw:row('b','自費服務')}];
+  f.buildApprovals();const baseline=f.paint;
+  f.window.apprSearch('zi',{isComposing:true});f.advance(500);
+  assert.equal(f.paint,baseline);assert.equal(f.timers.size,0);
+  f.window.apprSearch('自費');f.advance(199);assert.equal(f.paint,baseline);
+  f.advance(1);assert.equal(f.paint,baseline+1);assert.match(f.el('appr-list').innerHTML,/REQ-00b/);
+});
+check('Clearing search cancels pending work and restores the authorized list immediately',()=>{
+  const f=fixture();f.data=[{kind:'req',raw:row('a','第一張')},{kind:'req',raw:row('b','第二張')}];
+  f.buildApprovals();const baseline=f.paint;
+  f.window.apprSearch('找不到');assert.equal(f.timers.size,1);
+  f.window.apprSearch('');assert.equal(f.timers.size,0);assert.equal(f.paint,baseline+1);
+  assert.match(f.el('appr-list').innerHTML,/REQ-00a/);assert.match(f.el('appr-list').innerHTML,/REQ-00b/);
+  f.advance(500);assert.equal(f.paint,baseline+1);
+});
+check('Late callback cannot repaint after tab, page, query or identity changes',()=>{
+  for(const change of ['tab','page','query','identity']){
+    const f=fixture();f.data=[{kind:'req',raw:row('a','第一張')}];
+    f.window.apprSearch('第一張');const late=[...f.timers.values()][0].callback;
+    if(change==='tab')f.S.aT='mine';
+    if(change==='page')f.S.page='dashboard';
+    if(change==='query')f.S.apprQuery='第二張';
+    if(change==='identity')f.approvalHistoryIdentity=()=> 'other-user';
+    late();assert.equal(f.paint,0,change);
+  }
 });
 check('Same-page refresh retains visible choices and removes disappeared rows',()=>{
   const f=fixture();f.data=[{kind:'req',raw:row('a','第一張')},{kind:'req',raw:row('b','第二張')}];f.buildApprovals();f.window.toggleAllApprovalSelection(true);

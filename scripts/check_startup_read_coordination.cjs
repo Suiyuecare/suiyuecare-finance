@@ -64,5 +64,6 @@ function fixture(options={}){
   const result=await c.runFinanceBootstrapReadJobs(jobs,true);assert.deepEqual(clone(result),Array.from({length:22},(_,i)=>({index:i})));assert.equal(max,2);assert.equal(maxWide,1);check('all 22 bootstrap reads retain result positions, with at most two total and one wide financial read');
   const bad=jobs.slice();bad[7]=async()=>{throw Error('config denied')};await assert.rejects(c.runFinanceBootstrapReadJobs(bad,true),/config denied/);check('a rejected prerequisite cannot be converted into a successful empty bootstrap result');
  }
+ await require('./check_realtime_scoped_refresh.cjs').run();
  console.log('OK: '+passed+' startup coordination checks passed');
 })().catch(e=>{console.error(e);process.exitCode=1});
