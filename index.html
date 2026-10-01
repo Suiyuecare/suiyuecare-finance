@@ -39348,6 +39348,9 @@ function incomeSubmissionUnknown(message,identityChanged){
   error.code='FINANCE_MUTATION_RESULT_UNKNOWN';
   return {available:true,ok:false,unknown:true,uncertain:true,identityChanged:!!identityChanged,error:error};
 }
+function incomeSubmissionStatementCanceled(error){
+  return String(supabaseAuthErrorInfo(error).code||'').toUpperCase()==='57014';
+}
 function incomeSubmissionPayloadMatches(payload,entry){
   if(!payload||payload.ok!==true||!Array.isArray(payload.rows)||payload.rows.length!==entry.args.p_items.length)return false;
   var keys=new Set(),ids=new Set();
@@ -39359,7 +39362,7 @@ function incomeSubmissionPayloadMatches(payload,entry){
 async function readIncomeSubmissionCommit(entry,identity){
   if(!incomeSubmissionIdentityCurrent(identity))return null;
   try{
-    var response=await withOperationTimeout(getSb().from(entry.formType==='invoice'?'invoices':'bills').select('*')
+    var response=await withOperationTimeout(getSb().from(entry.formType==='invoice'?'invoices':'bills').select('id,no,batch_id,approval_status,approval_step,submission_item_key')
       .eq('tenant_id',currentTenantId()).eq('data_environment',entry.args.p_data_environment)
       .eq('submission_idempotency_key',entry.args.p_idempotency_key).eq('submission_actor_finance_user_id',S.user.id)
       .limit(entry.records.length+1),'確認原送單結果',12000);
@@ -39378,7 +39381,15 @@ async function runIncomeSubmissionAttempt(entry,identity){
     var hadUnknown=entry.unknown===true;
     entry.unknown=true;
     if(!saveIncomeSubmissionPending(entry))return incomeSubmissionUnknown('瀏覽器無法保存原送單識別碼；尚未送出新交易，請保留表單並確認瀏覽器儲存空間。');
-    for(var attempt=0;attempt<2;attempt++){
+    // An earlier response may have been lost after COMMIT. Read the exact
+    // operation before sending its frozen payload again.
+    var committed=null;
+    if(hadUnknown){
+      committed=await readIncomeSubmissionCommit(entry,identity);
+      if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
+      if(committed){entry.response=committed;saveIncomeSubmissionPending(entry);return {available:true,ok:true,data:committed,attempt:entry};}
+    }
+    for(var attempt=0;attempt<(hadUnknown?1:2);attempt++){
       if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
       var response;
       try{response=await withOperationTimeout(getSb().rpc(entry.rpcName,cloneSettingValue(entry.args)),'確認原送單交易',15000);}
@@ -39388,16 +39399,28 @@ async function runIncomeSubmissionAttempt(entry,identity){
         entry.response=cloneSettingValue(response.data);saveIncomeSubmissionPending(entry);
         return {available:true,ok:true,data:entry.response,attempt:entry};
       }
-      if(attempt===0&&!hadUnknown&&response&&response.error&&!expenseApplicantRevisionRpcErrorIsAmbiguous(response.error)){
-        clearIncomeSubmissionPending(entry);return {available:true,ok:false,error:response.error};
+      if(attempt===0&&!hadUnknown&&response&&response.error){
+        // A direct PostgreSQL 57014 aborts this first transaction. It is only
+        // definitive when no earlier request could still be committing.
+        if(incomeSubmissionStatementCanceled(response.error)){
+          clearIncomeSubmissionPending(entry);
+          return {available:true,ok:false,confirmedRollback:true,error:response.error};
+        }
+        if(!expenseApplicantRevisionRpcErrorIsAmbiguous(response.error)){
+          clearIncomeSubmissionPending(entry);return {available:true,ok:false,error:response.error};
+        }
       }
-      hadUnknown=true;
+      if(attempt===0&&!hadUnknown){
+        committed=await readIncomeSubmissionCommit(entry,identity);
+        if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
+        if(committed){entry.response=committed;saveIncomeSubmissionPending(entry);return {available:true,ok:true,data:committed,attempt:entry};}
+      }
     }
-    var committed=await readIncomeSubmissionCommit(entry,identity);
+    committed=await readIncomeSubmissionCommit(entry,identity);
     if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
     if(committed){entry.response=committed;saveIncomeSubmissionPending(entry);return {available:true,ok:true,data:committed,attempt:entry};}
     renderIncomeSubmissionRecovery(entry.formType);
-    return incomeSubmissionUnknown();
+    return incomeSubmissionUnknown('送單結果仍待確認；系統已讀取正式資料並沿用原識別碼確認，原內容與附件已保留。請稍後按「確認原送單結果」，不要另開新單。');
   }finally{if(INCOME_SUBMISSION_RUNNING[key]===entry)delete INCOME_SUBMISSION_RUNNING[key];}
 }
 function applyIncomeSubmissionResponse(records,result){
