@@ -1985,7 +1985,8 @@ var WORKFLOW_OPTIONAL_READ_ERRORS={};
 var APPROVAL_RUNTIME_AVAILABLE=null;
 var APPROVAL_RUNTIME_DISABLED_REASON='';
 var ORG_ADMIN_READ_STATE={identity:'',sequence:0,promise:null,lastSuccessAt:0};
-var ORG_ADMIN_RUNTIME={departments:[],positions:[],employeeRoles:[],health:null,departmentHealth:null,departmentHealthError:'',frontOfficeHealth:null,frontOfficeHealthError:'',lastLoaded:'',available:null,error:''};
+var ORG_ADMIN_RUNTIME={departments:[],positions:[],employeeRoles:[],employeeRolesConfirmed:false,employeeRolesIdentity:'',health:null,departmentHealth:null,departmentHealthError:'',frontOfficeHealth:null,frontOfficeHealthError:'',lastLoaded:'',available:null,error:''};
+var NR_ROLE_PREVIEW_REQUEST={identity:'',lastAttemptAt:0};
 var MEMBERSHIP_ORG_RUNTIME={loading:false,available:null,error:'',graph:null,lastLoaded:'',subscription:null};
 var MEMBERSHIP_ORG_DRAFT={version:null,snapshot:null,dirty:false,people:[],validation:null,impact:null,dragUnitId:'',batchUnitIds:[]};
 var FORM_FIELD_CONFIGS=[];
@@ -7026,10 +7027,18 @@ async function performApprovalOrgAdminRuntimeRead(client,reason,state){
     return {ok:false,skipped:true,reason:'no_supabase'};
   }
   try{
+    var employeeRolesRead=readOrgAdminRuntimeRpc(client,'finance_org_employee_role_list',{p_finance_user_id:null,p_department_code:null,p_include_inactive:false},fallbackOrgAdminEmployeeRoles);
+    employeeRolesRead.then(function(roleResult){
+      if(!current()||roleResult.fallback)return;
+      ORG_ADMIN_RUNTIME.employeeRoles=normalizeOrgAdminList(roleResult.data);
+      ORG_ADMIN_RUNTIME.employeeRolesConfirmed=true;
+      ORG_ADMIN_RUNTIME.employeeRolesIdentity=state.identity;
+      if(typeof updateNRRouteHealth==='function')updateNRRouteHealth();
+    }).catch(function(){/* The full runtime read reports failures below. */});
     var res=await withOperationTimeout(Promise.all([
       readOrgAdminRuntimeRpc(client,'finance_org_department_list',{p_include_inactive:false},fallbackOrgAdminDepartments),
       readOrgAdminRuntimeRpc(client,'finance_org_position_list',{p_include_inactive:false},fallbackOrgAdminPositions),
-      readOrgAdminRuntimeRpc(client,'finance_org_employee_role_list',{p_finance_user_id:null,p_department_code:null,p_include_inactive:false},fallbackOrgAdminEmployeeRoles),
+      employeeRolesRead,
       readOrgAdminRuntimeRpc(client,'finance_org_admin_health',{},function(){
         var users=(USERS||[]).filter(function(u){return u&&u.active!==false;}).length;
         return {ok:true,department_count:(DEPTS||[]).length,position_count:Object.keys(RL||{}).length,active_user_count:users,primary_role_count:users,missing_primary_role_count:0,role_without_department_count:0,manager_without_role_count:0,source:'frontend_fallback'};
@@ -7052,6 +7061,8 @@ async function performApprovalOrgAdminRuntimeRead(client,reason,state){
       departments:normalizeOrgAdminList(res[0].data),
       positions:normalizeOrgAdminList(res[1].data),
       employeeRoles:normalizeOrgAdminList(res[2].data),
+      employeeRolesConfirmed:!res[2].fallback,
+      employeeRolesIdentity:res[2].fallback?'':state.identity,
       health:normalizeOrgAdminHealth(res[3].data),
       departmentHealth:ORG_ADMIN_RUNTIME.departmentHealth||null,
       departmentHealthError:ORG_ADMIN_RUNTIME.departmentHealthError||'',
@@ -7065,6 +7076,7 @@ async function performApprovalOrgAdminRuntimeRead(client,reason,state){
     if(!current())return {ok:false,stale:true};
     state.lastSuccessAt=fallbackMessages.length||frontHealthError||ORG_ADMIN_RUNTIME.departmentHealthError?0:Date.now();
     renderOrgAdminRuntimeStatus();
+    if(typeof updateNRRouteHealth==='function')updateNRRouteHealth();
     if(typeof recordOpsEventDedup==='function'){
       recordOpsEventDedup('approval_org_admin_runtime_loaded','ok','組織 runtime 已讀取','後台已讀取 departments / positions / employee roles / health，供簽核設定頁確認。',{reason:reason||'',departments:ORG_ADMIN_RUNTIME.departments.length,positions:ORG_ADMIN_RUNTIME.positions.length,employeeRoles:ORG_ADMIN_RUNTIME.employeeRoles.length,dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
     }
@@ -7080,6 +7092,7 @@ async function performApprovalOrgAdminRuntimeRead(client,reason,state){
     ORG_ADMIN_RUNTIME.error=(missing?'正式 DB 尚未安裝組織管理 RPC；':'組織 runtime 讀取失敗；')+((err&&err.message)||err||'未知錯誤');
     ORG_ADMIN_RUNTIME.lastLoaded=new Date().toISOString();
     renderOrgAdminRuntimeStatus();
+    if(typeof updateNRRouteHealth==='function')updateNRRouteHealth();
     if(typeof recordOpsEvent==='function'){
       recordOpsEvent(missing?'approval_org_admin_runtime_missing':'approval_org_admin_runtime_failed','warn','組織 runtime 讀取未完成',ORG_ADMIN_RUNTIME.error,{reason:reason||'',error:String((err&&err.message)||err||''),dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
     }
@@ -12717,6 +12730,9 @@ function routeHealthPanelHtml(result,steps,opts){
   opts=opts||{};
   result=result||{ok:false,errors:['尚未完成流程檢查']};
   var title=opts.title||'簽核流程健康檢查';
+  if(opts.pending){
+    return'<div class="ux-health-card pending" role="status"><div class="ux-health-title">'+escAttr(title)+'：正式簽核人確認中</div><div>'+(opts.unavailable?'目前無法預覽完整簽核路線。送出時會重新向正式資料庫核對，未確認前不會建立申請單。':'正在讀取正式職務指派；送出時仍會由資料庫重新核對所有簽核人。')+'</div><div class="ux-health-actions"><button type="button" class="btn-g" onclick="refreshApprovalOrgAdminRuntime(null,\'expense_route_health_retry\',{force:true})">重新檢查</button></div></div>';
+  }
   if(result.ok){
     var mini=(steps||[]).slice(0,8).map(function(s,i){return'<span>'+(i+1)+'. '+escAttr(routeHealthStepName(s))+'</span>';}).join('');
     return'<div class="ux-health-card ok"><div class="ux-health-title">'+escAttr(title)+'：可以送出</div><div>系統已確認後續簽核人，送出後會依流程往下一關。</div><div class="ux-route-mini">'+mini+'</div></div>';
@@ -12756,7 +12772,19 @@ function updateNRRouteHealth(){
   if(!S.nrType){node.innerHTML='';return;}
   var appUser=currentNewReqApplicantUser();
   var dc=((el('nr-dept')||{}).value||((appUser||{}).dc)||'');
-  var res=validateApprovalRoute(appUser,S.nrType,dc,{amount:num((el('nr-amt')||{}).value),isFixedExpense:currentNewReqFixedExpense()});
+  var routeOpts={amount:num((el('nr-amt')||{}).value),isFixedExpense:currentNewReqFixedExpense()};
+  var needsCashier=workflowRequiresStep(S.nrType,'cashier',S.nrType!=='invoice_request',routeOpts);
+  var rolesConfirmed=ORG_ADMIN_RUNTIME.employeeRolesConfirmed===true&&ORG_ADMIN_RUNTIME.employeeRolesIdentity===financeStartupReadIdentity();
+  if(hasSupabase()&&!S.demoLogin&&needsCashier&&!rolesConfirmed){
+    node.innerHTML=routeHealthPanelHtml(null,[],{title:'送單前流程健檢',pending:true,unavailable:!!ORG_ADMIN_RUNTIME.error});
+    var previewIdentity=financeStartupReadIdentity();
+    if(previewIdentity&&(NR_ROLE_PREVIEW_REQUEST.identity!==previewIdentity||Date.now()-NR_ROLE_PREVIEW_REQUEST.lastAttemptAt>30000)){
+      NR_ROLE_PREVIEW_REQUEST={identity:previewIdentity,lastAttemptAt:Date.now()};
+      refreshApprovalOrgAdminRuntime(null,'login_runtime_assurance_before').catch(function(err){console.warn('Formal approval preview refresh failed',err);});
+    }
+    return;
+  }
+  var res=validateApprovalRoute(appUser,S.nrType,dc,routeOpts);
   node.innerHTML=routeHealthPanelHtml(res,newReqApprovalStepsForHealth(appUser),{title:'送單前流程健檢'});
 }
 window.updateNRRouteHealth=updateNRRouteHealth;
@@ -23297,8 +23325,10 @@ window.submitNR=async function(){
     var pendingResolution=await reconcilePendingExpenseSubmission({notify:true,allowRetry:true});
     if(pendingResolution.state==='committed')return;
     if(pendingResolution.state==='deterministic_failure'){
-      alert('上一筆送件已確認失敗，且沒有建立正式申請。\n\n'+friendlyErrorMessage(pendingResolution.error,{action:'確認上一筆送件'})+'\n請確認畫面資料後再送出。');
-      return;
+      // Readback and the same-ID retry both confirmed no formal request. The
+      // pending marker has been cleared; this click can validate the current
+      // form and start a new attempt without creating a duplicate.
+      setTopSyncStatus('前次送件未建立，正在檢查目前表單');
     }
     if(pendingResolution.state==='unknown'){
       alert('上一筆送件結果仍在確認中，為避免建立重複申請，現在不能再次送出。\n\n請先到「簽核管理 → 我的申請」重新整理確認；若仍看不到，請把事件編號交給系統管理員。');
