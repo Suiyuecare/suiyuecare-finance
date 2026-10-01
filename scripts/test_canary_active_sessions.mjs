@@ -117,7 +117,7 @@ try {
     // The separate human-accounting gate does not use these release parsers.
     if (name === 'finance_production_human_accounting_canary.sql') continue;
     const source = fs.readFileSync(new URL(name, scripts), 'utf8');
-    const select = source.match(/(?:^|\n)(select\s+(?:pg_catalog\.)?jsonb_build_object\([\s\S]*?\)\s+as\s+\w+\s*;)\s*$/i)?.[1];
+    const select = source.match(/(?:^|\n)(select\s+(?:'[^']+'\s+as\s+marker\s*,\s*)?(?:pg_catalog\.)?jsonb_build_object\([\s\S]*?\)\s+as\s+\w+\s*;)\s*$/i)?.[1];
     assert.ok(select, name+' final output must be explicitly verified');
     const file = join(outputDir, name+'.json');
     fs.writeFileSync(file, JSON.stringify(await outputDb.exec(select)));
@@ -131,7 +131,7 @@ try {
     }
     verified++;
   }
-  assert.equal(verified, 27, 'every protected authenticated/report/finalize/utility final SQL result is covered');
-  pass('all 27 actual final SQL result shapes satisfy their unchanged protected release parsers');
+  assert.equal(verified, 28, 'every protected authenticated/report/finalize/utility final SQL result is covered');
+  pass('all 28 actual final SQL result shapes satisfy their unchanged protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);
