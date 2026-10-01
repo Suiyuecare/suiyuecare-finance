@@ -3103,6 +3103,7 @@ var permissionRuntimeRefreshRunning=false;
 var SYSTEM_SETTINGS_REALTIME_UPDATES={};
 var SETTINGS_REMOTE_CHANGE_PENDING=false;
 var remoteLoadPromise=null;
+var remoteLoadIdentity='';
 var remoteDataAuthUserId='';
 // The write path must never use the embedded bootstrap directory to decide
 // whether an approval actor has Auth.  Keep a separate, identity-bound latch
@@ -3274,6 +3275,7 @@ function setFinanceWorkspaceIdentityBlocked(blocked){
   financeWorkspaceIdentityBlocked=!!blocked;
   if(blocked&&typeof clearSystemHealthRuntime==='function')clearSystemHealthRuntime();
   if(blocked&&window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();
+  if(blocked&&typeof window.closeReceiptViewer==='function')window.closeReceiptViewer();
   if(blocked&&window.FinancePaymentConcerns)FinancePaymentConcerns.suspend();
   if(blocked&&typeof FINANCE_NOTIFICATION_STATE!=='undefined'){FINANCE_NOTIFICATION_STATE=null;if(typeof NOTIFS!=='undefined')NOTIFS=[];}
   var nodes=['main-wrap','sidebar'].map(function(id){return el(id);});
@@ -8034,6 +8036,10 @@ function loadCurrentUserDrafts(options){
     if(!current()||settled)return;
     var client=options.client||getSb();if(!client||!auth||!ownerId)throw new Error('本人草稿連線或登入驗證尚未就緒，請重新讀取。');
     var rows=[],seen=Object.create(null),total=null,pageSize=100,filter=financeDraftOwnerFilter(ownerId,email);
+    function ownedDrafts(sourceRows){
+      return sourceRows.filter(function(row){return row.owner_id===ownerId||row.owner_id===null&&email&&String(row.owner_email||'').trim().toLowerCase()===email;})
+        .map(function(row){var draft=mapRemoteDraft(row);draft.ownerId=row.owner_id||'';draft.ownerEmail=row.owner_email||'';draft.ownerName=row.owner_name||'';return draft;});
+    }
     for(var offset=0;offset<100000;offset+=pageSize){
       if(!current()||settled){finish(null,null,true);return;}
       var query=client.from('draft_requests').select('*',{count:'exact'}).eq('tenant_id',tenant).eq('data_environment',environment).or(filter).order('updated_at',{ascending:false}).order('id',{ascending:true}).range(offset,offset+pageSize-1);
@@ -8050,11 +8056,17 @@ function loadCurrentUserDrafts(options){
       });
       if(rows.length>total)throw new Error('草稿筆數不一致，請重新讀取。');
       if(rows.length===total){
-        var mine=rows.filter(function(row){return row.owner_id===ownerId||row.owner_id===null&&email&&String(row.owner_email||'').trim().toLowerCase()===email;});
-        var mapped=mine.map(function(row){var draft=mapRemoteDraft(row);draft.ownerId=row.owner_id||'';draft.ownerEmail=row.owner_email||'';draft.ownerName=row.owner_name||'';return draft;});
-        finish(mapped,null,false);return;
+        finish(ownedDrafts(rows),null,false);return;
       }
       if(result.data.length!==pageSize)throw new Error('草稿分頁尚未完整讀取，請重試。');
+      // Show the verified first page while later pages load. This is a partial
+      // owner-scoped list: never mark its total or completeness as confirmed.
+      if(offset===0&&current()&&!settled){
+        var firstPage=ownedDrafts(rows);
+        DRAFTS=firstPage;state.rows=firstPage;state.loadedCount=firstPage.length;
+        state.previousComplete=false;
+        paintCurrentUserDrafts();
+      }
     }
     throw new Error('草稿清單超過安全讀取範圍，尚未確認完整筆數。');
   }).catch(function(error){finish(null,error,false);});
@@ -9435,16 +9447,31 @@ function scheduleDeferredFinanceRuntimeRefresh(authUserId){
     try{await refreshApprovalOrgAdminRuntime(client,'load_remote_data_deferred');}catch(err){console.warn('Deferred approval admin refresh failed',err&&err.message?err.message:err);}
   },0);
 }
+function remoteDataReadIdentity(){
+  var user=S.user||{};
+  if(!user.id||!String(user.authUserId||user.auth_user_id||'').trim()||financeWorkspaceIdentityBlocked)return '';
+  return JSON.stringify([
+    dashboardFinancialSourceIdentity(),
+    String(user.authUserId||user.auth_user_id||''),
+    typeof financeAuthIdentityEpoch==='undefined'?0:financeAuthIdentityEpoch
+  ]);
+}
 async function loadRemoteData(options){
   // Explicit resyncs and post-mutation reloads invalidate before reading. Cold
   // bootstrap joins the independent aggregate already started by the dashboard.
   if(!options||!options.preserveDashboardAggregate)invalidateDashboardFinancialCache();
-  if(remoteLoadPromise)return remoteLoadPromise;
-  remoteLoadPromise=performRemoteDataLoad();
+  var identity=remoteDataReadIdentity();
+  if(!identity)return false;
+  if(remoteLoadPromise&&remoteLoadIdentity===identity)return remoteLoadPromise;
+  var read=performRemoteDataLoad();
+  remoteLoadIdentity=identity;
+  remoteLoadPromise=read;
   try{
-    return await remoteLoadPromise;
+    return await read;
   }finally{
-    remoteLoadPromise=null;
+    // A previous account's read may settle after the new account starts.
+    // Its cleanup must not detach the new account's single-flight promise.
+    if(remoteLoadPromise===read){remoteLoadPromise=null;remoteLoadIdentity='';}
   }
 }
 function approvalBootstrapCoordinatorForCurrentUser(){
@@ -9784,11 +9811,16 @@ function refreshRealtimeScopedSource(table,payload){
 async function refreshRemoteData(reason,payload){
   if(!hasSupabase()||!S.user)return Promise.resolve(false);
   if(realtimeScopedRefreshKind(reason))return refreshRealtimeScopedSource(reason,payload);
-  var identity=approvalFastBootstrapIdentity();
+  var identity=remoteDataReadIdentity();
+  if(!identity)return false;
   if(remoteRefreshPromise&&remoteRefreshIdentity&&remoteRefreshIdentity!==identity){
-    return remoteRefreshPromise.catch(function(){return false;}).then(function(){
-      return identity===approvalFastBootstrapIdentity()?refreshRemoteData(reason):false;
-    });
+    // Retire the old account's refresh immediately. Its in-flight requests
+    // still have their own scope checks; the new account must not await them.
+    if(syncTimer)clearTimeout(syncTimer);
+    if(remoteRefreshTimerResolve)remoteRefreshTimerResolve();
+    remoteRefreshPromise=null;remoteRefreshTimerResolve=null;syncTimer=null;
+    remoteRefreshQueued=false;remoteRefreshReason='';
+    remoteRefreshApprovalDirty=false;remoteRefreshApprovalInFlight=false;
   }
   var refreshReason=String(reason||remoteRefreshReason||'realtime');
   if(/expense_requests|invoices|bills|approval/i.test(refreshReason)){
@@ -9800,7 +9832,7 @@ async function refreshRemoteData(reason,payload){
   remoteRefreshIdentity=identity;
   if(remoteRefreshPromise)return remoteRefreshPromise;
   if(syncTimer)clearTimeout(syncTimer);
-  remoteRefreshPromise=new Promise(function(resolve){
+  var refresh=new Promise(function(resolve){
     remoteRefreshTimerResolve=resolve;
     syncTimer=setTimeout(function(){
       remoteRefreshTimerResolve=null;
@@ -9812,8 +9844,12 @@ async function refreshRemoteData(reason,payload){
     // cycle. Events arriving during the trailing cycle are covered by that
     // read and must not re-arm an unbounded third/fourth full bootstrap.
     for(var cycle=0;cycle<2&&remoteRefreshQueued;cycle++){
+      // A retired debounce can wake after a new identity has queued work.
+      // Check ownership before consuming any shared refresh flags.
+      if(identity!==remoteDataReadIdentity()||remoteRefreshIdentity!==identity)break;
       remoteRefreshQueued=false;
-      var cycleIdentity=approvalFastBootstrapIdentity();
+      var cycleIdentity=remoteDataReadIdentity();
+      var cycleApprovalIdentity=approvalFastBootstrapIdentity();
       var cycleReason=remoteRefreshReason||'realtime';
       remoteRefreshReason='';
       var cycleApprovalDirty=remoteRefreshApprovalDirty;
@@ -9825,12 +9861,12 @@ async function refreshRemoteData(reason,payload){
       try{
         setTopSyncStatus('同步中');
         await loadRemoteData();
-        if(cycleIdentity!==approvalFastBootstrapIdentity())break;
+        if(cycleIdentity!==remoteDataReadIdentity()||cycleIdentity!==remoteRefreshIdentity)break;
         if(cycleNeedsApprovalRecovery||!approvalMutationRuntimeReady()){
           var recovered=await loadApprovalFastBootstrap('soft_refresh_recovery:'+cycleReason,{force:true});
-          if(cycleIdentity!==approvalFastBootstrapIdentity())break;
+          if(cycleIdentity!==remoteDataReadIdentity()||cycleIdentity!==remoteRefreshIdentity)break;
           var recoveredInvariant=!!(recovered&&recovered.hydrated===true
-            &&APPROVAL_FAST_BOOTSTRAP.identity===cycleIdentity
+            &&APPROVAL_FAST_BOOTSTRAP.identity===cycleApprovalIdentity
             &&APPROVAL_FAST_BOOTSTRAP.verified===true
             &&APPROVAL_FAST_BOOTSTRAP.tasksVerified===true
             &&APPROVAL_FAST_BOOTSTRAP.hydrated===true
@@ -9853,6 +9889,7 @@ async function refreshRemoteData(reason,payload){
         setTopSyncStatus(syncStatusText());
         lastResult=approvalMutationRuntimeReady();
       }catch(err){
+        if(cycleIdentity!==remoteDataReadIdentity()||cycleIdentity!==remoteRefreshIdentity)break;
         console.warn('Realtime refresh failed:',cycleReason,err);
         if(cycleNeedsApprovalRecovery){
           remoteRefreshApprovalInFlight=false;
@@ -9863,7 +9900,7 @@ async function refreshRemoteData(reason,payload){
         lastResult=false;
       }
     }
-    if(remoteRefreshQueued||remoteRefreshApprovalDirty){
+    if(identity===remoteDataReadIdentity()&&remoteRefreshIdentity===identity&&(remoteRefreshQueued||remoteRefreshApprovalDirty)){
       lastResult=false;
       remoteRefreshApprovalInFlight=false;
       remoteRefreshApprovalDirty=true;
@@ -9874,6 +9911,7 @@ async function refreshRemoteData(reason,payload){
     }
     return lastResult;
   }).finally(function(){
+    if(remoteRefreshPromise!==refresh||remoteRefreshIdentity!==identity)return;
     if(remoteRefreshApprovalInFlight){
       remoteRefreshApprovalInFlight=false;
       remoteRefreshApprovalDirty=true;
@@ -9886,7 +9924,8 @@ async function refreshRemoteData(reason,payload){
     remoteRefreshTimerResolve=null;
     syncTimer=null;
   });
-  return remoteRefreshPromise;
+  remoteRefreshPromise=refresh;
+  return refresh;
 }
 function applyRealtimeSystemSettingValue(key,value){
   if(!isFinanceRuntimeSettingKey(key))return false;
@@ -18359,7 +18398,12 @@ function dashboardFinancialBundle(scope){
   if(DASH_FINANCIAL_CACHE.key===key&&DASH_FINANCIAL_CACHE.value)return DASH_FINANCIAL_CACHE.value;
   var rows=state.ready?dashLedgerRows(scope.eid,scope.start,scope.end):[],previousRows=state.ready?dashLedgerRows(scope.eid,scope.prevStart,scope.prevEnd):[],engine=window.FinanceFinancialStatements;
   var cashRows=state.ready?engine.normalizeRows(statementScopedLedger(scope.eid).filter(function(r){return !r.voidedAt&&!r.voided_at;})):[],overrides=state.ready?statementCashFlowOverrides(scope.eid):{};
-  var local={scope:scope,rows:rows,previousRows:previousRows,summary:dashTotals(rows),previousSummary:dashTotals(previousRows),companies:state.ready?dashEntityMetrics(rows,previousRows,scope.eid):[],departments:state.ready?dashDepartmentMetrics(rows,previousRows):[],receivables:dashboardReceivablesAsOf(scope.eid,scope.end),previousReceivables:dashboardReceivablesAsOf(scope.eid,scope.prevEnd),trend:state.ready?dashboardTrend(scope):[],financialReady:state.ready,financialMessage:state.message,financialState:state,cashFlow:state.ready?engine.cashFlow(cashRows,{start:scope.start,end:scope.end},mappings,[],overrides):null,previousCashFlow:state.ready?engine.cashFlow(cashRows,{start:scope.prevStart,end:scope.prevEnd},mappings,[],overrides):null,officialSource:'local_bootstrap'};
+  // The online receivables card only accepts the complete, authorized server
+  // aggregate. Rebuilding a provisional browser copy on every ledger page is
+  // both expensive and invisible while that aggregate is still pending.
+  var localReceivables=state.ready&&(!hasSupabase()||S.demoLogin)?dashboardReceivablesAsOf(scope.eid,scope.end):null;
+  var localPreviousReceivables=state.ready&&(!hasSupabase()||S.demoLogin)?dashboardReceivablesAsOf(scope.eid,scope.prevEnd):null;
+  var local={scope:scope,rows:rows,previousRows:previousRows,summary:dashTotals(rows),previousSummary:dashTotals(previousRows),companies:state.ready?dashEntityMetrics(rows,previousRows,scope.eid):[],departments:state.ready?dashDepartmentMetrics(rows,previousRows):[],receivables:localReceivables,previousReceivables:localPreviousReceivables,trend:state.ready?dashboardTrend(scope):[],financialReady:state.ready,financialMessage:state.message,financialState:state,cashFlow:state.ready?engine.cashFlow(cashRows,{start:scope.start,end:scope.end},mappings,[],overrides):null,previousCashFlow:state.ready?engine.cashFlow(cashRows,{start:scope.prevStart,end:scope.prevEnd},mappings,[],overrides):null,officialSource:'local_bootstrap'};
   var value=remotePayload?dashboardBundleFromRemote(remotePayload,scope,local):local;
   DASH_FINANCIAL_CACHE={key:key,value:value};return value;
 }
@@ -19200,8 +19244,7 @@ function draftLoadStatusHtml(){
   var failed=state.status==='error',retained=(DRAFTS||[]).filter(draftBelongsToCurrentUser).length;
   return '<div class="draft-load-status" data-draft-state="'+(failed?'error':'loading')+'" role="status" aria-live="polite" aria-busy="'+(!failed)+'">'
     +'<div><strong>'+(failed?'草稿讀取未完成':'正在讀取我的草稿')+'</strong><p>'
-    +(failed?'目前無法確認完整草稿清單，請重試讀取。':'正在讀取你的草稿，完成後會顯示筆數。')
-    +(retained?' 下方保留已取得的草稿。':'')+'</p></div>'
+    +(retained?'目前先顯示 '+retained+' 筆本人草稿；完整清單與總筆數尚未確認。':failed?'目前無法確認完整草稿清單，請重試讀取。':'正在讀取你的草稿，完成後會顯示筆數。')+'</p></div>'
     +(failed?'<button type="button" class="btn-g" onclick="retryMyDrafts()">重試讀取草稿</button>':'')+'</div>';
 }
 window.retryMyDrafts=function(){return loadCurrentUserDrafts({force:true,reason:'draft_manual_retry'});};
@@ -20664,6 +20707,34 @@ async function receiptBundleAttachment(files,meta){
 var RECEIPT_VIEWER_STATE={files:[],index:0,zoom:1,rot:0,title:'',record:null};
 var RECEIPT_VIEWER_RENDER_GENERATION=0;
 var RECEIPT_VIEWER_RENDER_IDENTITY='';
+var RECEIPT_VIEWER_MEDIA_TIMER=null;
+var RECEIPT_VIEWER_PROBE_CONTROLLER=null;
+var RECEIPT_VIEWER_PDF_PROBE_STATE=null;
+var RECEIPT_VIEWER_SIGN_CANCEL=null;
+function clearReceiptViewerPendingMedia(){
+  if(RECEIPT_VIEWER_MEDIA_TIMER){clearTimeout(RECEIPT_VIEWER_MEDIA_TIMER);RECEIPT_VIEWER_MEDIA_TIMER=null;}
+  if(RECEIPT_VIEWER_PROBE_CONTROLLER){RECEIPT_VIEWER_PROBE_CONTROLLER.abort();RECEIPT_VIEWER_PROBE_CONTROLLER=null;}
+  if(RECEIPT_VIEWER_SIGN_CANCEL)RECEIPT_VIEWER_SIGN_CANCEL();
+  RECEIPT_VIEWER_PDF_PROBE_STATE=null;
+}
+function receiptViewerSignedUrl(file){
+  return new Promise(function(resolve,reject){
+    var finished=false,timer=null;
+    function settle(error,url){
+      if(finished)return;
+      finished=true;
+      if(timer)clearTimeout(timer);
+      if(RECEIPT_VIEWER_SIGN_CANCEL===cancel)RECEIPT_VIEWER_SIGN_CANCEL=null;
+      if(error)reject(error);else resolve(url);
+    }
+    function cancel(){var error=new Error('附件預覽已取消');error.code='CLIENT_CANCELLED';settle(error);}
+    RECEIPT_VIEWER_SIGN_CANCEL=cancel;
+    timer=setTimeout(function(){
+      var error=new Error('取得附件預覽連結逾時，請稍後重試。');error.code='CLIENT_TIMEOUT';settle(error);
+    },12000);
+    try{Promise.resolve(signAttachmentUrl(file)).then(function(url){settle(null,url);},settle);}catch(error){settle(error);}
+  });
+}
 function requestReceiptFiles(r){
   if(!r)return [];
   var files=[];
@@ -20704,6 +20775,7 @@ window.openReceiptViewerForRequest=function(rid){
 window.closeReceiptViewer=function(){
   RECEIPT_VIEWER_RENDER_GENERATION++;
   RECEIPT_VIEWER_RENDER_IDENTITY='';
+  clearReceiptViewerPendingMedia();
   RECEIPT_VIEWER_STATE={files:[],index:0,zoom:1,rot:0,title:'',record:null};
   var modal=el('m-receipt-viewer');if(modal)modal.style.display='none';
   var body=el('receipt-viewer-body');if(body)body.innerHTML='';
@@ -20736,8 +20808,90 @@ window.receiptViewerDownload=function(){
   var f=RECEIPT_VIEWER_STATE.files[RECEIPT_VIEWER_STATE.index];
   if(f)downloadFileMeta(f,{type:'expense_requests',record:RECEIPT_VIEWER_STATE.record});
 };
-function receiptViewerFailure(body,message){
-  if(body)body.innerHTML='<div class="receipt-viewer-empty" role="alert">'+escAttr(message)+' <button type="button" class="btn-g" onclick="renderReceiptViewer()">重新載入附件</button></div>';
+function receiptViewerFailure(body,message,allowDownload){
+  clearReceiptViewerPendingMedia();
+  if(body)body.innerHTML='<div class="receipt-viewer-empty" role="alert">'+escAttr(message)+' <button type="button" class="btn-g" onclick="renderReceiptViewer()">重新載入附件</button>'
+    +(allowDownload?' <button type="button" class="btn-g" onclick="receiptViewerDownload()">下載原檔</button>':'')+'</div>';
+}
+function receiptViewerMediaLoaded(generation){
+  if(generation!==RECEIPT_VIEWER_RENDER_GENERATION)return;
+  var identity=RECEIPT_VIEWER_RENDER_IDENTITY;
+  var s=RECEIPT_VIEWER_STATE,f=(s.files||[])[s.index];
+  if(!identity||identity!==attachmentDownloadIdentity()||!f||!canDownloadAttachment(f,{type:'expense_requests',record:s.record})){
+    receiptViewerFailure(el('receipt-viewer-body'),'登入身分或附件權限已變更，請重新登入後再開啟。');
+    return;
+  }
+  if(RECEIPT_VIEWER_MEDIA_TIMER){clearTimeout(RECEIPT_VIEWER_MEDIA_TIMER);RECEIPT_VIEWER_MEDIA_TIMER=null;}
+  var note=el('receipt-viewer-body')&&el('receipt-viewer-body').querySelector('[data-receipt-viewer-loading]');
+  var probe=RECEIPT_VIEWER_PDF_PROBE_STATE;
+  if(probe&&probe.generation===generation){
+    probe.mediaLoaded=true;
+    if(probe.status==='pending'){
+      if(note)note.textContent='PDF 已開啟，正在確認原檔狀態；若畫面空白，請下載原檔核對。';
+      return;
+    }
+    if(probe.status==='unverified'){
+      if(note)note.textContent='預覽已開啟，但無法確認原檔狀態；若畫面空白，請下載原檔核對。';
+      return;
+    }
+  }
+  if(note)note.remove();
+}
+function receiptViewerProbeSettled(generation,verified){
+  var probe=RECEIPT_VIEWER_PDF_PROBE_STATE;
+  if(!probe||probe.generation!==generation||generation!==RECEIPT_VIEWER_RENDER_GENERATION)return;
+  probe.status=verified?'verified':'unverified';
+  var body=el('receipt-viewer-body'),note=body&&body.querySelector('[data-receipt-viewer-loading]');
+  if(!note)return;
+  if(!verified){
+    note.textContent=(probe.mediaLoaded?'預覽已開啟，但':'正在載入 PDF，但')+'無法確認原檔狀態；若畫面空白，請下載原檔核對。';
+    return;
+  }
+  if(probe.mediaLoaded)note.remove();
+}
+function receiptViewerMediaSlow(generation){
+  if(generation!==RECEIPT_VIEWER_RENDER_GENERATION)return;
+  RECEIPT_VIEWER_MEDIA_TIMER=null;
+  var body=el('receipt-viewer-body'),s=RECEIPT_VIEWER_STATE,f=(s.files||[])[s.index];
+  if(!body||!f)return;
+  if(!RECEIPT_VIEWER_RENDER_IDENTITY||RECEIPT_VIEWER_RENDER_IDENTITY!==attachmentDownloadIdentity()||!canDownloadAttachment(f,{type:'expense_requests',record:s.record})){
+    receiptViewerFailure(body,'登入身分或附件權限已變更，請重新登入後再開啟。');
+    return;
+  }
+  var note=body.querySelector('[data-receipt-viewer-loading]');
+  if(note)note.textContent='預覽仍在載入'+(RECEIPT_VIEWER_PDF_PROBE_STATE&&RECEIPT_VIEWER_PDF_PROBE_STATE.status==='unverified'?'，且無法確認原檔狀態':'')+'；若畫面空白，可用上方「下載原檔」核對。';
+}
+async function receiptViewerProbePrivatePdf(url){
+  // A PDF iframe can fire load even for an HTTP error. Fetch only one byte to
+  // check the signed object without downloading a second 50 MB copy.
+  if(typeof fetch!=='function'||typeof AbortController==='undefined')return {verified:false};
+  var controller=new AbortController(),timedOut=false,timer=null;
+  RECEIPT_VIEWER_PROBE_CONTROLLER=controller;
+  try{
+    var response=await Promise.race([
+      fetch(url,{method:'GET',headers:{Range:'bytes=0-0'},signal:controller.signal,cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'}),
+      new Promise(function(_,reject){timer=setTimeout(function(){
+        timedOut=true;controller.abort();
+        var timeout=new Error('附件預覽檢查逾時');timeout.code='CLIENT_TIMEOUT';reject(timeout);
+      },10000);})
+    ]);
+    if(response.body&&typeof response.body.cancel==='function')Promise.resolve(response.body.cancel()).catch(function(){});
+    if(!response.ok){
+      var error=new Error('附件預覽讀取失敗（HTTP '+response.status+'）');
+      error.status=response.status;
+      throw error;
+    }
+    return {verified:true};
+  }catch(error){
+    if(timedOut&&error.code!=='CLIENT_TIMEOUT'){var timeout=new Error('附件預覽檢查逾時');timeout.code='CLIENT_TIMEOUT';throw timeout;}
+    // CORS/network failures cannot prove the signed object is missing. Let the
+    // browser try its normal media load, with visible status and download.
+    if(!error.status)return {verified:false};
+    throw error;
+  }finally{
+    clearTimeout(timer);
+    if(RECEIPT_VIEWER_PROBE_CONTROLLER===controller)RECEIPT_VIEWER_PROBE_CONTROLLER=null;
+  }
 }
 window.receiptViewerMediaFailed=function(generation){
   if(generation!==RECEIPT_VIEWER_RENDER_GENERATION)return;
@@ -20750,12 +20904,13 @@ window.receiptViewerMediaFailed=function(generation){
     receiptViewerFailure(body,'登入身分或附件權限已變更，請重新登入後再開啟。');
     return;
   }
-  receiptViewerFailure(body,'附件目前無法在瀏覽器預覽。請重試，或下載原檔核對。');
+  receiptViewerFailure(body,'附件目前無法在瀏覽器預覽。請重試，或下載原檔核對。',true);
 };
 async function renderReceiptViewer(){
   var s=RECEIPT_VIEWER_STATE,files=s.files||[],f=files[s.index];
   var title=el('receipt-viewer-title'),bar=el('receipt-viewer-toolbar'),body=el('receipt-viewer-body');
   var generation=++RECEIPT_VIEWER_RENDER_GENERATION;
+  clearReceiptViewerPendingMedia();
   if(title)title.textContent=s.title||'憑據核對';
   if(!bar||!body)return;
   if(!f){bar.innerHTML='';body.innerHTML='<div class="receipt-viewer-empty">沒有可預覽的憑據</div>';return;}
@@ -20770,7 +20925,7 @@ async function renderReceiptViewer(){
   body.innerHTML='<div class="receipt-viewer-empty">載入憑據中...</div>';
   function isCurrent(){return generation===RECEIPT_VIEWER_RENDER_GENERATION&&s===RECEIPT_VIEWER_STATE&&modal&&modal.style.display!=='none';}
   var url='';
-  try{url=await signAttachmentUrl(f);}catch(err){
+  try{url=await receiptViewerSignedUrl(f);}catch(err){
     if(!isCurrent())return;
     if(identity!==attachmentDownloadIdentity()||!canDownloadAttachment(f,context)){
       receiptViewerFailure(body,'登入身分或附件權限已變更，請重新登入後再開啟。');
@@ -20786,13 +20941,38 @@ async function renderReceiptViewer(){
     return;
   }
   if(!url){receiptViewerFailure(body,'附件下載連結尚未建立，請重新載入附件；若仍失敗，請聯絡系統管理員。');return;}
+  var privatePdf=attachmentLooksPdf(f)&&attachmentStoragePath(f)&&/^https?:\/\//i.test(url);
+  RECEIPT_VIEWER_PDF_PROBE_STATE=attachmentLooksPdf(f)?{generation:generation,status:privatePdf?'pending':'verified',mediaLoaded:false}:null;
   var transform='scale('+(s.zoom||1)+') rotate('+(s.rot||0)+'deg)';
+  var loadingNote='<div class="receipt-viewer-empty" role="status" data-receipt-viewer-loading style="position:absolute;z-index:2;top:20px;left:50%;transform:translateX(-50%);max-width:90%;pointer-events:none">正在載入'+(attachmentLooksPdf(f)?' PDF':'圖片')+'，可使用上方「下載原檔」。</div>';
+  if(attachmentLooksImage(f)||attachmentLooksPdf(f))RECEIPT_VIEWER_MEDIA_TIMER=setTimeout(function(){receiptViewerMediaSlow(generation);},15000);
   if(attachmentLooksImage(f)){
-    body.innerHTML='<div class="receipt-viewer-stage"><img class="receipt-viewer-img" src="'+escAttr(url)+'" alt="'+escAttr(f.n||'憑據')+'" style="transform:'+transform+'" onerror="receiptViewerMediaFailed('+generation+')"></div>';
+    body.innerHTML='<div class="receipt-viewer-stage" style="position:relative">'+loadingNote+'<img class="receipt-viewer-img" src="'+escAttr(url)+'" alt="'+escAttr(f.n||'憑據')+'" style="transform:'+transform+'" onload="receiptViewerMediaLoaded('+generation+')" onerror="receiptViewerMediaFailed('+generation+')"></div>';
   }else if(attachmentLooksPdf(f)){
-    body.innerHTML='<div class="receipt-viewer-stage"><iframe class="receipt-viewer-frame" src="'+escAttr(url)+'" title="'+escAttr(f.n||'憑據 PDF')+'" style="transform:'+transform+'" onerror="receiptViewerMediaFailed('+generation+')"></iframe></div>';
+    body.innerHTML='<div class="receipt-viewer-stage" style="position:relative">'+loadingNote+'<iframe class="receipt-viewer-frame" src="'+escAttr(url)+'" title="'+escAttr(f.n||'憑據 PDF')+'" style="transform:'+transform+'" onload="receiptViewerMediaLoaded('+generation+')" onerror="receiptViewerMediaFailed('+generation+')"></iframe></div>';
   }else{
     body.innerHTML='<div class="receipt-viewer-empty">此附件無法預覽，請下載原檔查看。</div>';
+  }
+  if(privatePdf){
+    try{
+      var probeResult=await receiptViewerProbePrivatePdf(url);
+      if(!isCurrent())return;
+      if(identity!==attachmentDownloadIdentity()||!canDownloadAttachment(f,context)){
+        receiptViewerFailure(body,'登入身分或附件權限已變更，請重新登入後再開啟。');
+        return;
+      }
+      receiptViewerProbeSettled(generation,probeResult.verified===true);
+    }catch(err){
+      if(!isCurrent())return;
+      if(identity!==attachmentDownloadIdentity()||!canDownloadAttachment(f,context)){
+        receiptViewerFailure(body,'登入身分或附件權限已變更，請重新登入後再開啟。');
+        return;
+      }
+      // The browser may still load a PDF when the separate probe times out.
+      // A definite HTTP rejection, however, must not remain a blank iframe.
+      if(err.code==='CLIENT_TIMEOUT'){receiptViewerProbeSettled(generation,false);return;}
+      receiptViewerFailure(body,attachmentDownloadFailureMessage(attachmentDownloadFailureKind(err)),attachmentDownloadFailureKind(err)==='transient');
+    }
   }
 }
 function lazyExcelAttachment(files,meta){
@@ -27048,7 +27228,7 @@ function approvalTableHeaderHtml(){
     +(approvalWaitColumnVisible()?approvalHeaderCell('waitTime','待處理時間'):'')
     +'</tr></thead>';
 }
-function approvalPagerHtml(total,page,pages){
+function approvalPagerHtml(total,page,pages,complete){
   if(!total)return'';
   var start=Math.max(1,(page-1)*50+1),end=Math.min(total,page*50);
   var btns=[];
@@ -27056,7 +27236,8 @@ function approvalPagerHtml(total,page,pages){
   var from=Math.max(1,page-2),to=Math.min(pages,from+4);from=Math.max(1,to-4);
   for(var i=from;i<=to;i++)btns.push('<button class="btn-g '+(i===page?'on':'')+'" onclick="apprPage('+i+')">'+i+'</button>');
   btns.push('<button class="btn-g" '+(page>=pages?'disabled':'')+' onclick="apprPage('+(page+1)+')">下一頁</button>');
-  return '<div class="appr-pager"><span style="font-size:11px;color:#8b7358;margin-right:auto">顯示 '+start+'-'+end+' / 共 '+total+' 筆，每頁最多 50 筆</span>'+btns.join('')+'</div>';
+  var countLabel=complete===false?'目前符合條件 '+total+' 筆，草稿仍在讀取':'共 '+total+' 筆';
+  return '<div class="appr-pager"><span style="font-size:11px;color:#8b7358;margin-right:auto">顯示 '+start+'-'+end+' / '+countLabel+'，每頁最多 50 筆</span>'+btns.join('')+'</div>';
 }
 var approvalLocalSearchTimer=null;
 var approvalLocalSearchSeq=0;
@@ -27327,7 +27508,7 @@ function renderApprDraftList(){
   var total=filtered.length,pages=Math.max(1,Math.ceil(total/50)),page=Math.min(Math.max(1,S.apprPage||1),pages);
   S.apprPage=page;
   var statusHtml=draftLoadStatusHtml();
-  var hint=el('appr-list-hint');if(hint)hint.textContent=statusHtml?'草稿清單尚未完整確認':'搜尋後 '+total+' 筆 · 每頁最多 50 筆';
+  var hint=el('appr-list-hint');if(hint)hint.textContent=statusHtml?'目前符合條件 '+total+' 筆 · 草稿清單尚未完整確認':'搜尋後 '+total+' 筆 · 每頁最多 50 筆';
   if(!filtered.length){l.innerHTML=statusHtml||'<div class="card" style="text-align:center;padding:34px;color:#c0a880;font-size:12px">'+((S.apprQuery||'')?'找不到符合搜尋條件的暫存表單':'目前沒有暫存表單')+'</div>';return;}
   var rows=filtered.slice((page-1)*50,page*50).map(function(item){
     var d=item.raw;
@@ -27346,7 +27527,7 @@ function renderApprDraftList(){
       +'<td class="appr-col-payDate date-cell" style="color:#94a3b8">'+escAttr(approvalShortDate(fields['nr-paydate']||'—'))+'</td>'
       +'</tr>';
   }).join('');
-  l.innerHTML=statusHtml+'<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table compact">'+approvalTableHeaderHtml()+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(total,page,pages)+'</div>';
+  l.innerHTML=statusHtml+'<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table compact">'+approvalTableHeaderHtml()+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(total,page,pages,!statusHtml)+'</div>';
 }
 window.openApprovalDraft=function(id){
   var d=(DRAFTS||[]).find(function(x){return x.id===id;});
@@ -39547,6 +39728,10 @@ function incomeSubmissionFingerprint(formType,records){
 // operation key across retry/reload; only verified completion unlocks a new form.
 var INCOME_SUBMISSION_PENDING={};
 var INCOME_SUBMISSION_RUNNING={};
+// sessionStorage carries the frozen request for retry in the same tab. A
+// minimal localStorage receipt survives a closed tab without storing invoice
+// details, payers, attachment paths, or a replayable request payload.
+var INCOME_SUBMISSION_RECOVERY_MARKER_PREFIX='finance_income_submission_recovery_v1:';
 function incomeSubmissionOwner(){
   return JSON.stringify([currentFinanceAuthUserId(),S.user&&S.user.id||'',currentTenantId(),activeDataEnvironment()]);
 }
@@ -39557,6 +39742,21 @@ function incomeSubmissionIdentity(){
 }
 function incomeSubmissionIdentityCurrent(identity){return !!identity&&identity===incomeSubmissionIdentity();}
 function incomeSubmissionStorageKey(formType){return 'finance_income_submission_pending_v2:'+incomeSubmissionOwner()+':'+formType;}
+function incomeSubmissionRecoveryMarkerKey(formType){return INCOME_SUBMISSION_RECOVERY_MARKER_PREFIX+incomeSubmissionOwner()+':'+formType;}
+function incomeSubmissionRecoveryMarker(formType){
+  var raw=safeGetItem(incomeSubmissionRecoveryMarkerKey(formType));if(!raw)return null;
+  var marker;
+  try{marker=JSON.parse(raw);}catch(_){throw new Error('前次送件識別碼無法讀取；為避免重複建立，請聯絡系統管理員查核正式資料。');}
+  if(!marker||marker.owner!==incomeSubmissionOwner()||marker.formType!==formType||typeof marker.operationKey!=='string'||!marker.operationKey||marker.dataEnvironment!==activeDataEnvironment()||!Array.isArray(marker.itemKeys)||!marker.itemKeys.length||marker.itemKeys.length>150||new Set(marker.itemKeys).size!==marker.itemKeys.length||marker.itemKeys.some(function(key){return typeof key!=='string'||!key;}))throw new Error('前次送件識別碼不完整；為避免重複建立，請聯絡系統管理員查核正式資料。');
+  return marker;
+}
+function incomeSubmissionMarkerFromEntry(entry){
+  return {owner:entry.owner,formType:entry.formType,operationKey:entry.args.p_idempotency_key,itemKeys:entry.args.p_items.map(function(item){return item.client_item_key;}),dataEnvironment:entry.args.p_data_environment,createdAt:entry.createdAt};
+}
+function clearIncomeSubmissionRecoveryMarker(formType,operationKey){
+  var marker=incomeSubmissionRecoveryMarker(formType);
+  if(marker&&marker.operationKey===operationKey)safeRemoveItem(incomeSubmissionRecoveryMarkerKey(formType));
+}
 function incomeSubmissionFormUi(mode){return {mode:mode,snapshot:incomeDirtySnapshot(mode==='bill'?'bills':'invoices')};}
 function clearIncomeSubmissionFormIfUnchanged(entry){
   var ui=entry&&entry.formUi,page=ui&&ui.mode==='bill'?'bills':'invoices';
@@ -39584,13 +39784,16 @@ function loadIncomeSubmissionPending(formType){
 function saveIncomeSubmissionPending(entry){
   if(!entry||entry.owner!==incomeSubmissionOwner())return false;
   var key=incomeSubmissionStorageKey(entry.formType);
-  if(!sessionSetItem(key,JSON.stringify(entry)))return false;
+  var previous=incomeSubmissionRecoveryMarker(entry.formType);
+  if(previous&&(previous.operationKey!==entry.args.p_idempotency_key||JSON.stringify(previous.itemKeys)!==JSON.stringify(entry.args.p_items.map(function(item){return item.client_item_key;}))))return false;
+  if(!safeJsonSet(incomeSubmissionRecoveryMarkerKey(entry.formType),incomeSubmissionMarkerFromEntry(entry)))return false;
+  if(!sessionSetItem(key,JSON.stringify(entry))){if(!previous)clearIncomeSubmissionRecoveryMarker(entry.formType,entry.args.p_idempotency_key);return false;}
   INCOME_SUBMISSION_PENDING[key]=entry;return true;
 }
 function clearIncomeSubmissionPending(entry){
   if(!entry||entry.owner!==incomeSubmissionOwner())return;
   var key=incomeSubmissionStorageKey(entry.formType),current=loadIncomeSubmissionPending(entry.formType);
-  if(current&&current.args.p_idempotency_key===entry.args.p_idempotency_key){sessionRemoveItem(key);delete INCOME_SUBMISSION_PENDING[key];delete INCOME_SUBMISSION_RETRY_STATE[entry.formType];}
+  if(current&&current.args.p_idempotency_key===entry.args.p_idempotency_key){sessionRemoveItem(key);delete INCOME_SUBMISSION_PENDING[key];delete INCOME_SUBMISSION_RETRY_STATE[entry.formType];clearIncomeSubmissionRecoveryMarker(entry.formType,entry.args.p_idempotency_key);}
   renderIncomeSubmissionRecovery(entry.formType);
 }
 function incomeSubmissionUnknown(message,identityChanged){
@@ -39681,16 +39884,26 @@ function applyIncomeSubmissionResponse(records,result){
 }
 async function recoverPendingIncomeSubmission(formType){
   var identity=incomeSubmissionIdentity(),entry=loadIncomeSubmissionPending(formType);
-  if(!entry)return false;
-  var result=await runIncomeSubmissionAttempt(entry,identity);
+  var marker=entry?null:incomeSubmissionRecoveryMarker(formType);
+  if(!entry&&!marker)return false;
+  var result;
+  if(entry)result=await runIncomeSubmissionAttempt(entry,identity);
+  else{
+    // The original tab is gone, so the frozen payload cannot be replayed.
+    // Exact, actor-scoped source reads can confirm a commit without creating
+    // a second request. An absent read is not proof of rollback.
+    var lookup={formType:formType,records:marker.itemKeys,args:{p_idempotency_key:marker.operationKey,p_data_environment:marker.dataEnvironment,p_items:marker.itemKeys.map(function(key){return {client_item_key:key};})}};
+    var committed=await readIncomeSubmissionCommit(lookup,identity);
+    result=committed?{available:true,ok:true,data:committed}:incomeSubmissionUnknown('尚未在正式資料確認前次送件；請勿重送。請由系統管理員核對原交易及發票申請，確認結果後再處理。');
+  }
   if(!incomeSubmissionIdentityCurrent(identity))return true;
   if(!result.ok){alert(result.error&&result.error.message||'原送單結果待確認');return true;}
   var ids=result.data.rows.map(function(row){return row.id;}),reloaded=false;
   try{reloaded=await withOperationTimeout(formType==='invoice'?reloadInvoicesByIds(ids):reloadBillsByIds(ids),'讀取原送單結果',12000);}catch(_){}
   if(!incomeSubmissionIdentityCurrent(identity))return true;
   if(reloaded){
-    var formCleared=clearIncomeSubmissionFormIfUnchanged(entry);
-    clearIncomeSubmissionPending(entry);
+    var formCleared=entry?clearIncomeSubmissionFormIfUnchanged(entry):false;
+    if(entry)clearIncomeSubmissionPending(entry);else{clearIncomeSubmissionRecoveryMarker(formType,marker.operationKey);renderIncomeSubmissionRecovery(formType);}
     if(formType==='invoice'){renderInvTable();renderBatchInvTable();}else renderBillList();
     buildApprovals();
     alert('原送單已確認，共 '+ids.length+' 張，沒有重複建立。'+(formCleared?'原表單已清空，可以填寫新申請。':'目前修改過的表單內容仍保留，尚未作為新單送出。'));
@@ -39700,12 +39913,12 @@ async function recoverPendingIncomeSubmission(formType){
 window.recoverPendingIncomeSubmission=recoverPendingIncomeSubmission;
 function renderIncomeSubmissionRecovery(formType){
   var root=el(formType==='invoice'?'pg-invoices':'pg-bills');if(!root||!root.insertBefore)return;
-  var id='income-submission-recovery-'+formType,box=el(id),entry=null,readError=null;
-  try{entry=loadIncomeSubmissionPending(formType);}catch(error){readError=error;}
-  if(!entry&&!readError){if(box)box.remove();return;}
+  var id='income-submission-recovery-'+formType,box=el(id),entry=null,marker=null,readError=null;
+  try{entry=loadIncomeSubmissionPending(formType);if(!entry)marker=incomeSubmissionRecoveryMarker(formType);}catch(error){readError=error;}
+  if(!entry&&!marker&&!readError){if(box)box.remove();return;}
   if(!box){box=document.createElement('div');box.id=id;box.className='card';box.style.padding='14px';root.insertBefore(box,root.firstChild);}
   if(readError){box.textContent=readError.message;return;}
-  box.textContent=entry.response?'原送單已保存，最新資料待同步。':'有一筆送單結果待確認；原內容與附件已保留。';
+  box.textContent=entry?(entry.response?'原送單已保存，最新資料待同步。':'有一筆送單結果待確認；原內容與附件已保留。'):'找到前次送件識別碼；原分頁已關閉。請先查核正式結果，系統不會重新送件。';
   var button=document.createElement('button');button.className='btn-s';button.textContent='確認原送單結果';button.type='button';
   button.onclick=async function(){button.disabled=true;try{await recoverPendingIncomeSubmission(formType);}finally{button.disabled=false;}};box.appendChild(button);
 }
@@ -39719,6 +39932,7 @@ async function submitIncomeDocumentTransaction(formType,records){
   if(formType==='bill'){var limit=billBatchLimitError(records.length,'submit');if(limit)return {available:true,ok:false,error:new Error(limit)};}
   var entry=loadIncomeSubmissionPending(formType);
   if(entry){return incomeSubmissionUnknown('先前送單結果尚未完成核對，請先按「確認原送單結果」。目前變更的內容尚未另行送出。');}
+  if(incomeSubmissionRecoveryMarker(formType))return incomeSubmissionUnknown('前次送件的原分頁已關閉；請先按「確認原送單結果」查核正式資料。目前不會建立新單。');
   var operationKey=formType+'_submit_'+crypto.randomUUID();
   records.forEach(function(record,index){record.submissionIdempotencyKey=operationKey;record.submissionClientItemKey=formType+'_item_'+index+'_'+crypto.randomUUID();});
   entry={owner:incomeSubmissionOwner(),formType:formType,rpcName:formType==='invoice'?'finance_submit_invoice_batch':'finance_submit_bill_batch',records:cloneSettingValue(records),formUi:cloneSettingValue(records[0].submissionFormUi||null),unknown:false,createdAt:new Date().toISOString(),args:{p_idempotency_key:operationKey,p_items:records.map(function(record,index){return incomeSubmissionRpcItem(formType,record,index);}),p_data_environment:activeDataEnvironment()}};

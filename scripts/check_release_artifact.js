@@ -490,13 +490,22 @@ function expectedBuiltIndex() {
   const hash = crypto.createHash('sha256');
   for (const asset of versionedAssets) hash.update(asset.key).update(fs.readFileSync(asset.file));
   html = html.replace(/__FINANCE_ASSET_VERSION__/g, hash.digest('hex').slice(0, 16));
-  const bundle = require('./finance_startup_bundle').createStartupBundle(applyBuildEnvironment(html, buildConfig), ROOT);
+  const { createStartupBundle, createAppBundle } = require('./finance_startup_bundle');
+  const bundle = createStartupBundle(applyBuildEnvironment(html, buildConfig), ROOT);
   if (fs.readFileSync(path.join(OUTPUT, bundle.file), 'utf8') !== bundle.code) fail('startup bundle is not the deterministic concatenation of source engines');
   if (!fs.readFileSync(path.join(OUTPUT, bundle.sdk.file)).equals(bundle.sdk.code)) fail('built Supabase SDK differs from the fixed official UMD');
   for (const file of ['assets/vendor/supabase-js-2.111.0.LICENSE', 'assets/vendor/supabase-js-2.111.0.provenance.json']) {
     if (!fs.readFileSync(path.join(OUTPUT, file)).equals(fs.readFileSync(path.join(ROOT, file)))) fail('built Supabase SDK evidence differs: ' + file);
   }
-  return bundle.html;
+  const app = createAppBundle(bundle.html);
+  const appPath = path.join(OUTPUT, app.file);
+  if (!fs.existsSync(appPath) || fs.readFileSync(appPath, 'utf8') !== app.code) {
+    fail('built Finance app differs from the exact configured source IIFE');
+  }
+  if (crypto.createHash('sha256').update(app.code).digest('hex').slice(0, 16) !== app.file.match(/finance-app-([a-f0-9]{16})\.js$/)?.[1]) {
+    fail('built Finance app path is not content-addressed');
+  }
+  return app.html;
 }
 
 function expectedExternalRemunerationPage() {
@@ -525,20 +534,29 @@ const builtIndexPath = path.join(OUTPUT, 'index.html');
 if (!fs.existsSync(builtIndexPath)) fail('www/index.html is missing');
 const builtIndex = fs.readFileSync(builtIndexPath, 'utf8');
 if (builtIndex !== expectedBuiltIndex()) fail('www/index.html is not the deterministic build of index.html for the selected build target');
+const appMatch = builtIndex.match(/<script src="(assets\/finance-app-[a-f0-9]{16}\.js)"><\/script>/g);
+if (!appMatch || appMatch.length !== 1 || builtIndex.includes("<script>\n(function(){\n'use strict';")) {
+  fail('built HTML must load exactly one external Finance app script');
+}
+if (Buffer.byteLength(builtIndex) >= Buffer.byteLength(fs.readFileSync(path.join(ROOT, 'index.html'))) / 4) {
+  fail('built HTML still carries the main application payload');
+}
+const builtAppPath = path.join(OUTPUT, appMatch[0].match(/src="([^"]+)"/)[1]);
+const builtBrowserCode = builtIndex + '\n' + fs.readFileSync(builtAppPath, 'utf8');
 const externalPagePath = path.join(OUTPUT, 'external-remuneration.html');
 if (!fs.existsSync(externalPagePath) || fs.readFileSync(externalPagePath, 'utf8') !== expectedExternalRemunerationPage()) {
   fail('www/external-remuneration.html is not the deterministic build of its source');
 }
-if (/__(?:FINANCE_BUILD_TARGET|FINANCE_SUPABASE_URL|FINANCE_SUPABASE_ANON_KEY)__/.test(builtIndex)) {
-  fail('www/index.html still contains a Finance runtime configuration placeholder');
+if (/__(?:FINANCE_BUILD_TARGET|FINANCE_SUPABASE_URL|FINANCE_SUPABASE_ANON_KEY)__/.test(builtBrowserCode)) {
+  fail('built Finance browser code still contains a runtime configuration placeholder');
 }
-if (buildConfig.target !== 'production' && /https:\/\/[a-z0-9-]+\.supabase\.co/i.test(builtIndex)) {
+if (buildConfig.target !== 'production' && /https:\/\/[a-z0-9-]+\.supabase\.co/i.test(builtBrowserCode)) {
   fail(`${buildConfig.target} artifact contains a Supabase project URL`);
 }
-if (buildConfig.target !== 'production' && /var\s+SUPABASE_(?:ANON|PUBLISHABLE)_KEY\s*=\s*['"](?:eyJ|sb_)/i.test(builtIndex)) {
+if (buildConfig.target !== 'production' && /var\s+SUPABASE_(?:ANON|PUBLISHABLE)_KEY\s*=\s*['"](?:eyJ|sb_)/i.test(builtBrowserCode)) {
   fail(`${buildConfig.target} artifact contains a Supabase browser key`);
 }
-if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(builtIndex)) {
+if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(builtBrowserCode)) {
   fail('artifact contains a forbidden Supabase elevated key');
 }
 

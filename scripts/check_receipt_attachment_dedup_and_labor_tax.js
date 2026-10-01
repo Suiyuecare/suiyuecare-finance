@@ -12,6 +12,8 @@ const registrySource=fs.readFileSync(path.join(root,'assets/engines/finance-v4-e
 const attachmentSource=fs.readFileSync(path.join(root,'assets/engines/attachment-engine.js'),'utf8');
 const indexSource=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const builtIndexSource=fs.readFileSync(path.join(builtRoot,'index.html'),'utf8');
+const builtAppPath=builtIndexSource.match(/<script src="(assets\/finance-app-[a-f0-9]{16}\.js)"><\/script>/)?.[1];
+const builtAppSource=builtAppPath?fs.readFileSync(path.join(builtRoot,builtAppPath),'utf8'):builtIndexSource;
 const builtAttachmentSource=fs.readFileSync(path.join(builtRoot,'assets/engines/attachment-engine.js'),'utf8');
 const context={window:{},console};
 context.window.window=context.window;
@@ -79,7 +81,7 @@ check('labor-fee OCR rows are forced to exempt mode',/if\(laborFee\)\{[\s\S]{0,1
 check('6221 is an explicit labor-fee detection signal',/if\(code==='6221'\)return true;/.test(indexSource));
 check('historical AI labor-fee lines default to zero input tax unless a human reviewed the amounts',/\|\|laborFee\)&&!humanTax&&!humanNet\)\{tax=0;net=gross;\}/.test(indexSource));
 check('saving a reviewed labor-fee line keeps the human tax input',/var tax=taxEl\?Math\.max\(0,Math\.round\(num\(taxEl\.value\)\)\):num\(line\.taxAmount\)/.test(indexSource));
-check('built frontend includes unique receipt attachment handling',builtIndexSource.includes('receiptFilesForInvoiceRows')&&builtAttachmentSource.includes('function uniqueFiles'));
-check('built frontend includes the labor fee AI default and human override guard',builtIndexSource.includes("if(code==='6221')return true")&&builtIndexSource.includes('humanAmount=accountingLineManualFields'));
+check('built frontend includes unique receipt attachment handling',builtAppSource.includes('receiptFilesForInvoiceRows')&&builtAttachmentSource.includes('function uniqueFiles'));
+check('built frontend includes the labor fee AI default and human override guard',builtAppSource.includes("if(code==='6221')return true")&&builtAppSource.includes('humanAmount=accountingLineManualFields'));
 
 process.stdout.write('OK: '+passed+' receipt attachment and labor tax checks passed\n');

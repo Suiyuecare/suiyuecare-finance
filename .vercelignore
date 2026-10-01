@@ -230,6 +230,7 @@ supabase/.temp
 # Read latency, lazy documents and exact RLS source pages
 !docs/finance-read-latency.md
 !scripts/check_read_latency.cjs
+!scripts/check_remote_account_switch_latency.cjs
 !scripts/check_read_latency_browser.cjs
 !scripts/check_approval_list_performance.cjs
 !scripts/check_voucher_pagination_browser.cjs
