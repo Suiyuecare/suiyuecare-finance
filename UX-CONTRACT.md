@@ -9,6 +9,8 @@
 | 手機常用導覽 | `assets/engines/mobile-ux-engine.js` 從桌面已授權導覽挑選捷徑 | 依職務排序最多四個常用頁，未授權頁面不得出現；完整授權頁面仍可由更多選單進入。職務排序不授予任何權限。 |
 | 主要／次要按鈕 | `assets/styles/finance-core.css` 的 `.btn-p`／`.btn-s`／`.btn-g` | 主要橘底白字至少 4.5:1；鍵盤焦點可見，忙碌及停用不冒充成功。色彩來源見 [DESIGN.md](DESIGN.md)。 |
 | 背景讀取及即時更新 | `loadRemoteData`、`refreshRemoteData` 與相應 scoped read | 小表變動只更新受影響資料；正式金額及送件前核對仍須完整。刷新可保留最後成功資料但要標示時間；錯誤、未完成與確定空集合須分開。 |
+| 單據頁首屏 | `performRemoteDataLoad` 與正式財務來源協調器 | 財務角色進入申請、傳票、繳費單或發票頁時，先讀並呈現該頁已驗證的單據，再接續完整分類帳與公司設定；正式財務數字未完整核對前維持核對中。單據來源失敗仍須繼續完整財務讀取，登入身分切換後不得回填舊單據。 |
+| 手機申請清單 | `assets/styles/finance-core.css` 的 `#pg-expenses .mobile-native-card-table` | 手機在清單標籤備妥後改為可逐項閱讀的卡片，保留七個欄位、長用途與金額；375／390px 不應出現 980px 橫向表格，桌面仍用欄位表格。卡片可點擊及鍵盤開啟詳情。 |
 | 畫面簡化層 | `assets/engines/workflow-simplification-engine.js` | 只掃描實際變動的表單、清單或詳情區域；通知等無關 DOM 異動不能造成全頁反覆重排；手動刷新仍能完整套用。 |
 | 附件保存與檢視 | Storage `file_attachments.storage_path`、`uploadAttachmentToSupabase`、`downloadFileMeta`／檢視器 | 選檔不等於上傳完成；私有附件須在當前登入身分下簽章並核權。晚到預覽不得跨檔案、帳號、租戶或環境顯示；失敗有重試。 |
 | 發票檔案匯入 | `setBatchInvoiceUploadFile`、`analyzeBatchInvoiceUpload`、`importBatchCsv` | OCR 與 CSV／Excel 異步讀取只可更新目前選定檔案的最新嘗試；換檔、切換登入身分及重試後的舊結果不得覆蓋明細或提示。 |
