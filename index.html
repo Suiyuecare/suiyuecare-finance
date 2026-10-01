@@ -4709,7 +4709,7 @@ async function uploadAttachmentResumable(client,path,blob,contentType,ctx,scope)
   var tusLibrary=await ensureFinanceTusLibrary();
   await assertFinanceAttachmentUploadIdentity(client,scope);
   return new Promise(function(resolve,reject){
-    var settled=false,stopping=false,lateCleanupStarted=false,upload=null,lastProgress=Date.now(),watch=null;
+    var settled=false,stopping=false,lateCleanupStarted=false,upload=null,lastProgress=Date.now(),watch=null,possiblyCompleted=false;
     var signal=ctx&&ctx.abortSignal;
     function cleanLateCompletion(){
       if(lateCleanupStarted)return;
@@ -4731,7 +4731,7 @@ async function uploadAttachmentResumable(client,path,blob,contentType,ctx,scope)
       // Wait for the active HTTP request to stop before the outer layer may
       // remove its Storage path. A final-chunk callback can race with abort.
       Promise.resolve().then(function(){return upload?upload.abort():null;}).then(function(){
-        finish(attachmentUploadError(message,{reason:reason,storagePath:path}));
+        finish(attachmentUploadError(message,{reason:reason,storagePath:path,possiblyCompleted:possiblyCompleted}));
       },function(error){
         finish(attachmentUploadError('附件傳輸中止尚未確認，系統已保留紀錄供查核；請勿重複送單。',{reason:'attachment_abort_unconfirmed',storagePath:path,sourceError:error}));
       });
@@ -4766,8 +4766,9 @@ async function uploadAttachmentResumable(client,path,blob,contentType,ctx,scope)
       },
       onError:function(error){if(!stopping)finish(error);},
       onSuccess:function(){
+        possiblyCompleted=true;
         if(stopping){if(settled)cleanLateCompletion();return;}
-        if(financeWorkspaceIdentityBlocked||financeAttachmentUploadScope()!==scope){finish(attachmentUploadError('登入身分已切換，附件不得寫入原帳號申請。',{reason:'attachment_upload_identity_changed',storagePath:path}));return;}
+        if(financeWorkspaceIdentityBlocked||financeAttachmentUploadScope()!==scope){finish(attachmentUploadError('登入身分已切換，附件不得寫入原帳號申請。',{reason:'attachment_upload_identity_changed',storagePath:path,possiblyCompleted:true}));return;}
         finish();
       }
     });
@@ -4830,7 +4831,7 @@ async function uploadAttachmentToSupabase(att,ctx){
       }
       // This path was freshly generated for this attempt. Never remove the
       // source draft attachment or an object from a previous submission.
-      try{await cleanupAttachmentPersistence(client,path,{objectOnly:true});}
+      try{await cleanupAttachmentPersistence(client,path,{objectOnly:true,objectRequired:uploadError&&uploadError.possiblyCompleted===true});}
       catch(cleanupError){
         console.error('Incomplete resumable upload cleanup:',path,cleanupError);
         stagedAttachmentCleanupDiagnostic('attachment_resumable_cleanup_failed','大附件上傳中斷後清理失敗','儲存路徑 '+path+' 的大附件續傳失敗後未能清理；請由管理員查核。',{storagePath:path,error:formatStorageUploadError(cleanupError)});
@@ -5030,7 +5031,7 @@ async function cleanupUploadedSupabaseAttachments(groups,label){
   var cleaned=0;
   for(var i=0;i<paths.length;i++){
     try{
-      await cleanupAttachmentPersistence(client,paths[i]);
+      await cleanupAttachmentPersistence(client,paths[i],{objectRequired:true});
       cleaned++;
     }catch(error){
       failures.push({path:paths[i],message:formatStorageUploadError(error)});

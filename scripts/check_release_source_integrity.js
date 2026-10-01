@@ -179,6 +179,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/check_external_labor_browser.cjs',
   'supabase/migrations/20261001030323_fix_attachment_claim_path_lookup.sql',
   'supabase/migrations/20261001202434_finance_attachment_owner_staged_cleanup_select_v3.sql',
+  'scripts/finance_attachment_staged_cleanup_postflight.sql',
   'scripts/finance_attachment_claim_postflight.sql',
   'scripts/finance_attachment_claim_canary.sql',
   'scripts/finance_attachment_claim_fingerprint.sql',

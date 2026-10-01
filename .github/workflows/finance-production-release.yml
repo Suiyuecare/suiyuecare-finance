@@ -313,6 +313,7 @@ jobs:
           cp scripts/finance_portal_session_logout_postflight.sql scripts/finance_portal_session_canary.sql scripts/finance_portal_session_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_external_labor_postflight.sql scripts/finance_external_labor_canary.sql scripts/finance_external_labor_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_attachment_claim_postflight.sql scripts/finance_attachment_claim_canary.sql scripts/finance_attachment_claim_fingerprint.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_attachment_staged_cleanup_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_audit_security_canary_20261001.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_invoice_select_initplan_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_invoice_select_initplan_canary.sql "$BUNDLE/release-tools/scripts/"
@@ -562,6 +563,7 @@ jobs:
           if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then
             run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
               "$RUNNER_TEMP/finance-compatibility-gate.sql" "$RUNNER_TEMP/finance-compatibility-gate.json"
+            (cd "$TOOLS" && supabase db query --linked --file scripts/finance_attachment_staged_cleanup_postflight.sql --output json) > "$RUNNER_TEMP/finance-attachment-cleanup-preflight.json"
           elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_audit_security_20260922"; then
             node "$GUARD" prepare-audit-security-prerequisite-query --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
               --output "$RUNNER_TEMP/finance-audit-security-prerequisites.sql" --ledger "$LEDGER" \
@@ -1387,6 +1389,9 @@ jobs:
             --release-phase "$RELEASE_PHASE" --migration-versions "$MIGRATION_VERSIONS"
           (cd "$TOOLS" && supabase db query --linked \
             --file "$RUNNER_TEMP/promotion-postflight.sql" --output json) > "$RUNNER_TEMP/promotion-postflight.json"
+          if test "$RELEASE_PHASE" = "frontend_compat"; then
+            (cd "$TOOLS" && supabase db query --linked --file scripts/finance_attachment_staged_cleanup_postflight.sql --output json) > "$RUNNER_TEMP/finance-attachment-cleanup-postflight.json"
+          fi
           if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"; then
           (cd "$TOOLS" && supabase db query --linked \
             --file scripts/finance_production_authenticated_canary.sql \

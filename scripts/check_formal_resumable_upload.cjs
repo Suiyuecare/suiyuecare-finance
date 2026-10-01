@@ -49,7 +49,8 @@ async function main() {
   console.log('PASS formal large file stays a native Blob through normalization; existing draft path is retained');
 
   let currentScope = 'user-a|tenant-a|production';
-  const trace = { tus: [], sdk: [], rows: [], removals: [], deletions: [], signed: [], progress: [], aborts: 0, diagnostics: [] };
+  const trace = { tus: [], sdk: [], rows: [], removals: [], cleanupOptions: [], deletions: [], signed: [], progress: [], aborts: 0, diagnostics: [] };
+  let rejectRequiredCleanup = false;
   let tusBehavior = (upload) => {
     upload.options.onProgress(upload.file.size, upload.file.size);
     upload.options.onSuccess();
@@ -106,12 +107,15 @@ async function main() {
       ? { needsUpload: false, needsPromotion: false }
       : { needsUpload: true, needsPromotion: false, blob: att.uploadBlob, archive, path: fixturePath, name: att.n },
     hasSupabase: () => true, requireRemotePersistence: () => true,
+    collectAttachmentStoragePaths: groups => [...new Set(groups.flat().map(item => item && item.path).filter(Boolean))],
     ensureSupabaseStorageReady: async () => ({ ok: true }), getSb: () => client,
     tenantColumnsEnabled: () => true, isSchemaCacheMiss: () => false,
     assertAttachmentUploadable: () => {},
     verifyUploadedAttachmentReadable: async (_, storagePath) => { trace.signed.push(storagePath); },
     cleanupAttachmentPersistence: async (_, storagePath, opts) => {
       trace.removals.push(storagePath);
+      trace.cleanupOptions.push(opts || {});
+      if (rejectRequiredCleanup && opts && opts.objectRequired) throw new Error('Storage remove returned no affected object');
       if (opts && opts.metadataFirst) trace.deletions.push(storagePath);
     },
     stagedAttachmentCleanupDiagnostic: (...args) => { trace.diagnostics.push(args); },
@@ -121,7 +125,8 @@ async function main() {
   vm.createContext(c);
   vm.runInContext(between('var FINANCE_TUS_LIBRARY_READ=', 'async function uploadAttachmentToSupabase(')
     + between('async function uploadAttachmentToSupabase(', 'function recordLateAttachmentCleanupFailure(')
-    + between('function uploadAttachmentWithTrackedTimeout(', 'async function uploadAttachmentsToSupabase('), c);
+    + between('function uploadAttachmentWithTrackedTimeout(', 'async function uploadAttachmentsToSupabase(')
+    + between('async function cleanupUploadedSupabaseAttachments(', 'var STAGED_ATTACHMENT_LOGIN_CLEANUP_KEY='), c);
   const scoped = await c.uploadAttachmentToSupabase({ ...prepared, kind: 'receipt' }, {});
   assert.equal(trace.tus.length, 1);
   assert.equal(trace.sdk.length, 0, 'large file must bypass one-shot SDK upload');
@@ -207,6 +212,7 @@ async function main() {
   assert.equal(trace.rows.length, rowsBeforeRace, 'completion race cannot create staged metadata');
   releaseAbort();
   await assert.rejects(racePromise, /已中止分段傳輸/);
+  assert.equal(trace.cleanupOptions.at(-1).objectRequired, true, 'a completed final chunk must require confirmed cleanup after abort');
   const removalsAfterAbort = trace.removals.length;
   racingUpload.options.onSuccess(); // A late confirmation after abort gets another exact-path cleanup.
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -235,7 +241,22 @@ async function main() {
   };
   await assert.rejects(c.uploadAttachmentToSupabase({ ...prepared, kind: 'receipt' }, {}), /登入身分已切換/);
   assert.equal(trace.rows.length, beforeRows, 'a replacement Auth subject cannot insert metadata while the displayed employee stays unchanged');
+  assert.equal(trace.cleanupOptions.at(-1).objectRequired, true, 'completed upload under a changed account must confirm object deletion');
   auth.data.session = makeSession();
+  tusBehavior = (upload) => {
+    currentScope = 'user-b|tenant-a|production';
+    upload.options.onSuccess();
+  };
+  rejectRequiredCleanup = true;
+  await assert.rejects(c.uploadAttachmentToSupabase({ ...prepared, kind: 'receipt' }, {}), /登入身分已切換/);
+  assert.equal(trace.diagnostics.at(-1)[0], 'attachment_resumable_cleanup_failed', 'inaccessible completed object leaves an actionable diagnostic');
+  rejectRequiredCleanup = false;
+  currentScope = 'user-a|tenant-a|production';
+  auth.data.session = makeSession();
+  rejectRequiredCleanup = true;
+  await assert.rejects(c.cleanupUploadedSupabaseAttachments([[{ path: fixturePath }]], 'fictional rollback'), /未完整完成/);
+  assert.equal(trace.cleanupOptions.at(-1).objectRequired, true, 'batch rollback cannot count an unconfirmed Storage deletion as successful');
+  rejectRequiredCleanup = false;
   console.log('PASS a changed Auth subject after transfer cannot write under the unchanged displayed employee');
 
   tusBehavior = (upload) => {
