@@ -103,12 +103,13 @@ check('送件待確認狀態可跨重新整理復原並先回讀再解鎖',
   index.includes("EXPENSE_SUBMISSION_PENDING_KEY_BASE='finance_expense_submission_pending_v1'")
     && index.includes('safeJsonSet(key,pending)')
     && index.includes('sessionSetItem(key,JSON.stringify(pending))')
-    && expenseSubmit.includes('await reconcilePendingExpenseSubmission({notify:true,allowRetry:true})')
+    && expenseSubmit.includes('await reconcilePendingExpenseSubmission({notify:true,allowRetry:true,retainAttachmentsOnFailure:true,requireDirectoryForRetry:true})')
     && index.includes("if(readback.state==='absent')")
     && index.includes("if(options.allowRetry!==true)return{state:'unknown'")
     && index.includes("submitExpenseRequestWithAmbiguousRecovery(pending.retryRecord")
     && index.includes("label||'申請單保存'")
-    && index.includes("return{state:'deterministic_failure',error:retryOutcome.error}"));
+    && index.includes("if(options.retainAttachmentsOnFailure!==true)clearExpenseSubmissionPending()")
+    && index.includes("return{state:'deterministic_failure',error:retryOutcome.error,pending:"));
 check('正式 RPC 前必須同時持久化完整可重試 record',
   index.includes('expected:retryRecord,retryRecord:retryRecord')
     && index.includes('if(localSaved&&sessionSaved)S.nrSubmissionConfirmationPending=pending')
@@ -343,6 +344,7 @@ async function runBehaviorRegressions() {
     buildAll:()=>finalizeOrder.push('ui'),
     renderNotifs:()=>finalizeOrder.push('notifs'),
     pruneCompletedExpensePostCommitOutbox:()=>finalizeOrder.push('prune'),
+    refreshExpenseSubmissionRecoveryActions:()=>{},
     alert:()=>{}
   });
   vm.runInContext(section("var EXPENSE_SUBMISSION_PENDING_KEY_BASE", 'var EXPENSE_POST_COMMIT_OUTBOX_KEY_BASE'), recoveryContext);
