@@ -60,7 +60,11 @@ async function main() {
     start() { queueMicrotask(() => tusBehavior(this)); }
     abort() { trace.aborts++; return abortBehavior(this); }
   }
-  const auth = { data: { session: { access_token: 'fixture-access-token' } } };
+  const authUserId = 'auth-user-a';
+  const makeSession = (token = 'fixture-access-token', id = authUserId) => ({
+    access_token: token, user: { id, email: 'user-a@suiyuecare.com' },
+  });
+  const auth = { data: { session: makeSession() } };
   const client = {
     auth: { getSession: async () => auth },
     storage: { from(bucket) {
@@ -87,6 +91,10 @@ async function main() {
     Blob, Date, Promise, URL, AbortController, setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask,
     console: { warn() {}, error() {} },
     S: { user: { get id() { return currentScope.split('|')[0]; } }, demoLogin: false }, window: { tus: { Upload } },
+    financeWorkspaceIdentityBlocked: false,
+    currentFinanceAuthUserId: () => authUserId,
+    financeSessionMatchesWorkspace: (session) => !!session && session.user?.id === authUserId
+      && session.user?.email === 'user-a@suiyuecare.com',
     SUPABASE_URL: 'https://fictional-project.supabase.co', SUPABASE_ANON_KEY: 'anon-fixture',
     SUPABASE_ATTACHMENT_BUCKET: 'finance-attachments', ATTACHMENT_RESUMABLE_THRESHOLD_BYTES: sixMiB,
     normalizeFileMeta: attachmentEngine.normalizeFileMeta,
@@ -127,7 +135,7 @@ async function main() {
   await trace.tus[0].options.onBeforeRequest(request);
   assert.equal(requestHeaders.authorization, 'Bearer fixture-refreshed-token', 'each TUS chunk/retry gets current refreshed JWT');
   auth.data.session.access_token = 'fixture-access-token';
-  assert.match(await trace.tus[0].options.fingerprint(file), /user-a\|tenant-a\|production\|tenant-a\/expense_requests/);
+  assert.match(await trace.tus[0].options.fingerprint(file), /auth-user-a\|user-a\|tenant-a\|production\|tenant-a\/expense_requests/);
   assert.equal(trace.tus[0].options.metadata.objectName, fixturePath);
   assert.equal(trace.tus[0].options.metadata.bucketName, 'finance-attachments');
   assert.equal(trace.rows[0].tenant_id, 'tenant-a');
@@ -146,7 +154,13 @@ async function main() {
   currentScope = 'user-a|tenant-a|production';
   auth.data.session = null;
   await assert.rejects(trace.tus[0].options.onBeforeRequest(request), /登入狀態已過期/);
-  auth.data.session = { access_token: 'fixture-access-token' };
+  auth.data.session = makeSession();
+  auth.data.session.user.id = 'auth-user-b';
+  await assert.rejects(trace.tus[0].options.onBeforeRequest(request), /登入身分已切換/);
+  auth.data.session = makeSession();
+  c.financeWorkspaceIdentityBlocked = true;
+  await assert.rejects(trace.tus[0].options.onBeforeRequest(request), /登入身分已切換/);
+  c.financeWorkspaceIdentityBlocked = false;
   console.log('PASS TUS request hook denies switched accounts and expired auth before sending a chunk');
 
   const small = fakeFile(512, 'small.pdf');
@@ -208,13 +222,22 @@ async function main() {
     removeEventListener() {},
   };
   await assert.rejects(c.uploadAttachmentResumable(client, fixturePath, file, file.type,
-    { abortSignal: signalAbortingDuringRegistration }, 'user-a|tenant-a|production'), /已中止分段傳輸/);
+    { abortSignal: signalAbortingDuringRegistration }, 'auth-user-a|user-a|tenant-a|production'), /已中止分段傳輸/);
   assert.equal(trace.tus.length, uploadsBeforePreStartAbort, 'pre-start abort cannot create a background TUS request');
   console.log('PASS abort during signal registration cannot start a late transfer');
 
   const beforeRows = trace.rows.length;
   const abortsBeforeSwitch = trace.aborts;
   currentScope = 'user-a|tenant-a|production';
+  tusBehavior = (upload) => {
+    auth.data.session = makeSession('replacement-token', 'auth-user-b');
+    upload.options.onSuccess();
+  };
+  await assert.rejects(c.uploadAttachmentToSupabase({ ...prepared, kind: 'receipt' }, {}), /登入身分已切換/);
+  assert.equal(trace.rows.length, beforeRows, 'a replacement Auth subject cannot insert metadata while the displayed employee stays unchanged');
+  auth.data.session = makeSession();
+  console.log('PASS a changed Auth subject after transfer cannot write under the unchanged displayed employee');
+
   tusBehavior = (upload) => {
     currentScope = 'user-b|tenant-a|production';
     upload.options.onProgress(1, upload.file.size);
@@ -280,6 +303,38 @@ async function main() {
   assert.equal(batchCleanup[0][0][0], newFile, 'batch failure must not delete pre-existing draft object');
   assert.equal(batch.newlyUploadedAttachmentResults([previouslyUploaded, newFile]).length, 1);
   console.log('PASS batch rollback includes only objects created in the current attempt');
+
+  let deletedObjects = [];
+  let deletedRows = [];
+  const cleanupClient = {
+    storage: { from: () => ({ remove: async () => ({ data: deletedObjects }) }) },
+    from: () => ({ delete: () => ({ eq: () => ({ select: async () => ({ data: deletedRows }) }) }) }),
+  };
+  const cleanup = {
+    SUPABASE_ATTACHMENT_BUCKET: 'finance-attachments',
+    attachmentUploadError: (message, details) => Object.assign(new Error(message), details),
+    formatStorageUploadError: (error) => error?.message || String(error),
+  };
+  vm.createContext(cleanup);
+  vm.runInContext(between('async function removeUploadedAttachmentObject(', 'async function verifyUploadedAttachmentReadable('), cleanup);
+  await assert.rejects(cleanup.cleanupAttachmentPersistence(cleanupClient, fixturePath,
+    { objectOnly: true, objectRequired: true }), /沒有確認刪除/);
+  await cleanup.cleanupAttachmentPersistence(cleanupClient, fixturePath, { objectOnly: true });
+  deletedObjects = [{ name: 'unique.pdf' }];
+  deletedRows = [{ id: 'fictional-staged-row' }];
+  await cleanup.cleanupAttachmentPersistence(cleanupClient, fixturePath,
+    { metadataFirst: true, objectRequired: true, metadataRequired: true });
+  deletedRows = [];
+  await assert.rejects(cleanup.cleanupAttachmentPersistence(cleanupClient, fixturePath,
+    { metadataFirst: true, objectRequired: true, metadataRequired: true }), /沒有確認刪除這筆暫存附件/);
+  console.log('PASS cleanup requires confirmed affected rows for known uploaded objects and metadata');
+
+  const migration = fs.readFileSync(path.join(root,
+    'supabase/migrations/20261001202434_finance_attachment_owner_staged_cleanup_select_v3.sql'), 'utf8');
+  assert.match(migration, /for select\s+to authenticated/i);
+  assert.match(migration, /finance_can_mutate_attachment_object_v2\(name, owner_id, created_at\)/i);
+  assert.doesNotMatch(migration, /for delete\s+to authenticated/i);
+  console.log('PASS owner-only staged cleanup read policy mirrors the existing narrow delete predicate');
 
   const vendor = fs.readFileSync(path.join(root, 'assets/vendor/tus-4.3.1.min.js'));
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'assets/vendor/tus-4.3.1.provenance.json'), 'utf8'));

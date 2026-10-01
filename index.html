@@ -4612,16 +4612,26 @@ async function preflightAttachmentsForSupabase(files,ctx){
   });
   return files;
 }
-async function removeUploadedAttachmentObject(client,path){
+async function removeUploadedAttachmentObject(client,path,required){
   if(!client||!path)return true;
   var result=await client.storage.from(SUPABASE_ATTACHMENT_BUCKET).remove([path]);
   if(result&&result.error)throw result.error;
+  if(required){
+    var removed=result&&result.data||[];
+    var basename=path.split('/').pop();
+    if(!Array.isArray(removed)||!removed.some(function(item){return item===path||item&&([item.name,item.path,item.storagePath].indexOf(path)>-1||removed.length===1&&item.name===basename);})){
+      throw attachmentUploadError('儲存服務沒有確認刪除這個附件；請由管理員查核後再重試。',{reason:'attachment_object_delete_unconfirmed',storagePath:path});
+    }
+  }
   return true;
 }
-async function deleteAttachmentMetadata(client,path){
+async function deleteAttachmentMetadata(client,path,required){
   if(!client||!path)return true;
-  var result=await client.from('file_attachments').delete().eq('storage_path',path);
+  var result=await client.from('file_attachments').delete().eq('storage_path',path).select('id');
   if(result&&result.error)throw result.error;
+  if(required&&(!result||!Array.isArray(result.data)||!result.data.length)){
+    throw attachmentUploadError('資料庫沒有確認刪除這筆暫存附件資料；請由管理員查核後再重試。',{reason:'attachment_metadata_delete_unconfirmed',storagePath:path});
+  }
   return true;
 }
 async function cleanupAttachmentPersistence(client,path,opts){
@@ -4633,11 +4643,11 @@ async function cleanupAttachmentPersistence(client,path,opts){
     catch(error){failures.push({label:label,message:formatStorageUploadError(error)});}
   }
   if(opts.metadataFirst&&!opts.objectOnly){
-    await attempt('附件歸檔資料',function(){return deleteAttachmentMetadata(client,path);});
+    await attempt('附件歸檔資料',function(){return deleteAttachmentMetadata(client,path,opts.metadataRequired);});
   }
-  await attempt('附件檔案',function(){return removeUploadedAttachmentObject(client,path);});
+  await attempt('附件檔案',function(){return removeUploadedAttachmentObject(client,path,opts.objectRequired);});
   if(!opts.metadataFirst&&!opts.objectOnly){
-    await attempt('附件歸檔資料',function(){return deleteAttachmentMetadata(client,path);});
+    await attempt('附件歸檔資料',function(){return deleteAttachmentMetadata(client,path,opts.metadataRequired);});
   }
   if(failures.length){
     throw attachmentUploadError(
@@ -4674,21 +4684,37 @@ function financeStorageResumableEndpoint(){
   return url.origin+'/storage/v1/upload/resumable';
 }
 function financeAttachmentUploadScope(){
-  return [S.user&&S.user.id||'',currentTenantId(),activeDataEnvironment()].join('|');
+  return [currentFinanceAuthUserId(),S.user&&S.user.id||'',currentTenantId(),activeDataEnvironment()].join('|');
+}
+function financeAttachmentUploadIdentityMatches(scope,session){
+  return !financeWorkspaceIdentityBlocked
+    &&financeAttachmentUploadScope()===scope
+    &&financeSessionMatchesWorkspace(session);
+}
+async function assertFinanceAttachmentUploadIdentity(client,scope){
+  if(financeWorkspaceIdentityBlocked||financeAttachmentUploadScope()!==scope){
+    throw attachmentUploadError('登入身分已切換，已停止附件上傳。',{reason:'attachment_upload_identity_changed'});
+  }
+  var current=await client.auth.getSession();
+  var session=current&&current.data&&current.data.session;
+  if((current&&current.error)||!session||!session.access_token){
+    throw attachmentUploadError('登入狀態已過期，附件上傳已停止；請重新登入後再試。',{reason:'resumable_auth_required'});
+  }
+  if(!financeAttachmentUploadIdentityMatches(scope,session)){
+    throw attachmentUploadError('登入身分已切換，已停止附件上傳。',{reason:'attachment_upload_identity_changed'});
+  }
+  return session;
 }
 async function uploadAttachmentResumable(client,path,blob,contentType,ctx,scope){
   var tusLibrary=await ensureFinanceTusLibrary();
-  var sessionResult=await client.auth.getSession();
-  var token=sessionResult&&sessionResult.data&&sessionResult.data.session&&sessionResult.data.session.access_token;
-  if((sessionResult&&sessionResult.error)||!token)throw attachmentUploadError('大附件上傳需要有效的 Google 登入狀態，請重新登入後重試。',{reason:'resumable_auth_required'});
-  if(financeAttachmentUploadScope()!==scope)throw attachmentUploadError('登入身分已切換，已停止上傳；請切回本人帳號後重新選擇附件。',{reason:'attachment_upload_identity_changed'});
+  await assertFinanceAttachmentUploadIdentity(client,scope);
   return new Promise(function(resolve,reject){
     var settled=false,stopping=false,lateCleanupStarted=false,upload=null,lastProgress=Date.now(),watch=null;
     var signal=ctx&&ctx.abortSignal;
     function cleanLateCompletion(){
       if(lateCleanupStarted)return;
       lateCleanupStarted=true;
-      cleanupAttachmentPersistence(client,path,{objectOnly:true}).catch(function(error){
+      cleanupAttachmentPersistence(client,path,{objectOnly:true,objectRequired:true}).catch(function(error){
         stagedAttachmentCleanupDiagnostic('attachment_resumable_late_cleanup_failed','中止後附件清理失敗','儲存路徑 '+path+' 的分段上傳在中止後仍完成；請由管理員查核。',{storagePath:path,error:formatStorageUploadError(error)});
       });
     }
@@ -4723,12 +4749,8 @@ async function uploadAttachmentResumable(client,path,blob,contentType,ctx,scope)
       onBeforeRequest:async function(request){
         // Supabase may refresh a short-lived JWT during a long upload. Read
         // the current token for every POST/HEAD/PATCH and every retry.
-        if(financeAttachmentUploadScope()!==scope)throw attachmentUploadError('登入身分已切換，已停止附件上傳。',{reason:'attachment_upload_identity_changed',storagePath:path});
-        var current=await client.auth.getSession();
-        var currentToken=current&&current.data&&current.data.session&&current.data.session.access_token;
-        if((current&&current.error)||!currentToken)throw attachmentUploadError('登入狀態已過期，大附件上傳已停止；請重新登入後再試。',{reason:'resumable_auth_required',storagePath:path});
-        if(financeAttachmentUploadScope()!==scope)throw attachmentUploadError('登入身分已切換，已停止附件上傳。',{reason:'attachment_upload_identity_changed',storagePath:path});
-        request.setHeader('authorization','Bearer '+currentToken);
+        var currentSession=await assertFinanceAttachmentUploadIdentity(client,scope);
+        request.setHeader('authorization','Bearer '+currentSession.access_token);
       },
       uploadDataDuringCreation:true,
       removeFingerprintOnSuccess:true,
@@ -4738,20 +4760,20 @@ async function uploadAttachmentResumable(client,path,blob,contentType,ctx,scope)
       chunkSize:6*1024*1024,
       metadata:{bucketName:SUPABASE_ATTACHMENT_BUCKET,objectName:path,contentType:contentType||'application/octet-stream',cacheControl:'3600'},
       onProgress:function(sent,total){
-        if(financeAttachmentUploadScope()!==scope){stop('attachment_upload_identity_changed','登入身分已切換，已停止附件上傳。');return;}
+        if(financeWorkspaceIdentityBlocked||financeAttachmentUploadScope()!==scope){stop('attachment_upload_identity_changed','登入身分已切換，已停止附件上傳。');return;}
         lastProgress=Date.now();
         if(ctx&&typeof ctx.onProgress==='function')ctx.onProgress(sent,total,{path:path});
       },
       onError:function(error){if(!stopping)finish(error);},
       onSuccess:function(){
         if(stopping){if(settled)cleanLateCompletion();return;}
-        if(financeAttachmentUploadScope()!==scope){finish(attachmentUploadError('登入身分已切換，附件不得寫入原帳號申請。',{reason:'attachment_upload_identity_changed',storagePath:path}));return;}
+        if(financeWorkspaceIdentityBlocked||financeAttachmentUploadScope()!==scope){finish(attachmentUploadError('登入身分已切換，附件不得寫入原帳號申請。',{reason:'attachment_upload_identity_changed',storagePath:path}));return;}
         finish();
       }
     });
     watch=setInterval(function(){
       if(settled)return;
-      if(financeAttachmentUploadScope()!==scope)stop('attachment_upload_identity_changed','登入身分已切換，已停止附件上傳。');
+      if(financeWorkspaceIdentityBlocked||financeAttachmentUploadScope()!==scope)stop('attachment_upload_identity_changed','登入身分已切換，已停止附件上傳。');
       else if(Date.now()-lastProgress>180000)stop('attachment_upload_stalled','附件上傳已超過 3 分鐘沒有進度，請確認網路後重試；已選檔案仍保留。');
     },5000);
     if(stopping||settled)return;
@@ -4783,7 +4805,7 @@ async function uploadAttachmentToSupabase(att,ctx){
     }
     return att;
   }
-  if(financeAttachmentUploadScope()!==uploadScope)throw attachmentUploadError('登入身分已切換，請用本人帳號重新送出附件。',{reason:'attachment_upload_identity_changed'});
+  await assertFinanceAttachmentUploadIdentity(client,uploadScope);
   var archive=prepared.archive;
   var recordType=archive.recordType;
   var recordNo=archive.recordNo;
@@ -4798,7 +4820,7 @@ async function uploadAttachmentToSupabase(att,ctx){
     blob=source.data;
     assertAttachmentUploadable(att,blob);
   }
-  if(financeAttachmentUploadScope()!==uploadScope)throw attachmentUploadError('登入身分已切換，請用本人帳號重新送出附件。',{reason:'attachment_upload_identity_changed'});
+  await assertFinanceAttachmentUploadIdentity(client,uploadScope);
   if(blob.size>=ATTACHMENT_RESUMABLE_THRESHOLD_BYTES){
     try{await uploadAttachmentResumable(client,path,blob,blob.type||att.mime||'application/octet-stream',ctx,uploadScope);}
     catch(uploadError){
@@ -4828,14 +4850,17 @@ async function uploadAttachmentToSupabase(att,ctx){
     }
     if(up.error)throw up.error;
   }
-  if(financeAttachmentUploadScope()!==uploadScope){
-    try{await cleanupAttachmentPersistence(client,path,{objectOnly:true});}
+  var identityBeforeMetadata;
+  try{await assertFinanceAttachmentUploadIdentity(client,uploadScope);}
+  catch(error){identityBeforeMetadata=error;}
+  if(identityBeforeMetadata){
+    try{await cleanupAttachmentPersistence(client,path,{objectOnly:true,objectRequired:true});}
     catch(cleanupError){
       console.error('Identity switch upload cleanup failed:',path,cleanupError);
       stagedAttachmentCleanupDiagnostic('attachment_identity_cleanup_failed','帳號切換後附件清理失敗','儲存路徑 '+path+' 的附件在帳號切換後未能清理；請由管理員查核。',{storagePath:path,error:formatStorageUploadError(cleanupError)});
       throw attachmentUploadError('登入身分已切換，附件未能完整清理；請通知系統管理員。',{reason:'attachment_identity_cleanup_failed',storagePath:path,cleanupError:cleanupError});
     }
-    throw attachmentUploadError('登入身分已切換，已停止將附件寫入原帳號申請。',{reason:'attachment_upload_identity_changed'});
+    throw identityBeforeMetadata;
   }
   try{
     var metaRow={
@@ -4868,25 +4893,28 @@ async function uploadAttachmentToSupabase(att,ctx){
     }
     if(meta.error)throw meta.error;
   }catch(metaErr){
-    try{await cleanupAttachmentPersistence(client,path,{objectOnly:true});}
+    try{await cleanupAttachmentPersistence(client,path,{objectOnly:true,objectRequired:true});}
     catch(cleanupErr){
       throw attachmentUploadError('附件「'+(att.n||att.name||name)+'」歸檔資料寫入失敗，且上傳檔案未能自動清理：'+formatStorageUploadError(cleanupErr),{reason:'metadata_insert_cleanup_failed',fileName:att.n||att.name||name,storagePath:path,sourceError:metaErr,cleanupError:cleanupErr});
     }
     var metaMessage=formatStorageUploadError(metaErr);
     throw attachmentUploadError('附件「'+(att.n||att.name||name)+'」已上傳但歸檔資料寫入失敗，系統已取消該檔案並停止送單：'+metaMessage,{reason:'metadata_insert_failed',fileName:att.n||att.name||name,storagePath:path});
   }
-  if(financeAttachmentUploadScope()!==uploadScope){
-    try{await cleanupAttachmentPersistence(client,path,{metadataFirst:true});}
+  var identityAfterMetadata;
+  try{await assertFinanceAttachmentUploadIdentity(client,uploadScope);}
+  catch(error){identityAfterMetadata=error;}
+  if(identityAfterMetadata){
+    try{await cleanupAttachmentPersistence(client,path,{metadataFirst:true,metadataRequired:true,objectRequired:true});}
     catch(cleanupError){
       stagedAttachmentCleanupDiagnostic('attachment_identity_cleanup_failed','帳號切換後附件清理失敗','儲存路徑 '+path+' 的附件在帳號切換後未能清理；請由管理員查核。',{storagePath:path,error:formatStorageUploadError(cleanupError)});
       throw attachmentUploadError('登入身分已切換，附件未能完整清理；請通知系統管理員。',{reason:'attachment_identity_cleanup_failed',storagePath:path,cleanupError:cleanupError});
     }
-    throw attachmentUploadError('登入身分已切換，已停止將附件寫入原帳號申請。',{reason:'attachment_upload_identity_changed',storagePath:path});
+    throw identityAfterMetadata;
   }
   try{
     await verifyUploadedAttachmentReadable(client,path);
   }catch(readErr){
-    try{await cleanupAttachmentPersistence(client,path,{metadataFirst:true});}
+    try{await cleanupAttachmentPersistence(client,path,{metadataFirst:true,metadataRequired:true,objectRequired:true});}
     catch(cleanupErr){
       throw attachmentUploadError('附件「'+(att.n||att.name||name)+'」無法產生下載連結，且未能完整清理：'+formatStorageUploadError(cleanupErr),{reason:'signed_url_cleanup_failed',fileName:att.n||att.name||name,storagePath:path,sourceError:readErr,cleanupError:cleanupErr});
     }

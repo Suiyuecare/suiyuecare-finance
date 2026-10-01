@@ -87,6 +87,9 @@ async function main() {
       window.SUPABASE_ANON_KEY = 'fictional-public-anon';
       window.SUPABASE_ATTACHMENT_BUCKET = 'finance-attachments';
       window.S = { user: { id: 'user-a' } };
+      window.financeWorkspaceIdentityBlocked = false;
+      window.currentFinanceAuthUserId = () => 'auth-user-a';
+      window.financeSessionMatchesWorkspace = (session) => session?.user?.id === 'auth-user-a';
       window.currentTenantId = () => 'tenant-a';
       window.activeDataEnvironment = () => 'production';
       window.attachmentUploadError = (message, details) => Object.assign(new Error(message), details);
@@ -94,7 +97,7 @@ async function main() {
       window.stagedAttachmentCleanupDiagnostic = () => {};
       window.formatStorageUploadError = (error) => error.message;
       window.currentToken = 'fictional-jwt-a';
-      const client = { auth: { getSession: async () => ({ data: { session: { access_token: window.currentToken } } }) } };
+      const client = { auth: { getSession: async () => ({ data: { session: { access_token: window.currentToken, user: { id: 'auth-user-a' } } } }) } };
       const uploadAttachmentResumable = new Function(transportSource + '\nreturn uploadAttachmentResumable;')();
       const blob = new Blob([new Uint8Array(sevenMiB)], { type: 'application/pdf' });
       const progress = [];
@@ -102,10 +105,10 @@ async function main() {
         'application/pdf', { onProgress(sent, total) {
           progress.push([sent, total]);
           if (sent >= chunkSize) window.currentToken = 'fictional-jwt-b';
-        } }, 'user-a|tenant-a|production');
+        } }, 'auth-user-a|user-a|tenant-a|production');
       const controller = new AbortController();
       const abortPromise = uploadAttachmentResumable(client, 'tenant-a/expense_requests/production/fixture/abort.pdf', blob,
-        'application/pdf', { abortSignal: controller.signal }, 'user-a|tenant-a|production');
+        'application/pdf', { abortSignal: controller.signal }, 'auth-user-a|user-a|tenant-a|production');
       setTimeout(() => controller.abort(), 40);
       let aborted = false;
       try { await abortPromise; } catch (error) { aborted = error.reason === 'attachment_upload_timeout'; }
