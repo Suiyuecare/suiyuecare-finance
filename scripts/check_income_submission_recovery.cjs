@@ -8,7 +8,7 @@ function fn(name){const match=new RegExp('^(?:async )?function '+name+'\\(','m')
 const clone=x=>JSON.parse(JSON.stringify(x));let checks=0;function check(name,condition){assert(condition,name);checks++;}
 function fixture(shared={}){
  const storage=shared.storage||new Map(),server=shared.server||new Map(),calls=shared.calls||[],hooks={};
- const state={lost:0,deny:false,hang:false,sourceRead:false,storageOk:true,uploads:0,cleanup:0,notifications:0,reads:0,alerts:[],hooks};
+ const state={lost:0,statementTimeouts:0,deny:false,hang:false,sourceRead:false,storageOk:true,uploads:0,cleanup:0,notifications:0,reads:0,readbacks:0,events:[],alerts:[],hooks};
  const user={id:'fictional-A',n:'Fictional A',email:'a@example.invalid',role:'accountant',dc:'FICT-D'};
  const fields={'inv-buyer':'Fictional buyer','inv-amt':'100','inv-identifier-type':'電子發票','inv-desc':'Fictional service','inv-tax':'5','inv-ent':'FICT-E','inv-date':'2026-09-22','bill-reason':'Fictional reason','bill-dept':'FICT-D','b-ent2':'FICT-E','b-ent':'FICT-E','b-month':'2026-09'};
  const nodes=Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{value,style:{},classList:{remove(){}}}]));
@@ -27,13 +27,14 @@ function fixture(shared={}){
   num:value=>Number(value)||0,cloneApprovalStepsForRecord:clone,cloneSettingValue:clone,todayIso:()=> '2026-09-22',todaySlash:()=> '2026/09/22',todayMonth:()=> '2026-09',stableSnapshotValue:x=>x,normalizeSettingValue:x=>x,isRpcMissing:()=>false,expenseApplicantRevisionRpcErrorIsAmbiguous:e=>['NETWORK','CLIENT_TIMEOUT'].includes(e.code)||/fetch/.test(e.message||''),
   Math,Date,JSON,Error,Promise,Set,console:{warn(){},error:console.error},alert:value=>state.alerts.push(value),setTimeout:(cb,ms)=>setTimeout(cb,Math.min(ms,shared.timeoutMs||15)),clearTimeout};
  c.window=c;
- const transport={async rpc(name,args){const frozen=clone(args);calls.push(frozen);if(hooks.rpc)await hooks.rpc();if(state.deny)return {error:{code:'42501',message:'Fictional denied'}};
+ const transport={async rpc(name,args){const frozen=clone(args);calls.push(frozen);state.events.push('rpc');if(hooks.rpc)await hooks.rpc();if(state.deny)return {error:{code:'42501',message:'Fictional denied'}};
+   if(state.statementTimeouts>0){state.statementTimeouts--;return {error:{code:'57014',message:'canceling statement due to statement timeout'}};}
    const key=args.p_idempotency_key;if(server.has(key)){assert.equal(server.get(key).payload,JSON.stringify(args),'same key binds same immutable request');}else server.set(key,{payload:JSON.stringify(args),data:{ok:true,rows:args.p_items.map((item,index)=>({client_item_key:item.client_item_key,id:'saved-'+server.size+'-'+index,no:'INV-'+server.size+'-'+index,batch_id:args.p_items.length>1?'saved-batch':'',approval_status:'pending_accountant',approval_step:2}))}});
    if(shared.sqlCommit){const result=await shared.sqlCommit(args,server.get(key).data);server.get(key).data=result;}
    if(state.hang)return new Promise(()=>{});if(state.lost>0){state.lost--;return {error:{code:'NETWORK',message:'Failed to fetch after commit'}};}return {data:clone(server.get(key).data)};
-  },from(){const filters={};return {select(){return this;},eq(k,v){filters[k]=v;return this;},limit(){const found=server.get(filters.submission_idempotency_key);return Promise.resolve({data:state.sourceRead&&found?found.data.rows.map(row=>({...row,submission_item_key:row.client_item_key})):[]});}};}};
+  },from(){const filters={};return {select(){return this;},eq(k,v){filters[k]=v;return this;},limit(){state.readbacks++;state.events.push('readback');const found=server.get(filters.submission_idempotency_key);return Promise.resolve({data:state.sourceRead&&found?found.data.rows.map(row=>({...row,submission_item_key:row.client_item_key})):[]});}};}};
  c.getSb=()=>transport;vm.createContext(c);
- ['expenseSubmissionOperationIdentity','withOperationTimeout','incomeSubmissionRpcItem','incomeFileSignature','incomeFieldValues','incomeDirtySnapshot'].forEach(name=>vm.runInContext(fn(name),c));
+ ['expenseSubmissionOperationIdentity','withOperationTimeout','supabaseAuthErrorInfo','incomeSubmissionRpcItem','incomeFileSignature','incomeFieldValues','incomeDirtySnapshot'].forEach(name=>vm.runInContext(fn(name),c));
  c.withAbortableOperationTimeout=(pending,label,ms)=>c.withOperationTimeout(pending,label,ms);
  const start=html.indexOf('var INCOME_SUBMISSION_PENDING={}'),end=html.indexOf('\nasync function insertMembershipOrgSubmittedRecord',start);assert(start>=0&&end>start);vm.runInContext(html.slice(start,end),c);
  ['reloadInvoicesByIds','reloadBillsByIds','insertMembershipOrgSubmittedRecord','insertMembershipOrgSubmittedBatch','issueInvCore','issueBatchCore','submitBillCore'].forEach(name=>vm.runInContext(fn(name),c));
@@ -45,12 +46,26 @@ function fixture(shared={}){
   let f=fixture();if(caller==='issueBatch'){f.c.S.bRows.push({...f.c.S.bRows[0],buyer:'Second buyer'});}
   const expected=caller==='issueBatch'?2:total;f.state.lost=1;await f.c[caller]();
   check(caller+': lost response retries frozen payload once',f.server.size===1&&f.calls.length===2&&JSON.stringify(f.calls[0])===JSON.stringify(f.calls[1]));
+  check(caller+': exact readback precedes the frozen retry',f.state.events.slice(0,3).join(',')==='rpc,readback,rpc');
   check(caller+': actual caller confirms all rows and clears durable attempt',(type==='bill'?f.c.BILLS:f.c.INVS).length===expected&&!f.c.loadIncomeSubmissionPending(type));
   check(caller+': no regenerated attachment or cleanup on replay',f.state.uploads===(type==='bill'?0:1)&&f.state.cleanup===0);
+  f=fixture();f.state.lost=1;f.state.sourceRead=true;await f.c[caller]();
+  check(caller+': committed readback avoids any retry',f.calls.length===1&&f.state.events.join(',')==='rpc,readback'&&f.server.size===1&&!f.c.loadIncomeSubmissionPending(type));
+  f=fixture();f.state.statementTimeouts=1;await f.c[caller]();
+  check(caller+': first direct 57014 is a confirmed rollback',f.calls.length===1&&f.state.readbacks===0&&f.server.size===0&&!f.c.loadIncomeSubmissionPending(type)&&f.state.cleanup===(type==='bill'?0:1));
+  f.state.statementTimeouts=0;await f.c[caller]();
+  check(caller+': later corrected send gets a fresh key',f.server.size===1&&f.calls[0].p_idempotency_key!==f.calls[1].p_idempotency_key);
   f=fixture();f.state.lost=2;await f.c[caller]();check(caller+': two unknown results keep original transaction',!!f.c.loadIncomeSubmissionPending(type)&&f.server.size===1&&f.state.cleanup===0&&Object.keys(f.c.POSTING_IN_FLIGHT).length===0);
   const original=JSON.stringify(f.calls[0]);f.nodes['inv-buyer'].value='Edited after unknown';f.c.S.bRows[0].buyer='Edited after unknown';f.c.BILL_ROWS[0].payer='Edited after unknown';await f.c[caller]();
   check(caller+': repeated click confirms original without sending edits',f.server.size===1&&JSON.stringify(f.calls.at(-1))===original&&f.state.uploads===(type==='bill'?0:1));
   check(caller+': edited input remains intact while prior operation is recovered',f.nodes['inv-buyer'].value==='Edited after unknown'&&f.c.S.bRows[0].buyer==='Edited after unknown'&&f.c.BILL_ROWS[0].payer==='Edited after unknown');
+  f=fixture();f.state.lost=2;await f.c[caller]();const pendingKey=f.calls[0].p_idempotency_key;
+  f.state.statementTimeouts=1;await f.c[caller]();
+  check(caller+': 57014 after an unknown result stays locked to the original key',f.calls.length===3&&f.calls.every(call=>call.p_idempotency_key===pendingKey)&&f.state.events.slice(-3).join(',')==='readback,rpc,readback'&&!!f.c.loadIncomeSubmissionPending(type)&&f.state.cleanup===0);
+  f.state.statementTimeouts=0;await f.c[caller]();
+  check(caller+': later recovery replays the original key without duplicate rows',f.server.size===1&&!f.c.loadIncomeSubmissionPending(type)&&f.calls.every(call=>call.p_idempotency_key===pendingKey));
+  f=fixture();f.state.lost=2;await f.c[caller]();f.state.sourceRead=true;await f.c[caller]();
+  check(caller+': persisted unknown resolves by exact read without another RPC',f.calls.length===2&&f.server.size===1&&!f.c.loadIncomeSubmissionPending(type)&&f.state.events.slice(-1)[0]==='readback');
   f=fixture();f.state.lost=2;await f.c[caller]();const refreshed=fixture(f.shared);await refreshed.c[caller]();
   check(caller+': page refresh recovers persisted key/files without another upload',refreshed.server.size===1&&refreshed.calls.length===3&&refreshed.state.uploads===0&&!refreshed.c.loadIncomeSubmissionPending(type));
   check(caller+': restored unchanged original form clears after confirmed recovery',caller==='issueInv'?refreshed.nodes['inv-buyer'].value==='':caller==='issueBatch'?!refreshed.c.S.bRows[0].buyer:!refreshed.c.BILL_ROWS[0].payer);
@@ -77,6 +92,10 @@ function fixture(shared={}){
  f=fixture();f.state.hang=true;const started=Date.now();await f.c.issueInv();check('Never-resolving transport releases actual UI lock with recoverable state',Date.now()-started<1000&&Object.keys(f.c.POSTING_IN_FLIGHT).length===0&&!!f.c.loadIncomeSubmissionPending('invoice'));
  f.state.hang=false;await f.c.issueInv();check('Retry after deadline confirms same committed attempt',f.server.size===1&&f.state.uploads===1&&!f.c.loadIncomeSubmissionPending('invoice'));
  f=fixture();f.state.hooks.notify=async()=>new Promise(()=>{});await f.c.issueInv();check('Committed submission does not keep UI locked for hung notification',f.c.INVS.length===1&&!f.c.loadIncomeSubmissionPending('invoice')&&Object.keys(f.c.POSTING_IN_FLIGHT).length===0);
+ f=fixture();f.c.S.bRows=Array.from({length:33},(_,index)=>({...f.c.S.bRows[0],buyer:'Fictional buyer '+(index+1)}));f.state.lost=1;await f.c.issueBatch();
+ check('33-item invoice batch recovers under one frozen operation key',f.calls.length===2&&f.calls[0].p_items.length===33&&JSON.stringify(f.calls[0])===JSON.stringify(f.calls[1])&&f.server.size===1&&f.c.INVS.length===33&&!f.c.loadIncomeSubmissionPending('invoice')&&f.state.uploads===1&&f.state.cleanup===0);
+ f=fixture();f.c.S.bRows=Array.from({length:33},(_,index)=>({...f.c.S.bRows[0],buyer:'Fictional buyer '+(index+1)}));f.state.statementTimeouts=1;await f.c.issueBatch();
+ check('33-item invoice batch with direct 57014 does not auto-repeat the doomed RPC',f.calls.length===1&&f.calls[0].p_items.length===33&&f.server.size===0&&!f.c.loadIncomeSubmissionPending('invoice')&&f.state.cleanup===1);
  // The real database idempotency implementation also receives the actual
  // caller's frozen RPC arguments. Organization/permission routing remains in
  // the separate existing SQL/persona suites; this fixture does not stub commit.
@@ -94,11 +113,13 @@ function fixture(shared={}){
     await db.exec('commit');return cached||result;
    }catch(error){await db.exec('rollback');throw error;}
   };
-  for(const caller of ['issueInv','issueBatch','submitBill']){
-   const sqlFixture=fixture({sqlCommit,timeoutMs:2000});sqlFixture.state.lost=1;await sqlFixture.c[caller]();
+  for(const [caller,expectedDocuments] of [['issueInv',1],['issueBatch',1],['submitBill',1],['issueBatch',33]]){
+   const sqlFixture=fixture({sqlCommit,timeoutMs:2000});
+   if(expectedDocuments===33)sqlFixture.c.S.bRows=Array.from({length:33},(_,index)=>({...sqlFixture.c.S.bRows[0],buyer:'Fictional buyer '+(index+1)}));
+   sqlFixture.state.lost=1;await sqlFixture.c[caller]();
    const key=sqlFixture.calls[0].p_idempotency_key;
    const tally=(await db.query("select (select count(*)::int from private.fictional_documents where operation_key=$1) documents,(select count(*)::int from private.finance_income_document_operations where idempotency_key=$1 and operation_status='completed') operations",[key])).rows[0];
-   check(caller+': actual PostgreSQL operation helper commits once across lost response replay',sqlFixture.calls.length===2&&tally.documents===1&&tally.operations===1);
+   check(caller+' '+expectedDocuments+': actual PostgreSQL operation helper commits once across lost response replay',sqlFixture.calls.length===2&&tally.documents===expectedDocuments&&tally.operations===1);
   }
  }finally{await db.close();}
  console.log('PASS: '+checks+' income submission caller/recovery checks');
