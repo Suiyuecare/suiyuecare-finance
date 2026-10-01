@@ -1394,6 +1394,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .action-feedback-sub{font-size:12px;color:#8b7358;line-height:1.6}
 .ux-health-card,.ux-import-review,.ux-reject-card{border:1px solid #efd7b8;border-radius:10px;padding:9px 10px;background:#fff;margin-bottom:8px;font-size:12px;line-height:1.6}
 .ux-health-card.ok,.ux-import-review.ok{border-color:#bfe5b8;background:#f3fbec;color:#1a5010}
+.ux-health-card.pending{border-color:#e8d2b3;background:#fffaf2;color:#71542f}
 .ux-health-card.warn,.ux-import-review.warn,.ux-reject-card{border-color:#f0b0b0;background:#fff1f2;color:#8a1010}
 .ux-health-title,.ux-import-title,.ux-reject-title{font-size:12px;font-weight:850;margin-bottom:4px;color:#334155}
 .ux-health-card.warn .ux-health-title,.ux-import-review.warn .ux-import-title,.ux-reject-title{color:#8a1010}
