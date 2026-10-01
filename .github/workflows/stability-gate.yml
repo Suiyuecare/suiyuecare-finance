@@ -128,6 +128,7 @@ jobs:
         env:
           FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json
         run: |
+          node scripts/check_formal_tus_browser_integration.cjs
           node scripts/check_admin_action_browser.cjs
           node scripts/check_shareholder_invoice_ocr_browser.cjs
           node scripts/check_personnel_login_browser.cjs

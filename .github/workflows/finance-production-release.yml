@@ -144,6 +144,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm exec playwright install --with-deps chromium
+          node scripts/check_formal_tus_browser_integration.cjs
           node scripts/check_admin_action_browser.cjs
           node scripts/check_shareholder_invoice_ocr_browser.cjs
           node scripts/check_personnel_login_browser.cjs

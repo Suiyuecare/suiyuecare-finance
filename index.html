@@ -3274,6 +3274,7 @@ function financeSessionMatchesWorkspace(session){
 function setFinanceWorkspaceIdentityBlocked(blocked){
   var wasBlocked=financeWorkspaceIdentityBlocked;
   financeWorkspaceIdentityBlocked=!!blocked;
+  if(blocked&&typeof retireFinanceBootstrapReadQueue==='function')retireFinanceBootstrapReadQueue('');
   if(blocked&&typeof clearSystemHealthRuntime==='function')clearSystemHealthRuntime();
   if(blocked&&window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();
   if(blocked&&typeof window.closeReceiptViewer==='function')window.closeReceiptViewer();
@@ -4990,7 +4991,14 @@ async function uploadAttachmentsToSupabase(files,ctx){
     try{
       var size=num(files[i]&&files[i].size);
       var timeout=size>=ATTACHMENT_RESUMABLE_THRESHOLD_BYTES?ATTACHMENT_LARGE_UPLOAD_TIMEOUT_MS:ATTACHMENT_UPLOAD_TIMEOUT_MS;
-      var uploaded=await uploadAttachmentWithTrackedTimeout(files[i],ctx,'第 '+(i+1)+' 個附件上傳',timeout);
+      var uploadContext=ctx;
+      if(ctx&&typeof ctx.onProgress==='function'){
+        var fileIndex=i+1,fileCount=files.length;
+        uploadContext=Object.assign({},ctx,{onProgress:function(sent,total,details){
+          ctx.onProgress(sent,total,Object.assign({},details||{},{fileIndex:fileIndex,fileCount:fileCount}));
+        }});
+      }
+      var uploaded=await uploadAttachmentWithTrackedTimeout(files[i],uploadContext,'第 '+(i+1)+' 個附件上傳',timeout);
       out.push(uploaded);
       if(uploaded&&uploaded.__uploadCreatedThisAttempt)created.push(uploaded);
     }catch(err){
@@ -6671,11 +6679,28 @@ function statementDataCompleteness(){
   var list=Object.keys(tables).map(function(k){return tables[k];});
   return {complete:list.every(function(s){return s.complete===true;}),status:list.some(function(s){return s.status==='loading';})?'loading':(list.every(function(s){return s.complete===true;})?'complete':(list.some(function(s){return s.status==='error';})?'error':'incomplete')),rowCount:tables.ledger.rowCount||0,tables:tables,promise:remoteLoadPromise||null};
 }
-var FINANCE_BOOTSTRAP_READ_QUEUE={active:0,wide:0,waiting:[]};
+var FINANCE_BOOTSTRAP_READ_QUEUE={active:0,wide:0,waiting:[],running:[],owner:''};
 var DASHBOARD_FINANCIAL_SOURCE_RUNTIME={identity:'',generation:0,promise:null,status:'not_loaded',result:null};
+function financeBootstrapQueueOwner(){
+  var user=S.user||{};
+  if(financeWorkspaceIdentityBlocked||!user.id||!String(user.authUserId||user.auth_user_id||''))return '';
+  return JSON.stringify([String(user.authUserId||user.auth_user_id),String(user.id),currentTenantId(),activeDataEnvironment(),typeof financeAuthIdentityEpoch==='undefined'?0:financeAuthIdentityEpoch]);
+}
+function retireFinanceBootstrapReadQueue(nextOwner){
+  var state=FINANCE_BOOTSTRAP_READ_QUEUE;
+  state.running=state.running||[];
+  state.owner=nextOwner||'';
+  var retired=state.waiting.splice(0);
+  retired.forEach(function(task){task.reject(new Error('登入身分或讀取版本已變更'));});
+  (state.running||[]).forEach(function(task){if(task.controller)try{task.controller.abort();}catch(_){}});
+}
 function queueFinanceBootstrapRead(job,wide,priority){
+  FINANCE_BOOTSTRAP_READ_QUEUE.running=FINANCE_BOOTSTRAP_READ_QUEUE.running||[];
+  var owner=financeBootstrapQueueOwner();
+  if(!owner)return Promise.reject(new Error('登入身分或讀取版本已變更'));
+  if(FINANCE_BOOTSTRAP_READ_QUEUE.owner!==owner)retireFinanceBootstrapReadQueue(owner);
   return new Promise(function(resolve,reject){
-    var task={job:job,wide:!!wide,resolve:resolve,reject:reject};
+    var task={job:job,wide:!!wide,resolve:resolve,reject:reject,owner:owner,controller:typeof AbortController!=='undefined'?new AbortController():null};
     if(priority)FINANCE_BOOTSTRAP_READ_QUEUE.waiting.unshift(task);else FINANCE_BOOTSTRAP_READ_QUEUE.waiting.push(task);
     drainFinanceBootstrapReads();
   });
@@ -6683,23 +6708,27 @@ function queueFinanceBootstrapRead(job,wide,priority){
 function drainFinanceBootstrapReads(){
   var state=FINANCE_BOOTSTRAP_READ_QUEUE;
   while(state.active<2){
-    var index=state.waiting.findIndex(function(task){return !task.wide||state.wide===0;});
+    var index=state.waiting.findIndex(function(task){return task.owner===state.owner&&(!task.wide||state.wide===0);});
     if(index<0)return;
     var task=state.waiting.splice(index,1)[0];state.active++;if(task.wide)state.wide++;
-    (function(current){Promise.resolve().then(current.job).then(current.resolve,current.reject).finally(function(){state.active--;if(current.wide)state.wide--;drainFinanceBootstrapReads();});})(task);
+    state.running.push(task);
+    (function(current){Promise.resolve().then(function(){if(current.owner!==state.owner)throw new Error('登入身分或讀取版本已變更');return current.job(current.controller&&current.controller.signal);}).then(current.resolve,current.reject).finally(function(){state.active--;if(current.wide)state.wide--;state.running=state.running.filter(function(item){return item!==current;});drainFinanceBootstrapReads();});})(task);
   }
 }
-async function financeBootstrapRead(operation,label,ms){
+async function financeBootstrapRead(operation,label,ms,externalSignal){
   var controller=typeof AbortController!=='undefined'?new AbortController():null;
+  var onAbort=externalSignal&&controller?function(){controller.abort();}:null;
+  if(onAbort){if(externalSignal.aborted)onAbort();else externalSignal.addEventListener('abort',onAbort,{once:true});}
   if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
   try{return await withOperationTimeout(operation,label,ms||20000);}
   catch(error){if(controller&&error&&error.code==='CLIENT_TIMEOUT'){try{controller.abort();}catch(_){}}throw error;}
+  finally{if(onAbort)externalSignal.removeEventListener('abort',onAbort);}
 }
-async function loadFinanceBootstrapOptionalTable(client,table,orderCol,ascending,limit){
+async function loadFinanceBootstrapOptionalTable(client,table,orderCol,ascending,limit,signal){
   var q=client.from(table).select('*');if(orderCol)q=q.order(orderCol,{ascending:ascending!==false});
   q=applyRemoteLimit(q,Number(limit)||REMOTE_BOOTSTRAP_LIMITS.optional);
-  try{var result=await financeBootstrapRead(q,table,20000);if(result.error)throw result.error;return result.data||[];}
-  catch(error){if(remoteTableMissing(error))return [];if(isTransientRemoteReadError(error)){recordRemoteReadIssue(table,error);return [];}throw error;}
+  try{var result=await financeBootstrapRead(q,table,20000,signal);if(result.error)throw result.error;return result.data||[];}
+  catch(error){if(signal&&signal.aborted)throw error;if(remoteTableMissing(error))return [];if(isTransientRemoteReadError(error)){recordRemoteReadIssue(table,error);return [];}throw error;}
 }
 function statementSourceResultCurrent(result){
   return !!(result&&!result.error&&result.statementState&&result.statementState.identity===statementDataIdentity()&&STATEMENT_SOURCE_STATE[result.statementKey]===result.statementState);
@@ -6725,8 +6754,8 @@ function loadDashboardFinancialSources(force){
   var lastPaint=0;
   state.promise=Promise.resolve().then(async function(){
     var results=await Promise.all([
-      queueFinanceBootstrapRead(function(){if(!current())throw new Error('登入身分或讀取版本已變更');return financeBootstrapRead(loadStatementSourcePages(client,'ledger_entries',{deferCommit:true,isCurrent:current,onProgress:function(){if(current()&&Date.now()-lastPaint>200){lastPaint=Date.now();paintDashboardFinancialSources();}}}),'完整分類帳',120000);},true,true),
-      queueFinanceBootstrapRead(function(){if(!current())throw new Error('登入身分或讀取版本已變更');return financeBootstrapRead(client.from('system_settings').select('*').eq('tenant_id',currentTenantId()).in('key',SYSTEM_SETTINGS_RUNTIME_KEYS),'公司報表設定',20000);},false,true)
+      queueFinanceBootstrapRead(function(signal){if(!current())throw new Error('登入身分或讀取版本已變更');return financeBootstrapRead(loadStatementSourcePages(client,'ledger_entries',{deferCommit:true,isCurrent:current,signal:signal,onProgress:function(){if(current()&&Date.now()-lastPaint>200){lastPaint=Date.now();paintDashboardFinancialSources();}}}),'完整分類帳',120000,signal);},true,true),
+      queueFinanceBootstrapRead(function(signal){if(!current())throw new Error('登入身分或讀取版本已變更');return financeBootstrapRead(client.from('system_settings').select('*').eq('tenant_id',currentTenantId()).in('key',SYSTEM_SETTINGS_RUNTIME_KEYS),'公司報表設定',20000,signal);},false,true)
     ]);
     if(!current())return {ok:false,stale:true};
     if(results[0].error)throw results[0].error;if(results[1].error)throw results[1].error;
@@ -6748,11 +6777,11 @@ function loadDashboardFinancialSources(force){
 }
 window.loadDashboardFinancialSources=loadDashboardFinancialSources;
 
-async function loadFinanceDocumentSourcePage(client,table,tenant,environment,start,end){
+async function loadFinanceDocumentSourcePage(client,table,tenant,environment,start,end,signal){
   if(['expense_requests','bills','invoices'].indexOf(table)<0)throw new Error('不支援的單據來源');
   var limit=end-start+1;
   if(client&&typeof client.rpc==='function'){
-    var result=await financeBootstrapRead(client.rpc('finance_statement_source_page_v1',{p_source:table,p_data_environment:environment,p_limit:limit,p_offset:start}),'單據資料分頁 '+table,20000);
+    var result=await financeBootstrapRead(client.rpc('finance_statement_source_page_v1',{p_source:table,p_data_environment:environment,p_limit:limit,p_offset:start}),'單據資料分頁 '+table,20000,signal);
     if(!(result&&result.error&&isRpcMissing(result.error))){
       if(result&&result.error)return result;
       var payload=result&&result.data;
@@ -6763,7 +6792,7 @@ async function loadFinanceDocumentSourcePage(client,table,tenant,environment,sta
     // Compatibility during a rolling release only. Permission, timeout and
     // malformed responses never fall back or become successful empty results.
   }
-  return financeBootstrapRead(client.from(table).select('*',{count:'exact'}).eq('tenant_id',tenant).eq('data_environment',environment).order('id',{ascending:true}).range(start,end),'報表資料分頁 '+table,20000);
+  return financeBootstrapRead(client.from(table).select('*',{count:'exact'}).eq('tenant_id',tenant).eq('data_environment',environment).order('id',{ascending:true}).range(start,end),'報表資料分頁 '+table,20000,signal);
 }
 async function loadStatementSourcePages(client,table,options){
   options=options||{};
@@ -6772,12 +6801,12 @@ async function loadStatementSourcePages(client,table,options){
   var identity=statementDataIdentity(),tenant=currentTenantId(),environment=activeDataEnvironment();
   var engine=window.FinanceFinancialStatements;
   var state={identity:identity,complete:false,status:'loading',rowCount:0,loadedAt:null,error:''};if(key)STATEMENT_SOURCE_STATE[key]=state;
-  function current(){return identity===statementDataIdentity()&&(!key||STATEMENT_SOURCE_STATE[key]===state)&&(!options.isCurrent||options.isCurrent());}
+  function current(){return !(options.signal&&options.signal.aborted)&&identity===statementDataIdentity()&&(!key||STATEMENT_SOURCE_STATE[key]===state)&&(!options.isCurrent||options.isCurrent());}
   try{
     if(!engine||typeof engine.loadLedgerPages!=='function')throw new Error('報表完整讀取引擎尚未載入');
     var result=await engine.loadLedgerPages(function(start,end){
-      if(table!=='ledger_entries')return loadFinanceDocumentSourcePage(client,table,tenant,environment,start,end);
-      return (typeof financeBootstrapRead==='function'?financeBootstrapRead:withOperationTimeout)(client.from(table).select('*',{count:'exact'}).eq('tenant_id',tenant).eq('data_environment',environment).order('id',{ascending:true}).range(start,end),'報表資料分頁 '+table,20000);
+      if(table!=='ledger_entries')return loadFinanceDocumentSourcePage(client,table,tenant,environment,start,end,options.signal);
+      return (typeof financeBootstrapRead==='function'?financeBootstrapRead:withOperationTimeout)(client.from(table).select('*',{count:'exact'}).eq('tenant_id',tenant).eq('data_environment',environment).order('id',{ascending:true}).range(start,end),'報表資料分頁 '+table,20000,options.signal);
     },{pageSize:table==='ledger_entries'?1000:250,isCurrent:current,onProgress:function(progress){if(current()){Object.assign(state,progress);if(options.onProgress)options.onProgress(progress);}}});
     if(!current())throw new Error('報表讀取期間登入身分已變更');
     result.data.sort(function(a,b){return String(b.entry_date||b.created_at||'').localeCompare(String(a.entry_date||a.created_at||''))||String(a.id).localeCompare(String(b.id));});
@@ -9469,27 +9498,27 @@ async function performRemoteDataLoad(){
   }
   var jobs=[
     function(){return syncRemoteFinanceUsersDirectory({message:'正在同步人員與簽核權限；其他正式資料會接續載入'}).then(function(result){return {data:result.users||[],error:null};});},
-    function(){return loadStatementSourcePages(client,'expense_requests',{deferCommit:true});},
+    function(signal){return loadStatementSourcePages(client,'expense_requests',{deferCommit:true,signal:signal});},
     function(){return loadAccountingData?applyRemoteLimit(client.from('vouchers').select('*').order('created_at',{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.vouchers):Promise.resolve({data:[],error:null});},
-    function(){return loadStatementSourcePages(client,'bills');},
-    function(){return loadStatementSourcePages(client,'invoices',{deferCommit:true});},
-    function(){return loadFinanceNotifications({client:client,reuseFresh:true});},
-    function(){return loadAccountingData?loadStatementSourcePages(client,'ledger_entries'):Promise.resolve({data:[],error:null});},
+    function(signal){return loadStatementSourcePages(client,'bills',{signal:signal});},
+    function(signal){return loadStatementSourcePages(client,'invoices',{deferCommit:true,signal:signal});},
+    function(signal){return loadFinanceNotifications({client:client,reuseFresh:true,signal:signal});},
+    function(signal){return loadAccountingData?loadStatementSourcePages(client,'ledger_entries',{signal:signal}):Promise.resolve({data:[],error:null});},
     function(){return client.from('system_settings').select('*').eq('tenant_id',currentTenantId()).in('key',SYSTEM_SETTINGS_RUNTIME_KEYS);},
     function(){return personalDraftRead;},
-    function(){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'period_closes','closed_at',false):Promise.resolve([]);},
-    function(){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'compliance_archives','archived_at',false):Promise.resolve([]);},
-    function(){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'annual_reviews','reviewed_at',false):Promise.resolve([]);},
-    function(){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'compliance_audit_logs','created_at',false,REMOTE_AUDIT_BOOTSTRAP_LIMIT):Promise.resolve([]);},
-	    function(){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'backup_restore_events','created_at',false):Promise.resolve([]);},
-	    function(){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'system_setting_versions','created_at',false):Promise.resolve([]);},
-	    function(){return loadFinanceBootstrapOptionalTable(client,'payee_bank_accounts','last_used_at',false);},
-	    function(){return loadFinanceBootstrapOptionalTable(client,'finance_portal_roles','sort_order',true);},
-	    function(){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'invoice_lifecycle_events','event_date',false):Promise.resolve([]);},
-	    function(){return loadFinanceBootstrapOptionalTable(client,'bank_accounts','created_at',false);},
-	    function(){return loadFinanceBootstrapOptionalTable(client,'bank_statement_imports','imported_at',false);},
-	    function(){return loadFinanceBootstrapOptionalTable(client,'bank_transactions','transaction_date',false);},
-	    function(){return loadFinanceBootstrapOptionalTable(client,'bank_reconciliation_matches','matched_at',false);}
+    function(signal){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'period_closes','closed_at',false,null,signal):Promise.resolve([]);},
+    function(signal){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'compliance_archives','archived_at',false,null,signal):Promise.resolve([]);},
+    function(signal){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'annual_reviews','reviewed_at',false,null,signal):Promise.resolve([]);},
+    function(signal){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'compliance_audit_logs','created_at',false,REMOTE_AUDIT_BOOTSTRAP_LIMIT,signal):Promise.resolve([]);},
+	    function(signal){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'backup_restore_events','created_at',false,null,signal):Promise.resolve([]);},
+	    function(signal){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'system_setting_versions','created_at',false,null,signal):Promise.resolve([]);},
+	    function(signal){return loadFinanceBootstrapOptionalTable(client,'payee_bank_accounts','last_used_at',false,null,signal);},
+	    function(signal){return loadFinanceBootstrapOptionalTable(client,'finance_portal_roles','sort_order',true,null,signal);},
+	    function(signal){return loadAccountingData?loadFinanceBootstrapOptionalTable(client,'invoice_lifecycle_events','event_date',false,null,signal):Promise.resolve([]);},
+	    function(signal){return loadFinanceBootstrapOptionalTable(client,'bank_accounts','created_at',false,null,signal);},
+	    function(signal){return loadFinanceBootstrapOptionalTable(client,'bank_statement_imports','imported_at',false,null,signal);},
+	    function(signal){return loadFinanceBootstrapOptionalTable(client,'bank_transactions','transaction_date',false,null,signal);},
+	    function(signal){return loadFinanceBootstrapOptionalTable(client,'bank_reconciliation_matches','matched_at',false,null,signal);}
 	  ];
   var priorityAwareJobs=jobs.map(function(job,index){
     return async function(){
@@ -9500,9 +9529,9 @@ async function performRemoteDataLoad(){
       if(fastPromise)try{await fastPromise;}catch(_){}
       if(fastIdentity!==approvalFastBootstrapIdentity())return {data:[],error:new Error('登入身分已變更')};
       if(index===8)return personalDraftRead;
-      return queueFinanceBootstrapRead(function(){
+      return queueFinanceBootstrapRead(function(signal){
         if([1,2,3,4].indexOf(index)>-1)sourceSnapshots[index]=financeReadSourceSnapshot({1:REQS,2:VOUCHERS,3:BILLS,4:INVS}[index]);
-        return financeBootstrapRead(job(),'正式資料 '+index,index===1||index===4?120000:20000);
+        return financeBootstrapRead(job(signal),'正式資料 '+index,index===1||index===4?120000:20000,signal);
       },[0,5,7,8,16,18].indexOf(index)<0,false).then(function(result){return [1,2,3,4].indexOf(index)>-1?publishReadSource(index,result):result;});
     };
   });
@@ -9536,7 +9565,12 @@ async function performRemoteDataLoad(){
     priorityAwareJobs[6]=function(){return Promise.resolve(financialCore&&financialCore.ok?financialCore.ledger:{data:null,error:financialCore&&financialCore.error||new Error('分類帳尚未完成核對')});};
     priorityAwareJobs[7]=function(){return Promise.resolve(financialCore&&financialCore.ok?financialCore.settings:{data:null,error:financialCore&&financialCore.error||new Error('公司設定尚未完成核對')});};
   }
-  var res=await runFinanceBootstrapReadJobs(priorityAwareJobs,loadAccountingData,{expenses:1,vouchers:2,bills:3,invoices:4}[S.page]);
+  var res;
+  try{res=await runFinanceBootstrapReadJobs(priorityAwareJobs,loadAccountingData,{expenses:1,vouchers:2,bills:3,invoices:4}[S.page]);}
+  catch(error){
+    if(activeApprovalIdentity!==approvalFastBootstrapIdentity()||activeReadIdentity!==dashboardFinancialSourceIdentity())return false;
+    throw error;
+  }
   if(activeApprovalIdentity!==approvalFastBootstrapIdentity()||activeReadIdentity!==dashboardFinancialSourceIdentity())return false;
   setApprovalSourceCompleteness('expense_requests',approvalRemoteSourceResultComplete(res[1],REMOTE_BOOTSTRAP_LIMITS.requests),activeApprovalIdentity);
   setApprovalSourceCompleteness('bills',approvalRemoteSourceResultComplete(res[3],REMOTE_BOOTSTRAP_LIMITS.bills),activeApprovalIdentity);
@@ -9950,7 +9984,7 @@ async function readRealtimeScopedSource(table,current){
   if(!client)throw new Error('正式資料服務尚未連線');
   var tenant=currentTenantId();
   var query=applyRemoteLimit(client.from(table).select('*').order(spec.order,{ascending:false}),REMOTE_BOOTSTRAP_LIMITS.optional);
-  var result=await queueFinanceBootstrapRead(function(){return current()?financeBootstrapRead(query,'即時資料 '+table,20000):{stale:true};},true,false);
+  var result=await queueFinanceBootstrapRead(function(signal){return current()?financeBootstrapRead(query,'即時資料 '+table,20000,signal):{stale:true};},true,false);
   if(!current()||result.stale)return {stale:true};
   if(!result||result.error)throw result&&result.error||new Error('即時資料未回傳');
   if(!Array.isArray(result.data))throw new Error('即時資料格式無法核對');
@@ -31851,7 +31885,9 @@ async function invoiceInitialStepFiles(rawFiles,rows,ctx){
   var source=[];
   for(var i=0;i<(rawFiles||[]).length;i++){
     if(!rawFiles[i])continue;
-    var att=await fileToAttachment(rawFiles[i]);
+    // Preserve a large original as a Blob. Encoding it as a data URL before
+    // TUS would allocate another full-size copy and stall the invoice form.
+    var att=await fileToAttachment(rawFiles[i],{directLarge:true});
     att.kind='invoice_source';
     source.push(att);
   }
@@ -31871,7 +31907,19 @@ async function invoiceInitialStepFiles(rawFiles,rows,ctx){
     reason:ctx.reason,
     note:ctx.note
   }));
-  return uploadAttachmentsToSupabase(files,{recordType:'invoices',recordNo:ctx.recordNo||'invoice',kind:'invoice_initial',date:ctx.date||todayIso(),entityId:ctx.eid,departmentCode:ctx.dc});
+  var lastProgressAt=0;
+  var onProgress=function(sent,total,details){
+    if(typeof ctx.onProgress==='function')ctx.onProgress(sent,total,details);
+    if(typeof setActionFeedback!=='function')return;
+    var now=Date.now();
+    if(now-lastProgressAt<300&&sent<total)return;
+    lastProgressAt=now;
+    var index=details&&details.fileIndex||1,count=details&&details.fileCount||files.length;
+    setActionFeedback('loading','正在保存發票附件','第 '+index+' / '+count+' 個附件 · '+Math.min(100,Math.round(sent/Math.max(1,total)*100))+'% · 網路中斷會自動重試。');
+  };
+  var uploaded=await uploadAttachmentsToSupabase(files,{recordType:'invoices',recordNo:ctx.recordNo||'invoice',kind:'invoice_initial',date:ctx.date||todayIso(),entityId:ctx.eid,departmentCode:ctx.dc,onProgress:onProgress});
+  if(typeof setActionFeedback==='function')setActionFeedback('loading','正在建立發票申請','附件已保存，正在建立正式單據與簽核流程。');
+  return uploaded;
 }
 async function issueInvCore(){
   var submissionIdentity=incomeSubmissionIdentity();
@@ -38202,13 +38250,29 @@ async function loadFinanceNotifications(options){
   options=options||{};
   var state=financeNotificationState();
   if(S.demoLogin||!state.identity||!currentFinanceAuthUserId())return {data:[],error:null,skipped:true};
-  if(state.promise)return state.promise;
+  if(state.promise){
+    if(options.signal&&state.controller){
+      var sharedSignal=options.signal,sharedController=state.controller;
+      var abortShared=function(){state.queueSignalAborted=true;sharedController.abort();};
+      if(sharedSignal.aborted)abortShared();
+      else{
+        sharedSignal.addEventListener('abort',abortShared,{once:true});
+        state.promise.then(function(){sharedSignal.removeEventListener('abort',abortShared);},function(){sharedSignal.removeEventListener('abort',abortShared);});
+      }
+    }
+    return state.promise;
+  }
+  if(options.signal&&options.signal.aborted)return {data:null,error:new Error('通知讀取已取消'),stale:true};
   if(options.reuseFresh&&state.status==='ready'&&state.lastSuccessAt&&Date.now()-new Date(state.lastSuccessAt).getTime()<30000)return {data:state.rows,error:null,count:state.count,reused:true};
   var client=options.client||null;
+  state.queueSignalAborted=false;
   state.status='loading';state.error=null;
   refreshFinanceNotificationViews();
   var current=function(){return FINANCE_NOTIFICATION_STATE===state&&state.identity===financeNotificationIdentity();};
   var controller=typeof AbortController!=='undefined'?new AbortController():null;
+  var onAbort=options.signal&&controller?function(){state.queueSignalAborted=true;controller.abort();}:null;
+  if(onAbort){if(options.signal.aborted)onAbort();else options.signal.addEventListener('abort',onAbort,{once:true});}
+  state.controller=controller;
   state.promise=Promise.resolve().then(async function(){
     try{
       if(!client)client=getSb();
@@ -38228,6 +38292,7 @@ async function loadFinanceNotifications(options){
     }catch(error){
       if(error&&error.code==='CLIENT_TIMEOUT'&&controller)try{controller.abort();}catch(_){ }
       if(!current())return {data:[],error:null,stale:true};
+      if(state.queueSignalAborted&&controller&&controller.signal.aborted){state.status=state.lastSuccessAt?'ready':'idle';state.error=null;return {data:null,error:null,stale:true};}
       state.error=error;state.status='error';
       var code=String(error&&(error.code||error.status)||'');
       if(['401','403','42501','PGRST301','PGRST302','PGRST303','FINANCE_AUTH_IDENTITY_CHANGED'].indexOf(code)>-1){
@@ -38235,7 +38300,8 @@ async function loadFinanceNotifications(options){
       }
       return {data:null,error:error};
     }finally{
-      if(current()){state.promise=null;refreshFinanceNotificationViews();}
+      if(onAbort)options.signal.removeEventListener('abort',onAbort);
+      if(current()){state.promise=null;state.controller=null;refreshFinanceNotificationViews();}
     }
   });
   return state.promise;

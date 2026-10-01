@@ -48,6 +48,35 @@ async function main() {
   assert.equal(existing.uploadBlob, undefined);
   console.log('PASS formal large file stays a native Blob through normalization; existing draft path is retained');
 
+  const invoiceFile = fakeFile(50 * 1024 * 1024, 'fictional-large-invoice.pdf');
+  const invoiceFeedback = [];
+  const invoiceCtx = {
+    ...fileCtx,
+    fileToAttachment: fileCtx.fileToAttachment,
+    todayIso: () => '2026-10-02',
+    attachmentLooksPdf: (item) => item.t === 'pdf',
+    attachmentLooksImage: () => false,
+    receiptBundleAttachment: async (items) => {
+      assert.equal(items[0].uploadBlob, invoiceFile, 'the optional receipt bundle may not base64-copy the 50 MiB original');
+      return null;
+    },
+    invoiceExcelAttachment: () => ({ n: 'details.xls', size: 100, url: 'data:application/vnd.ms-excel,fixture' }),
+    setActionFeedback: (...args) => invoiceFeedback.push(args),
+    uploadAttachmentsToSupabase: async (items, ctx) => {
+      assert.equal(items.length, 2);
+      assert.equal(items[1].uploadBlob, invoiceFile, 'the original invoice must reach the upload stage as a Blob');
+      ctx.onProgress(invoiceFile.size / 2, invoiceFile.size, { fileIndex: 2, fileCount: 2 });
+      return items;
+    },
+  };
+  vm.runInNewContext(between('async function invoiceInitialStepFiles(', 'async function issueInvCore('), invoiceCtx);
+  const invoiceFiles = await invoiceCtx.invoiceInitialStepFiles([invoiceFile], [{ total: 123 }], { recordNo: 'FICTIONAL', eid: 'E1', dc: 'A100' });
+  assert.equal(invoiceFiles[1].uploadBlob, invoiceFile);
+  assert.equal(readerCreated, 0, '50 MiB invoice submission must not instantiate FileReader');
+  assert(invoiceFeedback.some((item) => item[2].includes('第 2 / 2 個附件') && item[2].includes('50%')));
+  assert(invoiceFeedback.at(-1)[2].includes('附件已保存'));
+  console.log('PASS 50 MiB single and batch invoice source retains the native Blob and shows upload progress');
+
   let currentScope = 'user-a|tenant-a|production';
   const trace = { tus: [], sdk: [], rows: [], removals: [], cleanupOptions: [], deletions: [], signed: [], progress: [], aborts: 0, diagnostics: [] };
   let rejectRequiredCleanup = false;
