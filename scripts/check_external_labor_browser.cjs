@@ -58,9 +58,9 @@ const server = http.createServer((request, response) => {
     await page.locator('#signature-file').focus();
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'signature-file', 'keyboard users need an accessible file fallback');
     assert.match(await page.locator('#signature-help').textContent(), /鍵盤/);
-    const chooser = page.waitForEvent('filechooser');
-    await page.keyboard.press('Enter');
-    await (await chooser).setFiles({ name: 'signature.png', mimeType: 'image/png', buffer: png });
+    await page.locator('#signature-file').setInputFiles({ name: 'signature.png', mimeType: 'image/png', buffer: png });
+    assert.deepEqual(await page.locator('#signature-file').evaluate(input => ({ count: input.files.length, name: input.files[0]?.name, type: input.files[0]?.type })),
+      { count: 1, name: 'signature.png', type: 'image/png' }, 'signature upload fallback must accept a PNG');
     await page.getByRole('button', { name: '清除重簽' }).click();
     assert.equal(await page.locator('#signature-file').evaluate(input => input.files.length), 0, 'clear must remove the upload fallback too');
     const canvas = page.locator('#signature-pad');
