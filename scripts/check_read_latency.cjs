@@ -15,6 +15,121 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));let passed=0;function check(s){
  for(const page of ['dashboard','reports']){
   let resolve;const pending=new Promise(r=>resolve=r),c=fixture({transport:q=>q.table==='vouchers'?pending:null});c.S.page=page;c.viewPaints=[];c.buildAll=opts=>c.viewPaints.push({page:c.S.page,options:opts});const broad=c.performRemoteDataLoad();for(let i=0;!c.viewPaints.length&&i<100;i++)await pause(1);assert(c.viewPaints.some(p=>p.page===page&&p.options.pageOnly));assert(c.modelInvalidations>0);assert.equal(c.lastSyncAt,'');resolve({data:[],count:0});await broad;check(page+' receives completed source state without waiting for unrelated vouchers');
  }
+ for(const [table,key,page] of [['expense_requests','REQS','expenses'],['vouchers','VOUCHERS','vouchers'],['bills','BILLS','bills'],['invoices','INVS','invoices']]){
+  let releaseLedger;const pendingLedger=new Promise(resolve=>{releaseLedger=resolve});
+  const c=fixture({transport:q=>q.table==='ledger_entries'?pendingLedger:q.table===table?Promise.resolve({data:[{id:'visible',tenant_id:'tenant-a',data_environment:'production'}],count:1}):null});
+  c.S.page=page;c.viewPaints=[];c.buildAll=opts=>c.viewPaints.push({page:c.S.page,options:opts});
+  const broad=c.performRemoteDataLoad();
+  for(let i=0;(!c[key].length||!c.queries.some(q=>q.table==='ledger_entries'))&&i<100;i++)await pause(1);
+  assert.equal(c[key][0]?.id,'visible',page+' should show its source while the ledger is still pending');
+  assert(c.viewPaints.some(p=>p.page===page&&p.options.pageOnly));
+  assert.equal(c.STATEMENT_SOURCE_STATE.ledger.complete,false,'a visible document cannot certify incomplete financial data');
+  assert.equal(c.lastSyncAt,'','the whole bootstrap is still pending');
+  assert(c.queries.findIndex(q=>q.table===table)<c.queries.findIndex(q=>q.table==='ledger_entries'),'current page source starts before the wide ledger read');
+  releaseLedger({data:[{id:'verified-ledger',entry_date:'2026-09-13',tenant_id:'tenant-a',data_environment:'production'}],count:1});
+  assert.equal(await broad,true);
+  assert.equal(c.STATEMENT_SOURCE_STATE.ledger.complete,true);
+  assert.equal(c.queries.filter(q=>q.table===table).length,1,'the preferred source is not fetched again');
+  assert(c.max<=2&&c.maxWide<=1,'existing transport concurrency limits remain intact');
+  check(page+' becomes usable before complete ledger loading without weakening accounting completeness');
+ }
+ {
+  let releaseSource,ledgerReads=0;
+  const sourceRead=new Promise(resolve=>{releaseSource=resolve});
+  const c=fixture({transport:q=>q.table==='expense_requests'?sourceRead:q.table==='ledger_entries'?Promise.resolve({data:[{id:'verified-ledger-'+(++ledgerReads),entry_date:'2026-09-13',tenant_id:'tenant-a',data_environment:'production'}],count:1}):null});
+  c.FINANCE_ACCOUNTING_DENIED_IDENTITY='';
+  vm.runInContext(extract('financeAccountingReadReady'),c);
+  assert.equal((await c.loadDashboardFinancialSources(true)).ok,true);
+  assert.equal(c.financeAccountingReadReady(),true);
+  const verifiedLedger=c.LEDGER[0];
+  c.S.page='expenses';
+  const broad=c.performRemoteDataLoad();
+  for(let i=0;!c.queries.some(q=>q.table==='expense_requests')&&i<100;i++)await pause(1);
+  assert(c.queries.some(q=>q.table==='expense_requests'));
+  assert.equal(c.queries.filter(q=>q.table==='ledger_entries').length,1,'the new ledger waits for the visible source');
+  assert.equal(c.STATEMENT_SOURCE_STATE.ledger.status,'loading');
+  assert.equal(c.financeAccountingReadReady(),false,'the prior complete ledger cannot authorize accounting during this reload');
+  assert.equal(c.LEDGER[0],verifiedLedger,'the prior ledger rows remain available but unverified for this reload');
+  releaseSource({data:[{id:'visible',tenant_id:'tenant-a',data_environment:'production'}],count:1});
+  assert.equal(await broad,true);
+  assert.equal(c.queries.filter(q=>q.table==='ledger_entries').length,2);
+  assert.equal(c.LEDGER[0].id,'verified-ledger-2');
+  assert.equal(c.financeAccountingReadReady(),true);
+  check('a completed same-identity ledger becomes incomplete while the visible source is pending, then re-verifies');
+ }
+ {
+  let releaseSource,releaseLedger;
+  const sourceRead=new Promise(resolve=>{releaseSource=resolve}),ledgerRead=new Promise(resolve=>{releaseLedger=resolve});
+  const c=fixture({transport:q=>q.table==='expense_requests'?sourceRead:q.table==='ledger_entries'?ledgerRead:null});
+  c.S.page='expenses';
+  const existingCore=c.loadDashboardFinancialSources(true);
+  for(let i=0;!c.queries.some(q=>q.table==='ledger_entries')&&i<100;i++)await pause(1);
+  assert(c.queries.some(q=>q.table==='ledger_entries'));
+  const coreLedgerState=c.STATEMENT_SOURCE_STATE.ledger;
+  const broad=c.performRemoteDataLoad();
+  for(let i=0;!c.queries.some(q=>q.table==='expense_requests')&&i<100;i++)await pause(1);
+  assert.equal(c.STATEMENT_SOURCE_STATE.ledger,coreLedgerState,'the document wait must not replace an in-flight ledger state');
+  releaseSource({data:[{id:'visible',tenant_id:'tenant-a',data_environment:'production'}],count:1});
+  await pause(1);
+  assert.equal(c.queries.filter(q=>q.table==='ledger_entries').length,1,'the broad reload reuses the existing core');
+  releaseLedger({data:[{id:'verified-ledger',entry_date:'2026-09-13',tenant_id:'tenant-a',data_environment:'production'}],count:1});
+  assert.equal((await existingCore).ok,true);
+  assert.equal(await broad,true);
+  assert.equal(c.STATEMENT_SOURCE_STATE.ledger.complete,true);
+  check('a pending financial core retains its state and is shared by the document reload');
+ }
+ {
+  let releaseSource;const sourceRead=new Promise(resolve=>{releaseSource=resolve});
+  const c=fixture({transport:q=>q.table==='expense_requests'?sourceRead:null});
+  const otherIdentityLedger={identity:c.statementDataIdentity(),complete:true,status:'complete',rowCount:1};
+  c.STATEMENT_SOURCE_STATE.ledger=otherIdentityLedger;
+  c.S.user.authUserId='other-auth';c.S.page='expenses';
+  const broad=c.performRemoteDataLoad();
+  for(let i=0;!c.queries.some(q=>q.table==='expense_requests')&&i<100;i++)await pause(1);
+  assert.equal(c.STATEMENT_SOURCE_STATE.ledger,otherIdentityLedger,'the new identity cannot relabel another identity ledger');
+  assert.equal(c.statementDataCompleteness().tables.ledger.complete,false);
+  assert.equal(c.LEDGER[0].id,'old','the previous identity ledger rows are not cleared by the page wait');
+  releaseSource({data:[],count:0});
+  assert.equal(await broad,true);
+  check('a new identity does not relabel or clear the previous identity ledger before its own core starts');
+ }
+ {
+  let releaseFast,releaseSource,releaseLedger;
+  const fast=new Promise(resolve=>{releaseFast=resolve}),sourceRead=new Promise(resolve=>{releaseSource=resolve}),ledgerRead=new Promise(resolve=>{releaseLedger=resolve});
+  const c=fixture({transport:q=>q.table==='expense_requests'?sourceRead:q.table==='ledger_entries'?ledgerRead:null});
+  c.S.page='expenses';
+  c.syncRemoteFinanceUsersDirectory=async()=>{
+   c.approvalFastBootstrapRunIdentity=c.approvalFastBootstrapIdentity();
+   c.approvalFastBootstrapRunPromise=fast;
+   return {users:[c.S.user]};
+  };
+  const broad=c.performRemoteDataLoad();
+  for(let i=0;!c.approvalFastBootstrapRunPromise&&i<100;i++)await pause(1);
+  assert(c.approvalFastBootstrapRunPromise,'the users job started a later approval read');
+  assert.equal(c.queries.some(q=>q.table==='ledger_entries'),false);
+  releaseFast();
+  for(let i=0;!c.queries.some(q=>q.table==='expense_requests')&&i<100;i++)await pause(1);
+  assert(c.queries.some(q=>q.table==='expense_requests'));
+  assert.equal(c.queries.some(q=>q.table==='ledger_entries'),false,'ledger cannot pass a pending current-page source');
+  releaseSource({data:[{id:'visible',tenant_id:'tenant-a',data_environment:'production'}],count:1});
+  for(let i=0;(!c.REQS.length||!c.queries.some(q=>q.table==='ledger_entries'))&&i<100;i++)await pause(1);
+  assert.equal(c.REQS[0]?.id,'visible');
+  assert.equal(c.STATEMENT_SOURCE_STATE.ledger.complete,false);
+  releaseLedger({data:[{id:'verified-ledger',entry_date:'2026-09-13',tenant_id:'tenant-a',data_environment:'production'}],count:1});
+  assert.equal(await broad,true);
+  assert.equal(c.STATEMENT_SOURCE_STATE.ledger.complete,true);
+  assert.equal(c.queries.filter(q=>q.table==='expense_requests').length,1);
+  check('a later approval bootstrap cannot let the ledger overtake the visible source');
+ }
+ {
+  const c=fixture({transport:q=>q.table==='expense_requests'?Promise.reject(new Error('visible source unavailable')):null});
+  c.S.page='expenses';
+  await assert.rejects(c.performRemoteDataLoad(),/visible source unavailable/);
+  assert.equal(c.REQS.length,0);
+  assert.equal(c.queries.filter(q=>q.table==='ledger_entries').length,1,'the required financial read still starts after a source failure');
+  assert.equal(c.STATEMENT_SOURCE_STATE.ledger.complete,true);
+  check('a failed visible source still starts the financial core and remains a failed broad read');
+ }
  for(const [table,key,page] of [['vouchers','VOUCHERS','vouchers'],['expense_requests','REQS','expenses'],['bills','BILLS','bills'],['invoices','INVS','invoices']]){
   let finish;const tail=new Promise(r=>finish=r),c=fixture({transport:q=>q.table===table?Promise.resolve({data:[{id:'visible',data_environment:'production'}],count:1}):q.table==='bank_transactions'?tail:null});c.S.page=page;
   const broad=c.performRemoteDataLoad();for(let i=0;c[key].length===0&&i<100;i++)await pause(1);
@@ -25,7 +140,7 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));let passed=0;function check(s){
   check(table+' publishes before unrelated bank read; final broad completion cannot replay an older voucher result');
  }
  {
-  let finish;const read=new Promise(r=>finish=r),c=fixture({transport:q=>q.table==='vouchers'?read:null});c.S.page='vouchers';const broad=c.performRemoteDataLoad();await pause(1);c.S.user.authUserId='other';finish({data:[{id:'wrong-identity'}],count:1});await broad;assert.equal(c.VOUCHERS.length,0);check('early publication rejects an identity change');
+  let finish;const read=new Promise(r=>finish=r),c=fixture({transport:q=>q.table==='vouchers'?read:null});c.S.page='vouchers';const broad=c.performRemoteDataLoad();await pause(1);c.S.user.authUserId='other';finish({data:[{id:'wrong-identity'}],count:1});await broad;assert.equal(c.VOUCHERS.length,0);assert.equal(c.queries.filter(q=>q.table==='ledger_entries').length,0);check('early publication rejects an identity change before starting the financial core');
  }
  for(const [table,key] of [['expense_requests','REQS'],['bills','BILLS'],['invoices','INVS'],['vouchers','VOUCHERS']]){
   for(const mode of ['edit','insert','delete','unchanged-cache']){

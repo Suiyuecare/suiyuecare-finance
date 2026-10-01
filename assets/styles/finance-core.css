@@ -839,13 +839,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
   .expense-query-hint{display:none}
   .expense-result-count{align-self:flex-end}
   .expense-list-scroll{width:100%;overflow-x:auto!important}
-  #pg-expenses table.expense-list-table{display:table!important;width:100%!important;min-width:980px!important;table-layout:auto!important}
-  #pg-expenses table.expense-list-table thead{display:table-header-group!important}
-  #pg-expenses table.expense-list-table tbody{display:table-row-group!important}
-  #pg-expenses table.expense-list-table tr{display:table-row!important;border:0!important;padding:0!important;margin:0!important;box-shadow:none!important}
-  #pg-expenses table.expense-list-table th,#pg-expenses table.expense-list-table td{display:table-cell!important;width:auto!important;max-width:none!important;white-space:nowrap!important}
-  #pg-expenses table.expense-list-table td:nth-child(4){min-width:260px;white-space:normal!important}
-  #pg-expenses table.expense-list-table td::before{content:none!important;display:none!important}
+  /* Once the mobile engine adds card labels, release the desktop table width. */
+  #pg-expenses table.expense-list-table.mobile-native-card-table{display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;table-layout:auto!important}
+  #pg-expenses table.expense-list-table.mobile-native-card-table thead{display:none!important}
+  #pg-expenses table.expense-list-table.mobile-native-card-table tbody{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:12px!important;width:100%!important}
 }
 
 @media(max-width:430px){

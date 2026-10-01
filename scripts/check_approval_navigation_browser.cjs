@@ -41,7 +41,7 @@ async function scope(code){let v=JSON.parse(await b('eval','--base64',Buffer.fro
  if(!baseline){
   for(const tab of ['p','cashier','mine','drafts','h','rejected']){
    await b('click','[data-approval-tab="'+tab+'"]');
-   const state=await scope(`({tab:S.aT,active:document.querySelector('[data-approval-tab][aria-selected="true"]').dataset.approvalTab,label:el('appr-list').getAttribute('aria-labelledby'),description:el('approval-tab-description').textContent,count:document.querySelectorAll('[data-approval-tab][aria-selected="true"]').length})`);
+   const state=await scope(`(async function(){for(var attempt=0;attempt<30&&S.aT!==${JSON.stringify(tab)};attempt++)await new Promise(resolve=>setTimeout(resolve,20));return {tab:S.aT,active:document.querySelector('[data-approval-tab][aria-selected="true"]').dataset.approvalTab,label:el('appr-list').getAttribute('aria-labelledby'),description:el('approval-tab-description').textContent,count:document.querySelectorAll('[data-approval-tab][aria-selected="true"]').length};})()`);
    assert.equal(state.tab,tab);assert.equal(state.active,tab);assert.equal(state.label,'approval-tab-'+tab);assert.equal(state.count,1);assert(state.description.length>10);
   }
   await b('click','[data-approval-tab="p"]');await b('press','ArrowRight');assert.equal(await scope('S.aT'),'cashier');

@@ -9507,10 +9507,30 @@ async function performRemoteDataLoad(){
     };
   });
   var usersResult=await priorityAwareJobs[0]();
-  if(activeApprovalIdentity!==approvalFastBootstrapIdentity())return false;
+  if(activeApprovalIdentity!==approvalFastBootstrapIdentity()||activeDataIdentity!==statementDataIdentity())return false;
   loadAccountingData=!!(S.user&&['ceo','admin_director','accountant','external_audit','board','shareholder'].indexOf(normalizedRoleKey(S.user))>-1);
-  var financialCore=loadAccountingData?await loadDashboardFinancialSources(true):null;
   activeReadIdentity=dashboardFinancialSourceIdentity();
+  // On a document page, start its source before the complete ledger takes the
+  // only wide-read slot. Keep the same promise in the broad result set so the
+  // source is read once and all later completeness checks still run.
+  var preferredSourceIndex=loadAccountingData?{expenses:1,vouchers:2,bills:3,invoices:4}[S.page]:undefined;
+  if(Number.isInteger(preferredSourceIndex)){
+    // A previous same-identity ledger is not proof that this broad reload has
+    // verified its financial core. Preserve an already running core's state.
+    if(STATEMENT_SOURCE_STATE.ledger.identity===activeDataIdentity
+      &&STATEMENT_SOURCE_STATE.ledger.complete===true
+      &&!(DASHBOARD_FINANCIAL_SOURCE_RUNTIME.identity===activeReadIdentity&&DASHBOARD_FINANCIAL_SOURCE_RUNTIME.promise)){
+      STATEMENT_SOURCE_STATE.ledger={identity:activeDataIdentity,complete:false,status:'loading',rowCount:0,error:''};
+    }
+    var preferredSourcePromise=priorityAwareJobs[preferredSourceIndex]();
+    priorityAwareJobs[preferredSourceIndex]=function(){return preferredSourcePromise;};
+    // A newly started approval bootstrap may still be pending. Wait for the
+    // current page source to settle before the ledger reserves the wide slot;
+    // the original result or rejection remains in the broad result set.
+    try{await preferredSourcePromise;}catch(_){}
+    if(activeApprovalIdentity!==approvalFastBootstrapIdentity()||activeReadIdentity!==dashboardFinancialSourceIdentity())return false;
+  }
+  var financialCore=loadAccountingData?await loadDashboardFinancialSources(true):null;
   priorityAwareJobs[0]=function(){return Promise.resolve(usersResult);};
   if(loadAccountingData){
     priorityAwareJobs[6]=function(){return Promise.resolve(financialCore&&financialCore.ok?financialCore.ledger:{data:null,error:financialCore&&financialCore.error||new Error('分類帳尚未完成核對')});};
