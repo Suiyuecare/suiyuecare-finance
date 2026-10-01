@@ -22,6 +22,7 @@ const CHECKER_PATH = 'scripts/check_root_cause_regressions.js';
 const MIGRATION_CHECKER_PATH = 'scripts/check_migration_lineage_contract.js';
 const args = new Set(process.argv.slice(2));
 let buildConfig = null;
+let configuredAppSourceCode = '';
 
 function fail(message) {
   process.stderr.write(`FAIL ${message}\n`);
@@ -402,6 +403,7 @@ function releaseSourceFiles() {
     'index.html',
     'package.json',
     'pnpm-lock.yaml',
+    'pnpm-workspace.yaml',
     'privacy.html',
     'scripts/build_www.js',
     'scripts/finance_build_environment.js',
@@ -503,6 +505,7 @@ function expectedBuiltIndex() {
     if (!fs.readFileSync(path.join(OUTPUT, file)).equals(fs.readFileSync(path.join(ROOT, file)))) fail('built Supabase SDK evidence differs: ' + file);
   }
   const app = createAppBundle(bundle.html);
+  configuredAppSourceCode = app.sourceCode;
   const appPath = path.join(OUTPUT, app.file);
   if (!fs.existsSync(appPath) || fs.readFileSync(appPath, 'utf8') !== app.code) {
     fail('built Finance app differs from the exact configured source IIFE');
@@ -548,20 +551,21 @@ if (Buffer.byteLength(builtIndex) >= Buffer.byteLength(fs.readFileSync(path.join
 }
 const builtAppPath = path.join(OUTPUT, appMatch[0].match(/src="([^"]+)"/)[1]);
 const builtBrowserCode = builtIndex + '\n' + fs.readFileSync(builtAppPath, 'utf8');
+const browserCodeForSafety = builtBrowserCode + '\n' + configuredAppSourceCode;
 const externalPagePath = path.join(OUTPUT, 'external-remuneration.html');
 if (!fs.existsSync(externalPagePath) || fs.readFileSync(externalPagePath, 'utf8') !== expectedExternalRemunerationPage()) {
   fail('www/external-remuneration.html is not the deterministic build of its source');
 }
-if (/__(?:FINANCE_BUILD_TARGET|FINANCE_SUPABASE_URL|FINANCE_SUPABASE_ANON_KEY)__/.test(builtBrowserCode)) {
+if (/__(?:FINANCE_BUILD_TARGET|FINANCE_SUPABASE_URL|FINANCE_SUPABASE_ANON_KEY)__/.test(browserCodeForSafety)) {
   fail('built Finance browser code still contains a runtime configuration placeholder');
 }
-if (buildConfig.target !== 'production' && /https:\/\/[a-z0-9-]+\.supabase\.co/i.test(builtBrowserCode)) {
+if (buildConfig.target !== 'production' && /https:\/\/[a-z0-9-]+\.supabase\.co/i.test(browserCodeForSafety)) {
   fail(`${buildConfig.target} artifact contains a Supabase project URL`);
 }
-if (buildConfig.target !== 'production' && /var\s+SUPABASE_(?:ANON|PUBLISHABLE)_KEY\s*=\s*['"](?:eyJ|sb_)/i.test(builtBrowserCode)) {
+if (buildConfig.target !== 'production' && /var\s+SUPABASE_(?:ANON|PUBLISHABLE)_KEY\s*=\s*['"](?:eyJ|sb_)/i.test(browserCodeForSafety)) {
   fail(`${buildConfig.target} artifact contains a Supabase browser key`);
 }
-if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(builtBrowserCode)) {
+if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(browserCodeForSafety)) {
   fail('artifact contains a forbidden Supabase elevated key');
 }
 

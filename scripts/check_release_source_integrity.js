@@ -371,6 +371,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'index.html',
   'package.json',
   'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
   'privacy.html',
   'scripts/build_www.js',
   'scripts/finance_build_environment.js',
@@ -959,6 +960,8 @@ try {
 }
 if (pkg) {
   check('release runtime is pinned to Node 22', pkg.engines && pkg.engines.node === '>=22 <23');
+  check('app minifier is pinned to a locked build dependency', pkg.devDependencies && pkg.devDependencies.esbuild === '0.28.2');
+  check('only pinned app minifier may run an install script', fs.readFileSync(path.join(ROOT, 'pnpm-workspace.yaml'), 'utf8').trim() === 'allowBuilds:\n  esbuild: true');
   for (const [name, command] of Object.entries(EXPECTED_RELEASE_SCRIPTS)) {
     check(`package release script is exact: ${name}`, pkg.scripts && pkg.scripts[name] === command);
   }

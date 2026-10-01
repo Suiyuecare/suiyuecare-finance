@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { createStartupBundle, createAppBundle } = require('./finance_startup_bundle');
+const { applyBuildEnvironment, resolveBuildConfig } = require('./finance_build_environment');
 
 const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'index.html');
@@ -222,11 +224,13 @@ if (fs.existsSync(builtPath) && fs.existsSync(builtCssPath)) {
   const appPath = built.match(/<script src="(assets\/finance-app-[a-f0-9]{16}\.js)"><\/script>/)?.[1];
   const builtRuntime = appPath ? fs.readFileSync(path.join(root, 'www', appPath), 'utf8') : built;
   const builtCss = fs.readFileSync(builtCssPath, 'utf8');
+  const expectedApp = createAppBundle(createStartupBundle(applyBuildEnvironment(source, resolveBuildConfig(process.env)), root).html);
   check(
     'production artifact contains the same login safeguards',
     built.includes('id="login-account-guide"') &&
-      builtRuntime.includes('window.switchFinanceGoogleAccount=async function()') &&
-      builtRuntime.includes('queryParams.login_hint=expectedEmail') &&
+      appPath === expectedApp.file && builtRuntime === expectedApp.code &&
+      expectedApp.sourceCode.includes('window.switchFinanceGoogleAccount=async function()') &&
+      expectedApp.sourceCode.includes('queryParams.login_hint=expectedEmail') &&
       builtCss.includes('.login-account-guide[data-state="mismatch"]')
   );
 } else {

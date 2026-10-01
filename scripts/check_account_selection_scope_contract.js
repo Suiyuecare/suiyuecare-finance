@@ -29,8 +29,11 @@ if(fs.existsSync(builtIndex)&&fs.existsSync(builtEngine)){
   const built=fs.readFileSync(builtIndex,'utf8');
   const appPath=built.match(/<script src="(assets\/finance-app-[a-f0-9]{16}\.js)"><\/script>/)?.[1];
   const builtRuntime=appPath?fs.readFileSync(path.join(root,'www',appPath),'utf8'):built;
+  const {createStartupBundle,createAppBundle}=require('./finance_startup_bundle');
+  const {applyBuildEnvironment,resolveBuildConfig}=require('./finance_build_environment');
+  const expectedApp=createAppBundle(createStartupBundle(applyBuildEnvironment(source,resolveBuildConfig(process.env)),root).html);
   const builtEngineSource=fs.readFileSync(builtEngine,'utf8');
-  check('built frontend contains the same scoped account selector',builtRuntime.includes('function accountSelectableForContext(account,entityId,departmentCode)'));
+  check('built frontend contains the same scoped account selector',appPath===expectedApp.file&&builtRuntime===expectedApp.code&&expectedApp.sourceCode.includes('function accountSelectableForContext(account,entityId,departmentCode)'));
   check('built accounting engine contains the restricted-scope summary',builtEngineSource.includes("selectionScope(account).mode === 'restricted'"));
 }
 
