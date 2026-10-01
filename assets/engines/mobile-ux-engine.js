@@ -3,7 +3,7 @@
 
   var MOBILE_ROLE_PRIMARY_NAV_LIMIT=4;
   var PHONE_QUERY='(max-width: 760px)';
-  var MOBILE_PRIMARY_PAGES=['dashboard','newreq','approvals','invoices'];
+  var MOBILE_PRIMARY_PAGES=['dashboard','approvals','newreq','expenses'];
   var pageIcons={
     dashboard:'⌂',newreq:'＋',expenses:'▤',approvals:'✓',vouchers:'票',shareholder:'↔',
     invoices:'發',bills:'繳',recv:'收',reports:'表',ledger:'帳',accounts:'科',
@@ -16,10 +16,27 @@
     orgchart:'組織',health:'健檢',settings:'設定'
   };
   var rolePrimary={
-    accountant:MOBILE_PRIMARY_PAGES,cashier:MOBILE_PRIMARY_PAGES,ceo:MOBILE_PRIMARY_PAGES,
-    general_manager:MOBILE_PRIMARY_PAGES,admin_director:MOBILE_PRIMARY_PAGES,dept_manager:MOBILE_PRIMARY_PAGES,
-    section_chief:MOBILE_PRIMARY_PAGES,general_affairs:MOBILE_PRIMARY_PAGES,business_assistant:MOBILE_PRIMARY_PAGES,
-    case_manager:MOBILE_PRIMARY_PAGES,employee:MOBILE_PRIMARY_PAGES
+    accountant:['dashboard','approvals','vouchers','reports'],
+    cashier:['approvals','recv','bills','dashboard'],
+    ceo:['dashboard','approvals','reports','recv'],
+    general_manager:['dashboard','approvals','reports','newreq'],
+    admin_director:['approvals','newreq','expenses','dashboard'],
+    dept_manager:['approvals','newreq','expenses','dashboard'],
+    section_chief:['approvals','newreq','expenses','dashboard'],
+    general_affairs:['newreq','bills','approvals','expenses'],
+    business_assistant:['invoices','recv','approvals','dashboard'],
+    hr:['approvals','newreq','expenses','dashboard'],
+    case_manager:['newreq','approvals','expenses','dashboard'],
+    employee:['newreq','approvals','expenses','dashboard'],
+    external_audit:['reports','vouchers','ledger','dashboard'],
+    board:['dashboard','reports','vouchers','ledger'],
+    shareholder:['dashboard','shareholder','reports','approvals']
+  };
+  var roleAliases={
+    'accounting-chief':'accountant','cashier-chief':'cashier','ga-chief':'general_affairs',
+    'hr-chief':'hr','region-manager':'dept_manager','business-director':'dept_manager',
+    'admin-director':'admin_director','section-chief':'section_chief','team-lead':'section_chief',
+    staff:'employee','external-audit':'external_audit'
   };
   var observerQueued=false;
   var mobileMoreReturnFocus=null;
@@ -33,10 +50,15 @@
 
   function isPhone(){return !!(window.matchMedia&&window.matchMedia(PHONE_QUERY).matches);}
   function currentRole(){
+    var role='';
     if(typeof window.financeCurrentRoleKey==='function'){
-      try{return String(window.financeCurrentRoleKey()||'employee');}catch(_error){}
+      try{role=String(window.financeCurrentRoleKey()||'');}catch(_error){}
     }
-    return String((window.S&&window.S.user&&window.S.user.role)||'employee');
+    role=roleAliases[role]||role;
+    if(rolePrimary[role])return role;
+    // This only chooses shortcuts; the actual visible routes still come from the authorized sidebar.
+    role=String((window.S&&window.S.user&&window.S.user.role)||'employee');
+    return roleAliases[role]||role;
   }
   function navPageFromButton(button){
     var match=String(button&&button.getAttribute('onclick')||'').match(/nav\(['"]([^'"]+)/);
@@ -52,8 +74,11 @@
   function allowedPages(){return desktopNavItems().map(function(item){return item.page;});}
   function primaryPages(){
     var allowed=allowedPages();
-    var wanted=(rolePrimary[currentRole()]||MOBILE_PRIMARY_PAGES).filter(function(page){return allowed.indexOf(page)>-1;});
-    return wanted.slice(0,MOBILE_ROLE_PRIMARY_NAV_LIMIT);
+    var result=[];
+    (rolePrimary[currentRole()]||MOBILE_PRIMARY_PAGES).concat(MOBILE_PRIMARY_PAGES,allowed).forEach(function(page){
+      if(allowed.indexOf(page)>-1&&result.indexOf(page)<0)result.push(page);
+    });
+    return result.slice(0,MOBILE_ROLE_PRIMARY_NAV_LIMIT);
   }
   function primaryIcon(page){
     var icons={

@@ -1938,6 +1938,8 @@ html,body{overflow-x:hidden}
   --font-sans:"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif;
   --admin-orange:#ea880c;
   --admin-orange-dark:#b45309;
+  --admin-orange-action:#b45309;
+  --admin-orange-action-hover:#92400e;
   --admin-brown:#2f2a26;
   --admin-muted:#6e6259;
   --admin-paper:#fff9f2;
@@ -2019,7 +2021,7 @@ nav::-webkit-scrollbar-thumb{background:#e6cdaa!important}
   transition:background .18s ease,color .18s ease,transform .18s ease!important;
 }
 .ni:hover,.ni.on{
-  background:var(--admin-orange)!important;
+  background:var(--admin-orange-action)!important;
   color:#fff!important;
   transform:translateX(2px);
   box-shadow:none!important;
@@ -2119,7 +2121,7 @@ nav::-webkit-scrollbar-thumb{background:#e6cdaa!important}
   cursor:pointer;
   white-space:nowrap;
 }
-.module-switch-button.primary{background:var(--admin-orange);border-color:var(--admin-orange);color:#fff}
+.module-switch-button.primary{background:var(--admin-orange-action);border-color:var(--admin-orange-action);color:#fff}
 .module-switch-button:hover{box-shadow:0 8px 20px rgba(160,86,10,.12);transform:translateY(-1px)}
 .module-todo-badge{
   display:none;
@@ -2215,12 +2217,12 @@ input:focus,select:focus,textarea:focus{
   font-weight:1000!important;
 }
 .btn-p{
-  background:var(--admin-orange)!important;
+  background:var(--admin-orange-action)!important;
   color:#fff!important;
   border:0!important;
   box-shadow:0 14px 34px rgba(240,138,36,.22)!important;
 }
-.btn-p:hover{background:var(--admin-orange-dark)!important}
+.btn-p:hover{background:var(--admin-orange-action-hover)!important}
 .btn-s,.btn-g{
   background:#fff!important;
   border:1px solid var(--admin-line)!important;
@@ -2246,10 +2248,14 @@ input:focus,select:focus,textarea:focus{
   padding:0 16px!important;
 }
 .tb.on,.rtab.on{
-  border-color:var(--admin-orange)!important;
-  background:var(--admin-orange)!important;
+  border-color:var(--admin-orange-action)!important;
+  background:var(--admin-orange-action)!important;
   color:#fff!important;
 }
+.btn-p:focus-visible,.tb:focus-visible,.rtab:focus-visible,
+.module-switch-button.primary:focus-visible,.ni:focus-visible,
+#pg-approvals #appr-q:focus-visible{outline:3px solid #1167bb!important;outline-offset:2px!important}
+#pg-approvals #appr-list-hint{color:#475569!important}
 .badge,.ep,.dt{
   min-height:30px;
   align-items:center;
@@ -2382,7 +2388,7 @@ input:focus,select:focus,textarea:focus{
     border-radius:18px!important;
   }
   nav .ni.on,nav .ni:hover{
-    background:var(--admin-orange)!important;
+    background:var(--admin-orange-action)!important;
     color:#fff!important;
     transform:none!important;
   }

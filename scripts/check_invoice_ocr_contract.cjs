@@ -9,9 +9,10 @@ const schema=vm.runInNewContext(edge.slice(edge.indexOf('  const invoiceSchema =
 let count=0;function check(label,fn){fn();count++;console.log('PASS '+label);}const plain=x=>JSON.parse(JSON.stringify(x));
 function payload(net=210,tax=0,total=210,items=[]){const data=Object.fromEntries(Object.entries(schema.properties).map(([key,def])=>[key,def.type==='string'?'':def.type==='number'?0:[]]));Object.assign(data,{buyer_name:'虛構買受人',description:'九月服務合計',amount_excluding_tax:net,tax_amount:tax,total_amount:total,items,confidence:1,currency:'TWD'});return data;}
 function item(name,gross){return Object.fromEntries(Object.entries(schema.properties.items.items.properties).map(([key,def])=>[key,key==='item_name'?name:key==='total_amount'?gross:key==='quantity'?1:def.type==='string'?'次':gross]));}
-function fixture(){const dom=Object.fromEntries(['inv-no','inv-buyer','inv-taxid','inv-identifier-type','inv-date','inv-amt','inv-tax','inv-total','inv-desc','inv-item-type','batch-pw','batch-prog','batch-pl'].map(id=>[id,{value:'original',textContent:'',style:{}}]));
- const c={console,Number,Math,Array,JSON,String,Error,Promise,el:id=>dom[id],num:x=>Number(x||0),fmt:x=>String(x),invoiceItemTypeFromText:()=> 'other_income',updInvPrev(){},S:{bRows:[{buyer:'原資料',amt:50,total:50,tax:0}],bUploadFile:{name:'fictional.pdf',type:'application/pdf'},invOcrFile:{name:'fictional.pdf',type:'application/pdf'}},productModuleEnabled:()=>true,OPENAI_INVOICE_OCR_ENDPOINT:'https://example.invalid/ocr',SUPABASE_ANON_KEY:'fictional',fileToAttachment:async()=>({n:'fictional.pdf',mime:'application/pdf',url:'data:application/pdf;base64,UEZERklDVFVSRQ=='}),setInvOcrStatus:(text)=>{c.status=text;},ocrErrorMessage:e=>e.message,renderBatchTable:()=>{c.renderCount++;},defaultInvoiceBatchRow:()=>({}),renderCount:0,fetch:async()=>({ok:true,json:async()=>({invoice:c.response})}),alert:x=>{throw Error('Unexpected alert '+x);}};c.window=c;vm.createContext(c);
- for(const name of ['invoiceOcrReviewError','invoiceOcrNumber','invoiceOcrAmountParts','invoiceNumberValue','invoiceRateValue','invoiceAmountsFromTotal','applyInvoiceOcr','invoiceOcrDataToBatchRows'])vm.runInContext(declaration(name),c);
+function fixture(){const dom=Object.fromEntries(['inv-no','inv-buyer','inv-taxid','inv-identifier-type','inv-date','inv-amt','inv-tax','inv-total','inv-desc','inv-item-type','batch-pw','batch-prog','batch-pl','batch-fn','batch-dz'].map(id=>[id,{value:'original',textContent:'',style:{},classList:{add(){}}}]));
+ const c={console,Number,Math,Array,JSON,String,Error,Promise,el:id=>dom[id],num:x=>Number(x||0),fmt:x=>String(x),invoiceItemTypeFromText:()=> 'other_income',invoiceIdentifierType:x=>x,invoiceBatchOverflowMessage:()=>'',INVOICE_BATCH_MAX_ITEMS:1000,statementDataIdentity:()=> 'fictional-account-scope',updInvPrev(){},S:{bRows:[{buyer:'原資料',amt:50,total:50,tax:0}],bUploadFile:{name:'fictional.pdf',type:'application/pdf'},invOcrFile:{name:'fictional.pdf',type:'application/pdf'}},productModuleEnabled:()=>true,OPENAI_INVOICE_OCR_ENDPOINT:'https://example.invalid/ocr',SUPABASE_ANON_KEY:'fictional',fileToAttachment:async()=>({n:'fictional.pdf',mime:'application/pdf',url:'data:application/pdf;base64,UEZERklDVFVSRQ=='}),setInvOcrStatus:(text)=>{c.status=text;},ocrErrorMessage:e=>e.message,renderBatchTable:()=>{c.renderCount++;},defaultInvoiceBatchRow:()=>({}),renderCount:0,fetch:async()=>({ok:true,json:async()=>({invoice:c.response})}),alert:x=>{throw Error('Unexpected alert '+x);}};c.window=c;vm.createContext(c);
+ vm.runInContext('var BATCH_INVOICE_READ_GENERATION=0;',c);
+ for(const name of ['invoiceOcrReviewError','invoiceOcrNumber','invoiceOcrAmountParts','invoiceNumberValue','invoiceRateValue','invoiceAmountsFromTotal','applyInvoiceOcr','invoiceOcrDataToBatchRows','batchInvoiceReadCurrent','setBatchInvoiceUploadFile','importBatchCsv'])vm.runInContext(declaration(name),c);
  for(const name of ['calcInvTax','analyzeSingleInvoiceFile','analyzeBatchInvoiceUpload'])vm.runInContext(declaration(name,true),c);return {c,dom};}
 (async()=>{const {c,dom}=fixture();
  check('fixture is exact real Edge schema with item_name and no invented tax_rate',()=>{assert.equal(schema.properties.tax_rate,undefined);assert.ok(schema.properties.items.items.properties.item_name);assert.deepEqual(Object.keys(payload()).sort(),Array.from(schema.required).sort());});
@@ -37,5 +38,28 @@ function fixture(){const dom=Object.fromEntries(['inv-no','inv-buyer','inv-taxid
  const previous=plain(c.S.bRows);c.response=payload(0,0,210);await c.analyzeBatchInvoiceUpload();check('actual async batch caller keeps previous rows and exposes actionable ambiguity',()=>{assert.deepEqual(plain(c.S.bRows),previous);assert.equal(c.renderCount,1);assert.match(dom['batch-pl'].textContent,/人工核對/);});
  const oldInputs=plain(dom);await c.analyzeSingleInvoiceFile();check('actual async single caller does not claim completion after rejection',()=>{assert.deepEqual(plain(dom),oldInputs);assert.match(c.status,/人工核對/);assert.doesNotMatch(c.status,/已回填/);});
  c.response=payload(200,10,210);await c.analyzeSingleInvoiceFile();check('actual async single caller preserves 5% control',()=>{assert.equal(Number(dom['inv-amt'].value),200);assert.equal(Number(dom['inv-total'].value),210);assert.equal(dom['inv-tax'].value,'5');assert.match(c.status,/已回填/);});
+ function deferred(){let resolve;const promise=new Promise(done=>{resolve=done});return{promise,resolve};}
+ const oldOcr=deferred(),oldPdf={name:'old.pdf',type:'application/pdf'},newPdf={name:'new.pdf',type:'application/pdf'};
+ let ocrCalls=0;c.fetch=()=>++ocrCalls===1?oldOcr.promise:Promise.resolve({ok:true,json:async()=>({invoice:payload(210,0,210,[item('新檔內容',210)])})});
+ c.setBatchInvoiceUploadFile(oldPdf);const oldOcrRun=c.analyzeBatchInvoiceUpload();await new Promise(setImmediate);
+ c.setBatchInvoiceUploadFile(newPdf);await c.analyzeBatchInvoiceUpload();
+ oldOcr.resolve({ok:true,json:async()=>({invoice:payload(210,0,210,[item('舊檔內容',210)])})});await oldOcrRun;
+ check('late OCR from a replaced file cannot overwrite the selected invoice rows',()=>{assert.deepEqual(plain(c.S.bRows.map(row=>row.desc)),['新檔內容']);assert.match(dom['batch-pl'].textContent,/已填入 1 列/);});
+ const sameFile={name:'same.pdf',type:'application/pdf'},oldSame=deferred();let sameCalls=0;
+ c.fetch=()=>++sameCalls===1?oldSame.promise:Promise.resolve({ok:true,json:async()=>({invoice:payload(210,0,210,[item('第二次辨識',210)])})});
+ c.setBatchInvoiceUploadFile(sameFile);const firstSame=c.analyzeBatchInvoiceUpload();await new Promise(setImmediate);
+ await c.analyzeBatchInvoiceUpload();oldSame.resolve({ok:true,json:async()=>({invoice:payload(210,0,210,[item('第一次辨識',210)])})});await firstSame;
+ check('the first OCR attempt cannot overwrite a newer retry of the same file',()=>assert.deepEqual(plain(c.S.bRows.map(row=>row.desc)),['第二次辨識']));
+ const oldIdentity=deferred();c.fetch=()=>oldIdentity.promise;c.setBatchInvoiceUploadFile(sameFile);
+ const identityRun=c.analyzeBatchInvoiceUpload();await new Promise(setImmediate);c.statementDataIdentity=()=> 'different-account-scope';
+ oldIdentity.resolve({ok:true,json:async()=>({invoice:payload(210,0,210,[item('舊帳號辨識',210)])})});await identityRun;
+ check('late OCR from a previous login scope cannot change current invoice rows',()=>assert.deepEqual(plain(c.S.bRows.map(row=>row.desc)),['第二次辨識']));
+ const oldCsv=deferred(),oldSheet={name:'old.csv',type:'text/csv'},newSheet={name:'new.csv',type:'text/csv'};
+ let csvCalls=0;c.invoiceTableRowToData=row=>row;
+ c.readInvoiceTableFile=()=>++csvCalls===1?oldCsv.promise:Promise.resolve([{buyer:'新 CSV',identifierType:'電子發票',taxid:'',desc:'新資料',total:210,amount:210,rate:0}]);
+ c.setBatchInvoiceUploadFile(oldSheet);const oldCsvRun=c.analyzeBatchInvoiceUpload();await new Promise(setImmediate);
+ c.setBatchInvoiceUploadFile(newSheet);await c.analyzeBatchInvoiceUpload();
+ oldCsv.resolve([{buyer:'舊 CSV',identifierType:'電子發票',taxid:'',desc:'舊資料',total:210,amount:210,rate:0}]);await oldCsvRun;
+ check('late CSV import from a replaced file cannot overwrite the selected invoice rows',()=>{assert.deepEqual(plain(c.S.bRows.map(row=>row.buyer)),['新 CSV']);assert.match(dom['batch-pl'].textContent,/已讀入 1 筆/);});
  console.log('Invoice OCR contract: '+count+' checks PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

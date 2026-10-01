@@ -3,9 +3,11 @@
 
 const fs=require('fs');
 const path=require('path');
+const vm=require('vm');
 const root=path.resolve(__dirname,'..');
 const index=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const engine=fs.readFileSync(path.join(root,'assets/engines/workflow-simplification-engine.js'),'utf8');
+const mobileEngine=fs.readFileSync(path.join(root,'assets/engines/mobile-ux-engine.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'assets/styles/workflow-simplification.css'),'utf8');
 let passed=0;
 let failed=0;
@@ -53,6 +55,82 @@ check('手機專用詳情的檢核摘要不壓成直排文字',
     && /supervisor-review-summary\.is-full\{[\s\S]*?grid-template-columns:repeat\(2,minmax\(0,1fr\)\)!important/.test(css)
     && /supervisor-review-issues\.is-full\{[\s\S]*?grid-template-columns:minmax\(0,1fr\)!important/.test(css));
 check('所有樣式受可逆 root class 限制',count(css,'.workflow-simplification-v1')>=25);
+
+// Exercise the real observer callback: unrelated updates must not schedule a full-table scan.
+const animationFrames=[];
+let mutationCallback=null;
+const rootClasses=new Set();
+const documentStub={
+  readyState:'complete',
+  body:{nodeType:1},
+  documentElement:{
+    nodeType:1,
+    classList:{
+      add(name){rootClasses.add(name);},
+      remove(name){rootClasses.delete(name);},
+      contains(name){return rootClasses.has(name);}
+    }
+  },
+  getElementById(){return null;}
+};
+const windowStub={};
+vm.runInNewContext(engine,{
+  document:documentStub,
+  window:windowStub,
+  requestAnimationFrame(callback){animationFrames.push(callback);},
+  MutationObserver:class {
+    constructor(callback){mutationCallback=callback;}
+    observe(){}
+  }
+});
+check('簡化引擎初次載入排入一次全頁更新',animationFrames.length===1);
+animationFrames.shift()();
+const outsideNode={nodeType:1,id:'notification-list',closest(){return null;}};
+mutationCallback([{target:outsideNode,addedNodes:[]}]);
+check('通知等無關 DOM 更新不觸發清單重掃',animationFrames.length===0);
+mutationCallback([{target:documentStub.body,addedNodes:[outsideNode]}]);
+check('插入到 body 的通知不觸發全頁重掃',animationFrames.length===0);
+mutationCallback([{target:documentStub.body,addedNodes:[{nodeType:1,id:'pg-expenses'}]}]);
+check('替換工作頁根節點仍觸發更新',animationFrames.length===1);
+animationFrames.shift()();
+const expenseNode={nodeType:1,id:'exp-tbody',closest(selector){return selector==='#pg-expenses'?this:null;}};
+mutationCallback([{target:expenseNode,addedNodes:[]},{target:expenseNode,addedNodes:[]}]);
+check('同幀放款清單變動只排一次更新',animationFrames.length===1);
+animationFrames.shift()();
+windowStub.financeWorkflowSimplificationRefresh();
+check('既有手動刷新仍可完整更新',animationFrames.length===1);
+
+const mobileNavSource=mobileEngine.slice(
+  mobileEngine.indexOf('var MOBILE_ROLE_PRIMARY_NAV_LIMIT='),
+  mobileEngine.indexOf('function primaryIcon(')
+);
+function mobilePrimaryPages(role,allowed){
+  const buttons=allowed.map(page=>({
+    getAttribute(name){return name==='onclick'?"nav('"+page+"')":null;},
+    hasAttribute(){return false;},
+    hidden:false,
+    style:{display:''}
+  }));
+  return vm.runInNewContext('(function(){'+mobileNavSource+'return primaryPages();})()',{
+    document:{querySelectorAll(selector){return selector==='#sidebar nav .ni'?buttons:[];}},
+    window:{financeCurrentRoleKey(){return role;},S:{user:{role}}}
+  });
+}
+check('執行長手機捷徑優先保留儀表板簽核報表收款',
+  JSON.stringify(mobilePrimaryPages('ceo',['dashboard','newreq','approvals','invoices','recv','reports']))
+  ===JSON.stringify(['dashboard','approvals','reports','recv']));
+check('出納手機捷徑以實際授權頁補滿且不顯示未授權繳費單',
+  JSON.stringify(mobilePrimaryPages('cashier',['dashboard','newreq','approvals','recv']))
+  ===JSON.stringify(['approvals','recv','dashboard','newreq']));
+check('員工手機捷徑優先新增申請與本人清單',
+  JSON.stringify(mobilePrimaryPages('employee',['dashboard','newreq','approvals','expenses']))
+  ===JSON.stringify(['newreq','approvals','expenses','dashboard']));
+check('Membership 職務代碼會轉成對應財務任務捷徑',
+  JSON.stringify(mobilePrimaryPages('accounting-chief',['dashboard','approvals','vouchers','reports']))
+  ===JSON.stringify(['dashboard','approvals','vouchers','reports']));
+check('未知職務只使用已授權頁且不顯示空按鈕',
+  JSON.stringify(mobilePrimaryPages('custom-unit',['newreq','reports']))
+  ===JSON.stringify(['newreq','reports']));
 
 console.log(`RESULT ${passed} passed, ${failed} failed, ${passed+failed} total`);
 if(failed)process.exitCode=1;

@@ -76,6 +76,31 @@ function verifyColors(state) {
     assert(state.badgeContrast >= 4.5, 'Selected badge AA contrast');
   }
 }
+async function verifyPrimaryActionContrast() {
+  const state = await scope(`(async function(){
+    var button=document.createElement('button');button.className='btn-p';button.textContent='確認';document.body.appendChild(button);
+    var navButton=document.querySelector('#nav-approvals');navButton.classList.add('on');
+    await new Promise(function(resolve){setTimeout(resolve,250)});
+    function colors(node){var style=getComputedStyle(node);return {color:style.color,background:style.backgroundColor};}
+    var result={primary:colors(button),activeNavigation:colors(navButton),
+      moduleAction:colors(document.querySelector('.module-switch-button.primary')),
+      brightAccent:getComputedStyle(document.documentElement).getPropertyValue('--admin-orange').trim()};
+    navButton.classList.remove('on');button.remove();return result;
+  })()`);
+  assert.equal(state.brightAccent, '#ea880c', 'Decorative orange remains unchanged');
+  for (const [name, colors] of Object.entries({primary:state.primary,activeNavigation:state.activeNavigation,moduleAction:state.moduleAction})) {
+    assert.equal(colors.color, 'rgb(255, 255, 255)', name + ' label remains white');
+    assert(contrast(colors.color, colors.background) >= 4.5, name + ' white label meets AA contrast');
+  }
+  await browser('press', 'Tab');
+  const focus = await scope(`(function(){
+    var button=document.createElement('button');button.className='btn-p';button.textContent='確認';document.body.appendChild(button);
+    button.focus();var style=getComputedStyle(button),result={outlineStyle:style.outlineStyle,outlineWidth:style.outlineWidth};
+    button.remove();return result;
+  })()`);
+  assert.equal(focus.outlineStyle, 'solid', 'Primary action exposes keyboard focus');
+  assert.equal(focus.outlineWidth, '3px', 'Primary action has a visible focus ring');
+}
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -87,6 +112,7 @@ function verifyColors(state) {
     S.aT='p';S.apprQuery='';S.apprPage=1;nav('approvals',null);setApprovalTabVisual('p');buildApprovals();
     window.__colorsOriginal=JSON.stringify({REQS:REQS,INVS:INVS,BILLS:BILLS,DRAFTS:DRAFTS});return true;
   })()`);
+  if (!baseline) await verifyPrimaryActionContrast();
   fs.writeFileSync(path.join(out, prefix + '-snapshot.txt'), await browser('snapshot', '-i'));
   const evidence = [];
   for (const width of [1440, 390]) {

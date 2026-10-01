@@ -77,5 +77,6 @@ function fixture(opts={}){
   f=fixture();await f.c[name](f.bill.id);check(name+' passes selected attachment to its original atomic action',f.trace.rpc.length===1&&f.trace.rpc[0].args.p_action===action&&f.trace.rpc[0].args.p_files.length===1&&f.trace.uploads[0].ctx.kind===kind);
   for(const failure of ['readFail','uploadFail']){f=fixture({[failure]:true});const result=await f.c[name](f.bill.id);check(name+' '+failure+' stops before RPC with retained selection and actionable error',result===false&&f.trace.rpc.length===0&&f.input.files.length===1&&f.trace.alerts.some(x=>x.includes('這次簽核尚未送出'))&&f.trace.completed.length===0&&Object.keys(f.c.APPROVAL_ACTION_IN_FLIGHT).length===0);}
  }
+ await require('./check_attachment_experience_20261002.cjs').runAttachmentExperienceChecks();
  console.log('Bill attachment flow: '+count+' checks passed; fictional local transports only.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
