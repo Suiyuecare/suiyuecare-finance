@@ -23,7 +23,7 @@ function companyFixture(mode='success',type='capital_temp',withFile=true){
     cleanupUploadedSupabaseAttachments:async groups=>{cleaned+=groups.flat().length;return groups.flat().length;},friendlyErrorMessage:e=>e.message||String(e),fmt:String,requestNextStepLabel:()=> 'Fixture reviewer',buildAll:()=>{},renderNotifs:()=>{},updateShareholderPreview:()=>{},alert:m=>alerts.push(m),
     reqDbRow:clone,mapReq:clone,applyMembershipOrgActorsToSteps:()=>{},pushNotification:()=>{throw new Error('notification before commit');},
     normalizeFiles:x=>x||[],expenseRevisionContainsFilePaths:(actual,expected)=>expected.every(f=>actual.some(a=>a.path===f.path)),supabaseAuthErrorInfo:e=>e,
-    safeJsonSet:(key,val)=>{local.set(key,clone(val));return true;},safeJsonGet:(key,fallback)=>local.has(key)?clone(local.get(key)):fallback,safeRemoveItem:key=>local.delete(key),sessionSetItem:(key,v)=>{session.set(key,v);return true;},sessionGetItem:key=>session.get(key)||null,sessionRemoveItem:key=>session.delete(key),
+    safeJsonSet:(key,val)=>{local.set(key,clone(val));return true;},safeJsonGet:(key,fallback)=>local.has(key)?clone(local.get(key)):fallback,safeRemoveItem:key=>local.delete(key),sessionSetItem:(key,v)=>{session.set(key,v);return true;},sessionGetItem:key=>session.get(key)||null,sessionRemoveItem:key=>session.delete(key),refreshExpenseSubmissionRecoveryActions:()=>{},
     withOperationTimeout:async x=>await x,withAbortableOperationTimeout:async x=>await x,
     insertMembershipOrgSubmittedRecord:async(_kind,_table,record)=>{calls.push(clone(record));assert(record.formPayload.submissionAttemptId,'must send idempotency key');
       if(mode==='failure')return{ok:false,error:{code:'P0001',message:'fixture deterministic rejection'}};
