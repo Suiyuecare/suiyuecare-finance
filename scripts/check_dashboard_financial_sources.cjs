@@ -13,7 +13,7 @@ function fixture(options={}){
  Object.assign(c,{hasSupabase:()=>!options.noClient,currentFinanceAuthUserId:()=>c.S.user&&c.S.user.authUserId||'',getSb:()=>options.noClient?null:client,approvalFastBootstrapIdentity:()=>c.S.user&&c.S.user.authUserId||'',currentTenantId:()=>c.tenant||'tenant-a',activeDataEnvironment:()=>c.environment||'production',normalizedRoleKey:u=>u.role,inActiveDataEnvironment:r=>(r.dataEnv||r.data_environment||'production')===(c.environment||'production'),mapLedger:r=>{if(options.mapFailure)throw Error('invalid ledger row');return Object.assign({},r,{mappedWith:c.SYSTEM_SETTINGS.version})},applySystemSettings:rows=>{c.applied.push(clone(rows));c.SYSTEM_SETTINGS={version:rows[0]&&rows[0].value}},invalidateDashboardFinancialCache:()=>c.invalidations++,invalidateDashboardFinancialModel:()=>{c.modelInvalidations=(c.modelInvalidations||0)+1},buildDash:()=>c.paints.push({complete:c.statementDataCompleteness().tables.ledger.complete,ledger:clone(c.LEDGER),settings:clone(c.SYSTEM_SETTINGS)}),recordRemoteReadIssue:(label,error)=>c.issues.push({label,error:error.message}),remoteTableMissing:e=>e.code==='MISSING',isTransientRemoteReadError:e=>e.code==='CLIENT_TIMEOUT'||/timeout/i.test(e.message),financeDataEngine:()=>null,
  syncRemoteFinanceUsersDirectory:async()=>({users:[c.S.user]}),resetApprovalSourceCompleteness:()=>{},setApprovalSourceCompleteness:()=>{},approvalRemoteSourceResultComplete:r=>!!r&&!r.error,loadFinanceNotifications:async()=>({data:[],error:null}),loadRemoteApprovalFallbackData:async(_,rows)=>options.fallback?options.fallback(rows):rows,remoteReadResultTimedOut:r=>!!(r&&r.error&&r.error.code==='CLIENT_TIMEOUT'),refreshOrgChartRowsFromRuntime:async()=>({ok:true}),normalizeRequestFlows:()=>{},scheduleRemoteRecovery:()=>{},approvalMutationRuntimeReady:()=>true,clearRemoteRecovery:()=>{},scheduleDeferredFinanceRuntimeRefresh:()=>{},uniqueRemoteStrings:x=>[...new Set(x)],draftBelongsToCurrentUser:()=>true,
  mapUser:x=>x,mapReq:x=>x,mapBill:x=>x,mapInv:x=>x,mapVoucher:x=>x,mapRemoteDraft:x=>x,mapPeriodClose:x=>x,mapComplianceArchive:x=>x,mapAnnualReview:x=>x,mapComplianceAudit:x=>x,mapBackupEvent:x=>x,mapSettingVersion:x=>x,mapPayeeBankAccount:x=>x,mapPortalRole:x=>x,mapInvoiceLifecycleEvent:x=>x,mapBankAccount:x=>x,mapBankStatementImport:x=>x,mapBankTransaction:x=>x,mapBankReconciliationMatch:x=>x});
- vm.createContext(c);const names=['statementDataIdentity','statementDataCompleteness','queueFinanceBootstrapRead','drainFinanceBootstrapReads','financeBootstrapRead','loadFinanceBootstrapOptionalTable','statementSourceResultCurrent','commitStatementSourceResult','paintDashboardFinancialSources','dashboardFinancialSourceIdentity','loadDashboardFinancialSources','loadFinanceDocumentSourcePage','loadStatementSourcePages','applyRemoteLimit','runRemoteJobsWithConcurrency','runFinanceBootstrapReadJobs','withOperationTimeout','financeDraftReadIdentity','draftReadinessForCurrentUser','paintCurrentUserDrafts','financeDraftOwnerFilter','loadCurrentUserDrafts','approvalDraftsCompleteForCurrentUser','remoteRowKey','mergeRemoteRowsByKey','financeReadSourceSnapshot','mergeFinanceReadSourceRows','performRemoteDataLoad','remoteDataReadIdentity'];vm.runInContext(names.map(extract).join('\n'),c);
+ vm.createContext(c);const names=['statementDataIdentity','statementDataCompleteness','financeBootstrapQueueOwner','retireFinanceBootstrapReadQueue','queueFinanceBootstrapRead','drainFinanceBootstrapReads','financeBootstrapRead','loadFinanceBootstrapOptionalTable','statementSourceResultCurrent','commitStatementSourceResult','paintDashboardFinancialSources','dashboardFinancialSourceIdentity','loadDashboardFinancialSources','loadFinanceDocumentSourcePage','loadStatementSourcePages','applyRemoteLimit','runRemoteJobsWithConcurrency','runFinanceBootstrapReadJobs','withOperationTimeout','financeDraftReadIdentity','draftReadinessForCurrentUser','paintCurrentUserDrafts','financeDraftOwnerFilter','loadCurrentUserDrafts','approvalDraftsCompleteForCurrentUser','remoteRowKey','mergeRemoteRowsByKey','financeReadSourceSnapshot','mergeFinanceReadSourceRows','performRemoteDataLoad','remoteDataReadIdentity'];vm.runInContext(names.map(extract).join('\n'),c);
  if(options.timeout){const original=c.withOperationTimeout;c.withOperationTimeout=(p,label,ms)=>original(p,label,ms===120000?options.timeout*10:options.timeout);}
  return c;
 }
@@ -61,6 +61,34 @@ async function run(){
  }
  {
  const c=fixture(),d=deferred(),starts=[];const wide=c.queueFinanceBootstrapRead(()=>{starts.push('old-wide');return d.promise},true,false);await pause(0);const next=c.loadDashboardFinancialSources(true);await pause(0);assert(!c.queries.some(q=>q.table==='ledger_entries'));assert(c.queries.some(q=>q.table==='system_settings'));d.resolve();await wide;assert((await next).ok);check('manual core retry shares the existing one-wide/two-total read scheduler');
+ }
+
+ {
+  let c,aborted=0;const started=[];
+  c=fixture({transport:q=>{
+   if(c.S.user.authUserId!=='auth-a')return null;
+   return new Promise((resolve,reject)=>{
+    const stop=()=>{aborted++;reject(new Error('old account read aborted'))};
+    if(q.signal.aborted)stop();else q.signal.addEventListener('abort',stop,{once:true});
+   });
+  }});
+  const read=(table,wide,label)=>c.queueFinanceBootstrapRead(signal=>{started.push(label);return c.financeBootstrapRead(c.getSb().from(table).select('*'),label,120000,signal)},wide,false).then(value=>value,error=>error);
+  const oldWide=read('ledger_entries',true,'old-wide');
+  const oldSmall=read('system_settings',false,'old-small');
+  const oldWaiting=read('invoices',true,'old-waiting');
+  for(let i=0;i<100&&c.queries.length<2;i++)await pause(1);
+  assert.equal(c.queries.length,2);
+  c.S.user={id:'finance-b',authUserId:'auth-b',role:'accountant'};
+  const switchedAt=Date.now(),newWide=read('ledger_entries',true,'new-wide');
+  const results=await Promise.all([oldWide,oldSmall,oldWaiting,newWide]);
+  assert(results.slice(0,3).every(result=>result instanceof Error),'old running and waiting reads retire without success');
+  assert.equal(results[3].data[0].id,'new');
+  assert.deepEqual(started,['old-wide','old-small','new-wide'],'queued old-account read never starts');
+  assert.equal(aborted,2,'both old physical fetches observe abort');
+  assert(Date.now()-switchedAt<100,'new account is not held behind the old 120-second timeout');
+  assert(c.max<=2&&c.maxWide<=1,'transport limits stay two total and one wide through the switch');
+  assert.equal(c.FINANCE_BOOTSTRAP_READ_QUEUE.active,0);
+  check('identity switch aborts old transports and queued reads; new account starts promptly within bounded concurrency');
  }
 
  {

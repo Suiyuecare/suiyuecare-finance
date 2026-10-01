@@ -14,6 +14,7 @@ const end = source.indexOf('async function uploadAttachmentToSupabase(', start);
 assert(start >= 0 && end > start, 'production resumable transport functions are present');
 const transportSource = source.slice(start, end);
 const sevenMiB = 7 * 1024 * 1024 + 31;
+const fiftyMiB = 50 * 1024 * 1024;
 const chunkSize = 6 * 1024 * 1024;
 
 async function main() {
@@ -82,7 +83,7 @@ async function main() {
     const page = await browser.newPage();
     await page.goto(origin);
     await page.addScriptTag({ path: path.join(root, 'assets/vendor/tus-4.3.1.min.js') });
-    const result = await page.evaluate(async ({ transportSource, origin, sevenMiB, chunkSize }) => {
+    const result = await page.evaluate(async ({ transportSource, origin, sevenMiB, fiftyMiB, chunkSize }) => {
       window.SUPABASE_URL = origin;
       window.SUPABASE_ANON_KEY = 'fictional-public-anon';
       window.SUPABASE_ATTACHMENT_BUCKET = 'finance-attachments';
@@ -106,14 +107,19 @@ async function main() {
           progress.push([sent, total]);
           if (sent >= chunkSize) window.currentToken = 'fictional-jwt-b';
         } }, 'auth-user-a|user-a|tenant-a|production');
+      const largeBlob = new Blob([new Uint8Array(fiftyMiB)], { type: 'application/pdf' });
+      const largeProgress = [];
+      await uploadAttachmentResumable(client, 'tenant-a/invoices/production/fixture/large.pdf', largeBlob,
+        'application/pdf', { onProgress(sent, total) { largeProgress.push([sent, total]); } },
+        'auth-user-a|user-a|tenant-a|production');
       const controller = new AbortController();
       const abortPromise = uploadAttachmentResumable(client, 'tenant-a/expense_requests/production/fixture/abort.pdf', blob,
         'application/pdf', { abortSignal: controller.signal }, 'auth-user-a|user-a|tenant-a|production');
       setTimeout(() => controller.abort(), 40);
       let aborted = false;
       try { await abortPromise; } catch (error) { aborted = error.reason === 'attachment_upload_timeout'; }
-      return { progress, aborted, browserTus: typeof window.tus?.Upload === 'function' };
-    }, { transportSource, origin, sevenMiB, chunkSize });
+      return { progress, largeProgress, aborted, browserTus: typeof window.tus?.Upload === 'function' };
+    }, { transportSource, origin, sevenMiB, fiftyMiB, chunkSize });
 
     assert.equal(result.browserTus, true);
     assert.equal(result.aborted, true, 'actual TUS XHR abort must reject the production transport');
@@ -132,9 +138,17 @@ async function main() {
     assert(patches.every((attempt) => attempt.size === sevenMiB - chunkSize));
     assert.equal(attempts.find((attempt) => attempt.method === 'POST' && attempt.id === completed.id).authorization, 'Bearer fictional-jwt-a');
     assert(attempts.some((attempt) => attempt.method === 'HEAD' && attempt.id === completed.id), 'retry probes server offset');
-    assert.equal(attempts.filter((attempt) => attempt.method === 'POST').length, 2);
+    const large = [...uploads.values()].find((upload) => upload.metadata.objectName.endsWith('/large.pdf'));
+    assert(large, '50 MiB invoice source reaches the TUS transport');
+    assert.equal(large.length, fiftyMiB);
+    assert.equal(large.offset, fiftyMiB);
+    assert.equal(large.complete, true);
+    assert.equal(large.chunks.length, 9, '50 MiB uploads in nine bounded 6 MiB chunks');
+    assert(large.chunks.every((part) => part.length <= chunkSize));
+    assert(result.largeProgress.some(([sent, total]) => sent === fiftyMiB && total === fiftyMiB));
+    assert.equal(attempts.filter((attempt) => attempt.method === 'POST').length, 3);
     assert([...uploads.values()].some((upload) => upload.metadata.objectName.endsWith('/abort.pdf') && !upload.complete));
-    console.log('PASS real Chromium + vendored tus 4.3.1 transferred 7 MiB in 6 MiB chunks, retried HTTP 503, refreshed JWT, and aborted a second transfer');
+    console.log('PASS real Chromium + vendored tus 4.3.1 transferred 7 MiB with retry and 50 MiB invoice source in nine bounded chunks, refreshed JWT, and aborted a third transfer');
     console.log(`PASS loopback TUS trace: ${attempts.length} requests; no production network`);
   } finally {
     if (browser) await browser.close();
