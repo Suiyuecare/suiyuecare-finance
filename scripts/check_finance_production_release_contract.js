@@ -410,7 +410,7 @@ assert.doesNotMatch(promoteJob,/prepare-read-latency-(?:apply|rehearsal)/);
 assert.equal((workflow.match(/verify-reports-canary --domain statement_source/g)||[]).length,2);
 assert.match(databaseJob,/name: Prove authenticated submit[^\n]+\n\s+if: inputs\.release_phase != 'database_read_latency_20260913' && inputs\.release_phase != 'database_ar_mapping_20260913'/);
 for(const job of [databaseJob,promoteJob]) {
-  const guarded=job.indexOf('if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"; then');
+  const guarded=job.indexOf('if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"' + (job === databaseJob ? ' && test "$RELEASE_PHASE" != "database_human_float_20261002"' : '') + '; then');
   assert.ok(guarded>=0);
   assert.match(job.slice(guarded,job.indexOf('\n          fi',guarded)),/finance_production_authenticated_canary\.sql[\s\S]+verify-authenticated-canary/);
   assert.match(job,/if test "\$RELEASE_PHASE" = "database_read_latency_20260913"; then[\s\S]+finance_statement_source_canary\.sql[\s\S]+verify-reports-canary --domain statement_source/);
@@ -681,6 +681,18 @@ assert.ok(
   'live frontend proof and authenticated canary must run after sealed target revalidation and before DB mutation is classified'
 );
 assert.ok(canaryAfterAt > classifyAt, 'authenticated canary must pass again after the exact DB phase postflight');
+const humanFloatBeforeGate = databaseJob.slice(
+  databaseJob.indexOf('- name: Prove authenticated submit, supervisor return and applicant resubmit before DB mutation'),
+  databaseJob.indexOf('- name: Classify ledger and apply only when the exact phase remains pending')
+);
+assert.match(humanFloatBeforeGate, /inputs\.release_phase != 'database_human_float_20261002'/,
+  'only this DB-only phase must avoid the unrelated canary that requires employees to be signed in');
+const afterAuthConditionAt = databaseJob.lastIndexOf('if test "$RELEASE_PHASE" != "database_read_latency_20260913"', canaryAfterAt);
+assert.ok(afterAuthConditionAt >= 0, 'postflight authenticated canary condition must remain present');
+assert.match(databaseJob.slice(afterAuthConditionAt, canaryAfterAt), /test "\$RELEASE_PHASE" != "database_human_float_20261002"/,
+  'the same DB-only phase must avoid the session-dependent postflight canary');
+assert.ok(databaseJob.indexOf('finance_human_accounting_float_canary.sql') > classifyAt,
+  'the dedicated rollback-only human accounting canary must remain in the DB phase');
 assert.match(promoteJob, /finance_production_db_postflight\.sql[\s\S]+promotion-authenticated-canary\.json[\s\S]+promote "\$DEPLOYMENT_URL" --yes/);
 const rehearsalAt = databaseJob.indexOf('node "$GUARD" prepare-rehearsal');
 const finalLiveFrontendProofAt = databaseJob.lastIndexOf('node "$GUARD" verify-production-baseline');
