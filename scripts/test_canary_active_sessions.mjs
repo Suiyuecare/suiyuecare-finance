@@ -115,7 +115,7 @@ try {
   let verified = 0;
   for (const name of fs.readdirSync(scripts).filter(name => /^finance_.*canary\.sql$/.test(name))) {
     // The separate human-accounting gate does not use these release parsers.
-    if (name === 'finance_production_human_accounting_canary.sql') continue;
+    if (name === 'finance_production_human_accounting_canary.sql' || name === 'finance_human_accounting_float_canary.sql') continue;
     const source = fs.readFileSync(new URL(name, scripts), 'utf8');
     const select = source.match(/(?:^|\n)(select\s+(?:'[^']+'\s+as\s+marker\s*,\s*)?(?:pg_catalog\.)?jsonb_build_object\([\s\S]*?\)\s+as\s+\w+\s*;)\s*$/i)?.[1];
     assert.ok(select, name+' final output must be explicitly verified');
