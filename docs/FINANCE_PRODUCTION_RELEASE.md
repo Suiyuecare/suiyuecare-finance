@@ -1,5 +1,7 @@
 # Finance 受保護正式發布
 
+發票收入入帳結果查核使用 `database_invoice_revenue_result_20261002=20261002151725`。此資料庫階段先核對前置版次、發票與帳簿結構，對唯讀 RPC、migration ledger 及權限執行交易內演練與回滾，再原子套用並跑未登入身分 canary。此階段不提升候選前台，正式網域的 deployment ID 與 manifest 位元組在套版前後必須相同；待資料庫驗證完成，再用 `frontend_compat=none` 發布使用查核 RPC 的前台。
+
 2026-10-02 的人工會計浮點尾差修正使用 `database_human_float_20261002=20261002035707`。這是獨立資料庫階段：核對既有函式、觸發器與 migration ledger，先在交易中演練及回滾，再以同一交易套用函式與 ledger，驗證新函式及虛構資料 canary。候選 deployment 必須維持未指派正式網域；`promote` job 對此階段明確跳過，資料庫作業前後的正式站 alias deployment ID 與 manifest 位元組必須相同。若要發布前台，需另行執行 `frontend_compat=none` 並重新驗收。
 
 以下保留先前批次的發布紀錄與契約。該候選使用 `database_audit_controls_20260927=20260927152432,20260927153326`，將關帳、原件封存、報表獨立覆核及薪資應計兩份 migration 原子演練／套用後，提升同一封存前台。`frontend_compat=none` 必須已具備完整兩版。前置版本仍包含安全、收入、操作穩定性與舊 demo 密碼退役；歷史發布步驟保留在下方。
@@ -37,6 +39,7 @@ Vercel 的 `main` 自動正式部署必須保持停用。正式 token 只授權�
 | `database_audit_controls_20260927` | `20260927152432,20260927153326` | 全部前置版次完整；兩版在同一交易演練，通過 29 份 postflight、回滾指紋及唯讀 canary，再原子套用並提升同一候選。 |
 | `database_audit_security_20260922` | `20260922133752` | 全部前置版本含完整 HR 三版已安裝；22 份前置檢查通過後，演練新 SQL、ledger、24 份 postflight、7 份唯讀 canary，回滾指紋一致後再原子提交 SQL、ledger 與檢查。 |
 | `database_revenue_repair_20260924` | `20260924074010` | 安全版與正式 ledger 已採納的 HR directory export 來源都需通過檢查；收入修復依專屬帳務 postflight/canary 原子執行。 |
+| `database_invoice_revenue_result_20261002` | `20261002151725` | 前置版本完整、SQL SHA 固定；演練唯讀結果 RPC、權限與 rollback 指紋後原子套用，不提升前台。 |
 | `frontend_compat` | `none` | 全部前置版本及本次兩版已完整安裝；執行 29 份 postflight 與全部繼承及新唯讀 canary 後，提升同一封存前台。 |
 
 若 HR 三版尚未完整，先完成獨立審查的 HR 歷史候選發布；不得改填舊 phase、補寫 ledger 或拆分本批次來提升新前台。

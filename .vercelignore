@@ -39,6 +39,12 @@ scripts/*
 !scripts/finance_income_reconcile_postflight.sql
 !scripts/finance_income_reconcile_fingerprint.sql
 !scripts/finance_income_reconcile_canary.sql
+!scripts/finance_invoice_revenue_result_preflight.sql
+!scripts/finance_invoice_revenue_result_postflight.sql
+!scripts/finance_invoice_revenue_result_fingerprint.sql
+!scripts/finance_invoice_revenue_result_canary.sql
+!scripts/check_invoice_revenue_result_browser.cjs
+!scripts/test_invoice_revenue_result_sql.mjs
 !scripts/check_income_reconcile_migration.cjs
 !scripts/check_release_artifact.js
 !scripts/check_finance_login_account_switch_contract.js

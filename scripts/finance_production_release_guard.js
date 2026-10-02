@@ -113,6 +113,9 @@ const RELEASE_PHASE_DATABASE_HUMAN_FLOAT='database_human_float_20261002';
 const INCOME_RECONCILE_MIGRATIONS=Object.freeze(['20261002130327']);
 const INCOME_RECONCILE_SOURCE_SHA256=Object.freeze({'20261002130327':'a7c883074fa34db3e042084a1f1854ef4358a5006b11be0d5abd2d651d423181'});
 const RELEASE_PHASE_DATABASE_INCOME_RECONCILE='database_income_reconcile_20261002';
+const INVOICE_REVENUE_RESULT_MIGRATIONS=Object.freeze(['20261002151725']);
+const INVOICE_REVENUE_RESULT_SOURCE_SHA256=Object.freeze({'20261002151725':'55a5e12e9eefe4c49391f832807096e3dfd1238b5bc6fe37b839b4c54e370341'});
+const RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT='database_invoice_revenue_result_20261002';
 const AR_READ_SCOPE_MIGRATIONS = Object.freeze(['20260922072737']);
 const RELEASE_PHASE_DATABASE_AR_READ_SCOPE = 'database_ar_read_scope_20260922';
 const AR_READ_SCOPE_POSTFLIGHT_FILES = Object.freeze(['finance_ar_verified_accounting_scope_postflight.sql']);
@@ -160,7 +163,8 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...ATTACHMENT_CLAIM_MIGRATIONS,
   ...ATTACHMENT_STAGED_CLEANUP_MIGRATIONS,
   ...HUMAN_FLOAT_MIGRATIONS,
-  ...INCOME_RECONCILE_MIGRATIONS
+  ...INCOME_RECONCILE_MIGRATIONS,
+  ...INVOICE_REVENUE_RESULT_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -193,6 +197,7 @@ const RELEASE_PHASES = Object.freeze({
   [RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM]: ATTACHMENT_CLAIM_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_HUMAN_FLOAT]: HUMAN_FLOAT_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_INCOME_RECONCILE]: INCOME_RECONCILE_MIGRATIONS.join(','),
+  [RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT]: INVOICE_REVENUE_RESULT_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_AR_READ_SCOPE]: AR_READ_SCOPE_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY]: EMPLOYEE_RELIABILITY_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_AUDIT_READINESS]: AUDIT_READINESS_MIGRATIONS.join(','),
@@ -238,7 +243,8 @@ const SUPPORTED_GATE_PHASES = Object.freeze([
   AUDIT_CONTROLS_20260927_MIGRATIONS,
   HR_CONTRACTOR_MIGRATIONS, PORTAL_SESSION_MIGRATIONS, EXTERNAL_LABOR_MIGRATIONS, ATTACHMENT_CLAIM_MIGRATIONS,
   HUMAN_FLOAT_MIGRATIONS,
-  INCOME_RECONCILE_MIGRATIONS
+  INCOME_RECONCILE_MIGRATIONS,
+  INVOICE_REVENUE_RESULT_MIGRATIONS
 ]);
 const SUPPORTED_GATE_SUFFIXES = SUPPORTED_GATE_PHASES;
 
@@ -312,7 +318,7 @@ function deploymentHost(record) { return String(record.url || '').replace(/^http
 function validateTarget(env, candidate, releasePhase, versionsText, expectedRef) {
   canonicalSha(candidate);
   releasePlan(releasePhase, versionsText);
-  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use a reviewed current fixed database phase');
+  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use a reviewed current fixed database phase');
   expectedRef = projectRef(expectedRef);
   if (expectedRef !== PRODUCTION_CATALOG.supabaseProjectRef) fail('Supabase project ref is not the immutable Finance production catalog target');
   for (const name of ['SUPABASE_ACCESS_TOKEN', 'FINANCE_SUPABASE_URL', 'FINANCE_SUPABASE_ANON_KEY', 'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']) {
@@ -398,6 +404,16 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
   const remote = readLedgerVersions(ledgerPath);
   assertProductionLedgerBaseline(remote, baseline);
   const missing = MIGRATION_CHAIN.filter((version) => !remote.includes(version));
+  if (plan.releasePhase === RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT) {
+    const target = INVOICE_REVENUE_RESULT_MIGRATIONS[0];
+    const prerequisites = REVIEWED_MIGRATION_CATALOG.filter(version => version < target);
+    if (prerequisites.some(version => !remote.includes(version))) fail('Invoice revenue result phase requires every reviewed prerequisite migration');
+    const filename = local.find(name => name.startsWith(target + '_'));
+    if (!filename) fail('Invoice revenue result migration file is missing');
+    if (sha256File(path.join(directory, filename)) !== INVOICE_REVENUE_RESULT_SOURCE_SHA256[target])
+      fail('Invoice revenue result migration source differs from sealed SHA256');
+    return remote.includes(target) ? 'applied' : 'pending';
+  }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_INCOME_RECONCILE) {
     const target = INCOME_RECONCILE_MIGRATIONS[0];
     const prerequisites = REVIEWED_MIGRATION_CATALOG.filter(version => version < target);
@@ -652,6 +668,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(ATTACHMENT_CLAIM_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the complete attachment claim batch');
     if(ATTACHMENT_STAGED_CLEANUP_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the verified owner staged-attachment cleanup policy');
     if(INCOME_RECONCILE_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the reviewed income reconciliation migration');
+    if(INVOICE_REVENUE_RESULT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the invoice revenue result RPC');
     return 'compat';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
@@ -762,7 +779,7 @@ function prepareRehearsal(sourcePath, outputPath, target, fingerprintPath, canar
 
 function sqlLiteral(value) { return `'${String(value).replace(/'/g, "''")}'`; }
 function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATABASE_AUDIT) {
-  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE].includes(releasePhase))fail('unsupported fixed database batch');
+  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT].includes(releasePhase))fail('unsupported fixed database batch');
   releasePlan(releasePhase,versionsText);
   const files=migrationFiles(directory);
   return migrationPhase(versionsText).map(version=>{
@@ -776,6 +793,7 @@ function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATA
     if(releasePhase===RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM && sha256File(path.join(directory,filename))!==ATTACHMENT_CLAIM_SOURCE_SHA256[version])fail('Attachment claim migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_HUMAN_FLOAT && sha256File(path.join(directory,filename))!==HUMAN_FLOAT_SOURCE_SHA256[version])fail('Human float migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_INCOME_RECONCILE && sha256File(path.join(directory,filename))!==INCOME_RECONCILE_SOURCE_SHA256[version])fail('Income reconciliation migration source differs from sealed SHA256: '+version);
+    if(releasePhase===RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT && sha256File(path.join(directory,filename))!==INVOICE_REVENUE_RESULT_SOURCE_SHA256[version])fail('Invoice revenue result migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_HR_CONTRACTOR && sha256File(path.join(directory,filename))!==HR_CONTRACTOR_SOURCE_SHA256[version])fail('HR contractor migration source differs from sealed SHA256: '+version);
     return {version,filename,source};
   });
@@ -1078,6 +1096,72 @@ begin
   if (select pg_catalog.array_agg(version order by version) from supabase_migrations.schema_migrations)
      is distinct from array[${remote.map(sqlLiteral).join(',')}]::text[] then
     raise exception 'income reconciliation rollback rehearsal changed migration ledger';
+  end if;
+end;
+${tag};
+rollback;
+`);
+  return true;
+}
+function prepareInvoiceRevenueResultRehearsal(directory,outputPath,versionsText,ledgerPath,
+  fingerprintPath,canaryPath,preflightPath,postflightPath,
+  baseline=PRODUCTION_BASELINE_LEDGER){
+  const phase=RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT;
+  verifyLedger('pre',ledgerPath,directory,phase,versionsText,baseline);
+  const batch=readAuditBatch(directory,versionsText,phase);
+  if(batch.length!==1)fail('Invoice revenue result rehearsal requires exactly one sealed migration');
+  const remote=readLedgerVersions(ledgerPath);
+  const fingerprint=stripPsqlDirectives(fs.readFileSync(fingerprintPath,'utf8'),path.basename(fingerprintPath))
+    .trim().replace(/^(?:--[^\n]*(?:\n|$)\s*)+/,'');
+  if(!/^with\b/i.test(fingerprint)
+      || /\b(?:insert\s+into|update\s+\S+\s+set|delete\s+from|alter\s+table|create\s+(?:table|index|schema|function|policy)|drop\s+(?:table|index|schema|function|policy)|truncate\s+|vacuum\b|call\s+|copy\s+)\b/i.test(fingerprint))
+    fail('Invoice revenue result fingerprint must be one pure read-only CTE query');
+  const preflight=stripPsqlDirectives(fs.readFileSync(preflightPath,'utf8'),path.basename(preflightPath));
+  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
+  assertCliAtomicMigration(preflight,'invoice revenue result preflight');
+  assertCliAtomicMigration(postflight,'invoice revenue result postflight');
+  const canary=authenticatedCanarySections(canaryPath);
+  const tag='$finance_invoice_revenue_result_rehearsal$';
+  const source=batch[0].source.trimEnd();
+  const quote=`$finance_invoice_revenue_result_migration_${batch[0].version}$`;
+  const name=batch[0].filename.replace(/^\d{14}_/,'').replace(/\.sql$/,'');
+  const ledgerInsert=`insert into supabase_migrations.schema_migrations(version,statements,name,created_by) values (${sqlLiteral(batch[0].version)},array[${quote}${source}${quote}]::text[],${sqlLiteral(name)},'github-actions');`;
+  if([source,fingerprint,preflight,postflight,canary.core,canary.rollbackCheck,ledgerInsert]
+      .some(value=>value.includes(tag)))fail('Invoice revenue result rehearsal tag collision');
+  writeExclusive(outputPath,`begin isolation level repeatable read;
+set local lock_timeout='5s';
+set local statement_timeout='180s';
+select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('finance-production-release-v1',0));
+lock table supabase_migrations.schema_migrations in share row exclusive mode;
+do ${tag}
+begin
+  if (select pg_catalog.array_agg(version order by version) from supabase_migrations.schema_migrations)
+     is distinct from array[${remote.map(sqlLiteral).join(',')}]::text[] then
+    raise exception 'invoice revenue result migration ledger changed before rehearsal';
+  end if;
+end;
+${tag};
+${preflight}
+create temporary table finance_release_fingerprint_before on commit drop as
+${fingerprint}
+savepoint finance_release_migration;
+${source}
+${ledgerInsert}
+${postflight}
+${canary.core}
+rollback to savepoint finance_release_migration;
+${canary.rollbackCheck}
+create temporary table finance_release_fingerprint_after on commit drop as
+${fingerprint}
+do ${tag}
+begin
+  if (select fingerprint from finance_release_fingerprint_before)
+     is distinct from (select fingerprint from finance_release_fingerprint_after) then
+    raise exception 'invoice revenue result rollback rehearsal changed schema fingerprints';
+  end if;
+  if (select pg_catalog.array_agg(version order by version) from supabase_migrations.schema_migrations)
+     is distinct from array[${remote.map(sqlLiteral).join(',')}]::text[] then
+    raise exception 'invoice revenue result rollback rehearsal changed migration ledger';
   end if;
 end;
 ${tag};
@@ -1841,6 +1925,14 @@ function prepareGateQuery(sourcePath, outputPath, versionsText) {
 function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
   const plan = releasePlan(releasePhase, versionsText);
   const sourceName = path.basename(sourcePath);
+  if(plan.releasePhase===RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT){
+    if(sourceName!=='finance_invoice_revenue_result_postflight.sql')
+      fail('Invoice revenue result phase requires its exact sealed postflight');
+    const postflight=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),sourceName);
+    assertCliAtomicMigration(postflight,'invoice revenue result postflight');
+    writeExclusive(outputPath,`begin read only;\nset local statement_timeout='60s';\n${postflight}\nrollback;\n`);
+    return true;
+  }
   if(plan.releasePhase===RELEASE_PHASE_DATABASE_INCOME_RECONCILE){
     if(sourceName!=='finance_income_reconcile_postflight.sql')
       fail('Income reconciliation phase requires its exact sealed postflight');
@@ -2072,6 +2164,7 @@ function verifyUtilityCanary(inputPath) {
 function verifyReportsCanary(inputPath,domain) {
   const contracts={
     income_reconcile:{marker:'income_reconcile_canary_result',result:{canary:'readonly_income_reconcile_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
+    invoice_revenue_result:{marker:'invoice_revenue_result_canary_result',result:{canary:'readonly_invoice_revenue_result_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
     attachment_claim:{marker:'attachment_claim_canary_result',result:{canary:'finance_attachment_claim',ok:true,rolled_back:true,read_only:true}},
     external_labor:{marker:'finance_external_labor_canary_result',result:{canary:'readonly_external_labor_v1',ok:true,rolled_back:true,privacy_preserved:true,legacy_finalization_blocked:true,posting_sealed:true}},
     portal_session:{marker:'portal_session_canary_result',result:{canary:'readonly_portal_session_v1',ok:true,rolled_back:true,privacy_preserved:true}},
@@ -2304,6 +2397,8 @@ function manifestSha(file) { return sha256File(file); }
 const api = {
   INCOME_RECONCILE_MIGRATIONS, INCOME_RECONCILE_SOURCE_SHA256,
   RELEASE_PHASE_DATABASE_INCOME_RECONCILE, prepareIncomeReconcileRehearsal,
+  INVOICE_REVENUE_RESULT_MIGRATIONS, INVOICE_REVENUE_RESULT_SOURCE_SHA256,
+  RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT, prepareInvoiceRevenueResultRehearsal,
   HUMAN_FLOAT_MIGRATIONS, RELEASE_PHASE_DATABASE_HUMAN_FLOAT, prepareHumanFloatRehearsal, verifyDbOnlyAlias,
   HR_BRIDGE_MIGRATIONS, RELEASE_PHASE_DATABASE_HR_BRIDGE, HR_BRIDGE_POSTFLIGHT_FILES, pendingHrBridgeBatch, prepareHrBridgePrerequisiteQuery, prepareHrBridgeRehearsal,
   HR_DIRECTORY_EXPORT_MIGRATIONS, HR_DIRECTORY_EXPORT_POSTFLIGHT_FILES,
@@ -2385,6 +2480,8 @@ if (require.main === module) {
     else if(command==='prepare-human-float-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_HUMAN_FLOAT);
     else if(command==='prepare-income-reconcile-rehearsal')prepareIncomeReconcileRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('preflight'),arg('postflight'));
     else if(command==='prepare-income-reconcile-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_INCOME_RECONCILE);
+    else if(command==='prepare-invoice-revenue-result-rehearsal')prepareInvoiceRevenueResultRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('preflight'),arg('postflight'));
+    else if(command==='prepare-invoice-revenue-result-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT);
     else if (command === 'prepare-audit-controls-20260927-rehearsal') prepareAuditControls20260927Rehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('receivables-postflight'),arg('profiles-postflight'));
     else if (command === 'prepare-audit-controls-20260927-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('receivables-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,arg('profiles-postflight'));
     else if (command === 'prepare-demo-password-retirement-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('authenticated-canary'),arg('receivables-postflight'),RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,null,null,[],arg('profiles-postflight'));
