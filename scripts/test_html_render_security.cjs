@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 function between(start,end){const a=source.indexOf(start);assert.ok(a>=0,start);const b=source.indexOf(end,a+start.length);assert.ok(b>a,end);return source.slice(a,b);}
-const nodes={};const context={loadExpenseRevisionPending:()=>null,loadExpensePostingPending:()=>null,laborElectronicMarker:()=>null,window:{},S:{page:'list',user:null},REQS:[],SCSS:{completed:'done'},SL:{completed:'完成'},TCSS:{payment_request:'type'},el:id=>nodes[id]||(nodes[id]={innerHTML:''}),normalizeFileMeta:f=>f,fileExt:()=>'',normalizeRequestTerminalState(){},ensureRequestCashierStep(){},nav(){},gD:()=>({n:'單位'}),gE:()=>({s:'公司'}),activeStep:()=>null,isRestrictedReturnedMiddleStep:()=>false,approvalActionFields:()=>'',approvalApplicantIds:()=>[],canActRequest:()=>false,canWithdrawRequest:()=>false,requestBankFeeAmount:()=>0,isMegaBankRecipient:()=>false,requestFeeBearer:()=>'',fmt:String,approvalTimelineWithRuntimeLogs:()=>({html:'',slotId:''}),expenseInvoiceReviewHtml:()=>'',accountingLinesTitleForRequest:()=>'',shouldShowRequestAccountingLines:()=>false,isFinance:()=>true,entityDeptEditorHtml:()=>'',purchaseAmountCompareHtml:()=>'',advanceTwoEventHtml:()=>'',pettyAccountingHtml:()=>'',approvalTimelineRows:()=>[],approvalTimelineProgressText:()=>'',hydrateApprovalRuntimeLogsForRecord(){},paidReturnBoundaryHtml:()=>''};
+const nodes={};const context={loadExpenseRevisionPending:()=>null,loadExpensePostingPending:()=>null,laborElectronicMarker:()=>null,procurementSubmissionRecoveryHtml:()=>'',window:{},S:{page:'list',user:null},REQS:[],SCSS:{completed:'done'},SL:{completed:'完成'},TCSS:{payment_request:'type'},el:id=>nodes[id]||(nodes[id]={innerHTML:''}),normalizeFileMeta:f=>f,fileExt:()=>'',normalizeRequestTerminalState(){},ensureRequestCashierStep(){},nav(){},gD:()=>({n:'單位'}),gE:()=>({s:'公司'}),activeStep:()=>null,isRestrictedReturnedMiddleStep:()=>false,approvalActionFields:()=>'',approvalApplicantIds:()=>[],canActRequest:()=>false,canWithdrawRequest:()=>false,requestBankFeeAmount:()=>0,isMegaBankRecipient:()=>false,requestFeeBearer:()=>'',fmt:String,approvalTimelineWithRuntimeLogs:()=>({html:'',slotId:''}),expenseInvoiceReviewHtml:()=>'',accountingLinesTitleForRequest:()=>'',shouldShowRequestAccountingLines:()=>false,isFinance:()=>true,entityDeptEditorHtml:()=>'',purchaseAmountCompareHtml:()=>'',advanceTwoEventHtml:()=>'',pettyAccountingHtml:()=>'',approvalTimelineRows:()=>[],approvalTimelineProgressText:()=>'',hydrateApprovalRuntimeLogsForRecord(){},paidReturnBoundaryHtml:()=>''};
 vm.createContext(context);
 vm.runInContext(between('function requestCashPostedAt(', 'function ledgerPostingKey('),context);
 vm.runInContext(between('function escAttr(', 'function normalizeFileMeta('),context);
@@ -28,6 +28,18 @@ const recovery=context.expensePostingRecoveryHtml({id:maliciousId});
 const recoveryHandler=recovery.match(/onclick="([^"]+)"/)[1].replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
 let retried;const recoveryContext={doConfirmVoucher:id=>{retried=id;}};vm.runInNewContext(recoveryHandler,recoveryContext);
 assert.equal(retried,maliciousId);assert.equal(recoveryContext.injected,undefined,'recovery action cannot execute an injected request ID');
+context.loadProcurementSubmissionPending=()=>({owner:'fixture',requestId:maliciousId,operationId:'fixture-op',reenter:false});
+context.financeInlineJsString=value=>context.escAttr(JSON.stringify(String(value)));
+vm.runInContext(between('function procurementSubmissionRecoveryHtml(', 'async function reconcilePendingProcurementSubmission('),context);
+const procurementRecovery=context.procurementSubmissionRecoveryHtml({id:maliciousId,type:'purchase_request'});
+for(const procHandler of [...procurementRecovery.matchAll(/onclick="([^"]+)"/g)].map(match=>match[1])){
+  const decoded=procHandler.replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+  let selectedId;
+  const actionContext={confirmPendingProcurementSubmission:id=>{selectedId=id;},resumeProcurementSubmissionFromOriginalStep:id=>{selectedId=id;}};
+  vm.runInNewContext(decoded,actionContext);
+  assert.equal(selectedId,maliciousId,'procurement recovery action retains the exact request ID');
+  assert.equal(actionContext.injected,undefined,'procurement recovery action cannot execute an injected request ID');
+}
 assert.ok(!source.includes("'+r.desc+'"));
 console.log('PASS actual request detail and attachment rendering: description, applicant, bank details, filenames, extension and JavaScript argument injection');
 // Voucher text originates from employee descriptions and imported accounting

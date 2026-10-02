@@ -45,6 +45,7 @@ async function runHandler(db, old, actor='audit', alter=null, bypassUi=false) {
   Object.assign(state,{
     hasSupabase:()=>true, cloneSettingValue:clone, normalizeFiles:clone, todayShort:today,
     expenseSubmissionOperationIdentity:()=>JSON.stringify([tenant,'production',actor]),
+    financeInlineJsString:value=>JSON.stringify(String(value)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),
     safeGetItem:key=>storage.get(key)||null,safeSetItem:(key,value)=>{storage.set(key,value);return true;},safeRemoveItem:key=>{storage.delete(key);return true;},
     sessionGetItem:key=>session.get(key)||null,sessionSetItem:(key,value)=>{session.set(key,value);return true;},sessionRemoveItem:key=>session.delete(key),
     membershipOrgDraftUuid:()=> '11111111-1111-4111-8111-111111111111',withOperationTimeout:promise=>promise,
@@ -109,7 +110,7 @@ function faultFixture(kind, shared, newTab=false) {
     approvalActionPayload:async()=>({comment:'fixture',files:[{path:'staged-proof',__uploadCreatedThisAttempt:true}],addUid:''}),
     uploadApprovalFiles:async p=>{state.uploads++;return p;},el:()=>({value:'80'}),num:Number,purchaseEstimatedAmount:r=>r.estimatedAmt,
     requestBankFeeAmount:()=>0,invalidateAccountingLines:()=>{},fmt:String,
-    escAttr:String,attr:String,
+    escAttr:String,attr:String,financeInlineJsString:value=>JSON.stringify(String(value)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),
     approveActiveStep:r=>{r.steps[0].a='approved';r.step=payment?3:9;r.status=payment?'pending_section_chief':'pending_voucher';},
     rememberPayeeBankAccount:async()=>{},buildAll:()=>{},openDetail:()=>{},
     newlyUploadedAttachmentResults:files=>files.filter(file=>file.__uploadCreatedThisAttempt),

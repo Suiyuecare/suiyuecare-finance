@@ -29987,7 +29987,7 @@ function procurementSubmissionRecoveryHtml(r){
   try{pending=loadProcurementSubmissionPending(r.id);}catch(error){return '<div role="status" class="ux-health-card warn">'+escAttr(error.message)+'</div>';}
   if(!pending)return '';
   if(pending.reenter)return '';
-  return '<div role="status" class="ux-health-card warn"><strong>前次採購資料送出待確認</strong><div style="margin:7px 0">原識別碼與已上傳附件保留。先核對原單；若仍停在同一關，可安全重試原內容或重新填寫此關。</div><button type="button" class="btn-p" onclick="confirmPendingProcurementSubmission(\''+attr(r.id)+'\')">確認或重試原送件</button> <button type="button" class="btn-s" onclick="resumeProcurementSubmissionFromOriginalStep(\''+attr(r.id)+'\')">重新填寫同一關</button></div>';
+  return '<div role="status" class="ux-health-card warn"><strong>前次採購資料送出待確認</strong><div style="margin:7px 0">原識別碼與已上傳附件保留。先核對原單；若仍停在同一關，可安全重試原內容或重新填寫此關。</div><button type="button" class="btn-p" onclick="confirmPendingProcurementSubmission('+financeInlineJsString(r.id)+')">確認或重試原送件</button> <button type="button" class="btn-s" onclick="resumeProcurementSubmissionFromOriginalStep('+financeInlineJsString(r.id)+')">重新填寫同一關</button></div>';
 }
 async function reconcilePendingProcurementSubmission(rid){
   var pending=loadProcurementSubmissionPending(rid);if(!pending)return{state:'none'};
