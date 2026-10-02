@@ -63,6 +63,7 @@ const laborRuntime=new Function('num','BUSINESS_TAX_RATE',[
   functionSource('accountingLaborFeeDetected'),
   functionSource('accountingManualFieldNames'),
   functionSource('accountingLineManualFields'),
+  functionSource('accountingDecimalAmount'),
   functionSource('lazyHasValue'),
   functionSource('normalizeLazyTaxMode'),
   functionSource('lazyTaxMode'),
@@ -83,7 +84,7 @@ check('atomic receipt write deduplicates the reviewed proof set without appendin
 check('labor-fee OCR rows are forced to exempt mode',/if\(laborFee\)\{[\s\S]{0,180}tax=0;[\s\S]{0,100}taxMode='exempt';/.test(indexSource));
 check('6221 is an explicit labor-fee detection signal',/if\(code==='6221'\)return true;/.test(indexSource));
 check('historical AI labor-fee lines default to zero input tax unless a human reviewed the amounts',/\|\|laborFee\)&&!humanTax&&!humanNet\)\{tax=0;net=gross;\}/.test(indexSource));
-check('saving a reviewed labor-fee line keeps the human tax input',/var tax=taxEl\?Math\.max\(0,Math\.round\(num\(taxEl\.value\)\)\):num\(line\.taxAmount\)/.test(indexSource));
+check('saving a reviewed labor-fee line keeps the human tax input',/var tax=taxEl\?Math\.max\(0,num\(taxEl\.value\)\):num\(line\.taxAmount\)/.test(indexSource));
 check('built frontend includes unique receipt attachment handling',builtAppPath===expectedApp.file&&builtAppSource===expectedApp.code&&expectedApp.sourceCode.includes('receiptFilesForInvoiceRows')&&builtAttachmentSource.includes('function uniqueFiles'));
 check('built frontend includes the labor fee AI default and human override guard',builtAppSource===expectedApp.code&&expectedApp.sourceCode.includes("if(code==='6221')return true")&&expectedApp.sourceCode.includes('humanAmount=accountingLineManualFields'));
 

@@ -1,6 +1,8 @@
 # Finance 受保護正式發布
 
-本次候選使用 `database_audit_controls_20260927=20260927152432,20260927153326`，將關帳、原件封存、報表獨立覆核及薪資應計兩份 migration 原子演練／套用後，提升同一封存前台。`frontend_compat=none` 必須已具備完整兩版。前置版本仍包含安全、收入、操作穩定性與舊 demo 密碼退役；歷史發布步驟保留在下方。
+2026-10-02 的人工會計浮點尾差修正使用 `database_human_float_20261002=20261002035707`。這是獨立資料庫階段：核對既有函式、觸發器與 migration ledger，先在交易中演練及回滾，再以同一交易套用函式與 ledger，驗證新函式及虛構資料 canary。候選 deployment 必須維持未指派正式網域；`promote` job 對此階段明確跳過，資料庫作業前後的正式站 alias deployment ID 與 manifest 位元組必須相同。若要發布前台，需另行執行 `frontend_compat=none` 並重新驗收。
+
+以下保留先前批次的發布紀錄與契約。該候選使用 `database_audit_controls_20260927=20260927152432,20260927153326`，將關帳、原件封存、報表獨立覆核及薪資應計兩份 migration 原子演練／套用後，提升同一封存前台。`frontend_compat=none` 必須已具備完整兩版。前置版本仍包含安全、收入、操作穩定性與舊 demo 密碼退役；歷史發布步驟保留在下方。
 
 `.github/workflows/finance-production-release.yml` 是唯一允許 Finance 正式資料庫套版與 Vercel 正式提升的人工流程。它不接受 push／PR 自動上線，也不把「建置成功」當成「正式可提升」。
 

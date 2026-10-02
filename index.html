@@ -17454,8 +17454,28 @@ function accountingLineManualFields(line){
 function accountingLineFieldIsHuman(line,field){
   return !!(line&&(line.manualOverride===true||line.valueAuthority==='human')&&accountingLineManualFields(line).indexOf(field)>-1);
 }
+// Add/subtract the decimal values a person entered without persisting binary
+// floating-point residue (for example, 0.1 + 0.2). This does not round or
+// rewrite either operand, including reviewed amounts with three decimals.
+function accountingDecimalAmount(left,right,subtract){
+  function parts(value){
+    var match=String(num(value)).match(/^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i);
+    if(!match)return null;
+    var fraction=match[3]||'',scale=fraction.length-Number(match[4]||0);
+    var integer=BigInt(match[2]+fraction)*(match[1]?-1n:1n);
+    if(scale<0){integer*=10n**BigInt(-scale);scale=0;}
+    return {integer:integer,scale:scale};
+  }
+  var a=parts(left),b=parts(right);
+  if(!a||!b)return num(left)+(subtract?-num(right):num(right));
+  var scale=Math.max(a.scale,b.scale);
+  var amount=a.integer*10n**BigInt(scale-a.scale)+(subtract?-b.integer:b.integer)*10n**BigInt(scale-b.scale);
+  var negative=amount<0n;
+  var digits=(negative?-amount:amount).toString().padStart(scale+1,'0');
+  return Number((negative?'-':'')+(scale?digits.slice(0,-scale)+'.'+digits.slice(-scale):digits));
+}
 function accountingComparableValue(field,value){
-  return ['netAmount','taxAmount','grossAmount'].indexOf(field)>-1?Math.round(num(value)):String(value||'');
+  return ['netAmount','taxAmount','grossAmount'].indexOf(field)>-1?num(value):String(value||'');
 }
 function accountingChangedFields(before,after,fields){
   before=before||{};after=after||{};
@@ -17870,11 +17890,11 @@ function buildAccountingLines(r){
     var parts=lazyAmountParts(row,requestPostingLocked(r));
     var gross=parts.gross;
     var tax=Math.min(gross,Math.max(0,parts.tax));
-    var net=Math.max(0,gross-tax);
+    var net=Math.max(0,accountingDecimalAmount(gross,tax,true));
     var inf=inferDebitAccountForLine(row,r.type,r)||{code:(r&&r.dr)||'6299',name:(r&&r.drN)||acctName((r&&r.dr)||'6299')||'待指定',reason:'系統找不到可用借方科目，暫以申請類型預設科目建立，待會計覆核。'};
     var rowManualFields=accountingLineManualFields(row);
     if(accountingUtilityBillDetected(row)&&(accountingLineFieldIsHuman(row,'taxAmount')||accountingLineFieldIsHuman(row,'netAmount'))){
-      tax=Math.min(gross,Math.max(0,num(row.taxAmount)));net=Object.prototype.hasOwnProperty.call(row,'netAmount')?num(row.netAmount):gross-tax;
+      tax=Math.min(gross,Math.max(0,num(row.taxAmount)));net=Object.prototype.hasOwnProperty.call(row,'netAmount')?num(row.netAmount):accountingDecimalAmount(gross,tax,true);
     }
     var manualDefaults=fp.accountingManualDefaults||{};
     var defaultManualFields=Array.isArray(manualDefaults.manualFields)?manualDefaults.manualFields:[];
@@ -17926,14 +17946,14 @@ function normalizeAccountingLine(line,r,i){
   var gross=Object.prototype.hasOwnProperty.call(line,'grossAmount')?num(line.grossAmount):num(line.total||line.amount);
   var tax=Object.prototype.hasOwnProperty.call(line,'taxAmount')?num(line.taxAmount):num(line.tax);
   tax=Math.min(gross,Math.max(0,tax));
-  var net=Object.prototype.hasOwnProperty.call(line,'netAmount')?num(line.netAmount):Math.max(0,gross-tax);
+  var net=Object.prototype.hasOwnProperty.call(line,'netAmount')?num(line.netAmount):Math.max(0,accountingDecimalAmount(gross,tax,true));
   var dr=accountByCode(line.debitAccount)||accountByCode((r&&r.dr)||'')||accountByCode('6233')||expenseDebitAccounts()[0]||{};
   var laborFee=accountingLaborFeeDetected(Object.assign({},line,{debitAccount:dr.c||line.debitAccount,debitAccountName:dr.n||line.debitAccountName}));
   var humanTax=accountingLineFieldIsHuman(line,'taxAmount');
   var humanNet=accountingLineFieldIsHuman(line,'netAmount');
   if(((r&&r.type==='hr_expense_request')||laborFee)&&!humanTax&&!humanNet){tax=0;net=gross;}
   if(accountingUtilityBillDetected(line)&&!requestPostingLocked(r)&&!humanTax&&!humanNet){tax=0;net=gross;}
-  if(!Object.prototype.hasOwnProperty.call(line,'netAmount'))net=Math.max(0,gross-tax);
+  if(!Object.prototype.hasOwnProperty.call(line,'netAmount'))net=Math.max(0,accountingDecimalAmount(gross,tax,true));
   var cr=accountingLineCreditAccount(line,r);
   var normalized={
     id:line.id||('line_'+(i+1)),
@@ -17958,22 +17978,22 @@ function normalizeAccountingLine(line,r,i){
 function accountingLineAmountInput(prefix,i,field,value,utilityBill){
   var label={netAmount:'未稅/費用',taxAmount:'進項稅額',grossAmount:'含稅'}[field]||field;
   var key={netAmount:'net',taxAmount:'tax',grossAmount:'gross'}[field]||field;
-  return '<input'+(utilityBill?' data-utility-bill="true"':'')+(utilityBill&&field==='taxAmount'?' readonly aria-readonly="true"':'')+' id="'+prefix+'-'+key+'-'+i+'" type="number" min="0" step="1" value="'+escAttr(Math.round(num(value)))+'" aria-label="'+label+'" title="'+label+'" style="width:112px;max-width:100%;text-align:right;font-family:var(--font-sans);font-weight:750;font-size:12px;padding:6px 8px" oninput="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onblur="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onchange="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')">';
+  return '<input'+(utilityBill?' data-utility-bill="true"':'')+(utilityBill&&field==='taxAmount'?' readonly aria-readonly="true"':'')+' id="'+prefix+'-'+key+'-'+i+'" type="number" min="0" step="any" value="'+escAttr(num(value))+'" aria-label="'+label+'" title="'+label+'" style="width:112px;max-width:100%;text-align:right;font-family:var(--font-sans);font-weight:750;font-size:12px;padding:6px 8px" oninput="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onblur="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onchange="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')">';
 }
 window.syncAccountingLineAmountInputs=function(prefix,i,field){
   var netEl=el(prefix+'-net-'+i),taxEl=el(prefix+'-tax-'+i),grossEl=el(prefix+'-gross-'+i);
   if(!netEl||!taxEl||!grossEl)return;
-  var net=Math.max(0,Math.round(num(netEl.value)));
-  var tax=Math.max(0,Math.round(num(taxEl.value)));
-  var gross=Math.max(0,Math.round(num(grossEl.value)));
+  var net=Math.max(0,num(netEl.value));
+  var tax=Math.max(0,num(taxEl.value));
+  var gross=Math.max(0,num(grossEl.value));
   if(grossEl.dataset&&grossEl.dataset.utilityBill==='true'){
     if(field==='netAmount')gross=net;
     net=gross;tax=0;
   }else if(field==='grossAmount'){
     if(tax>gross)tax=gross;
-    net=Math.max(0,gross-tax);
+    net=Math.max(0,accountingDecimalAmount(gross,tax,true));
   }else{
-    gross=net+tax;
+    gross=accountingDecimalAmount(net,tax,false);
   }
   netEl.value=net;
   taxEl.value=tax;
@@ -18096,12 +18116,12 @@ function collectAccountingLinesFromDom(r){
     var dr=accountByCode((el(prefix+'-dr-'+i)||{}).value||line.debitAccount)||{};
     var cr=accountByCode((el(prefix+'-cr-'+i)||{}).value||line.creditAccount)||accountingLineCreditAccount(line,r);
     var netEl=el(prefix+'-net-'+i),taxEl=el(prefix+'-tax-'+i),grossEl=el(prefix+'-gross-'+i);
-    var net=netEl?Math.max(0,Math.round(num(netEl.value))):num(line.netAmount);
-    var tax=taxEl?Math.max(0,Math.round(num(taxEl.value))):num(line.taxAmount);
-    var gross=grossEl?Math.max(0,Math.round(num(grossEl.value))):(net+tax||num(line.grossAmount));
+    var net=netEl?Math.max(0,num(netEl.value)):num(line.netAmount);
+    var tax=taxEl?Math.max(0,num(taxEl.value)):num(line.taxAmount);
+    var gross=grossEl?Math.max(0,num(grossEl.value)):(accountingDecimalAmount(net,tax,false)||num(line.grossAmount));
     if(tax>gross)tax=gross;
-    if(grossEl&&Math.abs(gross-(net+tax))>0.5)net=Math.max(0,gross-tax);
-    else gross=net+tax;
+    if(grossEl&&Math.abs(gross-accountingDecimalAmount(net,tax,false))>0.5)net=Math.max(0,accountingDecimalAmount(gross,tax,true));
+    else gross=accountingDecimalAmount(net,tax,false);
     if(accountingUtilityBillDetected(line)){tax=0;net=gross;}
     var next=Object.assign({},line,{
       netAmount:net,
@@ -20011,7 +20031,7 @@ function lazyAmountParts(r,preserveHistoricalTax){
   var hasNet=lazyHasValue(r,'netAmount')||lazyHasValue(r,'subtotal');
   var hasTax=lazyHasValue(r,'taxAmount')||lazyHasValue(r,'tax');
   if(!preserveHistoricalTax&&accountingUtilityBillDetected(r)){
-    var billGross=lazyHasValue(r,'grossAmount')?num(r.grossAmount):lazyHasValue(r,'total')?num(r.total):lazyHasValue(r,'amount')?num(r.amount):(hasNet?net+tax:Math.max(0,(num(r.qty)||1)*num(r.unitPrice||r.unit||0)));
+    var billGross=lazyHasValue(r,'grossAmount')?num(r.grossAmount):lazyHasValue(r,'total')?num(r.total):lazyHasValue(r,'amount')?num(r.amount):(hasNet?accountingDecimalAmount(net,tax,false):Math.max(0,(num(r.qty)||1)*num(r.unitPrice||r.unit||0)));
     return {net:Math.max(0,billGross),tax:0,gross:Math.max(0,billGross),mode:'exempt'};
   }
   var manualFields=accountingLineManualFields(r);
@@ -20020,11 +20040,11 @@ function lazyAmountParts(r,preserveHistoricalTax){
   var manualGross=manualFields.indexOf('grossAmount')>-1;
   if(manualNet||manualTax||manualGross){
     net=Math.max(0,net);tax=Math.max(0,tax);gross=Math.max(0,gross);
-    if(manualGross&&manualTax)net=Math.max(0,gross-tax);
-    else if(manualNet&&manualTax)gross=net+tax;
-    else if(manualGross&&manualNet)tax=Math.max(0,gross-net);
-    else if(manualGross){tax=Math.min(gross,tax);net=Math.max(0,gross-tax);}
-    else gross=net+tax;
+    if(manualGross&&manualTax)net=Math.max(0,accountingDecimalAmount(gross,tax,true));
+    else if(manualNet&&manualTax)gross=accountingDecimalAmount(net,tax,false);
+    else if(manualGross&&manualNet)tax=Math.max(0,accountingDecimalAmount(gross,net,true));
+    else if(manualGross){tax=Math.min(gross,tax);net=Math.max(0,accountingDecimalAmount(gross,tax,true));}
+    else gross=accountingDecimalAmount(net,tax,false);
     return {net:net,tax:tax,gross:gross,mode:mode};
   }
   if(mode==='exempt'){
@@ -20032,18 +20052,18 @@ function lazyAmountParts(r,preserveHistoricalTax){
     return {net:Math.max(0,base),tax:0,gross:Math.max(0,base),mode:'exempt'};
   }
   if(mode==='gross_inclusive'){
-    if(!gross&&net&&tax)gross=net+tax;
+    if(!gross&&net&&tax)gross=accountingDecimalAmount(net,tax,false);
     if(!gross&&net)gross=net;
-    if(tax>0)net=Math.max(0,gross-tax);
-    else if(hasNet&&net>0&&gross>net)tax=Math.max(0,gross-net);
-    else {net=Math.round(gross/(1+rate));tax=Math.max(0,gross-net);}
+    if(tax>0)net=Math.max(0,accountingDecimalAmount(gross,tax,true));
+    else if(hasNet&&net>0&&gross>net)tax=Math.max(0,accountingDecimalAmount(gross,net,true));
+    else {net=Math.round(gross/(1+rate));tax=Math.max(0,accountingDecimalAmount(gross,net,true));}
     return {net:Math.max(0,net),tax:Math.max(0,tax),gross:Math.max(0,gross),mode:mode};
   }
-  if(!net&&gross&&tax)net=Math.max(0,gross-tax);
+  if(!net&&gross&&tax)net=Math.max(0,accountingDecimalAmount(gross,tax,true));
   if(!net&&gross)net=Math.round(gross/(1+rate));
   if(!net)net=Math.max(0,(num(r.qty)||1)*num(r.unitPrice||r.unit||0));
   if(!tax&&hasTax)tax=0;
-  if(!gross||!hasGross||mode==='net_exclusive')gross=net+tax;
+  if(!gross||!hasGross||mode==='net_exclusive')gross=accountingDecimalAmount(net,tax,false);
   return {net:Math.max(0,net),tax:Math.max(0,tax),gross:Math.max(0,gross),mode:mode};
 }
 function lazyNetAmount(r){
@@ -20166,18 +20186,18 @@ function applyLazyEditValue(i,k,v,finalize,render){
     r.taxMode='net_exclusive';
     r.netAmount=Math.max(0,num(r.netAmount));
     r.taxAmount=Math.max(0,num(r.taxAmount));
-    r.grossAmount=r.netAmount+r.taxAmount;
+    r.grossAmount=accountingDecimalAmount(r.netAmount,r.taxAmount,false);
     r.total=r.grossAmount;
   }else if(k==='taxAmount'){
     r.taxAmount=Math.max(0,num(r.taxAmount));
     r.netAmount=Math.max(0,lazyHasValue(r,'netAmount')?num(r.netAmount):priorNet);
-    r.grossAmount=r.netAmount+r.taxAmount;
+    r.grossAmount=accountingDecimalAmount(r.netAmount,r.taxAmount,false);
     r.total=r.grossAmount;
   }else if(k==='grossAmount'){
     r.taxMode='gross_inclusive';
     r.grossAmount=Math.max(0,num(r.grossAmount));
     r.taxAmount=Math.min(r.grossAmount,Math.max(0,num(r.taxAmount)));
-    r.netAmount=Math.max(0,r.grossAmount-r.taxAmount);
+    r.netAmount=Math.max(0,accountingDecimalAmount(r.grossAmount,r.taxAmount,true));
     r.total=r.grossAmount;
   }else if(k==='taxMode'){
     r.taxMode=normalizeLazyTaxMode(v)||'gross_inclusive';
@@ -29094,6 +29114,10 @@ async function bulkRunSelected(action){
       var expenseAction=action==='cancel'?'reject':(action==='countersign'?'add_sign':action);
       var expenseTransaction=await expenseActiveStepTransaction(expenseCandidates,expenseAction,note,[],addUid,{});
       if(expenseTransaction.available){
+        if(expenseTransaction.unknown){
+          alert('整批申請單的正式交易結果尚待確認，請勿重複簽核。請重新整理後核對原單的最新狀態；若仍無法確認，請將單號與畫面交由系統管理員處理。\n\n待確認單號：'+expenseCandidates.map(function(row){return row.no||row.id;}).join('、'));
+          return false;
+        }
         if(expenseTransaction.ok){
           ok+=expenseTransaction.count;
           if(expenseTransaction.refreshRequired)skipDetails.push('申請單簽核已寫入，但最新畫面需重新整理後才會顯示');

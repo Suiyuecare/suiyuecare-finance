@@ -19,7 +19,7 @@ assert.ok(handlerStart>=0&&handlerEnd>handlerStart,'exact real finalization hand
 const handler=source.slice(handlerStart,handlerEnd+4);
 const helperNames=[
  'accountingUtilityBillDetected','accountingLaborFeeDetected','accountingManualFieldNames','accountingLineManualFields','accountingLineFieldIsHuman',
- 'lazyHasValue','normalizeLazyTaxMode','lazyTaxMode','lazyAmountParts','requestTaxAmount','requestGrossAmount','requestNetTaxSplit',
+ 'accountingDecimalAmount','lazyHasValue','normalizeLazyTaxMode','lazyTaxMode','lazyAmountParts','requestTaxAmount','requestGrossAmount','requestNetTaxSplit',
  'requestLedgerPostedAt','requestPostingLocked','requestApprovalStepCompleted','approvedStepCount','requestWorkflowStepCount',
  'advanceOriginalAmount','advanceActualAmount','advanceSettlementInfo','expensePostingAmount','accountingLineIsSystemFee','principalAccountingLines'
 ];
