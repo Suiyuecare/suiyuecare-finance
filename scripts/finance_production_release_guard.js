@@ -107,6 +107,9 @@ const RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM='database_attachment_claim_2026100
 // Applied as a narrowly scoped, backward-compatible Supabase migration before
 // frontend promotion; its SELECT predicate mirrors the existing DELETE rule.
 const ATTACHMENT_STAGED_CLEANUP_MIGRATIONS=Object.freeze(['20261001202434']);
+const HUMAN_FLOAT_MIGRATIONS=Object.freeze(['20261002035707']);
+const HUMAN_FLOAT_SOURCE_SHA256=Object.freeze({'20261002035707':'70e42d40d7e3bf2396605c93dc70f0b50ec938b56d0abcae440754ea29b71b1f'});
+const RELEASE_PHASE_DATABASE_HUMAN_FLOAT='database_human_float_20261002';
 const AR_READ_SCOPE_MIGRATIONS = Object.freeze(['20260922072737']);
 const RELEASE_PHASE_DATABASE_AR_READ_SCOPE = 'database_ar_read_scope_20260922';
 const AR_READ_SCOPE_POSTFLIGHT_FILES = Object.freeze(['finance_ar_verified_accounting_scope_postflight.sql']);
@@ -152,7 +155,8 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...PORTAL_SESSION_MIGRATIONS,
   ...EXTERNAL_LABOR_MIGRATIONS,
   ...ATTACHMENT_CLAIM_MIGRATIONS,
-  ...ATTACHMENT_STAGED_CLEANUP_MIGRATIONS
+  ...ATTACHMENT_STAGED_CLEANUP_MIGRATIONS,
+  ...HUMAN_FLOAT_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -183,6 +187,7 @@ const RELEASE_PHASES = Object.freeze({
   [RELEASE_PHASE_DATABASE_PORTAL_SESSION]: PORTAL_SESSION_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_EXTERNAL_LABOR]: EXTERNAL_LABOR_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM]: ATTACHMENT_CLAIM_MIGRATIONS.join(','),
+  [RELEASE_PHASE_DATABASE_HUMAN_FLOAT]: HUMAN_FLOAT_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_AR_READ_SCOPE]: AR_READ_SCOPE_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY]: EMPLOYEE_RELIABILITY_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_AUDIT_READINESS]: AUDIT_READINESS_MIGRATIONS.join(','),
@@ -226,7 +231,8 @@ const SUPPORTED_GATE_PHASES = Object.freeze([
   OPERATIONAL_STABILITY_MIGRATIONS,
   DEMO_PASSWORD_RETIREMENT_MIGRATIONS,
   AUDIT_CONTROLS_20260927_MIGRATIONS,
-  HR_CONTRACTOR_MIGRATIONS, PORTAL_SESSION_MIGRATIONS, EXTERNAL_LABOR_MIGRATIONS, ATTACHMENT_CLAIM_MIGRATIONS
+  HR_CONTRACTOR_MIGRATIONS, PORTAL_SESSION_MIGRATIONS, EXTERNAL_LABOR_MIGRATIONS, ATTACHMENT_CLAIM_MIGRATIONS,
+  HUMAN_FLOAT_MIGRATIONS
 ]);
 const SUPPORTED_GATE_SUFFIXES = SUPPORTED_GATE_PHASES;
 
@@ -300,7 +306,7 @@ function deploymentHost(record) { return String(record.url || '').replace(/^http
 function validateTarget(env, candidate, releasePhase, versionsText, expectedRef) {
   canonicalSha(candidate);
   releasePlan(releasePhase, versionsText);
-  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use a reviewed current fixed database phase');
+  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use a reviewed current fixed database phase');
   expectedRef = projectRef(expectedRef);
   if (expectedRef !== PRODUCTION_CATALOG.supabaseProjectRef) fail('Supabase project ref is not the immutable Finance production catalog target');
   for (const name of ['SUPABASE_ACCESS_TOKEN', 'FINANCE_SUPABASE_URL', 'FINANCE_SUPABASE_ANON_KEY', 'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']) {
@@ -386,6 +392,16 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
   const remote = readLedgerVersions(ledgerPath);
   assertProductionLedgerBaseline(remote, baseline);
   const missing = MIGRATION_CHAIN.filter((version) => !remote.includes(version));
+  if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_FLOAT) {
+    const target = HUMAN_FLOAT_MIGRATIONS[0];
+    const prerequisites = REVIEWED_MIGRATION_CATALOG.filter(version => version < target);
+    if (prerequisites.some(version => !remote.includes(version))) fail('Human float phase requires every reviewed prerequisite migration');
+    const filename=local.find(name => name.startsWith(target + '_'));
+    if (!filename) fail('Human float migration file is missing');
+    if(sha256File(path.join(directory,filename))!==HUMAN_FLOAT_SOURCE_SHA256[target])
+      fail('Human float migration source differs from sealed SHA256');
+    return remote.includes(target) ? 'applied' : 'pending';
+  }
   if(plan.releasePhase===RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM){
     const prerequisites=REVIEWED_MIGRATION_CATALOG.filter(version=>version<ATTACHMENT_CLAIM_MIGRATIONS[0]);
     if(prerequisites.some(version=>!remote.includes(version)))fail('Attachment claim requires every reviewed prerequisite migration');
@@ -729,7 +745,7 @@ function prepareRehearsal(sourcePath, outputPath, target, fingerprintPath, canar
 
 function sqlLiteral(value) { return `'${String(value).replace(/'/g, "''")}'`; }
 function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATABASE_AUDIT) {
-  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM].includes(releasePhase))fail('unsupported fixed database batch');
+  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT].includes(releasePhase))fail('unsupported fixed database batch');
   releasePlan(releasePhase,versionsText);
   const files=migrationFiles(directory);
   return migrationPhase(versionsText).map(version=>{
@@ -741,6 +757,7 @@ function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATA
     if(releasePhase===RELEASE_PHASE_DATABASE_PORTAL_SESSION && sha256File(path.join(directory,filename))!==PORTAL_SESSION_SOURCE_SHA256[version])fail('Portal session migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_EXTERNAL_LABOR && sha256File(path.join(directory,filename))!==EXTERNAL_LABOR_SOURCE_SHA256[version])fail('External labor migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM && sha256File(path.join(directory,filename))!==ATTACHMENT_CLAIM_SOURCE_SHA256[version])fail('Attachment claim migration source differs from sealed SHA256: '+version);
+    if(releasePhase===RELEASE_PHASE_DATABASE_HUMAN_FLOAT && sha256File(path.join(directory,filename))!==HUMAN_FLOAT_SOURCE_SHA256[version])fail('Human float migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_HR_CONTRACTOR && sha256File(path.join(directory,filename))!==HR_CONTRACTOR_SOURCE_SHA256[version])fail('HR contractor migration source differs from sealed SHA256: '+version);
     return {version,filename,source};
   });
@@ -917,6 +934,72 @@ function attachmentClaimPostflightChain(postflightPath,profilePostflightPath){
  if(!prior.includes('-- Reviewed reports postflight: finance_audit_security_postflight.sql')||prior.split(oldMd5).length!==2)fail('Attachment claim cannot adapt the reviewed audit-security source exactly once');
  const versionedPrior=prior.replace(oldMd5,newMd5);
  return versionedPrior+`\n-- Reviewed reports postflight: ${name}\n${checks.trimEnd()}`;
+}
+function prepareHumanFloatRehearsal(directory,outputPath,versionsText,ledgerPath,
+  fingerprintPath,canaryPath,preflightPath,postflightPath,
+  baseline=PRODUCTION_BASELINE_LEDGER){
+  const phase=RELEASE_PHASE_DATABASE_HUMAN_FLOAT;
+  verifyLedger('pre',ledgerPath,directory,phase,versionsText,baseline);
+  const batch=readAuditBatch(directory,versionsText,phase);
+  if(batch.length!==1)fail('Human float rehearsal requires exactly one sealed migration');
+  const remote=readLedgerVersions(ledgerPath);
+  const fingerprint=stripPsqlDirectives(fs.readFileSync(fingerprintPath,'utf8'),path.basename(fingerprintPath))
+    .trim().replace(/^(?:--[^\n]*(?:\n|$)\s*)+/,'');
+  if(!/^with\b/i.test(fingerprint)
+      || /\b(?:insert\s+into|update\s+\S+\s+set|delete\s+from|alter\s+table|create\s+(?:table|index|schema|function|policy)|drop\s+(?:table|index|schema|function|policy)|truncate\s+|vacuum\b|call\s+|copy\s+)\b/i.test(fingerprint))
+    fail('Human float fingerprint must be one pure read-only CTE query');
+  const preflight=stripPsqlDirectives(fs.readFileSync(preflightPath,'utf8'),path.basename(preflightPath));
+  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
+  assertCliAtomicMigration(preflight,'human float preflight');
+  assertCliAtomicMigration(postflight,'human float postflight');
+  const canary=authenticatedCanarySections(canaryPath);
+  const tag='$finance_human_float_rehearsal$';
+  const source=batch[0].source.trimEnd();
+  const quote=`$finance_human_float_migration_${batch[0].version}$`;
+  const name=batch[0].filename.replace(/^\d{14}_/,'').replace(/\.sql$/,'');
+  const ledgerInsert=`insert into supabase_migrations.schema_migrations(version,statements,name,created_by) values (${sqlLiteral(batch[0].version)},array[${quote}${source}${quote}]::text[],${sqlLiteral(name)},'github-actions');`;
+  if([source,fingerprint,preflight,postflight,canary.core,canary.rollbackCheck,ledgerInsert]
+      .some(value=>value.includes(tag)))fail('Human float rehearsal tag collision');
+  writeExclusive(outputPath,`begin isolation level repeatable read;
+set local lock_timeout='5s';
+set local statement_timeout='180s';
+select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('finance-production-release-v1',0));
+lock table supabase_migrations.schema_migrations in share row exclusive mode;
+do ${tag}
+begin
+  if (select pg_catalog.array_agg(version order by version) from supabase_migrations.schema_migrations)
+     is distinct from array[${remote.map(sqlLiteral).join(',')}]::text[] then
+    raise exception 'human float migration ledger changed before rehearsal';
+  end if;
+end;
+${tag};
+${preflight}
+create temporary table finance_release_fingerprint_before on commit drop as
+${fingerprint}
+savepoint finance_release_migration;
+${source}
+${ledgerInsert}
+${postflight}
+${canary.core}
+rollback to savepoint finance_release_migration;
+${canary.rollbackCheck}
+create temporary table finance_release_fingerprint_after on commit drop as
+${fingerprint}
+do ${tag}
+begin
+  if (select fingerprint from finance_release_fingerprint_before)
+     is distinct from (select fingerprint from finance_release_fingerprint_after) then
+    raise exception 'human float rollback rehearsal changed schema fingerprints';
+  end if;
+  if (select pg_catalog.array_agg(version order by version) from supabase_migrations.schema_migrations)
+     is distinct from array[${remote.map(sqlLiteral).join(',')}]::text[] then
+    raise exception 'human float rollback rehearsal changed migration ledger';
+  end if;
+end;
+${tag};
+rollback;
+`);
+  return true;
 }
 function prepareAttachmentClaimRehearsal(directory,outputPath,versionsText,ledgerPath,fingerprintPath,canaryPath,postflightPath,profilePostflightPath,baseline=PRODUCTION_BASELINE_LEDGER){
  const phase=RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM;
@@ -1674,6 +1757,14 @@ function prepareGateQuery(sourcePath, outputPath, versionsText) {
 function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
   const plan = releasePlan(releasePhase, versionsText);
   const sourceName = path.basename(sourcePath);
+  if(plan.releasePhase===RELEASE_PHASE_DATABASE_HUMAN_FLOAT){
+    if(sourceName!=='finance_human_accounting_float_postflight.sql')
+      fail('Human float phase requires its exact sealed postflight');
+    const postflight=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),sourceName);
+    assertCliAtomicMigration(postflight,'human float postflight');
+    writeExclusive(outputPath,`begin read only;\nset local statement_timeout='60s';\n${postflight}\nrollback;\n`);
+    return true;
+  }
   if([RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)){
     if(sourceName!=='finance_production_db_postflight.sql')fail('Portal session compatibility requires the reviewed existing-v3 postflight');
     const directory=path.dirname(sourcePath);
@@ -2046,6 +2137,26 @@ function verifyPromotion(candidateDeploymentPath, promotedDeploymentPath, produc
   return true;
 }
 
+function verifyDbOnlyAlias(beforeAliasPath,afterAliasPath,beforeManifestPath,afterManifestPath,candidateDeploymentPath){
+  const before=readJson(beforeAliasPath),after=readJson(afterAliasPath);
+  const candidate=readJson(candidateDeploymentPath);
+  for(const record of [before,after]){
+    if(record.alias!==PRODUCTION_CATALOG.productionDomain
+        || record.projectId!==PRODUCTION_CATALOG.vercelProjectId
+        || !String(record.deploymentId||'').trim())
+      fail('database-only phase observed an invalid production alias');
+  }
+  if(before.deploymentId!==after.deploymentId)
+    fail('database-only phase changed the production deployment alias');
+  if(before.deploymentId===deploymentId(candidate))
+    fail('database-only candidate was unexpectedly assigned to the production alias');
+  assert.deepStrictEqual(readJson(afterManifestPath),readJson(beforeManifestPath),
+    'database-only phase changed the production frontend manifest');
+  if(sha256File(afterManifestPath)!==sha256File(beforeManifestPath))
+    fail('database-only phase changed production frontend manifest bytes');
+  return true;
+}
+
 function createReceipt(outputPath, deploymentPath, manifestPath, indexPath, candidate, releasePhase, versionsText, deploymentUrl, repository, runId) {
   candidate = canonicalSha(candidate);
   releasePlan(releasePhase, versionsText);
@@ -2098,6 +2209,7 @@ function verifyReceipt(receiptPath, deploymentPath, manifestPath, indexPath, can
 function manifestSha(file) { return sha256File(file); }
 
 const api = {
+  HUMAN_FLOAT_MIGRATIONS, RELEASE_PHASE_DATABASE_HUMAN_FLOAT, prepareHumanFloatRehearsal, verifyDbOnlyAlias,
   HR_BRIDGE_MIGRATIONS, RELEASE_PHASE_DATABASE_HR_BRIDGE, HR_BRIDGE_POSTFLIGHT_FILES, pendingHrBridgeBatch, prepareHrBridgePrerequisiteQuery, prepareHrBridgeRehearsal,
   HR_DIRECTORY_EXPORT_MIGRATIONS, HR_DIRECTORY_EXPORT_POSTFLIGHT_FILES,
   AUDIT_SECURITY_MIGRATIONS, RELEASE_PHASE_DATABASE_AUDIT_SECURITY, AUDIT_SECURITY_POSTFLIGHT_FILES, pendingAuditSecurityBatch, prepareAuditSecurityPrerequisiteQuery, prepareAuditSecurityRehearsal,
@@ -2174,6 +2286,8 @@ if (require.main === module) {
     else if(command==='prepare-external-labor-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('receivables-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,arg('profiles-postflight'));
     else if(command==='prepare-attachment-claim-rehearsal')prepareAttachmentClaimRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('receivables-postflight'),arg('profiles-postflight'));
     else if(command==='prepare-attachment-claim-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('receivables-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,arg('profiles-postflight'));
+    else if(command==='prepare-human-float-rehearsal')prepareHumanFloatRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('preflight'),arg('postflight'));
+    else if(command==='prepare-human-float-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_HUMAN_FLOAT);
     else if (command === 'prepare-audit-controls-20260927-rehearsal') prepareAuditControls20260927Rehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('receivables-postflight'),arg('profiles-postflight'));
     else if (command === 'prepare-audit-controls-20260927-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('receivables-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,arg('profiles-postflight'));
     else if (command === 'prepare-demo-password-retirement-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('authenticated-canary'),arg('receivables-postflight'),RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,null,null,[],arg('profiles-postflight'));
@@ -2211,6 +2325,7 @@ if (require.main === module) {
     else if (command === 'prepare-rehearsal') prepareRehearsal(arg('migration'), arg('output'), arg('migration-version'), arg('fingerprint'), arg('authenticated-canary'));
     else if (command === 'prepare-gate-query') prepareGateQuery(arg('input'), arg('output'), arg('migration-versions'));
     else if (command === 'prepare-phase-query') preparePhaseQuery(arg('input'), arg('output'), arg('release-phase'), arg('migration-versions'));
+    else if (command === 'verify-db-only-alias') verifyDbOnlyAlias(arg('before-alias'),arg('after-alias'),arg('before-manifest'),arg('after-manifest'),arg('candidate-deployment'));
     else if (command === 'prepare-read-only-query') prepareReadOnlyQuery(arg('input'), arg('output'));
     else if (command === 'prepare-apply') prepareApply(arg('migration'), arg('output'), arg('migration-version'), arg('ledger'));
     else if (command === 'normalize-query-rows') normalizeQueryRows(arg('input'), arg('output'));
