@@ -57,7 +57,7 @@ const runtime = {
 const functionNames = [
   'accountingUtilityBillDetected', 'accountingLaborFeeDetected',
   'accountingManualActorSnapshot', 'accountingManualFieldNames', 'accountingLineManualFields',
-  'accountingLineFieldIsHuman', 'accountingComparableValue', 'accountingChangedFields',
+  'accountingLineFieldIsHuman', 'accountingDecimalAmount', 'accountingComparableValue', 'accountingChangedFields',
   'preserveAccountingManualAuthority', 'markAccountingManualAuthority',
   'lazyHasValue', 'normalizeLazyTaxMode', 'lazyTaxMode', 'lazyAmountParts',
   'lazyNetAmount', 'lazyTaxAmount', 'lazyRowTotal', 'syncLazyAmountDraftDom',
