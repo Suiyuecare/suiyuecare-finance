@@ -28,6 +28,13 @@ scripts/*
 !scripts/check_final_accountant_self_post_contract.js
 !scripts/check_formal_cashier_self_disbursement_contract.js
 !scripts/check_human_accounting_authority.js
+!scripts/check_human_accounting_float_residue.cjs
+!scripts/check_human_accounting_batch_atomicity.cjs
+!scripts/check_human_accounting_browser_20261002.cjs
+!scripts/finance_human_accounting_float_preflight.sql
+!scripts/finance_human_accounting_float_postflight.sql
+!scripts/finance_human_accounting_float_fingerprint.sql
+!scripts/finance_human_accounting_float_canary.sql
 !scripts/check_release_artifact.js
 !scripts/check_finance_login_account_switch_contract.js
 !scripts/check_receipt_attachment_dedup_and_labor_tax.js
