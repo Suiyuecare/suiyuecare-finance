@@ -35,6 +35,11 @@ scripts/*
 !scripts/finance_human_accounting_float_postflight.sql
 !scripts/finance_human_accounting_float_fingerprint.sql
 !scripts/finance_human_accounting_float_canary.sql
+!scripts/finance_income_reconcile_preflight.sql
+!scripts/finance_income_reconcile_postflight.sql
+!scripts/finance_income_reconcile_fingerprint.sql
+!scripts/finance_income_reconcile_canary.sql
+!scripts/check_income_reconcile_migration.cjs
 !scripts/check_release_artifact.js
 !scripts/check_finance_login_account_switch_contract.js
 !scripts/check_receipt_attachment_dedup_and_labor_tax.js

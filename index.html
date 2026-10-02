@@ -19803,11 +19803,19 @@ function travelApprovalOverviewHtml(){
 }
 function expenseSubmissionRecoveryPanelHtml(pending){
   var attempt=escAttr(String(pending&&pending.attemptId||''));
+  var missing=pending&&Array.isArray(pending.repairMissing)?pending.repairMissing:[];
+  var notice=S.nrExpenseRepairMessage;
+  var noticeText=notice&&notice.requestId===pending.requestId&&notice.attemptId===pending.attemptId?String(notice.text||''):'';
+  var repair=missing.length?'<div class="nr-submit-panel-sub">原附件有 '+missing.length+' 個無法從歸檔資料與檔案區同時確認。請逐一選取原始檔案；系統會保留原單號與兩次送件內容，未選齊不會重送。</div>'
+    +missing.map(function(item,i){return'<label class="nr-submit-panel-sub" style="display:block;margin-top:8px">重新選取：'+escAttr(item.name||('附件 '+(i+1)))
+      +'<input id="expense-repair-file-'+i+'" type="file" style="display:block;margin-top:4px;max-width:100%;box-sizing:border-box" aria-label="重新選取 '+escAttr(item.name||('附件 '+(i+1)))+'"></label>';}).join('')
+    +'<div class="nr-submit-buttons" style="grid-template-columns:1fr"><button type="button" class="btn-p" onclick="repairPendingExpenseSubmission()">上傳缺少附件並確認原申請</button></div>':'';
   return'<div class="nr-submit-panel" data-expense-submission-recovery="pending" role="status" style="border-color:#e8b86e;background:#fffaf1">'
     +'<div><div class="nr-submit-panel-title">前次送件待確認</div>'
       +'<div class="nr-submit-panel-sub">這筆申請可能已建立。請用原帳號、原瀏覽器確認前次結果；系統只會查詢或以原識別碼安全重試，不會另建新單。</div>'
-      +(attempt?'<div class="nr-submit-panel-sub" style="overflow-wrap:anywhere">事件識別：'+attempt+'</div>':'')+'</div>'
-    +'<div class="nr-submit-buttons" style="grid-template-columns:1fr"><button type="button" class="btn-p" onclick="confirmPendingExpenseSubmission()">確認前次送件</button></div>'
+      +(attempt?'<div class="nr-submit-panel-sub" style="overflow-wrap:anywhere">事件識別：'+attempt+'</div>':'')
+      +(noticeText?'<div class="nr-submit-panel-sub" role="alert" style="color:#9a3412;overflow-wrap:anywhere">'+escAttr(noticeText)+'</div>':'')+'</div>'
+    +'<div class="nr-submit-buttons" style="grid-template-columns:1fr"><button type="button" class="btn-p" onclick="confirmPendingExpenseSubmission()">確認前次送件</button></div>'+repair
   +'</div>';
 }
 function syncExpenseSubmissionRecoveryBanner(){
@@ -23319,6 +23327,9 @@ function expenseApplicantRevisionRpcErrorIsAmbiguous(error){
   if(code==='CLIENT_TIMEOUT'||code==='57014'||code==='PGRST003'||info.status===408||info.status===425||info.status===429||info.status>=500)return true;
   return /failed to fetch|fetch failed|network|networkerror|load failed|connection|socket|timeout|timed out|gateway|service unavailable|temporarily unavailable|abort|econn|逾時|網路|連線/.test(text);
 }
+function expenseSubmissionStatementCanceled(error){
+  return String(supabaseAuthErrorInfo(error).code||'').toUpperCase()==='57014';
+}
 function expenseSubmissionRecordMatches(actual,expected){
   if(!actual||!expected)return false;
   var actualPayload=actual.formPayload||actual.form_payload||{};
@@ -23363,7 +23374,7 @@ function expenseSubmissionIdentityChanged(){
   error.code='FINANCE_AUTH_IDENTITY_CHANGED';
   return {ok:false,state:'unknown',unknown:true,uncertain:true,identityChanged:true,reason:'expense_submission_identity_changed',error:error};
 }
-async function readExpenseSubmissionCommit(expected){
+async function readExpenseSubmissionCommit(expected,alternates,recoveryAttemptIds){
   var identity=expenseSubmissionOperationIdentity();
   if(!expenseSubmissionOperationCurrent(identity,expected))return expenseSubmissionIdentityChanged();
   try{
@@ -23377,13 +23388,24 @@ async function readExpenseSubmissionCommit(expected){
     var raw=response.data&&response.data[0];
     if(!raw)return{state:'absent'};
     var mapped=mapReq(raw);
-    if(!expenseSubmissionRecordMatches(mapped,expected)){
+    var matched=[expected].concat(alternates||[]).find(function(snapshot){return expenseSubmissionRecordMatches(mapped,snapshot);});
+    // A closed tab loses the full repaired snapshot in sessionStorage.  A
+    // locally saved random attempt token can still identify a committed row;
+    // it never authorizes a replay without the complete session snapshot.
+    if(!matched&&(recoveryAttemptIds||[]).length){
+      var actualPayload=mapped.formPayload||{};
+      if((recoveryAttemptIds||[]).indexOf(String(actualPayload.submissionAttemptId||''))>-1){
+        var tokenExpected=Object.assign({},expected,{files:mapped.files||[],passbookFiles:mapped.passbookFiles||actualPayload.passbookFiles||[],formPayload:Object.assign({},expected.formPayload||{},{submissionAttemptId:actualPayload.submissionAttemptId,passbookFiles:actualPayload.passbookFiles||[]})});
+        if(expenseSubmissionRecordMatches(mapped,tokenExpected))matched=tokenExpected;
+      }
+    }
+    if(!matched){
       var collision=new Error('正式資料已有相同識別碼，但內容或送件識別不一致；系統已停止重試。');
       collision.code='EXPENSE_SUBMISSION_ID_COLLISION';
       return{state:'unknown',error:collision,record:mapped};
     }
     mergeCommittedExpenseRequest(mapped);
-    return{state:'committed',record:mapped,raw:raw};
+    return{state:'committed',record:mapped,raw:raw,matchedExpected:matched};
   }catch(error){return{state:'unknown',error:error};}
 }
 async function callExpenseSubmissionOnce(record,label){
@@ -23395,14 +23417,14 @@ async function callExpenseSubmissionOnce(record,label){
     return result&&typeof result==='object'?result:{ok:false,error:new Error('申請單交易沒有回傳結果')};
   }catch(error){return{ok:false,error:error};}
 }
-async function readExpenseSubmissionCommitWithDelays(record,delays){
+async function readExpenseSubmissionCommitWithDelays(record,delays,alternates,recoveryAttemptIds){
   var identity=expenseSubmissionOperationIdentity();
   delays=delays||[350,1000,2500];
   var latest={state:'absent'};
   for(var i=0;i<delays.length;i++){
     if(delays[i]>0)await new Promise(function(resolve){setTimeout(resolve,delays[i]);});
     if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
-    latest=await readExpenseSubmissionCommit(record);
+    latest=await readExpenseSubmissionCommit(record,alternates,recoveryAttemptIds);
     if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
     if(latest.state==='committed'||latest.identityChanged)return latest;
     if(latest.state==='unknown'){
@@ -23437,15 +23459,38 @@ function saveExpenseSubmissionPending(record,error){
   else{safeRemoveItem(key);sessionRemoveItem(key);S.nrSubmissionConfirmationPending=null;}
   return{ok:!!(localSaved&&sessionSaved),pending:pending,localSaved:!!localSaved,sessionSaved:!!sessionSaved};
 }
+function persistExpenseSubmissionPendingUpdate(previous,next){
+  var key=expenseSubmissionPendingStorageKey();
+  var oldLocal=safeJsonGet(key,null),oldSession=sessionGetItem(key);
+  // The existing local copy already contains the original request.  Keep it
+  // unchanged except for opaque attempt tokens; repaired form and file names
+  // live only in this tab's sessionStorage.
+  var localCopy=oldLocal?JSON.parse(JSON.stringify(oldLocal)):null;
+  if(localCopy)localCopy.repairAttemptIds=(next.repairAttemptIds||[]).slice();
+  var localSaved=localCopy?safeJsonSet(key,localCopy):!next.repairRecord;
+  var sessionSaved=localSaved&&sessionSetItem(key,JSON.stringify(next));
+  if(!localSaved||!sessionSaved){
+    if(oldLocal)safeJsonSet(key,oldLocal);else safeRemoveItem(key);
+    if(oldSession)sessionSetItem(key,oldSession);else sessionRemoveItem(key);
+    S.nrSubmissionConfirmationPending=previous;
+    return false;
+  }
+  S.nrSubmissionConfirmationPending=next;
+  return true;
+}
 function expenseSubmissionPendingInCurrentScope(pending){
   return !!(pending&&String(pending.tenantId||'')===String(currentTenantId()||DEFAULT_TENANT_ID)
     &&String(pending.dataEnv||'')===String(activeDataEnvironment())
     &&String(pending.applicantId||'')===String(S.user&&S.user.id||''));
 }
 function loadExpenseSubmissionPending(){
-  var key=expenseSubmissionPendingStorageKey(),pending=null,sessionRaw=sessionGetItem(key);
+  var key=expenseSubmissionPendingStorageKey(),pending=null,sessionRaw=sessionGetItem(key),localPending=safeJsonGet(key,null);
   try{pending=sessionRaw?JSON.parse(sessionRaw):null;}catch(_){pending=null;}
-  if(!pending)pending=safeJsonGet(key,null);
+  if(pending&&pending.repairRecord){
+    var repairedAttempt=String((pending.repairRecord.formPayload||{}).submissionAttemptId||'');
+    if(!repairedAttempt||!localPending||(localPending.repairAttemptIds||[]).indexOf(repairedAttempt)<0)pending=localPending;
+  }
+  if(!pending)pending=localPending;
   if(!expenseSubmissionPendingInCurrentScope(pending)){
     var cached=S.nrSubmissionConfirmationPending;
     pending=expenseSubmissionPendingInCurrentScope(cached)?cached:null;
@@ -23453,9 +23498,71 @@ function loadExpenseSubmissionPending(){
   S.nrSubmissionConfirmationPending=pending;
   return pending;
 }
+function expenseSubmissionAttachmentReferences(record){
+  var references=[],seen={};
+  function visit(value){
+    if(!value||typeof value!=='object')return;
+    if(Array.isArray(value)){value.forEach(visit);return;}
+    ['path','storagePath','storage_path'].forEach(function(key){
+      var path=typeof value[key]==='string'?value[key]:'';
+      if(path&&!seen[path]){
+        seen[path]=true;
+        references.push({path:path,name:String(value.originalName||value.n||value.name||value.fileName||value.file_name||'附件'),
+          size:num(value.size||value.file_size),mime:String(value.mime||value.fileType||value.file_type||''),kind:String(value.kind||'request_files')});
+      }
+    });
+    Object.keys(value).forEach(function(key){if(value[key]&&typeof value[key]==='object')visit(value[key]);});
+  }
+  visit(reqDbRow(record));
+  return references;
+}
+function expenseSubmissionAttachmentPathInScope(path,pending){
+  var parts=String(path||'').split('/'),tenant=String(pending.tenantId||''),env=String(pending.dataEnv||''),no=String(pending.requestNo||'');
+  return (parts.length>=10&&parts[0]===tenant&&parts[1]==='expense_requests'&&parts[2]===env&&parts[7]===no)
+    ||(parts.length>=9&&parts[0]==='expense_requests'&&parts[1]===env&&parts[6]===no);
+}
+async function verifyPendingExpenseAttachmentPaths(pending,record,identity){
+  var references=expenseSubmissionAttachmentReferences(record);
+  if(!references.length)return{state:'present',missing:[]};
+  if(references.length>100||!references.every(function(item){return expenseSubmissionAttachmentPathInScope(item.path,pending);})){
+    return{state:'unknown',reason:'attachment_path_scope_mismatch'};
+  }
+  if(!hasSupabase()||!getSb()||!expenseSubmissionOperationCurrent(identity,record))return{state:'unknown',reason:'attachment_check_unavailable'};
+  try{
+    var client=getSb(),paths=references.map(function(item){return item.path;});
+    var metadata=await withAbortableOperationTimeout(client.from('file_attachments')
+      .select('id,bucket_id,storage_path,record_type,record_no,attachment_state,uploaded_by,tenant_id,data_environment')
+      .eq('tenant_id',pending.tenantId).eq('data_environment',pending.dataEnv)
+      .eq('bucket_id',SUPABASE_ATTACHMENT_BUCKET).in('storage_path',paths),
+      '確認申請附件歸檔資料',12000);
+    if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
+    if(!metadata||metadata.error)return{state:'unknown',reason:'attachment_metadata_unverified',error:metadata&&metadata.error};
+    var rows=metadata.data||[],byPath={};
+    rows.forEach(function(row){byPath[row.storage_path]=row;});
+    var missing=[];
+    for(var i=0;i<references.length;i++){
+      var item=references[i],row=byPath[item.path];
+      if(row&&(row.record_type!=='expense_requests'||String(row.record_no)!==String(pending.requestNo)
+        ||String(row.uploaded_by)!==String(S.user.id)||row.attachment_state!=='staged')){
+        return{state:'unknown',reason:'attachment_metadata_scope_or_claim_mismatch'};
+      }
+      var object=await withOperationTimeout(client.storage.from(SUPABASE_ATTACHMENT_BUCKET).exists(item.path),'確認申請附件檔案',12000);
+      if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
+      if(!object)return{state:'unknown',reason:'attachment_storage_unverified'};
+      var exists=object.data===true||!!(object.data&&object.data.exists===true);
+      var absent=object.data===false||!!(object.data&&object.data.exists===false);
+      var storageStatus=Number(object.error&&object.error.status||0);
+      if(object.error&&!(absent&&(storageStatus===400||storageStatus===404)))return{state:'unknown',reason:'attachment_storage_unverified',error:object.error};
+      if(!exists&&!absent)return{state:'unknown',reason:'attachment_storage_unverified'};
+      if(!row||absent)missing.push(item);
+    }
+    return{state:missing.length?'missing':'present',missing:missing};
+  }catch(error){return{state:'unknown',reason:'attachment_check_failed',error:error};}
+}
 function clearExpenseSubmissionPending(){
   var key=expenseSubmissionPendingStorageKey();
   S.nrSubmissionConfirmationPending=null;
+  S.nrExpenseRepairMessage=null;
   safeRemoveItem(key);sessionRemoveItem(key);
   refreshExpenseSubmissionRecoveryActions();
 }
@@ -23641,7 +23748,7 @@ async function finalizeRecoveredExpenseSubmission(pending,record,options){
   options=options||{};
   var identity=options.identity||expenseSubmissionOperationIdentity();
   if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
-  var pendingRecord=pending.retryRecord||pending.expected||{};
+  var pendingRecord=options.matchedExpected||pending.retryRecord||pending.expected||{};
   var recoveryRecord=Object.assign({},pendingRecord,record||{});
   var pendingPayload=pendingRecord.formPayload||{},committedPayload=record&&record.formPayload||{};
   recoveryRecord.formPayload=Object.assign({},pendingPayload,committedPayload);
@@ -23667,6 +23774,86 @@ async function finalizeRecoveredExpenseSubmission(pending,record,options){
   }
   return{state:'committed',record:record,outbox:outboxResult};
 }
+function replaceExpenseSubmissionAttachmentPath(record,oldPath,uploaded){
+  var replaced=0;
+  function visit(value){
+    if(!value||typeof value!=='object')return;
+    if(Array.isArray(value)){value.forEach(visit);return;}
+    if(['path','storagePath','storage_path'].some(function(key){return value[key]===oldPath;})){
+      var hadStoragePath=Object.prototype.hasOwnProperty.call(value,'storage_path');
+      Object.assign(value,uploaded,{url:'',path:uploaded.path,storagePath:uploaded.path,archivePath:uploaded.path});
+      if(hadStoragePath)value.storage_path=uploaded.path;
+      replaced++;
+    }
+    Object.keys(value).forEach(function(key){if(value[key]&&typeof value[key]==='object')visit(value[key]);});
+  }
+  visit(record);
+  return replaced;
+}
+function expenseRepairSelectedFileCheck(original,file){
+  var name=String(original&&original.name||''),size=num(original&&original.size),mime=String(original&&original.mime||'').toLowerCase();
+  if(name&&name!=='附件'&&String(file&&file.name||'').normalize('NFC')!==name.normalize('NFC'))return{ok:false,reason:'檔名'};
+  if(size>0&&num(file&&file.size)!==size)return{ok:false,reason:'檔案大小'};
+  if(mime&&mime!=='application/octet-stream'&&file&&file.type&&String(file.type).toLowerCase()!==mime)return{ok:false,reason:'檔案格式'};
+  return{ok:true,limited:!name||name==='附件'||!size||!mime||mime==='application/octet-stream'||!file.type};
+}
+var EXPENSE_REPAIR_FRESH_UPLOAD_PATHS={};
+async function cleanupUnclaimedExpenseRepairUploads(pending,identity){
+  var paths=pending&&pending.repairUploadedPaths||[];
+  if(!paths.length||!hasSupabase())return 0;
+  var originalPaths=expenseSubmissionAttachmentReferences(pending.expected).map(function(item){return item.path;});
+  var client=getSb(),cleaned=0;
+  for(var i=0;i<paths.length;i++){
+    var path=paths[i];
+    if(originalPaths.indexOf(path)>-1||!expenseSubmissionAttachmentPathInScope(path,pending))continue;
+    var createdHere=EXPENSE_REPAIR_FRESH_UPLOAD_PATHS[path];
+    if(!createdHere||Date.now()-createdHere>20*60*1000)continue;
+    if(!expenseSubmissionOperationCurrent(identity,pending.expected))return cleaned;
+    try{
+      var found=await withAbortableOperationTimeout(client.from('file_attachments')
+        .select('id,attachment_state,uploaded_by,record_type,record_no')
+        .eq('tenant_id',pending.tenantId).eq('data_environment',pending.dataEnv)
+        .eq('bucket_id',SUPABASE_ATTACHMENT_BUCKET).eq('storage_path',path).limit(1),
+        '確認修復附件清理範圍',12000);
+      if(found.error)throw found.error;
+      var row=found.data&&found.data[0];
+      if(!row||row.attachment_state!=='staged'||String(row.uploaded_by)!==String(S.user.id)
+        ||row.record_type!=='expense_requests'||String(row.record_no)!==String(pending.requestNo))continue;
+      // Removing metadata first prevents a concurrent claim from becoming a
+      // deleted object.  Storage permits the subsequent object removal only
+      // while its server-side created_at is within 30 minutes.
+      var info=await withOperationTimeout(client.storage.from(SUPABASE_ATTACHMENT_BUCKET).info(path),'確認新修復附件建立時間',12000);
+      if(info.error)throw info.error;
+      var createdAt=Date.parse(info.data&&info.data.createdAt||'');
+      if(!isFinite(createdAt)||Date.now()-createdAt<0||Date.now()-createdAt>20*60*1000)continue;
+      var removed=await withAbortableOperationTimeout(client.from('file_attachments').delete()
+        .eq('id',row.id).eq('tenant_id',pending.tenantId).eq('data_environment',pending.dataEnv)
+        .eq('uploaded_by',S.user.id).eq('attachment_state','staged').select('id'),
+        '清理未綁定修復附件資料',12000);
+      if(removed.error)throw removed.error;
+      if(!removed.data||!removed.data.length)continue; // It was claimed concurrently.
+      var object=await withOperationTimeout(client.storage.from(SUPABASE_ATTACHMENT_BUCKET).remove([path]),'清理未綁定修復附件檔案',12000);
+      if(object&&object.error)throw object.error;
+      delete EXPENSE_REPAIR_FRESH_UPLOAD_PATHS[path];
+      cleaned++;
+    }catch(error){
+      stagedAttachmentCleanupDiagnostic('expense_repair_staged_cleanup_failed','修復附件清理未完成',formatStorageUploadError(error),{recordId:pending.requestId,storagePath:path});
+    }
+  }
+  return cleaned;
+}
+function retainExpenseRepairUploadsAfterIdentityChange(storageKey,pending,uploaded){
+  var paths=(uploaded||[]).map(function(item){return item&&item.path||'';}).filter(Boolean);
+  if(!paths.length)return;
+  try{
+    var saved=JSON.parse(sessionGetItem(storageKey)||'null');
+    if(saved&&saved.requestId===pending.requestId&&saved.attemptId===pending.attemptId){
+      saved.unconfirmedRepairUploads=Array.from(new Set((saved.unconfirmedRepairUploads||[]).concat(paths)));
+      if(sessionSetItem(storageKey,JSON.stringify(saved)))return;
+    }
+  }catch(_){ }
+  console.warn('Expense repair upload completed after identity changed; keep staged attachment for original owner or administrator review.',pending.requestId,paths);
+}
 async function reconcilePendingExpenseSubmission(options){
   options=options||{};
   var identity=expenseSubmissionOperationIdentity();
@@ -23674,10 +23861,18 @@ async function reconcilePendingExpenseSubmission(options){
   if(!pending||!pending.expected||!pending.requestId)return{state:'none'};
   var current=function(){return expenseSubmissionOperationCurrent(identity,pending.expected)&&String(pending.tenantId||'')===String(currentTenantId())&&String(pending.dataEnv||'')===String(activeDataEnvironment())&&(!S.nrSubmissionConfirmationPending||S.nrSubmissionConfirmationPending.requestId===pending.requestId&&S.nrSubmissionConfirmationPending.attemptId===pending.attemptId);};
   if(!current())return expenseSubmissionIdentityChanged();
-  var readback=await readExpenseSubmissionCommitWithDelays(pending.expected,options.delays||[0,1000,2500]);
+  var alternatives=(pending.repairSnapshots||[]).concat(pending.repairRecord?[pending.repairRecord]:[]);
+  var readback=await readExpenseSubmissionCommitWithDelays(pending.expected,options.delays||[0,1000,2500],alternatives,pending.repairAttemptIds||[]);
   if(!current()||readback.identityChanged)return expenseSubmissionIdentityChanged();
+  if(Array.isArray(pending.unconfirmedRepairUploads)&&pending.unconfirmedRepairUploads.length){
+    await cleanupUnclaimedExpenseRepairUploads(Object.assign({},pending,{repairUploadedPaths:pending.unconfirmedRepairUploads}),identity);
+    if(!current())return expenseSubmissionIdentityChanged();
+  }
   if(readback.state==='committed'){
     mergeCommittedExpenseRequest(readback.record);
+    if(pending.repairRecord&&readback.matchedExpected!==pending.repairRecord)await cleanupUnclaimedExpenseRepairUploads(pending,identity);
+    if(!current())return expenseSubmissionIdentityChanged();
+    options=Object.assign({},options,{matchedExpected:readback.matchedExpected});
     return await finalizeRecoveredExpenseSubmission(pending,readback.record,Object.assign({},options,{identity:identity}));
   }
   if(readback.state==='absent'){
@@ -23687,14 +23882,52 @@ async function reconcilePendingExpenseSubmission(options){
       if(!await guardSubmissionIdentityDirectory('確認前次費用申請'))return{state:'unknown',pending:pending,reason:'directory_unavailable_retry_deferred'};
       if(!current())return expenseSubmissionIdentityChanged();
     }
-    var retryOutcome=await submitExpenseRequestWithAmbiguousRecovery(pending.retryRecord,'待確認申請原識別重試');
+    var attachments=await verifyPendingExpenseAttachmentPaths(pending,pending.retryRecord,identity);
+    if(!current()||attachments.identityChanged)return expenseSubmissionIdentityChanged();
+    if(attachments.state==='unknown')return{state:'unknown',pending:pending,reason:attachments.reason,error:attachments.error};
+    if(attachments.state==='missing'){
+      var missingPending=JSON.parse(JSON.stringify(pending));
+      missingPending.repairMissing=attachments.missing;
+      if(!persistExpenseSubmissionPendingUpdate(pending,missingPending))return{state:'unknown',pending:pending,reason:'repair_state_not_durable'};
+      return{state:'attachment_missing',pending:missingPending,missing:attachments.missing};
+    }
+    var retryOutcome=await submitExpenseRequestWithAmbiguousRecovery(pending.retryRecord,'待確認申請原識別重試',{previouslyDispatched:true});
     if(!current()||retryOutcome.identityChanged)return expenseSubmissionIdentityChanged();
     if(retryOutcome.ok){
+      if(pending.repairRecord){
+        var repairedReadback=await readExpenseSubmissionCommitWithDelays(pending.expected,[0,350,1000,2500],alternatives,pending.repairAttemptIds||[]);
+        if(!current()||repairedReadback.identityChanged)return expenseSubmissionIdentityChanged();
+        if(repairedReadback.state!=='committed')return{state:'unknown',pending:pending,reason:'repaired_commit_unverified',error:repairedReadback.error};
+        if(repairedReadback.matchedExpected!==pending.repairRecord)await cleanupUnclaimedExpenseRepairUploads(pending,identity);
+        if(!current())return expenseSubmissionIdentityChanged();
+        var verified=await finalizeRecoveredExpenseSubmission(pending,repairedReadback.record,Object.assign({},options,{identity:identity,matchedExpected:repairedReadback.matchedExpected}));
+        verified.retried=true;
+        return verified;
+      }
       var responseRow=retryOutcome.result&&retryOutcome.result.data&&retryOutcome.result.data.row?mapReq(retryOutcome.result.data.row):null;
       var committed=mergeCommittedExpenseRequest(responseRow||retryOutcome.record||pending.retryRecord);
       var finalized=await finalizeRecoveredExpenseSubmission(pending,committed,Object.assign({},options,{identity:identity}));
       finalized.retried=true;
       return finalized;
+    }
+    if(pending.repairRecord||String(supabaseAuthErrorInfo(retryOutcome.error).code||'')==='55000'){
+      var conflictReadback=await readExpenseSubmissionCommitWithDelays(pending.expected,[0,350,1000,2500],alternatives,pending.repairAttemptIds||[]);
+      if(!current()||conflictReadback.identityChanged)return expenseSubmissionIdentityChanged();
+      if(conflictReadback.state==='committed'){
+        if(pending.repairRecord&&conflictReadback.matchedExpected!==pending.repairRecord)await cleanupUnclaimedExpenseRepairUploads(pending,identity);
+        if(!current())return expenseSubmissionIdentityChanged();
+        return await finalizeRecoveredExpenseSubmission(pending,conflictReadback.record,Object.assign({},options,{identity:identity,matchedExpected:conflictReadback.matchedExpected}));
+      }
+      if(pending.repairRecord)return{state:'unknown',pending:pending,reason:'repaired_retry_unverified',error:retryOutcome.error};
+      if(conflictReadback.state==='absent'){
+        var afterClaimFailure=await verifyPendingExpenseAttachmentPaths(pending,pending.retryRecord,identity);
+        if(!current()||afterClaimFailure.identityChanged)return expenseSubmissionIdentityChanged();
+        if(afterClaimFailure.state==='missing'){
+          var claimPending=JSON.parse(JSON.stringify(pending));
+          claimPending.repairMissing=afterClaimFailure.missing;
+          if(persistExpenseSubmissionPendingUpdate(pending,claimPending))return{state:'attachment_missing',pending:claimPending,missing:afterClaimFailure.missing};
+        }
+      }
     }
     if(!retryOutcome.unknown){
       if(options.retainAttachmentsOnFailure!==true){
@@ -23732,6 +23965,9 @@ window.confirmPendingExpenseSubmission=async function(){
     if(result.state==='committed'){
       completeActionFeedback('已確認前次申請','正式申請已建立；不需再次送件。');
       openApprovalTab('mine');
+    }else if(result.state==='attachment_missing'){
+      failActionFeedback('原附件需要重新選取','請在待確認區逐一選取缺少的原始檔案，再按上傳確認。');
+      S.nrExpenseRepairMessage={requestId:pending.requestId,attemptId:pending.attemptId,text:'正式申請尚未建立。請重新選取下列原始附件，再按「上傳缺少附件並確認原申請」。'};
     }else if(result.state==='deterministic_failure'){
       failActionFeedback('前次申請未建立','原送件識別碼與已上傳附件已保留，請聯絡系統管理員處理。');
       alert('已確認前次送件尚未建立正式申請。系統保留原送件識別碼與附件，請勿另開新申請或重新上傳；請將畫面上的事件識別提供給系統管理員處理，再於原帳號、原瀏覽器按「確認前次送件」。');
@@ -23747,13 +23983,125 @@ window.confirmPendingExpenseSubmission=async function(){
     refreshExpenseSubmissionRecoveryActions();
   }
 };
-async function submitExpenseRequestWithAmbiguousRecovery(record,label){
+window.repairPendingExpenseSubmission=async function(){
+  if(S.nrSubmitting)return;
+  var pending=loadExpenseSubmissionPending();
+  if(!pending||!Array.isArray(pending.repairMissing)||!pending.repairMissing.length)return;
+  var identity=expenseSubmissionOperationIdentity();
+  if(!expenseSubmissionOperationCurrent(identity,pending.expected))return;
+  var pendingStorageKey=expenseSubmissionPendingStorageKey();
+  var selections=[];
+  for(var i=0;i<pending.repairMissing.length;i++){
+    var input=el('expense-repair-file-'+i),file=input&&input.files&&input.files[0];
+    if(!file){S.nrExpenseRepairMessage={requestId:pending.requestId,attemptId:pending.attemptId,text:'請逐一選取畫面列出的原始附件；先前暫存的檔名不能代替檔案內容。'};refreshExpenseSubmissionRecoveryActions();return;}
+    selections.push(file);
+  }
+  var uploaded=[];
+  S.nrSubmitting=true;
+  try{
+    showActionFeedback('正在確認並修復前次附件','會先查原申請與附件狀態，再使用同一張單號送出。');
+    var alternatives=(pending.repairSnapshots||[]).concat(pending.repairRecord?[pending.repairRecord]:[]);
+    var readback=await readExpenseSubmissionCommitWithDelays(pending.expected,[0,1000,2500],alternatives,pending.repairAttemptIds||[]);
+    if(!expenseSubmissionOperationCurrent(identity,pending.expected)||readback.identityChanged)return;
+    if(readback.state==='committed'){
+      if(pending.repairRecord&&readback.matchedExpected!==pending.repairRecord)await cleanupUnclaimedExpenseRepairUploads(pending,identity);
+      if(!expenseSubmissionOperationCurrent(identity,pending.expected))return;
+      await finalizeRecoveredExpenseSubmission(pending,readback.record,{identity:identity,matchedExpected:readback.matchedExpected,notify:true});
+      completeActionFeedback('已確認前次申請','正式申請已建立；不需再次上傳。');
+      openApprovalTab('mine');
+      return;
+    }
+    if(readback.state!=='absent')throw new Error('原申請單的正式結果尚無法確認，系統沒有上傳或重送。');
+    if(!await guardSubmissionIdentityDirectory('修復前次費用申請'))throw new Error('申請身分資料暫時無法確認，系統沒有上傳或重送。');
+    if(!expenseSubmissionOperationCurrent(identity,pending.expected))return;
+    var checked=await verifyPendingExpenseAttachmentPaths(pending,pending.retryRecord,identity);
+    if(!expenseSubmissionOperationCurrent(identity,pending.expected)||checked.identityChanged)return;
+    if(checked.state==='unknown')throw new Error('附件歸檔資料或檔案區暫時無法確認，系統沒有上傳或重送。');
+    if(checked.state!=='missing'){
+      var healthyResult=await reconcilePendingExpenseSubmission({notify:true,allowRetry:true,retainAttachmentsOnFailure:true,requireDirectoryForRetry:true});
+      if(healthyResult.state==='committed')openApprovalTab('mine');
+      return;
+    }
+    if(checked.missing.length!==pending.repairMissing.length||checked.missing.some(function(item,j){return item.path!==pending.repairMissing[j].path;})){
+      var changed=JSON.parse(JSON.stringify(pending));changed.repairMissing=checked.missing;
+      if(!persistExpenseSubmissionPendingUpdate(pending,changed))throw new Error('附件查核結果無法安全保存，系統沒有上傳或重送。');
+      throw new Error('缺少的附件清單已改變。請按畫面重新選取對應的原始檔案。');
+    }
+    var limitedEvidence=false;
+    for(var checkIndex=0;checkIndex<checked.missing.length;checkIndex++){
+      var fileCheck=expenseRepairSelectedFileCheck(checked.missing[checkIndex],selections[checkIndex]);
+      if(!fileCheck.ok)throw new Error('第 '+(checkIndex+1)+' 個選取檔案的'+fileCheck.reason+'與原附件紀錄不同。請重新選取同一份原始憑據；系統沒有上傳或重送。');
+      if(fileCheck.limited)limitedEvidence=true;
+    }
+    if(!confirm('請確認所選的 '+selections.length+' 個檔案確實是原申請的原始憑據。'
+      +(limitedEvidence?'部分原附件缺少可比對的檔名、大小或格式；':'檔名、大小與格式已和原紀錄比對；')
+      +'系統沒有原檔內容雜湊，無法自動證明內容相同。確認後才會上傳到原單號。'))return;
+    var repaired=JSON.parse(JSON.stringify(pending.retryRecord));
+    for(var j=0;j<checked.missing.length;j++){
+      var missing=checked.missing[j],prepared=await fileToAttachment(selections[j],{directLarge:true});
+      prepared.kind=missing.kind;
+      var fresh=await uploadAttachmentsToSupabase([prepared],{recordType:'expense_requests',recordNo:pending.requestNo,kind:missing.kind||'request_files',date:repaired.date||todayIso(),entityId:repaired.eid,departmentCode:repaired.dc});
+      if(!fresh[0]||!fresh[0].__uploadCreatedThisAttempt)throw new Error('新附件沒有確認實際上傳，系統已停止修復。');
+      uploaded.push(fresh[0]);
+      EXPENSE_REPAIR_FRESH_UPLOAD_PATHS[fresh[0].path]=Date.now();
+      if(!expenseSubmissionOperationCurrent(identity,pending.expected)){
+        retainExpenseRepairUploadsAfterIdentityChange(pendingStorageKey,pending,uploaded);
+        return;
+      }
+      if(!replaceExpenseSubmissionAttachmentPath(repaired,missing.path,fresh[0]))throw new Error('原附件位置已變更，系統已停止修復。');
+    }
+    var previousAttempt=String((pending.retryRecord.formPayload||{}).submissionAttemptId||pending.attemptId||'');
+    var newAttempt='expense_submit_'+membershipOrgDraftUuid();
+    repaired.formPayload=Object.assign({},repaired.formPayload||{},{
+      submissionAttemptId:newAttempt,submissionStartedAt:new Date().toISOString(),
+      attachmentRecovery:{previousAttemptId:previousAttempt,reselectedCount:checked.missing.length,source:'employee_file_reselect'}
+    });
+    var next=JSON.parse(JSON.stringify(pending));
+    next.repairSnapshots=(pending.repairSnapshots||[]).map(function(item){return JSON.parse(JSON.stringify(item));});
+    if(pending.repairRecord)next.repairSnapshots.push(JSON.parse(JSON.stringify(pending.repairRecord)));
+    next.repairRecord=JSON.parse(JSON.stringify(repaired));
+    next.retryRecord=JSON.parse(JSON.stringify(repaired));
+    next.repairAttemptIds=(pending.repairAttemptIds||[]).concat([newAttempt]);
+    next.repairUploadedPaths=(pending.repairUploadedPaths||[]).concat(uploaded.map(function(item){return item.path;}));
+    delete next.repairMissing;
+    if(!persistExpenseSubmissionPendingUpdate(pending,next))throw new Error('修復內容無法同時安全保存，系統沒有重送；請稍後再試。');
+    uploaded=[]; // The durable pending now owns these staged paths.
+    var result=await reconcilePendingExpenseSubmission({notify:true,allowRetry:true,retainAttachmentsOnFailure:true,requireDirectoryForRetry:true});
+    if(!expenseSubmissionOperationCurrent(identity,pending.expected))return;
+    if(result.state==='committed'){
+      S.nrExpenseRepairMessage=null;
+      completeActionFeedback('原申請已完成','正式申請已用原單號建立。');
+      openApprovalTab('mine');
+    }else if(result.state==='attachment_missing'){
+      failActionFeedback('附件仍需確認','請依待確認區的新清單重新選取。');
+      S.nrExpenseRepairMessage={requestId:pending.requestId,attemptId:pending.attemptId,text:'部分附件仍無法確認。原單號及兩次送件識別已保留，請依下列清單重新選取。'};
+    }else{
+      failActionFeedback('修復結果待確認','申請識別與新附件已保留，請稍後確認前次送件。');
+      S.nrExpenseRepairMessage={requestId:pending.requestId,attemptId:pending.attemptId,text:'修復結果仍待確認。原單號、兩份送件內容及新附件已保留；請稍後按「確認前次送件」。'};
+    }
+  }catch(error){
+    if(uploaded.length)await cleanupUnclaimedExpenseRepairUploads({tenantId:pending.tenantId,dataEnv:pending.dataEnv,requestId:pending.requestId,requestNo:pending.requestNo,expected:pending.expected,repairUploadedPaths:uploaded.map(function(item){return item.path;})},identity);
+    if(!expenseSubmissionOperationCurrent(identity,pending.expected))return;
+    failActionFeedback('修復暫停',String(error&&error.message||'請稍後再試。'));
+    S.nrExpenseRepairMessage={requestId:pending.requestId,attemptId:pending.attemptId,text:String(error&&error.message||'附件修復暫時無法完成，原待確認資料仍保留。')};
+  }finally{
+    S.nrSubmitting=false;
+    refreshExpenseSubmissionRecoveryActions();
+  }
+};
+async function submitExpenseRequestWithAmbiguousRecovery(record,label,options){
+  options=options||{};
   var identity=expenseSubmissionOperationIdentity();
   if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
   var first=await callExpenseSubmissionOnce(record,label||'申請單保存');
   if(!expenseSubmissionOperationCurrent(identity,record)||first.identityChanged)return expenseSubmissionIdentityChanged();
   if(first&&first.ok)return{ok:true,result:first,record:record};
   var firstError=first&&first.error?first.error:new Error('申請單交易沒有回傳成功狀態');
+  // PostgreSQL's explicit statement cancellation rolls back this transaction.
+  // Only a brand-new dispatch has no earlier unknown commit to reconcile.
+  if(!options.previouslyDispatched&&expenseSubmissionStatementCanceled(firstError)){
+    return{ok:false,error:firstError,result:first,confirmedRollback:true};
+  }
   if(!expenseApplicantRevisionRpcErrorIsAmbiguous(firstError))return{ok:false,error:firstError,result:first};
   var readback=await readExpenseSubmissionCommitWithDelays(record,[350,1000]);
   if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
@@ -25849,6 +26197,7 @@ window.openDetail=function(rid){
   if(r.status==='pending_voucher'&&canActRequest(r))acts.push('<div style="min-width:260px;max-width:460px;flex:1">'+advanceFinalAmtField+approvalActionFields('detail-appr-c','detail-appr-files','detail-appr-add-user',{excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\',\'detail-appr\',\'detail-advance-final\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn);
   var revisionRecovery=expenseRevisionRecoveryHtml(r);if(revisionRecovery)acts=[revisionRecovery];
   var postingRecovery=expensePostingRecoveryHtml(r);if(postingRecovery)acts=[postingRecovery];
+  var procurementRecovery=procurementSubmissionRecoveryHtml(r);if(procurementRecovery)acts=[procurementRecovery];
   if(r.voucherId)acts.push('<button class="btn-g" onclick="showVoucherById(\''+r.voucherId+'\')">查看傳票 '+r.voucherId+'</button>');
   if(!laborMarker&&canWithdrawRequest(r)&&(!curStep||curStep.rk!=='applicant_revision'))acts.push('<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button>');
   if(!laborMarker&&requestCashPostedAt(r))acts.push(paymentConcernButtonHtml(r));
@@ -29593,10 +29942,169 @@ window.apprRejectBill=async function(id){
   if(!rejected){buildBills();buildApprovals();return;}
   buildBills();buildApprovals();closeAppr();
 };
+var PROCUREMENT_SUBMISSION_PENDING_PREFIX='finance_procurement_submission_pending_v1:';
+var PROCUREMENT_SUBMISSION_RUNNING={};
+function procurementSubmissionOwner(){return expenseSubmissionOperationIdentity();}
+function procurementSubmissionPendingKey(rid){return PROCUREMENT_SUBMISSION_PENDING_PREFIX+procurementSubmissionOwner()+':'+String(rid||'');}
+function procurementSubmissionFrozenKey(rid){return procurementSubmissionPendingKey(rid)+':frozen';}
+function loadProcurementSubmissionPending(rid){
+  var owner=procurementSubmissionOwner();if(!owner)return null;
+  var raw=safeGetItem(procurementSubmissionPendingKey(rid));if(!raw)return null;
+  var pending;
+  try{pending=JSON.parse(raw);}catch(_){throw new Error('前次採購送件識別碼無法讀取，請聯絡系統管理員核對原單，勿重複送出。');}
+  if(!pending||pending.owner!==owner||String(pending.requestId)!==String(rid)||['payment','actual'].indexOf(pending.kind)<0||typeof pending.operationId!=='string'||!pending.operationId||!Array.isArray(pending.operationIds)||pending.operationIds.length<1||pending.operationIds.length>8||pending.operationIds.indexOf(pending.operationId)<0||!pending.originalRoleKey){
+    throw new Error('前次採購送件識別碼不完整，請聯絡系統管理員核對原單，勿重複送出。');
+  }
+  return pending;
+}
+function loadProcurementSubmissionFrozen(rid,pending){
+  var raw=sessionGetItem(procurementSubmissionFrozenKey(rid));if(!raw)return null;
+  try{
+    var frozen=JSON.parse(raw);
+    return frozen&&frozen.owner===pending.owner&&frozen.requestId===pending.requestId&&frozen.operationId===pending.operationId&&frozen.kind===pending.kind&&frozen.values&&typeof frozen.values==='object'?frozen:null;
+  }catch(_){return null;}
+}
+function saveProcurementSubmissionPending(rid,kind,operationId,beforeRequest,values,files){
+  var owner=procurementSubmissionOwner();if(!owner)return null;
+  if(!operationId)return null;
+  var previous=loadProcurementSubmissionPending(rid);
+  if(previous&&!previous.reenter)return null;
+  var operationIds=previous?previous.operationIds.concat(operationId):[operationId];
+  if(operationIds.length>8)return null;
+  var currentStep=activeStep(beforeRequest);
+  var pending={owner:owner,requestId:String(rid),kind:kind,operationId:operationId,operationIds:operationIds,
+    originalStep:beforeRequest.step,originalStatus:beforeRequest.status,originalRoleKey:currentStep&&currentStep.rk||'',
+    startedAt:new Date().toISOString(),reenter:false};
+  var frozen={owner:owner,requestId:String(rid),kind:kind,operationId:operationId,values:values,files:files||[]};
+  if(!pending.originalRoleKey||!sessionSetItem(procurementSubmissionFrozenKey(rid),JSON.stringify(frozen)))return null;
+  if(!safeSetItem(procurementSubmissionPendingKey(rid),JSON.stringify(pending))){sessionRemoveItem(procurementSubmissionFrozenKey(rid));return null;}
+  return pending;
+}
+function clearProcurementSubmissionPending(rid){safeRemoveItem(procurementSubmissionPendingKey(rid));sessionRemoveItem(procurementSubmissionFrozenKey(rid));}
+function procurementSubmissionRecoveryHtml(r){
+  if(!r||r.type!=='purchase_request')return '';
+  var pending;
+  try{pending=loadProcurementSubmissionPending(r.id);}catch(error){return '<div role="status" class="ux-health-card warn">'+escAttr(error.message)+'</div>';}
+  if(!pending)return '';
+  if(pending.reenter)return '';
+  return '<div role="status" class="ux-health-card warn"><strong>前次採購資料送出待確認</strong><div style="margin:7px 0">原識別碼與已上傳附件保留。先核對原單；若仍停在同一關，可安全重試原內容或重新填寫此關。</div><button type="button" class="btn-p" onclick="confirmPendingProcurementSubmission('+financeInlineJsString(r.id)+')">確認或重試原送件</button> <button type="button" class="btn-s" onclick="resumeProcurementSubmissionFromOriginalStep('+financeInlineJsString(r.id)+')">重新填寫同一關</button></div>';
+}
+async function reconcilePendingProcurementSubmission(rid){
+  var pending=loadProcurementSubmissionPending(rid);if(!pending)return{state:'none'};
+  var owner=pending.owner,response;
+  try{
+    response=await withAbortableOperationTimeout(getSb().from('expense_requests').select('*')
+      .eq('id',rid).eq('tenant_id',currentTenantId()).eq('data_environment',activeDataEnvironment()).limit(2),'核對原採購送件',10000);
+  }catch(error){return{state:'unknown',error:error};}
+  if(owner!==procurementSubmissionOwner())return{state:'identity_changed'};
+  if(!response||response.error||!Array.isArray(response.data)||response.data.length!==1)return{state:'unknown',error:response&&response.error};
+  var row=response.data[0],payload=row.form_payload||{};
+  var recorded=pending.kind==='payment'?(payload.procurementPaymentInfo||{}).operationId:(payload.procurementReceiptInfo||{}).operationId;
+  if(pending.operationIds.indexOf(String(recorded||''))>-1){
+    try{mergeCommittedExpenseRequest(row);}catch(error){return{state:'unknown',error:error};}
+    clearProcurementSubmissionPending(rid);
+    buildAll();if(S.detailRid===rid)openDetail(rid);
+    return{state:'committed',record:row};
+  }
+  var mapped,currentStep;
+  try{mapped=mapReq(row);currentStep=activeStep(mapped);}catch(error){return{state:'unknown',error:error};}
+  if(mapped.step===pending.originalStep&&mapped.status===pending.originalStatus&&currentStep&&currentStep.rk===pending.originalRoleKey)return{state:'original_step',record:row};
+  return{state:'unknown'};
+}
+window.confirmPendingProcurementSubmission=async function(rid){
+  if(PROCUREMENT_SUBMISSION_RUNNING[rid])return false;
+  PROCUREMENT_SUBMISSION_RUNNING[rid]=true;
+  try{
+    var outcome=await reconcilePendingProcurementSubmission(rid);
+    if(outcome.state==='original_step'){
+      var pending=loadProcurementSubmissionPending(rid),frozen=loadProcurementSubmissionFrozen(rid,pending);
+      if(!frozen)alert('原瀏覽器分頁的送件內容已不在此分頁。請按「重新填寫同一關」，核對最新原單後再送出。');
+      else{
+        var result;
+        try{result=await withOperationTimeout(dbUpdate('expense_requests',rid,frozen.values),'重試原採購送件',15000);}
+        catch(error){result={ok:false,error:error,uncertain:true};}
+        outcome=await reconcilePendingProcurementSubmission(rid);
+        if(outcome.state!=='committed')alert('原採購送件仍待確認。已保留同一識別碼與附件，請稍後再確認；勿另建新單。');
+      }
+    }
+    if(outcome.state==='committed')alert('前次採購資料已正式送出，畫面已更新。');
+    else if(outcome.state==='identity_changed')alert('登入身分已變更，請用原帳號確認前次採購送件。');
+    else if(outcome.state==='unknown')alert('前次採購送件結果仍待確認。原識別碼與附件已保留；請稍後再按「確認前次結果」，勿重新上傳或送出。');
+    return outcome.state==='committed';
+  }catch(error){alert(error.message||'前次採購送件結果待確認。');return false;}
+  finally{delete PROCUREMENT_SUBMISSION_RUNNING[rid];}
+};
+window.resumeProcurementSubmissionFromOriginalStep=async function(rid){
+  if(PROCUREMENT_SUBMISSION_RUNNING[rid])return false;
+  PROCUREMENT_SUBMISSION_RUNNING[rid]=true;
+  try{
+    var outcome=await reconcilePendingProcurementSubmission(rid);
+    if(outcome.state==='committed')return true;
+    if(outcome.state!=='original_step'){alert('尚無法確認原採購關卡未前進，請稍後再確認原送件結果。');return false;}
+    var pending=loadProcurementSubmissionPending(rid);
+    pending.reenter=true;
+    if(!safeSetItem(procurementSubmissionPendingKey(rid),JSON.stringify(pending))){alert('無法保存原送件識別碼，請保留此頁並聯絡系統管理員。');return false;}
+    mergeCommittedExpenseRequest(outcome.record);buildAll();openDetail(rid);
+    alert('請核對最新原單，重新填寫此關後送出。系統會保留前次識別碼，若前次操作稍後完成會自動核對。');
+    return true;
+  }catch(error){alert(error.message||'前次採購送件結果待確認。');return false;}
+  finally{delete PROCUREMENT_SUBMISSION_RUNNING[rid];}
+};
+async function withProcurementSubmissionLock(rid,action){
+  if(PROCUREMENT_SUBMISSION_RUNNING[rid]){alert('這筆採購資料正在送出或確認，請稍候。');return false;}
+  PROCUREMENT_SUBMISSION_RUNNING[rid]=true;
+  try{return await action();}finally{delete PROCUREMENT_SUBMISSION_RUNNING[rid];}
+}
+function procurementSubmissionDefinitivelyRejected(result){
+  var code=String(result&&result.error&&result.error.code||'').toUpperCase();
+  return !!(result&&result.zeroRows)||['42501','23514','55000','22P02','23503'].indexOf(code)>-1;
+}
+async function persistProcurementSubmission(rid,kind,record,beforeRequest,values,files,label){
+  var requestIndex=REQS.findIndex(function(row){return row.id===rid;});
+  var detail=kind==='payment'?(record.formPayload||{}).procurementPaymentInfo:(record.formPayload||{}).procurementReceiptInfo;
+  var operationId=detail&&detail.operationId;
+  var pending=saveProcurementSubmissionPending(rid,kind,operationId,beforeRequest,values,files);
+  if(!pending){
+    if(requestIndex>-1)REQS[requestIndex]=beforeRequest;
+    await cleanupApprovalFilesAfterDefiniteFailure(newlyUploadedAttachmentResults(files||[]),label+'送出前清理');
+    alert('瀏覽器無法保存採購送件復原識別碼，這次尚未送出；請確認瀏覽器儲存空間後再試。');
+    buildAll();openDetail(rid);return false;
+  }
+  var result;
+  try{result=await withOperationTimeout(dbUpdate('expense_requests',rid,values),label,15000);}
+  catch(error){result={ok:false,error:error,uncertain:true};}
+  if(pending.owner!==procurementSubmissionOwner())return false;
+  if(result&&result.ok===true){clearProcurementSubmissionPending(rid);return true;}
+  if(!result||result.uncertain||!procurementSubmissionDefinitivelyRejected(result)){
+    var confirmed=await reconcilePendingProcurementSubmission(rid);
+    if(confirmed.state==='committed')return true;
+    if(confirmed.state==='identity_changed')return false;
+    if(requestIndex>-1)REQS[requestIndex]=beforeRequest;
+    alert('採購資料送出結果待確認。原識別碼與已上傳附件保留；請在原單按「確認前次結果」，勿重新上傳或重送。');
+    buildAll();openDetail(rid);
+    return false;
+  }
+  if(pending.operationIds.length>1){
+    var earlier=await reconcilePendingProcurementSubmission(rid);
+    if(earlier.state==='committed')return true;
+    if(earlier.state==='identity_changed')return false;
+    if(requestIndex>-1)REQS[requestIndex]=beforeRequest;
+    alert('這次採購送件未完成，前次送件仍待核對；附件與識別碼已保留，請確認原單結果。');
+    buildAll();openDetail(rid);return false;
+  }
+  clearProcurementSubmissionPending(rid);
+  if(requestIndex>-1)REQS[requestIndex]=beforeRequest;
+  await cleanupApprovalFilesAfterDefiniteFailure(newlyUploadedAttachmentResults(files||[]),label+'失敗清理');
+  recordApprovalWriteFailure(label,beforeRequest,result);
+  buildAll();openDetail(rid);return false;
+}
 window.submitProcurementPaymentInfo=async function(rid,prefix){
+  return withProcurementSubmissionLock(rid,async function(){
   prefix=prefix||'proc';
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
-  var requestIndex=REQS.indexOf(r),beforeRequest=cloneSettingValue(r);
+  try{var previous=loadProcurementSubmissionPending(rid);if(previous){var prior=await reconcilePendingProcurementSubmission(rid);if(prior.state==='committed'){alert('前次採購資料已正式送出，畫面已更新。');return false;}if(!previous.reenter||prior.state!=='original_step'){alert('前次採購資料仍待確認，請在原單先按「確認或重試原送件」。');return false;}r=mergeCommittedExpenseRequest(prior.record);}}
+  catch(pendingError){alert(pendingError.message);return false;}
+  var beforeRequest=cloneSettingValue(r);
   var cur=activeStep(r);
   if(!canActRequest(r)||r.status!=='pending_procurement'||!cur||cur.rk!=='procurement_payment'){alert('目前不是總務填寫付款資料關卡');return;}
   var info=collectProcurementPaymentInfo(prefix);
@@ -29611,6 +30119,7 @@ window.submitProcurementPaymentInfo=async function(rid,prefix){
   var p=await approvalActionPayload(prefix+'-c',prefix+'-files',prefix+'-add-user');
   if(p.addUid){alert('總務付款資料送出不能同時加簽。請先送出資料，再由下一位簽核人提出加簽。');return;}
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'procurement_payment');
+  var operationId=membershipOrgDraftUuid();
   r.estimatedAmt=info.amount;
   r.amt=info.amount;
   r.payee=info.payee;
@@ -29636,6 +30145,7 @@ window.submitProcurementPaymentInfo=async function(rid,prefix){
       filledAt:new Date().toISOString()
     }),
     procurementPaymentInfo:{
+      operationId:operationId,
       amount:info.amount,
       payee:info.payee,
       bankType:info.bankType,
@@ -29650,7 +30160,7 @@ window.submitProcurementPaymentInfo=async function(rid,prefix){
     }
   });
   approveActiveStep(r,'approved',p.comment||('總務填寫預估付款資料 '+fmt(info.amount)),p.files,p.addUid);
-  var paymentWrite=await dbUpdate('expense_requests',rid,{
+  var paymentValues={
     amount:r.amt,
     estimated_amount:r.estimatedAmt,
     payee:r.payee,
@@ -29666,22 +30176,22 @@ window.submitProcurementPaymentInfo=async function(rid,prefix){
     step:r.step,
     steps:r.steps,
     form_payload:r.formPayload||{}
-  });
-  if(!settingsWriteResultOk(paymentWrite)){
-    if(requestIndex>-1)REQS[requestIndex]=beforeRequest;
-    await cleanupUploadedSupabaseAttachments([p.files||[]],'總務付款資料寫入失敗清理');
-    recordApprovalWriteFailure('送出總務付款資料',beforeRequest,paymentWrite);
-    buildAll();openDetail(rid);return;
-  }
-  await rememberPayeeBankAccount(info,[]);
+  };
+  if(!await persistProcurementSubmission(rid,'payment',r,beforeRequest,paymentValues,p.files,'送出總務付款資料'))return false;
+  try{await rememberPayeeBankAccount(info,[]);}catch(error){console.warn('採購付款資料已送出，但常用帳號未同步',error);}
   buildAll();openDetail(rid);
+  });
 };
 window.submitProcurementActual=async function(rid,prefix){
   prefix=prefix||'proc';
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
-  var requestIndex=REQS.indexOf(r),beforeRequest=cloneSettingValue(r);
   var cur=activeStep(r);
   if(cur&&cur.rk==='procurement_payment')return window.submitProcurementPaymentInfo(rid,prefix);
+  return withProcurementSubmissionLock(rid,async function(){
+  try{var previous=loadProcurementSubmissionPending(rid);if(previous){var prior=await reconcilePendingProcurementSubmission(rid);if(prior.state==='committed'){alert('前次採購資料已正式送出，畫面已更新。');return false;}if(!previous.reenter||prior.state!=='original_step'){alert('前次採購資料仍待確認，請在原單先按「確認或重試原送件」。');return false;}r=mergeCommittedExpenseRequest(prior.record);}}
+  catch(pendingError){alert(pendingError.message);return false;}
+  cur=activeStep(r);
+  var beforeRequest=cloneSettingValue(r);
   if(!canActRequest(r)||r.status!=='pending_procurement'||!cur||['procurement_receipt','procurement_review'].indexOf(cur.rk)<0){alert('目前不是總務提交憑據關卡');return;}
   var actual=num((el(prefix+'-actual-amt')||{}).value||0);
   if(!actual){alert('請填寫最終採購實際支出');return;}
@@ -29689,6 +30199,7 @@ window.submitProcurementActual=async function(rid,prefix){
   if(p.addUid){alert('採購憑據送出不能同時加簽。請先送出憑據，再由下一位簽核人提出加簽。');return;}
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'procurement_actual');
   if(!p.files.length){alert('請上傳採購完成後的發票或憑據');return;}
+  var operationId=membershipOrgDraftUuid();
   r.estimatedAmt=purchaseEstimatedAmount(r)||r.amt;
   r.actualAmt=actual;
   r.actualFiles=normalizeFiles(r.actualFiles||[]).concat(p.files);
@@ -29703,32 +30214,18 @@ window.submitProcurementActual=async function(rid,prefix){
       submittedAt:new Date().toISOString()
     },
     procurementReceiptInfo:{
+      operationId:operationId,
       actualAmount:actual,
       submittedBy:S.user?S.user.n:'',
       submittedAt:new Date().toISOString(),
       fileCount:p.files.length
     }
   });
-  if(p.addUid){
-    approveActiveStep(r,'approved',p.comment,p.files,p.addUid);
-    var addSignWrite=await dbUpdate('expense_requests',rid,{amount:r.amt,estimated_amount:r.estimatedAmt,actual_amount:r.actualAmt,actual_files:r.actualFiles,status:r.status,step:r.step,steps:r.steps,files:r.files,form_payload:r.formPayload||{}});
-    if(!settingsWriteResultOk(addSignWrite)){
-      if(requestIndex>-1)REQS[requestIndex]=beforeRequest;
-      await cleanupUploadedSupabaseAttachments([p.files||[]],'採購憑據寫入失敗清理');
-      recordApprovalWriteFailure('送出採購憑據',beforeRequest,addSignWrite);
-      buildAll();openDetail(rid);return;
-    }
-    buildAll();openDetail(rid);return;
-  }
   approveActiveStep(r,'approved',p.comment||('總務填寫實際支出 '+fmt(actual)),p.files,'');
-  var receiptWrite=await dbUpdate('expense_requests',rid,{amount:r.amt,estimated_amount:r.estimatedAmt,actual_amount:r.actualAmt,actual_files:r.actualFiles,status:r.status,step:r.step,steps:r.steps,files:r.files,form_payload:r.formPayload||{}});
-  if(!settingsWriteResultOk(receiptWrite)){
-    if(requestIndex>-1)REQS[requestIndex]=beforeRequest;
-    await cleanupUploadedSupabaseAttachments([p.files||[]],'採購憑據寫入失敗清理');
-    recordApprovalWriteFailure('送出採購憑據',beforeRequest,receiptWrite);
-    buildAll();openDetail(rid);return;
-  }
+  var receiptValues={amount:r.amt,estimated_amount:r.estimatedAmt,actual_amount:r.actualAmt,actual_files:r.actualFiles,status:r.status,step:r.step,steps:r.steps,files:r.files,form_payload:r.formPayload||{}};
+  if(!await persistProcurementSubmission(rid,'actual',r,beforeRequest,receiptValues,p.files,'送出採購憑據'))return false;
   buildAll();openDetail(rid);
+  });
 };
 window.apprApproveInv=async function(id){
   var i=INVS.find(function(x){return x.id===id;});if(!i)return;
@@ -40136,17 +40633,26 @@ function incomeSubmissionPayloadMatches(payload,entry){
     keys.add(row.client_item_key);ids.add(row.id);return true;
   });
 }
-async function readIncomeSubmissionCommit(entry,identity){
-  if(!incomeSubmissionIdentityCurrent(identity))return null;
+async function reconcileIncomeSubmission(entry,identity){
+  if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
+  var preserved=entry.owner?'原內容與附件已保留':'前次送件識別碼已保留；原分頁已關閉';
+  var response;
   try{
-    var response=await withOperationTimeout(getSb().from(entry.formType==='invoice'?'invoices':'bills').select('id,no,batch_id,approval_status,approval_step,submission_item_key')
-      .eq('tenant_id',currentTenantId()).eq('data_environment',entry.args.p_data_environment)
-      .eq('submission_idempotency_key',entry.args.p_idempotency_key).eq('submission_actor_finance_user_id',S.user.id)
-      .limit(entry.records.length+1),'確認原送單結果',12000);
-    if(!incomeSubmissionIdentityCurrent(identity)||response.error||!Array.isArray(response.data)||response.data.length!==entry.records.length)return null;
-    var payload={ok:true,idempotent_replay:true,rows:response.data.map(function(row){return {client_item_key:row.submission_item_key,id:row.id,no:row.no,batch_id:row.batch_id,approval_status:row.approval_status,approval_step:row.approval_step};})};
-    return incomeSubmissionPayloadMatches(payload,entry)?payload:null;
-  }catch(_){return null;}
+    response=await withOperationTimeout(getSb().rpc('finance_income_reconcile_submission_v1',{
+      p_document_type:entry.formType,
+      p_idempotency_key:entry.args.p_idempotency_key,
+      p_data_environment:entry.args.p_data_environment
+    }),'確認原送單結果',15000);
+  }catch(error){response={error:error};}
+  if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
+  var data=response&&response.data;
+  if(response&&response.error||!data||data.ok!==true)return incomeSubmissionUnknown('暫時無法確認原送單結果；'+preserved+'。請稍後再按「確認原送單結果」，不要另開新單。');
+  if(data.state==='committed'){
+    if(incomeSubmissionPayloadMatches(data.result,entry))return {available:true,ok:true,data:cloneSettingValue(data.result),attempt:entry};
+    return incomeSubmissionUnknown('原送單結果與保存的識別碼不一致；為避免重複建立，請聯絡系統管理員查核。');
+  }
+  if(data.state==='confirmed_not_committed')return {available:true,ok:false,confirmedRollback:true,error:new Error('正式查核確認前次送單未建立；原識別碼已封存，現在可以修正後重新送出。')};
+  return incomeSubmissionUnknown('原送單仍在處理；'+preserved+'。請稍後再按「確認原送單結果」，不要另開新單。');
 }
 async function runIncomeSubmissionAttempt(entry,identity){
   var key=incomeSubmissionStorageKey(entry.formType);
@@ -40158,46 +40664,37 @@ async function runIncomeSubmissionAttempt(entry,identity){
     var hadUnknown=entry.unknown===true;
     entry.unknown=true;
     if(!saveIncomeSubmissionPending(entry))return incomeSubmissionUnknown('瀏覽器無法保存原送單識別碼；尚未送出新交易，請保留表單並確認瀏覽器儲存空間。');
-    // An earlier response may have been lost after COMMIT. Read the exact
-    // operation before sending its frozen payload again.
-    var committed=null;
+    // A lost response may follow COMMIT. Reconcile the exact operation key
+    // without sending the frozen document payload again.
     if(hadUnknown){
-      committed=await readIncomeSubmissionCommit(entry,identity);
-      if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
-      if(committed){entry.response=committed;saveIncomeSubmissionPending(entry);return {available:true,ok:true,data:committed,attempt:entry};}
+      var previous=await reconcileIncomeSubmission(entry,identity);
+      if(previous.ok){entry.response=previous.data;saveIncomeSubmissionPending(entry);return previous;}
+      if(previous.confirmedRollback&&incomeSubmissionIdentityCurrent(identity))clearIncomeSubmissionPending(entry);
+      return previous;
     }
-    for(var attempt=0;attempt<(hadUnknown?1:2);attempt++){
-      if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
-      var response;
-      try{response=await withOperationTimeout(getSb().rpc(entry.rpcName,cloneSettingValue(entry.args)),'確認原送單交易',15000);}
-      catch(error){response={error:error};}
-      if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
-      if(response&&!response.error&&incomeSubmissionPayloadMatches(response.data,entry)){
-        entry.response=cloneSettingValue(response.data);saveIncomeSubmissionPending(entry);
-        return {available:true,ok:true,data:entry.response,attempt:entry};
-      }
-      if(attempt===0&&!hadUnknown&&response&&response.error){
-        // A direct PostgreSQL 57014 aborts this first transaction. It is only
-        // definitive when no earlier request could still be committing.
-        if(incomeSubmissionStatementCanceled(response.error)){
-          clearIncomeSubmissionPending(entry);
-          return {available:true,ok:false,confirmedRollback:true,error:response.error};
-        }
-        if(!expenseApplicantRevisionRpcErrorIsAmbiguous(response.error)){
-          clearIncomeSubmissionPending(entry);return {available:true,ok:false,error:response.error};
-        }
-      }
-      if(attempt===0&&!hadUnknown){
-        committed=await readIncomeSubmissionCommit(entry,identity);
-        if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
-        if(committed){entry.response=committed;saveIncomeSubmissionPending(entry);return {available:true,ok:true,data:committed,attempt:entry};}
-      }
-    }
-    committed=await readIncomeSubmissionCommit(entry,identity);
+    var response;
+    try{response=await withOperationTimeout(getSb().rpc(entry.rpcName,cloneSettingValue(entry.args)),'確認原送單交易',15000);}
+    catch(error){response={error:error};}
     if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
-    if(committed){entry.response=committed;saveIncomeSubmissionPending(entry);return {available:true,ok:true,data:committed,attempt:entry};}
-    renderIncomeSubmissionRecovery(entry.formType);
-    return incomeSubmissionUnknown('送單結果仍待確認；系統已讀取正式資料並沿用原識別碼確認，原內容與附件已保留。請稍後按「確認原送單結果」，不要另開新單。');
+    if(response&&!response.error&&incomeSubmissionPayloadMatches(response.data,entry)){
+      entry.response=cloneSettingValue(response.data);saveIncomeSubmissionPending(entry);
+      return {available:true,ok:true,data:entry.response,attempt:entry};
+    }
+    if(response&&response.error){
+      // The first PostgreSQL 57014 is a definite rollback because this key
+      // has never been dispatched before this request.
+      if(incomeSubmissionStatementCanceled(response.error)){
+        clearIncomeSubmissionPending(entry);
+        return {available:true,ok:false,confirmedRollback:true,error:response.error};
+      }
+      if(!expenseApplicantRevisionRpcErrorIsAmbiguous(response.error)){
+        clearIncomeSubmissionPending(entry);return {available:true,ok:false,error:response.error};
+      }
+    }
+    var reconciled=await reconcileIncomeSubmission(entry,identity);
+    if(reconciled.ok){entry.response=reconciled.data;saveIncomeSubmissionPending(entry);return reconciled;}
+    if(reconciled.confirmedRollback&&incomeSubmissionIdentityCurrent(identity))clearIncomeSubmissionPending(entry);
+    return reconciled;
   }finally{if(INCOME_SUBMISSION_RUNNING[key]===entry)delete INCOME_SUBMISSION_RUNNING[key];}
 }
 function applyIncomeSubmissionResponse(records,result){
@@ -40214,24 +40711,32 @@ async function recoverPendingIncomeSubmission(formType){
   if(entry)result=await runIncomeSubmissionAttempt(entry,identity);
   else{
     // The original tab is gone, so the frozen payload cannot be replayed.
-    // Exact, actor-scoped source reads can confirm a commit without creating
-    // a second request. An absent read is not proof of rollback.
+    // The database must seal an absent operation key before a new submission
+    // is allowed; a browser-side source read cannot prove rollback.
     var lookup={formType:formType,records:marker.itemKeys,args:{p_idempotency_key:marker.operationKey,p_data_environment:marker.dataEnvironment,p_items:marker.itemKeys.map(function(key){return {client_item_key:key};})}};
-    var committed=await readIncomeSubmissionCommit(lookup,identity);
-    result=committed?{available:true,ok:true,data:committed}:incomeSubmissionUnknown('尚未在正式資料確認前次送件；請勿重送。請由系統管理員核對原交易及發票申請，確認結果後再處理。');
+    result=await reconcileIncomeSubmission(lookup,identity);
   }
   if(!incomeSubmissionIdentityCurrent(identity))return true;
+  if(result.confirmedRollback){
+    if(entry)clearIncomeSubmissionPending(entry);else{clearIncomeSubmissionRecoveryMarker(formType,marker.operationKey);renderIncomeSubmissionRecovery(formType);}
+    alert(result.error.message+(entry?'請檢查目前表單與附件，確認完整後再重新送出。':'原分頁已關閉，請重新填寫表單並選取附件。'));
+    return true;
+  }
   if(!result.ok){alert(result.error&&result.error.message||'原送單結果待確認');return true;}
-  var ids=result.data.rows.map(function(row){return row.id;}),reloaded=false;
+  var ids=result.data.rows.map(function(row){return row.id;});
+  if(entry)clearIncomeSubmissionPending(entry);else{clearIncomeSubmissionRecoveryMarker(formType,marker.operationKey);renderIncomeSubmissionRecovery(formType);}
+  // The authoritative commit result already settles the blocker. A slow
+  // display refresh must not keep a confirmed submission in recovery mode.
+  var reloaded=false;
   try{reloaded=await withOperationTimeout(formType==='invoice'?reloadInvoicesByIds(ids):reloadBillsByIds(ids),'讀取原送單結果',12000);}catch(_){}
   if(!incomeSubmissionIdentityCurrent(identity))return true;
+  var formCleared=entry?clearIncomeSubmissionFormIfUnchanged(entry):false;
+  var formMessage=entry?(formCleared?'原表單已清空，可以填寫新申請。':'目前修改過的表單內容仍保留，尚未作為新單送出。'):'原分頁已關閉；若要送新申請，請重新填寫表單並選取附件。';
   if(reloaded){
-    var formCleared=entry?clearIncomeSubmissionFormIfUnchanged(entry):false;
-    if(entry)clearIncomeSubmissionPending(entry);else{clearIncomeSubmissionRecoveryMarker(formType,marker.operationKey);renderIncomeSubmissionRecovery(formType);}
     if(formType==='invoice'){renderInvTable();renderBatchInvTable();}else renderBillList();
     buildApprovals();
-    alert('原送單已確認，共 '+ids.length+' 張，沒有重複建立。'+(formCleared?'原表單已清空，可以填寫新申請。':'目前修改過的表單內容仍保留，尚未作為新單送出。'));
-  }else{renderIncomeSubmissionRecovery(formType);alert('原送單已正式保存，共 '+ids.length+' 張；最新資料尚未同步，請再按「確認原送單結果」。目前表單沒有另行送出。');}
+    alert('原送單已確認，共 '+ids.length+' 張，沒有重複建立。'+formMessage);
+  }else alert('原送單已正式保存，共 '+ids.length+' 張，沒有重複建立。列表資料暫時未同步，請稍後重新整理。'+formMessage);
   return true;
 }
 window.recoverPendingIncomeSubmission=recoverPendingIncomeSubmission;
@@ -40254,13 +40759,29 @@ async function submitIncomeDocumentTransaction(formType,records){
   records=(records||[]).filter(Boolean);
   if(!records.length)return {available:true,ok:false,error:new Error('沒有可送出的單據')};
   if(formType==='bill'){var limit=billBatchLimitError(records.length,'submit');if(limit)return {available:true,ok:false,error:new Error(limit)};}
-  var entry=loadIncomeSubmissionPending(formType);
-  if(entry){return incomeSubmissionUnknown('先前送單結果尚未完成核對，請先按「確認原送單結果」。目前變更的內容尚未另行送出。');}
-  if(incomeSubmissionRecoveryMarker(formType))return incomeSubmissionUnknown('前次送件的原分頁已關閉；請先按「確認原送單結果」查核正式資料。目前不會建立新單。');
-  var operationKey=formType+'_submit_'+crypto.randomUUID();
-  records.forEach(function(record,index){record.submissionIdempotencyKey=operationKey;record.submissionClientItemKey=formType+'_item_'+index+'_'+crypto.randomUUID();});
-  entry={owner:incomeSubmissionOwner(),formType:formType,rpcName:formType==='invoice'?'finance_submit_invoice_batch':'finance_submit_bill_batch',records:cloneSettingValue(records),formUi:cloneSettingValue(records[0].submissionFormUi||null),unknown:false,createdAt:new Date().toISOString(),args:{p_idempotency_key:operationKey,p_items:records.map(function(record,index){return incomeSubmissionRpcItem(formType,record,index);}),p_data_environment:activeDataEnvironment()}};
-  if(!saveIncomeSubmissionPending(entry))return {available:true,ok:false,error:new Error('無法安全保存本次送單識別碼，尚未送出任何交易；請保留表單並確認瀏覽器儲存空間。')};
+  // Reserve a single operation key across tabs before dispatch. A synchronous
+  // localStorage check alone cannot atomically exclude another tab.
+  if(typeof navigator==='undefined'||!navigator.locks||typeof navigator.locks.request!=='function')
+    return {available:true,ok:false,error:new Error('瀏覽器無法安全鎖定跨分頁送單，尚未送出任何交易；請使用支援的瀏覽器並保留表單。')};
+  var entry=null,reservation;
+  try{
+    reservation=await navigator.locks.request('finance-income-submit:'+incomeSubmissionOwner()+':'+formType,{mode:'exclusive'},function(){
+      if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，尚未送出任何交易。',true);
+      var existing=loadIncomeSubmissionPending(formType);
+      if(existing)return incomeSubmissionUnknown('先前送單結果尚未完成核對，請先按「確認原送單結果」。目前變更的內容尚未另行送出。');
+      if(incomeSubmissionRecoveryMarker(formType))return incomeSubmissionUnknown('前次送件的原分頁已關閉；請先按「確認原送單結果」查核正式資料。目前不會建立新單。');
+      var operationKey=formType+'_submit_'+crypto.randomUUID();
+      records.forEach(function(record,index){record.submissionIdempotencyKey=operationKey;record.submissionClientItemKey=formType+'_item_'+index+'_'+crypto.randomUUID();});
+      entry={owner:incomeSubmissionOwner(),formType:formType,rpcName:formType==='invoice'?'finance_submit_invoice_batch':'finance_submit_bill_batch',records:cloneSettingValue(records),formUi:cloneSettingValue(records[0].submissionFormUi||null),unknown:false,createdAt:new Date().toISOString(),args:{p_idempotency_key:operationKey,p_items:records.map(function(record,index){return incomeSubmissionRpcItem(formType,record,index);}),p_data_environment:activeDataEnvironment()}};
+      if(!saveIncomeSubmissionPending(entry))return {available:true,ok:false,error:new Error('無法安全保存本次送單識別碼，尚未送出任何交易；請保留表單並確認瀏覽器儲存空間。')};
+      return {available:true,ok:true};
+    });
+  }catch(error){
+    if(error&&/原送單記錄|前次送件識別碼/.test(String(error.message||'')))throw error;
+    return {available:true,ok:false,error:new Error('跨分頁送單鎖定失敗，尚未送出任何交易；請保留表單並稍後重試。')};
+  }
+  if(!reservation||!reservation.ok)return reservation||incomeSubmissionUnknown('跨分頁送單鎖定沒有回傳結果，尚未送出任何交易。');
+  if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
   var result=await runIncomeSubmissionAttempt(entry,identity);
   if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
   return result.ok?applyIncomeSubmissionResponse(records,result):result;
