@@ -17667,6 +17667,30 @@ function rowAccountingText(row,r){
   ];
   return String(pieces.filter(Boolean).join(' ')).toLowerCase();
 }
+function accountingLineItemText(row,r){
+  row=row||{};r=r||{};
+  // Classify a debit from this line's item, never from the request summary,
+  // filename or a document-level OCR hint shared by unrelated receipt items.
+  var item=[row.item,row.itemName,row.label,row.description,row['類別'],row.kind]
+    .map(function(value){return String(value||'').trim();}).find(Boolean)||'';
+  if(item&&!/^(?:明細|費用|品項|憑據費用|雜項|其他)$/.test(item))return item.toLowerCase();
+  var detail=String([row.reason,row.note].filter(Boolean).join(' ')).toLowerCase();
+  if(detail)return detail;
+  if(item)return item.toLowerCase();
+  return row.source==='request_total'?String(r.desc||'').toLowerCase():'';
+}
+function accountingLineOcrFallbackText(row,r){
+  row=row||{};r=r||{};
+  var hint=String(row.accountingSubjectSuggestion||row.accounting_subject_suggestion||'').trim().toLowerCase();
+  if(!hint)return '';
+  if(Number(row.ocrItemCount)>1)return '';
+  var rows=((r.formPayload||{}).lazyRows||[]).filter(function(item){return item&&!item.systemFee;});
+  if(rows.length>1){
+    var file=String(row.file||'').trim();
+    if(!file||rows.filter(function(item){return String(item.file||'').trim()===file;}).length>1)return '';
+  }
+  return hint;
+}
 function accountingUtilityBillDetected(row){
   row=row||{};
   // This is the company's expense treatment, not a statutory tax exemption.
@@ -17734,13 +17758,14 @@ function taxAccountingNote(row,r){
   if(!rowHasInvoice(row,r)&&/收據|領據|請款|明細/.test(text))return '憑證提醒：非統一發票通常不列進項稅額，需以收據或領據性質覆核。';
   return '';
 }
-function inferDebitAccountForLine(row,type,r){
+function inferDebitAccountForLine(row,type,r,skipOcrFallback){
   row=row||{};
   r=r||{};
-  var text=rowAccountingText(row,r);
-  var ctx=detectUsageContext(row,type,r,text);
+  var text=accountingLineItemText(row,r);
+  var contextText=rowAccountingText(row,r);
+  var ctx=detectUsageContext(row,type,r,contextText);
   var gross=lazyRowTotal(row);
-  var assetNote=detectAssetizationNote(row,type,r,text,gross);
+  var assetNote=detectAssetizationNote(row,type,r,contextText,gross);
   var taxNote=taxAccountingNote(row,r);
   var reasonBase='AI判定：申請類型='+requestTypeAccountingLabel(type)+'；使用情境='+ctx.label+'；'+ctx.reason;
   var withNotes=function(inf){
@@ -17748,6 +17773,12 @@ function inferDebitAccountForLine(row,type,r){
     var notes=[inf.reason,taxNote,assetNote].filter(Boolean).join('；');
     inf.reason=notes;
     return inf;
+  };
+  var withReview=function(inf,note){
+    if(!inf)return null;
+    inf.accountingReviewNote=note;
+    inf.reason+='；待會計覆核：'+note;
+    return withNotes(inf);
   };
   if(row.systemFee)return withNotes(pickAccount('6290',reasonBase+'；明細命中銀行轉帳手續費，免憑證列手續費。')||pickAccount('6233',reasonBase+'；手續費科目未啟用，暫列其他費用。'));
   if(type==='refund_request'){
@@ -17772,7 +17803,13 @@ function inferDebitAccountForLine(row,type,r){
     if(/股權|100%股權|投資|收購/.test(text))return withNotes(pickAccount('1510',reasonBase+'；明細命中股權、投資或收購，建議列長期股權投資。')||pickAccount('1129',reasonBase+'；投資科目未啟用，暫列其他應收款並需會計覆核。'));
     if(/關係人|公司間|借款|往來/.test(text))return withNotes(pickAccount('1130',reasonBase+'；公司間或關係人資金往來，建議列其他應收款-關係人。')||pickAccount('1129',reasonBase+'；公司間往來暫列其他應收款。'));
   }
-  if(ctx.id==='travel'){
+  if(/悠遊卡|一卡通|交通卡/.test(text)&&/加值|儲值|充值|增值/.test(text)){
+    return withReview(pickAccount('1141',reasonBase+'；交通卡加值先列預付費用，實際使用時再轉費用。')||pickAccount('6299',reasonBase+'；預付費用科目未啟用，暫列其他費用。'),'儲值卡餘額、實際用途與後續核銷');
+  }
+  if(/汽油|柴油|燃料|加油|油料|油資|無鉛/.test(text)){
+    return withReview(pickAccount('6219',reasonBase+'；本列為汽油或燃料支出。')||pickAccount('6299',reasonBase+'；燃料費科目未啟用，需會計覆核。'),'用車目的、車輛歸屬與憑證');
+  }
+  if(ctx.id==='travel'&&(type==='travel_request'||/差旅|出差|住宿|旅費|高鐵|台鐵|計程車|停車|膳什|膳雜/.test(text))){
     if(type==='travel_request')return withNotes(pickAccount('6209',reasonBase+'；差旅憑證列差旅費。'));
     return withNotes(pickAccount('6208',reasonBase+'；非差旅表但明細命中交通，列交通費。'));
   }
@@ -17780,7 +17817,8 @@ function inferDebitAccountForLine(row,type,r){
   if(/租金|場租|租借|租賃/.test(text))return withNotes(pickAccount('6201',reasonBase+'；明細命中租金或場地租借。')||pickAccount('5123',reasonBase+'；培訓場地租借列場地租借費。'));
   if(/文具|紙|筆|墨水|辦公用品/.test(text))return withNotes(pickAccount('6205',reasonBase+'；明細命中文具或辦公用品。'));
   if(/印刷|影印|輸出|印製/.test(text))return withNotes(pickAccount('6206',reasonBase+'；明細命中印刷或影印。'));
-  if(/郵|電話|網路|電信|簡訊|通訊/.test(text))return withNotes(pickAccount('6203',reasonBase+'；明細命中郵電或通訊費。'));
+  if(/郵資券|郵票/.test(text))return withReview(pickAccount('6203',reasonBase+'；本列為郵資券或郵票，先列郵電費候選。'),'郵資是否已使用；期末未使用餘額應評估預付費用');
+  if(/郵|傳真|電話|網路|電信|簡訊|通訊/.test(text))return withNotes(pickAccount('6203',reasonBase+'；本列命中郵電、傳真或通訊費。'));
   if(/修繕|維修|修理|保養/.test(text))return withNotes(pickAccount('6207',reasonBase+'；明細命中修繕維護。'));
   if(/廣告|行銷|宣傳|刊登/.test(text))return withNotes(pickAccount('6211',reasonBase+'；明細命中廣告行銷。'));
   if(/水費|電費|瓦斯|台電|自來水/.test(text))return withNotes(pickAccount('6202',reasonBase+'；明細命中水電瓦斯費。'));
@@ -17791,14 +17829,20 @@ function inferDebitAccountForLine(row,type,r){
   if(/勞務|顧問|講師|外包|委外/.test(text))return withNotes(pickAccount(/講師/.test(text)?'5113':'6221',reasonBase+'；明細命中勞務、講師、顧問或委外。')||pickAccount('6212',reasonBase+'；專業服務費。'));
   if(/課程|訓練|活動|教材|講義/.test(text))return withNotes(pickAccount(ctx.id==='dementia_site'?'5111':'5122',reasonBase+'；明細命中課程、訓練、活動或教材。')||pickAccount('6213',reasonBase+'；教育訓練費。'));
   if(/長照|照服|居服|到宅|個案|服務/.test(text))return withNotes(pickAccount('5101',reasonBase+'；明細命中長照服務直接成本。')||pickAccount('6299',reasonBase+'；服務成本科目未啟用，暫列其他營業費用。'));
-  if(/餐|便當|膳|伙食|餐費/.test(text)){
-    if(ctx.id==='dementia_site')return withNotes(pickAccount('5112',reasonBase+'；據點相關餐食，列據點餐食及點心費。'));
-    if(ctx.id==='course_activity'||ctx.id==='care_service')return withNotes(pickAccount('5124',reasonBase+'；活動或訓練相關餐食，列學員活動及訓練耗材。')||pickAccount('6217',reasonBase+'；餐費相關支出。'));
-    return withNotes(pickAccount('6217',reasonBase+'；明細命中餐費或伙食費。')||pickAccount('6299',reasonBase+'；餐費科目未啟用，暫列其他營業費用。'));
+  if(/餐|便當|膳|伙食|咖啡|拿鐵|飲料|飲品|點心|麥茶|紅茶|綠茶|烏龍茶|茶飲|奶茶|牛奶/.test(text)){
+    if(ctx.id==='dementia_site')return withReview(pickAccount('5112',reasonBase+'；據點相關餐食，列據點餐食及點心費。'),'餐食對象與據點用途');
+    if(ctx.id==='course_activity'||ctx.id==='care_service')return withReview(pickAccount('5124',reasonBase+'；活動或訓練相關餐食，列學員活動及訓練耗材。')||pickAccount('6217',reasonBase+'；餐費相關支出。'),'餐食對象及活動或服務用途');
+    return withReview(pickAccount('6217',reasonBase+'；本列為餐食或飲品，先列伙食費候選。')||pickAccount('6299',reasonBase+'；伙食費科目未啟用，暫列其他營業費用。'),'餐食對象及業務用途');
   }
   if(/福利|津貼|補助/.test(text))return withNotes(pickAccount('6215',reasonBase+'；明細命中員工福利、津貼或補助。'));
   if(/稅|規費|罰鍰|罰款/.test(text))return withNotes(pickAccount('6216',reasonBase+'；明細命中稅捐、規費或罰款，需會計確認可否認列。'));
   if(/軟體|系統|訂閱|雲端|saas/.test(text))return withNotes(pickAccount('6204',reasonBase+'；明細命中軟體、系統或訂閱服務。'));
+  var ocrHint=skipOcrFallback?'':accountingLineOcrFallbackText(row,r);
+  if(ocrHint&&ocrHint!==text){
+    var hintRow=Object.assign({},row,{item:ocrHint,itemName:'',label:'',description:'',reason:'',note:'',accountingSubjectSuggestion:'',accounting_subject_suggestion:''});
+    var hinted=inferDebitAccountForLine(hintRow,type,r,true);
+    if(hinted&&hinted.code&&hinted.code!=='6299')return withReview(hinted,'單筆 OCR 科目建議，請核對原始品項與憑證');
+  }
   if(ctx.id==='dementia_site')return withNotes(pickAccount('5111',reasonBase+'；未命中明細關鍵字，但使用情境為失智據點。')||pickAccount('5299',reasonBase+'；失智據點科目未啟用，暫列其他直接成本。'));
   if(type==='purchase_request')return withNotes(pickAccount('6222',reasonBase+'；採購申請以雜項購置為預設，待總務實際憑據確認。')||pickAccount('6299',reasonBase+'；採購科目未啟用，暫列其他營業費用並待會計覆核。')||{code:'6299',name:'其他營業費用',reason:reasonBase+'；系統找不到採購科目，暫列其他營業費用並待會計覆核。'});
   return withNotes(pickAccount((r&&r.dr)||'6299',reasonBase+'；未命中特定品項規則，依申請類型預設科目。')||pickAccount('6299',reasonBase+'；其他營業費用。'));
@@ -17983,6 +18027,7 @@ function buildAccountingLines(r){
       creditAccountName:defaultManualFields.indexOf('creditAccount')>-1?manualDefaults.creditAccountName:cr.n,
       departmentCode:r.dc,
       aiReason:inf.reason,
+      accountingReviewNote:inf.accountingReviewNote||'',
       systemFee:!!row.systemFee,
       locked:!!row.systemFee
     };
@@ -18037,6 +18082,7 @@ function normalizeAccountingLine(line,r,i){
     creditAccountName:(cr&&cr.n)||line.creditAccountName||'',
     departmentCode:line.departmentCode||(r&&r.dc)||'',
     aiReason:line.aiReason||'系統預設科目，請會計覆核。',
+    accountingReviewNote:line.accountingReviewNote||'',
     systemFee:accountingLineIsSystemFee(line),
     locked:!!line.locked||accountingLineIsSystemFee(line)
   };
@@ -18071,6 +18117,60 @@ window.syncAccountingLineAmountInputs=function(prefix,i,field){
 window.syncAccountingLineSubjectTax=function(prefix,i){
   // 科目變更後保留畫面上的人工金額；6221 只作為 AI 預設免稅依據，
   // 不得再次覆寫人工輸入的未稅、營業稅或含稅金額。
+  var select=el(prefix+'-dr-'+i);
+  if(select&&select.dataset&&select.dataset.reclassificationCode){
+    delete select.dataset.reclassificationReason;
+    delete select.dataset.reclassificationReviewNote;
+    delete select.dataset.reclassificationCode;
+    var badge=el(prefix+'-review-'+i);
+    if(badge){badge.textContent='';badge.style.display='none';}
+  }
+};
+function accountingDebitReclassificationPlan(r){
+  if(!r||requestPostingLocked(r)||requestLedgerRowsExist(r))return {ok:false,reason:'已入帳或鎖定的申請單不能重新辨識。',changes:[]};
+  var rows=sourceRowsForAccounting(r).filter(function(row){return num(lazyAmountParts(row,false).gross)>0;});
+  var lines=buildAccountingLines(r);
+  if(rows.length!==lines.length)return {ok:false,reason:'明細數量與來源不一致，請先由會計核對。',changes:[]};
+  var changes=[],reviewHints=[],skipped=0;
+  rows.forEach(function(row,i){
+    var line=lines[i];
+    var label=String(row.item||row.label||row.description||('明細 '+(i+1))).trim();
+    if(!line||String(line.description||'').trim()!==label||line.locked||accountingLineIsSystemFee(line)
+      ||accountingLineFieldIsHuman(line,'debitAccount')){skipped++;return;}
+    var inf=inferDebitAccountForLine(row,r.type,r);
+    if(!inf||!inf.code||!accountByCode(inf.code)){skipped++;return;}
+    if(String(line.debitAccount)!==String(inf.code))changes.push({index:i,from:line.debitAccount,to:inf.code,reason:inf.reason,reviewNote:inf.accountingReviewNote||''});
+    else if(inf.accountingReviewNote&&!line.accountingReviewNote)reviewHints.push({index:i,note:inf.accountingReviewNote});
+  });
+  return {ok:true,changes:changes,reviewHints:reviewHints,skipped:skipped,lines:lines};
+}
+window.reinferUnreviewedDebitAccounts=function(id,prefix){
+  var r=REQS.find(function(row){return row.id===id;});
+  if(!r||!canActRequest(r)||!canEditAccountingLineSubjects(r)||requestPostingLocked(r)||requestLedgerRowsExist(r))return;
+  var plan=accountingDebitReclassificationPlan(r);
+  var card=Array.from(document.querySelectorAll('[data-accounting-request][data-accounting-prefix]'))
+    .find(function(node){return node.dataset.accountingRequest===id&&node.dataset.accountingPrefix===prefix&&node.isConnected;});
+  var status=card&&card.querySelector('[data-accounting-reclass-status]');
+  if(!plan.ok){if(status)status.textContent=plan.reason;return;}
+  if(!plan.changes.length){if(status)status.textContent='沒有可重新辨識的借方科目；人工選定的科目與已入帳明細均保留。';return;}
+  if(!confirm('將依各列品項重新建議 '+plan.changes.length+' 筆尚未人工選定的借方科目。未稅、稅額、含稅與貸方欄位不會更動；需由會計核對後沿原簽核流程保存。是否繼續？'))return;
+  var updated=0,review=0,untouched=0;
+  plan.changes.forEach(function(change){
+    var select=el(prefix+'-dr-'+change.index),base=plan.lines[change.index];
+    // A reviewer may already have unsaved edits in the open modal.
+    if(!select||select.disabled||select.value!==String(base.debitAccount)){untouched++;return;}
+    select.value=change.to;
+    if(select.value!==change.to){untouched++;return;}
+    select.dataset.reclassificationReason=change.reason;
+    select.dataset.reclassificationReviewNote=change.reviewNote;
+    select.dataset.reclassificationCode=change.to;
+    var badge=el(prefix+'-review-'+change.index);
+    if(badge){badge.textContent=change.reviewNote?'待會計覆核：'+change.reviewNote:'';badge.style.display=change.reviewNote?'block':'none';}
+    if(change.reviewNote)review++;
+    updated++;
+  });
+  if(card)captureAccountingReviewDraftForElement(card);
+  if(status)status.textContent='已更新 '+updated+' 列借方建議'+(untouched?'，保留 '+untouched+' 列畫面中已修改的選擇':'')+'；其中 '+review+' 列需會計覆核用途。金額、稅額與貸方未變更。這是本分頁草稿，請沿原簽核流程保存。';
 };
 function accountingLinesHtml(r,editable,title){
   var prefix=arguments.length>3&&arguments[3]?arguments[3]:'acct-line';
@@ -18082,22 +18182,32 @@ function accountingLinesHtml(r,editable,title){
   if(posted&&!posted.lines)return postedVoucherEntriesHtml(r,prefix,posted);
   if(posted){editable=false;title='正式入帳會計明細';}
   var lines=buildAccountingLines(r);
+  var reclassPlan=posted?null:accountingDebitReclassificationPlan(r);
+  var reclassSuggestions={},reclassReviewHints={};
+  if(reclassPlan&&reclassPlan.ok)reclassPlan.changes.forEach(function(change){reclassSuggestions[change.index]=change;});
+  if(reclassPlan&&reclassPlan.ok)reclassPlan.reviewHints.forEach(function(hint){reclassReviewHints[hint.index]=hint.note;});
   var editAllowed=editable&&(canEditAccountingLineAmounts(r)||canEditAccountingLineSubjects(r));
   var head=editAllowed
     ?'<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">每一列明細都可以有自己的借方會計科目；只有執行長、行政部門主任或會計可以修訂品項、數量、金額與會計科目。</div>'
     :'<div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">申請人與申請人主管僅能檢視；若需修訂品項、數量、金額或會計科目，請由執行長、行政部門主任或會計處理。</div>';
   if(posted)head='<div style="font-size:12px;line-height:1.7;margin-bottom:10px">正式傳票 '+escAttr(posted.voucher.no)+' · 以下為與已入帳分錄核對一致的會計明細。既有簽核與付款紀錄保留；後續更正請由會計辦理調整。'+(r.type==='petty_cash_request'&&!pettyIsInitial(r)?' 零用金依兩段分錄核銷並補足額度，完整借貸列於下方正式傳票。':'')+'</div>';
+  if(!posted&&editable&&canActRequest(r)&&canEditAccountingLineSubjects(r)&&!requestPostingLocked(r)&&!requestLedgerRowsExist(r)){
+    head+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px"><button type="button" class="btn-g" style="min-height:40px" data-request-id="'+escAttr(r.id)+'" data-prefix="'+escAttr(prefix)+'" onclick="reinferUnreviewedDebitAccounts(this.dataset.requestId,this.dataset.prefix)">重新辨識未覆核借方科目</button><span role="status" data-accounting-reclass-status style="font-size:11px;color:#8b7358">僅更新本單尚未人工選定的借方建議；金額、稅額與貸方保留，需會計確認。</span></div>';
+  }
   var rows=lines.map(function(line,i){
     var amountEditable=editable&&canEditAccountingLineAmounts(r)&&!line.locked;
     var utilityBill=amountEditable&&accountingUtilityBillDetected(line)&&!requestPostingLocked(r);
     var subjectEditable=editable&&canEditAccountingLineSubjects(r)&&!line.locked;
+    var proposed=reclassSuggestions[i],proposedAccount=proposed&&accountByCode(proposed.to);
+    var proposedHtml=proposed?'<div style="font-size:10px;color:#9a5b13;margin-top:4px">逐列新建議：'+escAttr(proposed.to)+' '+escAttr(proposedAccount&&proposedAccount.n||'')+(proposed.reviewNote?' · 待會計覆核':'')+'</div>':'';
+    if(!proposed&&reclassReviewHints[i])proposedHtml='<div style="font-size:10px;color:#9a5b13;margin-top:4px">原科目待會計覆核：'+escAttr(reclassReviewHints[i])+'</div>';
     return'<tr>'
       +'<td style="text-align:center;color:#94a3b8">'+(i+1)+'</td>'
       +'<td><div style="font-size:11px;font-weight:650;color:#334155">'+escAttr(line.description)+'</div>'+(utilityBill?'<div style="font-size:11px;color:#8b7358">水電帳單全額列費用，不拆進項稅</div>':'')+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'netAmount',utilityBill?line.grossAmount:line.netAmount,utilityBill):fmt(line.netAmount))+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'taxAmount',utilityBill?0:line.taxAmount,utilityBill):fmt(line.taxAmount))+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);font-weight:650">'+(amountEditable?accountingLineAmountInput(prefix,i,'grossAmount',line.grossAmount,utilityBill):fmt(line.grossAmount))+'</td>'
-      +'<td>'+(subjectEditable?'<select id="'+prefix+'-dr-'+i+'" style="font-size:11px" onchange="syncAccountingLineSubjectTax(\''+prefix+'\','+i+')">'+accountOptionsHtml(line.debitAccount,'debit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-dr">'+escAttr(line.debitAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.debitAccountName)+'</div>')+'</td>'
+      +'<td>'+(subjectEditable?'<select id="'+prefix+'-dr-'+i+'" style="font-size:11px" onchange="syncAccountingLineSubjectTax(\''+prefix+'\','+i+')">'+accountOptionsHtml(line.debitAccount,'debit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-dr">'+escAttr(line.debitAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.debitAccountName)+'</div>')+proposedHtml+'<div id="'+prefix+'-review-'+i+'" style="font-size:10px;color:#9a5b13;margin-top:3px'+(line.accountingReviewNote?'':';display:none')+'">'+(line.accountingReviewNote?'待會計覆核：'+escAttr(line.accountingReviewNote):'')+'</div></td>'
       +'<td>'+(posted&&r.type==='petty_cash_request'&&!pettyIsInitial(r)?'<span class="acct-cr">1111</span><div style="font-size:10px;color:#64748b">零用金核銷；補足另貸 1112</div>':(subjectEditable?'<select id="'+prefix+'-cr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.creditAccount,'credit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-cr">'+escAttr(line.creditAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.creditAccountName)+'（系統鎖定）</div>'))+'</td>'
       +'</tr>';
   }).join('');
@@ -18201,6 +18311,15 @@ function collectAccountingLinesFromDom(r){
       creditAccount:(cr&&cr.c)||line.creditAccount,
       creditAccountName:(cr&&cr.n)||line.creditAccountName
     });
+    var debitInput=el(prefix+'-dr-'+i);
+    if(debitInput&&debitInput.dataset&&debitInput.dataset.reclassificationCode===debitInput.value
+      &&(debitInput.dataset.reclassificationReason||debitInput.dataset.reclassificationReviewNote)){
+      next.aiReason=debitInput.dataset.reclassificationReason||line.aiReason;
+      next.accountingReviewNote=debitInput.dataset.reclassificationReviewNote||'';
+    }else if(String(next.debitAccount)!==String(line.debitAccount)){
+      next.aiReason='借方科目由會計覆核人員於簽核畫面選定。';
+      next.accountingReviewNote='';
+    }
     return markAccountingManualAuthority(before,next,prefix.indexOf('detail-')===0?'approval_detail_review':'approval_modal_review');
   });
   var principalLines=principalAccountingLines(lines);
@@ -20371,7 +20490,10 @@ function invoiceRowsFromOcr(data,fileName){
     var tax=num(x.tax_amount||x.tax||x.taxAmount||0);
     var gross=num(x.total_amount||x.amount_including_tax||x.gross_amount||x.grossAmount||x.amount||0);
     var itemName=x.item_name||x.name||x.description||inv.description||'憑據費用';
-    var laborFee=accountingLaborFeeDetected({item:itemName,accountingSubjectSuggestion:accountingSubjectSuggestion});
+    // Invoice-level advice is shared by every OCR item.  It can guide a
+    // one-item receipt, but cannot turn unrelated items into labor fees.
+    var lineAccountingSuggestion=items.length===1?accountingSubjectSuggestion:'';
+    var laborFee=accountingLaborFeeDetected({item:itemName,accountingSubjectSuggestion:lineAccountingSuggestion});
     var taxMode=gross?'gross_inclusive':'net_exclusive';
     if(/免稅|不計稅|收據|領據/.test(String(taxTreatmentSuggestion||''))&&!tax)taxMode='exempt';
     if(!net&&unitPrice&&taxMode==='net_exclusive')net=qty*unitPrice;
@@ -20389,7 +20511,7 @@ function invoiceRowsFromOcr(data,fileName){
       tax=0;
       taxMode='exempt';
     }
-    var row={no:no,date:date,buyerTaxId:buyerTaxId,sellerTaxId:sellerTaxId,item:itemName,qty:qty,unitName:x.unit||x.unit_name||x.unitName||'',unitPrice:unitPrice,netAmount:net,taxAmount:tax,grossAmount:gross,total:gross,taxMode:taxMode,file:fileName,accountingSubjectSuggestion:accountingSubjectSuggestion,usageContextSuggestion:usageContextSuggestion,taxTreatmentSuggestion:taxTreatmentSuggestion,assetizationSuggestion:assetizationSuggestion};
+    var row={no:no,date:date,buyerTaxId:buyerTaxId,sellerTaxId:sellerTaxId,item:itemName,qty:qty,unitName:x.unit||x.unit_name||x.unitName||'',unitPrice:unitPrice,netAmount:net,taxAmount:tax,grossAmount:gross,total:gross,taxMode:taxMode,file:fileName,ocrItemCount:items.length,accountingSubjectSuggestion:lineAccountingSuggestion,ocrDocumentAccountingSubjectSuggestion:items.length>1?accountingSubjectSuggestion:'',usageContextSuggestion:usageContextSuggestion,taxTreatmentSuggestion:taxTreatmentSuggestion,assetizationSuggestion:assetizationSuggestion};
     var parts=lazyAmountParts(row);
     row.netAmount=parts.net;row.taxAmount=parts.tax;row.grossAmount=parts.gross;row.total=parts.gross;
     if(accountingUtilityBillDetected(row)){row.taxMode='exempt';row.unitPrice=parts.gross/qty;}
@@ -28279,7 +28401,9 @@ function accountingReviewLineIdentity(line){
   return JSON.stringify([line.id||'',line.source||'',line.description||'',line.departmentCode||'']);
 }
 function accountingReviewValuesMatch(a,b){
-  return accountingManualFieldNames().every(function(field){return String(a[field])===String(b[field]);});
+  return accountingManualFieldNames().every(function(field){return String(a[field])===String(b[field]);})
+    &&String(a.aiReason||'')===String(b.aiReason||'')
+    &&String(a.accountingReviewNote||'')===String(b.accountingReviewNote||'');
 }
 function clearAccountingReviewDraft(r){
   var key=accountingReviewDraftKey(r);if(!key)return;
@@ -28324,7 +28448,20 @@ window.restoreAccountingReviewDraft=function(id,prefix){
     if((field==='debitAccount'||field==='creditAccount')?!subjects:!amounts)return;
     var input=el(prefix+'-'+names[field]+'-'+i);
     if(input&&!input.disabled)input.value=String(draft.lines[i][field]);
-  });});
+  });
+    var debit=subjects&&el(prefix+'-dr-'+i),saved=draft.lines[i];
+    if(debit&&(saved.aiReason!==line.aiReason||saved.accountingReviewNote!==line.accountingReviewNote)
+      &&debit.value===String(saved.debitAccount)){
+      debit.dataset.reclassificationReason=saved.aiReason||'';
+      debit.dataset.reclassificationReviewNote=saved.accountingReviewNote||'';
+      debit.dataset.reclassificationCode=String(saved.debitAccount);
+      var badge=el(prefix+'-review-'+i);
+      if(badge){
+        badge.textContent=saved.accountingReviewNote?'待會計覆核：'+saved.accountingReviewNote:'';
+        badge.style.display=saved.accountingReviewNote?'block':'none';
+      }
+    }
+  });
 };
 window.discardAccountingReviewDraft=function(id){
   var r=REQS.find(function(row){return row.id===id;});if(!r||!accountingReviewDraft(r))return;

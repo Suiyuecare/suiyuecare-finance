@@ -379,6 +379,160 @@ async function runBehaviorRegressions() {
   check('behavior: a stale open production page is stopped with a refresh instruction', stale.ok===false && stale.stale===true && /重新整理/.test(stale.message));
 }
 
+function runAccountLineClassificationRegressions() {
+  const accounts = Object.fromEntries([
+    ['1141','預付費用'],['6203','郵電費'],['6205','辦公用品'],['6217','伙食費'],
+    ['6219','燃料費'],['6221','勞務費'],['6299','其他營業費用']
+  ].map(([c,n]) => [c,{c,n}]));
+  const runtime = vm.createContext({
+    window:{},num:value=>Number(value)||0,
+    accountByCode:code=>accounts[String(code)]||null,
+    acctName:code=>accounts[String(code)]?.n||'',
+    requestTypeLabel:()=> '付款申請',
+    lazyRowTotal:row=>Number(row.grossAmount||row.total||0),
+    lazyTaxAmount:row=>Number(row.taxAmount||0),
+    lazyAmountParts:row=>({gross:Number(row.grossAmount||row.total||0),net:Number(row.netAmount||0),tax:Number(row.taxAmount||0)}),
+    pettyIsInitial:()=>false,pettyIsGeneral:()=>false,
+    requestPostingLocked:r=>!!r.posted,requestLedgerRowsExist:r=>!!r.ledger,
+    buildAccountingLines:r=>r.formPayload.accountingLines,
+    accountingLineIsSystemFee:line=>!!line.systemFee,
+    accountingLineFieldIsHuman:(line,field)=>(line.manualFields||[]).includes(field),
+    normalizeLazyInvoiceIdentity:()=>({invoiceNo:'',buyerTaxId:'',sellerTaxId:''}),
+    todayIso:()=> '2026-10-03'
+  });
+  vm.runInContext(section('function requestTypeAccountingLabel(', 'function sourceRowsForAccounting('),runtime);
+  vm.runInContext(section('function sourceRowsForAccounting(', 'var POSTED_ACCOUNTING_VIEWS='),runtime);
+  vm.runInContext(section('function accountingDebitReclassificationPlan(', 'window.reinferUnreviewedDebitAccounts='),runtime);
+  vm.runInContext(section('function invoiceRowsFromOcr(', 'function hrPickValue('),runtime);
+  const mixedItems=[
+    {item:'郵資券',file:'mixed.jpg',grossAmount:44,netAmount:44,taxAmount:0,accountingSubjectSuggestion:'郵電費'},
+    {item:'悠遊卡加值',file:'mixed.jpg',grossAmount:500,netAmount:500,taxAmount:0,accountingSubjectSuggestion:'郵電費'},
+    {item:'便當',file:'mixed.jpg',grossAmount:1000,netAmount:1000,taxAmount:0,accountingSubjectSuggestion:'郵電費'},
+    {item:'市內傳真費用',file:'mixed.jpg',grossAmount:24,netAmount:24,taxAmount:0,accountingSubjectSuggestion:'辦公用品'},
+    {item:'九五無鉛汽油',file:'mixed.jpg',grossAmount:800,netAmount:800,taxAmount:0,accountingSubjectSuggestion:'郵電費'}
+  ];
+  const mixedRecord={type:'payment_request',desc:'10月郵資券採購',formPayload:{requestPurpose:'郵資券',lazyRows:mixedItems}};
+  const inferred=mixedItems.map(row=>runtime.inferDebitAccountForLine(row,mixedRecord.type,mixedRecord));
+  check('mixed receipt classifies each item instead of applying request-wide postal text',
+    inferred.map(item=>item.code).join(',')==='6203,1141,6217,6203,6219');
+  check('stored-value top-up, meal and fuel candidates explicitly require accountant review',
+    [1,2,4].every(i=>!!inferred[i].accountingReviewNote));
+  check('postal coupons carry an unused-balance review reminder even when 6203 remains the candidate',
+    inferred[0].code==='6203'&&/未使用/.test(inferred[0].accountingReviewNote));
+  const actualShapeItems=[
+    '郵資券','悠遊卡加值','郵票','便當','便當','便當','郵資券','自助傳真國內',
+    '冰厚乳拿鐵(特大)','冰黃金薑麥茶','熱美式咖啡','市內傳真費用','九五無鉛汽油','郵票','郵資券'
+  ];
+  const actualShapeRows=actualShapeItems.map((item,i)=>({
+    item,file:'15-items.jpg',grossAmount:100+i,netAmount:100+i,taxAmount:0,
+    accountingSubjectSuggestion:i===7?'辦公用品':'郵電費',ocrItemCount:15
+  }));
+  const actualShapeRecord={type:'payment_request',desc:'郵資券採購與行政雜支',
+    formPayload:{requestPurpose:'郵資券',lazyRows:actualShapeRows}};
+  check('all fifteen mixed receipt items classify from their own label',
+    actualShapeRows.map(row=>runtime.inferDebitAccountForLine(row,actualShapeRecord.type,actualShapeRecord).code)
+      .join(',')==='6203,1141,6203,6217,6217,6217,6203,6203,6217,6217,6217,6203,6219,6203,6203');
+  const tea={item:'冰黃金薑麥茶',file:'mixed.jpg',grossAmount:85,netAmount:85,taxAmount:0,accountingSubjectSuggestion:'郵電費'};
+  const travelSummaryRecord={type:'payment_request',desc:'差旅郵資券與雜項採購',
+    formPayload:{requestPurpose:'出差交通',lazyRows:mixedItems.concat(tea)}};
+  check('request-wide travel and postal context cannot preempt a meal or tea line',
+    runtime.inferDebitAccountForLine(mixedItems[2],travelSummaryRecord.type,travelSummaryRecord).code==='6217'
+      &&runtime.inferDebitAccountForLine(tea,travelSummaryRecord.type,travelSummaryRecord).code==='6217');
+  const single={item:'雜項',file:'single.jpg',grossAmount:100,netAmount:100,taxAmount:0,accountingSubjectSuggestion:'郵電費',ocrItemCount:1};
+  const singleRecord={type:'payment_request',desc:'一般費用',formPayload:{lazyRows:[single]}};
+  check('a single uninformative OCR line may use its document account hint',
+    runtime.inferDebitAccountForLine(single,singleRecord.type,singleRecord).code==='6203');
+  const ocrRows=runtime.invoiceRowsFromOcr({invoice:{
+    accounting_subject_suggestion:'勞務費',items:[
+      {item_name:'郵票',subtotal:100,tax_amount:5,total_amount:105},
+      {item_name:'便當',subtotal:100,tax_amount:5,total_amount:105}
+    ]
+  }},'mixed-labor.jpg');
+  check('multi-item OCR document labor hint does not zero unrelated item input tax',
+    ocrRows.length===2&&ocrRows.every(row=>row.taxAmount===5&&row.accountingSubjectSuggestion===''));
+  const lines=[
+    {id:'line_1',source:'expense_detail',description:'便當',grossAmount:1000,netAmount:952,taxAmount:48,
+      debitAccount:'6203',creditAccount:'1111',manualFields:['grossAmount','netAmount','taxAmount']},
+    {id:'line_2',source:'expense_detail',description:'九五無鉛汽油',grossAmount:800,netAmount:800,taxAmount:0,
+      debitAccount:'6203',creditAccount:'1111',manualFields:['debitAccount']}
+  ];
+  const reviewRecord={type:'payment_request',desc:'郵資券與餐食',formPayload:{lazyRows:[mixedItems[2],mixedItems[4]],accountingLines:lines}};
+  const before=JSON.stringify(reviewRecord);
+  const plan=runtime.accountingDebitReclassificationPlan(reviewRecord);
+  check('reclassification plans only an unreviewed debit, retaining human amounts and human debit',
+    plan.ok&&plan.changes.length===1&&plan.changes[0].index===0&&plan.changes[0].to==='6217'
+      &&JSON.stringify(reviewRecord)===before);
+  const sameCodeRecord={type:'payment_request',formPayload:{lazyRows:[mixedItems[0]],
+    accountingLines:[{id:'line_1',source:'expense_detail',description:'郵資券',
+      grossAmount:44,netAmount:44,taxAmount:0,debitAccount:'6203',creditAccount:'1111'}]}};
+  const sameCodePlan=runtime.accountingDebitReclassificationPlan(sameCodeRecord);
+  check('old postal lines show a review hint even when their debit code already matches',
+    sameCodePlan.ok&&sameCodePlan.changes.length===0
+      &&sameCodePlan.reviewHints.length===1&&/未使用/.test(sameCodePlan.reviewHints[0].note));
+  const debit0={value:'6203',disabled:false,dataset:{}},debit1={value:'6203',disabled:false,dataset:{}};
+  const net0={value:'952'},tax0={value:'48'},gross0={value:'1000'},credit0={value:'1111'};
+  const status={textContent:''},badge={textContent:'',style:{display:'none'}};
+  const elements={'review-dr-0':debit0,'review-dr-1':debit1,'review-net-0':net0,
+    'review-tax-0':tax0,'review-gross-0':gross0,'review-cr-0':credit0,'review-review-0':badge};
+  const card={dataset:{accountingRequest:'request-1',accountingPrefix:'review'},
+    isConnected:true,querySelector:()=>status};
+  let captured=0;
+  reviewRecord.id='request-1';
+  runtime.REQS=[reviewRecord];
+  runtime.document={querySelectorAll:()=>[card]};
+  runtime.el=id=>elements[id]||null;
+  runtime.canActRequest=()=>true;
+  runtime.canEditAccountingLineSubjects=()=>true;
+  runtime.confirm=()=>true;
+  runtime.captureAccountingReviewDraftForElement=()=>{captured++;return true;};
+  vm.runInContext(section('window.reinferUnreviewedDebitAccounts=', 'function accountingLinesHtml('),runtime);
+  runtime.window.reinferUnreviewedDebitAccounts('request-1','review');
+  check('review action updates only the unreviewed debit dropdown and preserves amount, tax and credit inputs',
+    debit0.value==='6217'&&debit1.value==='6203'&&net0.value==='952'
+      &&tax0.value==='48'&&gross0.value==='1000'&&credit0.value==='1111'
+      &&captured===1&&badge.textContent.includes('待會計覆核'));
+  vm.runInContext(section('window.syncAccountingLineSubjectTax=', 'function accountingDebitReclassificationPlan('),runtime);
+  runtime.window.syncAccountingLineSubjectTax('review',0);
+  check('manual account selection clears the prior AI candidate review reason without touching amounts',
+    !debit0.dataset.reclassificationReason&&!badge.textContent
+      &&net0.value==='952'&&tax0.value==='48'&&gross0.value==='1000');
+  runtime.accountingReviewDraft=()=>({lines:[
+    {...lines[0],debitAccount:'6217',debitAccountName:'伙食費',
+      aiReason:'逐列分類；待會計覆核',accountingReviewNote:'餐食對象及業務用途'},
+    {...lines[1]}
+  ]});
+  runtime.accountingReviewLineIdentity=line=>JSON.stringify([line.id,line.source,line.description,line.departmentCode||'']);
+  runtime.canEditAccountingLineAmounts=()=>true;
+  runtime.accountingManualFieldNames=()=>['netAmount','taxAmount','grossAmount','debitAccount','creditAccount'];
+  vm.runInContext(section('function accountingReviewValuesMatch(', 'function clearAccountingReviewDraft('),runtime);
+  vm.runInContext(section('window.restoreAccountingReviewDraft=', 'window.discardAccountingReviewDraft='),runtime);
+  check('draft matching includes accounting review rationale and flag, not only numeric/account fields',
+    !runtime.accountingReviewValuesMatch(
+      {...lines[0],debitAccount:'6217',aiReason:'正式舊理由',accountingReviewNote:''},
+      {...lines[0],debitAccount:'6217',aiReason:'逐列分類；待會計覆核',accountingReviewNote:'餐食對象及業務用途'}));
+  debit0.value='6203';
+  runtime.window.restoreAccountingReviewDraft('request-1','review');
+  check('restoring a debit candidate restores its review flag and reason with the account',
+    debit0.value==='6217'&&debit0.dataset.reclassificationCode==='6217'
+      &&debit0.dataset.reclassificationReason==='逐列分類；待會計覆核'
+      &&badge.textContent.includes('餐食對象及業務用途'));
+  runtime.accountingReviewDraft=()=>({lines:[
+    {...lines[0],debitAccount:'6217',debitAccountName:'伙食費',
+      aiReason:lines[0].aiReason,accountingReviewNote:'僅註記更新仍須覆核'},
+    {...lines[1]}
+  ]});
+  debit0.value='6203';debit0.dataset={};badge.textContent='';
+  runtime.window.restoreAccountingReviewDraft('request-1','review');
+  check('draft restoration also restores a review note when the rationale text is unchanged',
+    debit0.value==='6217'&&debit0.dataset.reclassificationCode==='6217'
+      &&debit0.dataset.reclassificationReviewNote==='僅註記更新仍須覆核'
+      &&badge.textContent.includes('僅註記更新'));
+  reviewRecord.posted=true;
+  check('posted or voucher-locked requests cannot be reclassified',
+    !runtime.accountingDebitReclassificationPlan(reviewRecord).ok);
+}
+
+runAccountLineClassificationRegressions();
 runBehaviorRegressions().then(() => {
   process.stdout.write(`\nRoot-cause regressions: ${passed}/${passed + failed} passed.\n`);
   if (failed) process.exit(1);
