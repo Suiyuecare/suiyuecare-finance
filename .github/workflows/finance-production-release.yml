@@ -538,8 +538,10 @@ jobs:
               --migration-versions "$MIGRATION_VERSIONS"
           fi
 
+      # The human-float DB-only phase has its own rollback canary. This broader
+      # canary requires three real employees to have active login sessions.
       - name: Prove authenticated submit, supervisor return and applicant resubmit before DB mutation
-        if: inputs.release_phase != 'database_read_latency_20260913' && inputs.release_phase != 'database_ar_mapping_20260913' && inputs.release_phase != 'database_audit_remediation_20260914' && inputs.release_phase != 'database_approval_search_20260914' && inputs.release_phase != 'database_history_summary_20260915' && inputs.release_phase != 'database_invoice_read_scope_20260915' && inputs.release_phase != 'frontend_compat' && inputs.release_phase != 'database_audit_security_20260922' && inputs.release_phase != 'database_revenue_repair_20260924' && inputs.release_phase != 'database_operational_stability_20260924' && inputs.release_phase != 'database_hr_bridge_20260922' && inputs.release_phase != 'database_ar_read_scope_20260922'
+        if: inputs.release_phase != 'database_read_latency_20260913' && inputs.release_phase != 'database_ar_mapping_20260913' && inputs.release_phase != 'database_audit_remediation_20260914' && inputs.release_phase != 'database_approval_search_20260914' && inputs.release_phase != 'database_history_summary_20260915' && inputs.release_phase != 'database_invoice_read_scope_20260915' && inputs.release_phase != 'frontend_compat' && inputs.release_phase != 'database_audit_security_20260922' && inputs.release_phase != 'database_revenue_repair_20260924' && inputs.release_phase != 'database_operational_stability_20260924' && inputs.release_phase != 'database_hr_bridge_20260922' && inputs.release_phase != 'database_ar_read_scope_20260922' && inputs.release_phase != 'database_human_float_20261002'
         shell: bash
         run: |
           set -euo pipefail
@@ -1191,7 +1193,7 @@ jobs:
               --candidate-deployment "$BUNDLE/candidate-deployment.json"
             echo "Database-only human accounting float fix verified; production Vercel alias and frontend manifest remained unchanged."
           fi
-          if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"; then
+          if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922" && test "$RELEASE_PHASE" != "database_human_float_20261002"; then
           (cd "$TOOLS" && supabase db query --linked \
             --file scripts/finance_production_authenticated_canary.sql \
             --output json) > "$RUNNER_TEMP/authenticated-canary-after.json"
