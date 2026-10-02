@@ -1,4 +1,3 @@
-\set ON_ERROR_STOP on
 -- Transactional fictional-row test; no production business row is changed.
 begin isolation level repeatable read;
 set local statement_timeout = '20s';

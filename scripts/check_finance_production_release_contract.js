@@ -191,6 +191,8 @@ try {
   const phase=guard.RELEASE_PHASE_DATABASE_HUMAN_FLOAT;
   const versions=guard.HUMAN_FLOAT_MIGRATIONS.join(',');
   const scripts=name=>path.join(root,'scripts',name);
+  assert.doesNotMatch(fs.readFileSync(scripts('finance_human_accounting_float_canary.sql'),'utf8'),/^\s*\\(?:set|i|include)\b/m,
+    'the direct Supabase CLI canary must contain SQL only');
   fs.writeFileSync(ledger,prior.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'pending');
   const rehearsal=path.join(humanFloatTemp,'rehearsal.sql');
