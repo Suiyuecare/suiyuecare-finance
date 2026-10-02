@@ -16956,11 +16956,48 @@ function canAttemptInvoiceRevenuePosting(i,justApprovedStep){
   if(rk!=='applicant_invoice_delivery')return false;
   return !!(S.user&&(String(S.user.id)===String(i.applicantId)||['accountant','admin_director','ceo'].indexOf(currentRoleKey())>-1));
 }
+var INVOICE_REVENUE_VERIFIED={};
+function invoiceRevenueVerificationKey(i){
+  var identity=incomeSubmissionIdentity();
+  return i&&identity?JSON.stringify([identity,String(i.tenantId||''),String(i.dataEnv||''),String(i.id||'')]):'';
+}
 function invoiceRevenueRecognized(i){
-  return !!(i&&(i.revenuePosted||invoiceRevenuePostedAt(i))&&hasInvoiceRevenueLedger(i));
+  if(!i||!(i.revenuePosted||invoiceRevenuePostedAt(i)))return false;
+  var key=invoiceRevenueVerificationKey(i);
+  return !!(i.revenuePostingVerified||hasInvoiceRevenueLedger(i)||(key&&INVOICE_REVENUE_VERIFIED[key]===String(invoiceRevenuePostedAt(i))));
+}
+async function reconcileInvoiceRevenuePosting(i,identity){
+  if(!incomeSubmissionIdentityCurrent(identity)||!i||String(i.tenantId||'')!==String(currentTenantId())||String(i.dataEnv||'')!==String(activeDataEnvironment()))return null;
+  var expectedTenant=String(currentTenantId()),expectedEnvironment=activeDataEnvironment();
+  try{
+    var result=await withOperationTimeout(callAccountingRpc('finance_invoice_revenue_result_v1',{
+      p_invoice_id:i.id,p_data_environment:expectedEnvironment
+    }),'核對發票收入入帳結果',12000);
+    if(!incomeSubmissionIdentityCurrent(identity))return null;
+    var data=result&&result.ok&&result.data;
+    if(!data||data.confirmed!==true||String(data.invoice_id)!==String(i.id)||String(data.tenant_id)!==expectedTenant||data.data_environment!==expectedEnvironment||typeof data.posted_at!=='string'||!data.posted_at||!Number.isInteger(data.posting_version)||data.posting_version<2)return null;
+    return data;
+  }catch(readbackError){
+    console.warn('invoice revenue result readback unavailable',readbackError);
+    return null;
+  }
+}
+function markInvoiceRevenuePostingVerified(i,result){
+  i.revenuePosted=true;
+  i.revenuePostedAt=result.posted_at;
+  i.revenuePostingState='posted';
+  i.revenuePostingVersion=result.posting_version;
+  i.revenuePostingError='';
+  i.revenuePostingVerified=true;
+  i.revenuePostingResultUnknown=false;
+  i.postingLockedAt=i.postingLockedAt||result.posted_at;
+  var key=invoiceRevenueVerificationKey(i);
+  if(key)INVOICE_REVENUE_VERIFIED[key]=String(result.posted_at);
 }
 async function postInvoiceRevenue(i){
-  if(!i||invoiceRevenueRecognized(i)||!invoiceRevenuePostingReady(i))return false;
+  if(!i||i.revenuePostingResultUnknown||invoiceRevenueRecognized(i)||!invoiceRevenuePostingReady(i))return false;
+  var postingIdentity=incomeSubmissionIdentity();
+  if(!postingIdentity)return false;
   var lockKey='invoice-revenue:'+i.id;
   if(POSTING_IN_FLIGHT[lockKey])return false;
   POSTING_IN_FLIGHT[lockKey]=true;
@@ -16969,17 +17006,49 @@ async function postInvoiceRevenue(i){
   var revenueAcct=invoiceRevenueAccount(i,dc);
   var outputTax=Math.min(amt,Math.max(0,num(i.tax)));
   var revenueAmt=Math.max(0,amt-outputTax);
+  if(!isLocalRuntime()&&(i.revenuePosted||invoiceRevenuePostedAt(i)||i.revenuePostingState==='posted')){
+    var existingResult=await reconcileInvoiceRevenuePosting(i,postingIdentity);
+    if(!incomeSubmissionIdentityCurrent(postingIdentity)){delete POSTING_IN_FLIGHT[lockKey];return false;}
+    if(existingResult){markInvoiceRevenuePostingVerified(i,existingResult);delete POSTING_IN_FLIGHT[lockKey];return true;}
+    i.revenuePostingResultUnknown=true;
+    setTopSyncStatus('簽核已保留；收入入帳結果待查核');
+    alert('最後簽核已保留，但發票已有入帳標記而帳務結果尚未核實。請勿重複送出，請會計查核此張發票。');
+    delete POSTING_IN_FLIGHT[lockKey];return false;
+  }
   if(!ensureOpenPostingPeriod(i.eid||entityOfDept(dc),date,'發票收入認列')){delete POSTING_IN_FLIGHT[lockKey];return false;}
   var rpc=null;
   try{
-    rpc=await callAccountingRpc('post_invoice_revenue_v2',{p_invoice_id:i.id});
+    rpc=await withOperationTimeout(callAccountingRpc('post_invoice_revenue_v2',{p_invoice_id:i.id}),'發票收入入帳',45000);
   }catch(rpcErr){
     console.error(rpcErr);
+    if(!incomeSubmissionIdentityCurrent(postingIdentity)){delete POSTING_IN_FLIGHT[lockKey];return false;}
+    if(expenseApplicantRevisionRpcErrorIsAmbiguous(rpcErr)){
+      var readback=await reconcileInvoiceRevenuePosting(i,postingIdentity);
+      if(!incomeSubmissionIdentityCurrent(postingIdentity)){delete POSTING_IN_FLIGHT[lockKey];return false;}
+      if(readback){
+        markInvoiceRevenuePostingVerified(i,readback);
+        delete POSTING_IN_FLIGHT[lockKey];return true;
+      }
+      i.revenuePostingResultUnknown=true;
+      setTopSyncStatus('簽核已保留；收入入帳結果待查核');
+      alert('最後簽核已保留，但網路中斷後無法確認此張發票的收入入帳結果。請勿重複送出，請重新整理或通知會計查核。');
+      delete POSTING_IN_FLIGHT[lockKey];return false;
+    }
     i.revenuePostingState='pending_accounting_review';
     i.revenuePostingError=rpcErr.message||String(rpcErr);
     alert('最後簽核已保留，但發票收入入帳失敗，已列入會計待處理：'+(rpcErr.message||rpcErr));
     delete POSTING_IN_FLIGHT[lockKey];
     return false;
+  }
+  if(!incomeSubmissionIdentityCurrent(postingIdentity)){delete POSTING_IN_FLIGHT[lockKey];return false;}
+  if(!isLocalRuntime()&&rpc&&rpc.ok&&!rpc.missing&&(!rpc.data||rpc.data.ok!==true||String(rpc.data.invoice_id)!==String(i.id)||(rpc.data.deferred!==true&&rpc.data.deferred!==false))){
+    var uncertainResponse=await reconcileInvoiceRevenuePosting(i,postingIdentity);
+    if(!incomeSubmissionIdentityCurrent(postingIdentity)){delete POSTING_IN_FLIGHT[lockKey];return false;}
+    if(uncertainResponse){markInvoiceRevenuePostingVerified(i,uncertainResponse);delete POSTING_IN_FLIGHT[lockKey];return true;}
+    i.revenuePostingResultUnknown=true;
+    setTopSyncStatus('簽核已保留；收入入帳結果待查核');
+    alert('最後簽核已保留，但發票收入入帳回覆不完整，結果尚未核實。請勿重複送出，請會計查核此張發票。');
+    delete POSTING_IN_FLIGHT[lockKey];return false;
   }
   if(rpc&&rpc.ok&&rpc.data&&rpc.data.deferred){
     i.revenuePosted=false;i.revenuePostedAt=null;i.revenuePostingState='deferred';

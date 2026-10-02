@@ -24,8 +24,9 @@ on:
           - database_attachment_claim_20261001
           - database_human_float_20261002
           - database_income_reconcile_20261002
+          - database_invoice_revenue_result_20261002
       migration_versions:
-        description: frontend_compat=none; database_audit_security_20260922=20260922133752; database_revenue_repair_20260924=20260924074010; database_operational_stability_20260924=20260924155142; database_demo_password_retirement_20260925=20260925170000; database_audit_controls_20260927=20260927152432,20260927153326; database_hr_contractor_20260928=20260927175827,20260927180005; database_portal_session_20260928=20260927180201; database_external_labor_20260928=20260928090000; database_attachment_claim_20261001=20261001030323; database_human_float_20261002=20261002035707; database_income_reconcile_20261002=20261002130327 (DB only)
+        description: frontend_compat=none; database_audit_security_20260922=20260922133752; database_revenue_repair_20260924=20260924074010; database_operational_stability_20260924=20260924155142; database_demo_password_retirement_20260925=20260925170000; database_audit_controls_20260927=20260927152432,20260927153326; database_hr_contractor_20260928=20260927175827,20260927180005; database_portal_session_20260928=20260927180201; database_external_labor_20260928=20260928090000; database_attachment_claim_20261001=20261001030323; database_human_float_20261002=20261002035707; database_income_reconcile_20261002=20261002130327; database_invoice_revenue_result_20261002=20261002151725 (DB only)
         required: true
         type: string
       confirmation:
@@ -320,6 +321,7 @@ jobs:
           cp scripts/finance_attachment_staged_cleanup_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_human_accounting_float_preflight.sql scripts/finance_human_accounting_float_postflight.sql scripts/finance_human_accounting_float_fingerprint.sql scripts/finance_human_accounting_float_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_income_reconcile_preflight.sql scripts/finance_income_reconcile_postflight.sql scripts/finance_income_reconcile_fingerprint.sql scripts/finance_income_reconcile_canary.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_invoice_revenue_result_preflight.sql scripts/finance_invoice_revenue_result_postflight.sql scripts/finance_invoice_revenue_result_fingerprint.sql scripts/finance_invoice_revenue_result_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_audit_security_canary_20261001.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_invoice_select_initplan_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_invoice_select_initplan_canary.sql "$BUNDLE/release-tools/scripts/"
@@ -515,7 +517,7 @@ jobs:
             --project-json "$RUNNER_TEMP/database-vercel-project.json" \
             --domains-json "$RUNNER_TEMP/database-vercel-domains.json" \
             --candidate-sha "$CANDIDATE_SHA" --deployment-url "$DEPLOYMENT_URL"
-          if test "$RELEASE_PHASE" = "database_human_float_20261002" || test "$RELEASE_PHASE" = "database_income_reconcile_20261002"; then
+          if test "$RELEASE_PHASE" = "database_human_float_20261002" || test "$RELEASE_PHASE" = "database_income_reconcile_20261002" || test "$RELEASE_PHASE" = "database_invoice_revenue_result_20261002"; then
             pnpm dlx vercel@59.3.0 api "/v4/aliases/${FINANCE_PRODUCTION_DOMAIN}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/production-alias-before-db-only.json"
             pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
               --fail --silent --show-error --output "$RUNNER_TEMP/production-manifest-before-db-only.json"
@@ -543,7 +545,7 @@ jobs:
       # DB-only phases have their own rollback canaries. This broader
       # canary requires three real employees to have active login sessions.
       - name: Prove authenticated submit, supervisor return and applicant resubmit before DB mutation
-        if: inputs.release_phase != 'database_read_latency_20260913' && inputs.release_phase != 'database_ar_mapping_20260913' && inputs.release_phase != 'database_audit_remediation_20260914' && inputs.release_phase != 'database_approval_search_20260914' && inputs.release_phase != 'database_history_summary_20260915' && inputs.release_phase != 'database_invoice_read_scope_20260915' && inputs.release_phase != 'frontend_compat' && inputs.release_phase != 'database_audit_security_20260922' && inputs.release_phase != 'database_revenue_repair_20260924' && inputs.release_phase != 'database_operational_stability_20260924' && inputs.release_phase != 'database_hr_bridge_20260922' && inputs.release_phase != 'database_ar_read_scope_20260922' && inputs.release_phase != 'database_human_float_20261002' && inputs.release_phase != 'database_income_reconcile_20261002'
+        if: inputs.release_phase != 'database_read_latency_20260913' && inputs.release_phase != 'database_ar_mapping_20260913' && inputs.release_phase != 'database_audit_remediation_20260914' && inputs.release_phase != 'database_approval_search_20260914' && inputs.release_phase != 'database_history_summary_20260915' && inputs.release_phase != 'database_invoice_read_scope_20260915' && inputs.release_phase != 'frontend_compat' && inputs.release_phase != 'database_audit_security_20260922' && inputs.release_phase != 'database_revenue_repair_20260924' && inputs.release_phase != 'database_operational_stability_20260924' && inputs.release_phase != 'database_hr_bridge_20260922' && inputs.release_phase != 'database_ar_read_scope_20260922' && inputs.release_phase != 'database_human_float_20261002' && inputs.release_phase != 'database_income_reconcile_20261002' && inputs.release_phase != 'database_invoice_revenue_result_20261002'
         shell: bash
         run: |
           set -euo pipefail
@@ -680,6 +682,23 @@ jobs:
               --migration-versions "$MIGRATION_VERSIONS" --ledger "$LEDGER" \
               --postflight "$TOOLS/scripts/finance_income_reconcile_postflight.sql"
             (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-income-reconcile-apply.sql" --output json) > "$RUNNER_TEMP/finance-income-reconcile-apply.json"
+          elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_invoice_revenue_result_20261002"; then
+            node "$GUARD" prepare-read-only-query --input "$TOOLS/scripts/finance_invoice_revenue_result_preflight.sql" \
+              --output "$RUNNER_TEMP/finance-invoice-revenue-result-preflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-invoice-revenue-result-preflight.sql" --output json) > "$RUNNER_TEMP/finance-invoice-revenue-result-preflight.json"
+            node "$GUARD" prepare-invoice-revenue-result-rehearsal --migration-dir "$TOOLS/supabase/migrations" \
+              --output "$RUNNER_TEMP/finance-invoice-revenue-result-rehearsal.sql" \
+              --migration-versions "$MIGRATION_VERSIONS" --ledger "$LEDGER" \
+              --fingerprint "$TOOLS/scripts/finance_invoice_revenue_result_fingerprint.sql" \
+              --authenticated-canary "$TOOLS/scripts/finance_invoice_revenue_result_canary.sql" \
+              --preflight "$TOOLS/scripts/finance_invoice_revenue_result_preflight.sql" \
+              --postflight "$TOOLS/scripts/finance_invoice_revenue_result_postflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-invoice-revenue-result-rehearsal.sql" --output json) > "$RUNNER_TEMP/finance-invoice-revenue-result-rehearsal.json"
+            node "$GUARD" prepare-invoice-revenue-result-apply --migration-dir "$TOOLS/supabase/migrations" \
+              --output "$RUNNER_TEMP/finance-invoice-revenue-result-apply.sql" \
+              --migration-versions "$MIGRATION_VERSIONS" --ledger "$LEDGER" \
+              --postflight "$TOOLS/scripts/finance_invoice_revenue_result_postflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-invoice-revenue-result-apply.sql" --output json) > "$RUNNER_TEMP/finance-invoice-revenue-result-apply.json"
           elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_attachment_claim_20261001"; then
             node "$GUARD" prepare-phase-query --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
               --output "$RUNNER_TEMP/finance-attachment-claim-prerequisites.sql" \
@@ -1181,7 +1200,7 @@ jobs:
             node "$GUARD" prepare-apply --migration "$MIGRATION" --output "$APPLY" \
               --migration-version "$MIGRATION_VERSIONS" --ledger "$LEDGER"
             (cd "$TOOLS" && supabase db query --linked --file "$APPLY" --output json) > "$RUNNER_TEMP/apply-result.json"
-          elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_income_reconcile_20261002" || test "$RELEASE_PHASE" = "database_human_float_20261002" || test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912" || test "$RELEASE_PHASE" = "database_history_performance_20260913" || test "$RELEASE_PHASE" = "database_read_latency_20260913" || test "$RELEASE_PHASE" = "database_ar_mapping_20260913" || test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_demo_password_retirement_20260925" || test "$RELEASE_PHASE" = "database_hr_contractor_20260928" || test "$RELEASE_PHASE" = "database_portal_session_20260928" || test "$RELEASE_PHASE" = "database_external_labor_20260928" || test "$RELEASE_PHASE" = "database_attachment_claim_20261001" || test "$RELEASE_PHASE" = "database_audit_controls_20260927" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922"; }; then
+          elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_invoice_revenue_result_20261002" || test "$RELEASE_PHASE" = "database_income_reconcile_20261002" || test "$RELEASE_PHASE" = "database_human_float_20261002" || test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912" || test "$RELEASE_PHASE" = "database_history_performance_20260913" || test "$RELEASE_PHASE" = "database_read_latency_20260913" || test "$RELEASE_PHASE" = "database_ar_mapping_20260913" || test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_demo_password_retirement_20260925" || test "$RELEASE_PHASE" = "database_hr_contractor_20260928" || test "$RELEASE_PHASE" = "database_portal_session_20260928" || test "$RELEASE_PHASE" = "database_external_labor_20260928" || test "$RELEASE_PHASE" = "database_attachment_claim_20261001" || test "$RELEASE_PHASE" = "database_audit_controls_20260927" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922"; }; then
             echo "Exact DB phase is already applied; recovering with postflight only and no mutation."
           else
             echo "Unexpected phase state: $PHASE_STATE" >&2
@@ -1198,6 +1217,8 @@ jobs:
             POSTFLIGHT_SOURCE="$TOOLS/scripts/finance_human_accounting_float_postflight.sql"
           elif test "$RELEASE_PHASE" = "database_income_reconcile_20261002"; then
             POSTFLIGHT_SOURCE="$TOOLS/scripts/finance_income_reconcile_postflight.sql"
+          elif test "$RELEASE_PHASE" = "database_invoice_revenue_result_20261002"; then
+            POSTFLIGHT_SOURCE="$TOOLS/scripts/finance_invoice_revenue_result_postflight.sql"
           fi
           run_gate "$POSTFLIGHT_SOURCE" \
             "$RUNNER_TEMP/finance-postflight.sql" "$RUNNER_TEMP/finance-postflight.json"
@@ -1206,8 +1227,11 @@ jobs:
           elif test "$RELEASE_PHASE" = "database_income_reconcile_20261002"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_income_reconcile_canary.sql --output json) > "$RUNNER_TEMP/finance-income-reconcile-canary.json"
             node "$GUARD" verify-reports-canary --domain income_reconcile --input "$RUNNER_TEMP/finance-income-reconcile-canary.json"
+          elif test "$RELEASE_PHASE" = "database_invoice_revenue_result_20261002"; then
+            (cd "$TOOLS" && supabase db query --linked --file scripts/finance_invoice_revenue_result_canary.sql --output json) > "$RUNNER_TEMP/finance-invoice-revenue-result-canary.json"
+            node "$GUARD" verify-reports-canary --domain invoice_revenue_result --input "$RUNNER_TEMP/finance-invoice-revenue-result-canary.json"
           fi
-          if test "$RELEASE_PHASE" = "database_human_float_20261002" || test "$RELEASE_PHASE" = "database_income_reconcile_20261002"; then
+          if test "$RELEASE_PHASE" = "database_human_float_20261002" || test "$RELEASE_PHASE" = "database_income_reconcile_20261002" || test "$RELEASE_PHASE" = "database_invoice_revenue_result_20261002"; then
             pnpm dlx vercel@59.3.0 api "/v4/aliases/${FINANCE_PRODUCTION_DOMAIN}?teamId=${VERCEL_ORG_ID}" > "$RUNNER_TEMP/production-alias-after-db-only.json"
             pnpm dlx vercel@59.3.0 curl /release-manifest.json --deployment "https://${FINANCE_PRODUCTION_DOMAIN}/" -- \
               --fail --silent --show-error --output "$RUNNER_TEMP/production-manifest-after-db-only.json"
@@ -1219,7 +1243,7 @@ jobs:
               --candidate-deployment "$BUNDLE/candidate-deployment.json"
             echo "Database-only release verified; production Vercel alias and frontend manifest remained unchanged."
           fi
-          if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922" && test "$RELEASE_PHASE" != "database_human_float_20261002" && test "$RELEASE_PHASE" != "database_income_reconcile_20261002"; then
+          if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922" && test "$RELEASE_PHASE" != "database_human_float_20261002" && test "$RELEASE_PHASE" != "database_income_reconcile_20261002" && test "$RELEASE_PHASE" != "database_invoice_revenue_result_20261002"; then
           (cd "$TOOLS" && supabase db query --linked \
             --file scripts/finance_production_authenticated_canary.sql \
             --output json) > "$RUNNER_TEMP/authenticated-canary-after.json"
@@ -1349,7 +1373,7 @@ jobs:
 
   promote:
     name: Promote the sealed candidate; independently retryable without build or DB apply
-    if: ${{ inputs.release_phase != 'database_human_float_20261002' && inputs.release_phase != 'database_income_reconcile_20261002' }}
+    if: ${{ inputs.release_phase != 'database_human_float_20261002' && inputs.release_phase != 'database_income_reconcile_20261002' && inputs.release_phase != 'database_invoice_revenue_result_20261002' }}
     needs: [candidate, database]
     runs-on: ubuntu-latest
     timeout-minutes: 20
