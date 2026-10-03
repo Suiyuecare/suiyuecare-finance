@@ -111,7 +111,7 @@ jobs:
       - name: Install locked dependencies and browser
         run: |
           pnpm install --frozen-lockfile
-          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright install --with-deps chromium webkit
       - name: Configure private disposable PostgreSQL for browser concurrency
         env:
           FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json
@@ -132,6 +132,7 @@ jobs:
           node scripts/check_admin_action_browser.cjs
           node scripts/check_shareholder_invoice_ocr_browser.cjs
           node scripts/check_personnel_login_browser.cjs
+          pnpm test:personnel-save-browser
           node scripts/check_human_accounting_browser_20261002.cjs
           pnpm test:history-summary-browser
           pnpm test:finance-ui-interactions
