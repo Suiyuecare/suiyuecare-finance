@@ -442,3 +442,14 @@ supabase/.temp
 !scripts/finance_audit_security_canary_20261001.sql
 !scripts/check_attachment_claim_migration_contract.js
 !scripts/check_submission_cashier_preflight.cjs
+
+# Personnel save reliability and cross-module projection acceptance.
+!scripts/finance_personnel_save_conflict_postflight.sql
+!scripts/finance_personnel_save_live_canary.sql
+!scripts/check_personnel_save_reliability.cjs
+!scripts/test_personnel_save_conflict_nonretry.mjs
+!scripts/check_personnel_save_browser.cjs
+!docs/finance-personnel-save-reliability-20261003.md
+!scripts/finance_personnel_reliable_save_live_canary.sql
+!scripts/test_member_save_reliable_receipt.mjs
+!scripts/finance_member_save_reliable_receipt_postflight.sql

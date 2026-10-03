@@ -1229,6 +1229,10 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
         <button onclick="closeModal('m-add-user')" style="background:none;border:none;cursor:pointer;font-size:17px;color:#c0a080">&#215;</button>
       </div>
       <div style="padding:15px">
+        <div id="user-personnel-turnover-hint" class="user-field-help" style="display:none;margin-bottom:12px;padding:10px 12px;border:1px solid #ead5b4;border-radius:10px;background:#fffaf2">
+          編輯只用於同一人的資料更正。若是新人接替職務，請先「新增人員」，再為原人員執行離職交接，保留舊單據的簽核歷史。
+          <button type="button" class="btn-g" style="margin-left:8px" onclick="openUserOffboardingFromEdit()">辦理原人員交接</button>
+        </div>
         <div class="user-modal-section-title">基本資料</div>
         <div class="fr2">
           <div class="fg"><label class="fl">姓名 *</label><input id="un" autocomplete="off"></div>
@@ -1271,7 +1275,9 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
           <div class="user-field-help">職稱不等於系統權限；只授予完成工作所需的最低權限。</div>
         </div>
         <div id="user-google-save-status" role="status" aria-live="polite" style="display:none;margin:0 0 9px;padding:10px 12px;border:1px solid #ead5b4;border-radius:10px;background:#fffaf2;font-size:12px;line-height:1.65"></div>
+        <div id="user-pending-create-wrap" class="fg" style="display:none;margin-bottom:9px"><label class="fl" for="user-pending-create-select">待確認的原新增請求</label><select id="user-pending-create-select" onchange="selectPendingCreateAttempt(this.value)"></select></div>
         <div id="add-err" role="alert" style="color:#8a1010;font-size:12px;margin-bottom:9px;display:none"></div>
+        <button type="button" class="btn-g" id="user-retry-original" style="display:none;margin-bottom:9px" onclick="retryOriginalMemberSave()">重試原儲存內容（不含後續修改）</button>
         <div style="display:flex;gap:7px;justify-content:flex-end"><button class="btn-s" onclick="closeModal('m-add-user')">取消</button><button class="btn-p" id="user-modal-submit" onclick="submitAddUser()">建立帳號</button></div>
       </div>
     </div>
@@ -1512,7 +1518,7 @@ function fmt(n){
 function fmtMoney(n){return fmt(n);}
 function el(id){return document.getElementById(id);}
 window.openModal=function(id){var e=document.getElementById(id);if(e)e.style.display='flex';}
-window.closeModal=function(id){var e=document.getElementById(id);if(e)e.style.display='none';}
+window.closeModal=function(id){var e=document.getElementById(id);if(e)e.style.display='none';if(id==='m-add-user'&&typeof USER_EDIT_GENERATION==='number')USER_EDIT_GENERATION++;}
 // 本地別名，讓 IIFE 內部也能用
 var openModal=window.openModal;var closeModal=window.closeModal;
 
@@ -1591,7 +1597,7 @@ var USERS=[
   {id:'u_project_yu',n:'project_yu@suiyuecare.com',email:'project_yu@suiyuecare.com',role:'employee',rL:'一般組員',dc:'A1201',init:'員',active:true},
   {id:'u_projectmember',n:'projectmember@suiyuecare.com',email:'projectmember@suiyuecare.com',role:'employee',rL:'一般組員',dc:'A1201',init:'員',active:true},
 ];
-var FINANCE_USER_SAFE_COLUMNS='id,name,email,role,role_label,department_code,init,active,created_at,entity_id,auth_user_id,tenant_id,job_title,extension,org_contact_email,org_status,org_source,org_source_updated_at,google_login_verified_at,google_link_status,pending_login_email,google_link_revision,google_link_requested_at,google_link_status_detail,google_last_linked_at';
+var FINANCE_USER_SAFE_COLUMNS='id,name,email,role,role_label,department_code,init,active,created_at,entity_id,auth_user_id,tenant_id,member_revision,job_title,extension,org_contact_email,org_status,org_source,org_source_updated_at,google_login_verified_at,google_link_status,pending_login_email,google_link_revision,google_link_requested_at,google_link_status_detail,google_last_linked_at';
 var FINANCE_GOOGLE_LOGIN_HEALTH=Object.create(null);
 var FINANCE_GOOGLE_LOGIN_HEALTH_RPC_AVAILABLE=null;
 var FINANCE_GOOGLE_LOGIN_HEALTH_SCOPE='';
@@ -39607,27 +39613,73 @@ window.toggleU=async function(id){
     openUserOffboarding(id);
     return;
   }
-  var client=getSb();
-  if(!client||S.demoLogin)return alert('必須使用正式公司帳號登入後才能啟用人員');
-  var health=financeGoogleLoginHealthForUser(u);
-  var response=await client.rpc('finance_admin_upsert_member_atomic_v1',{
-    p_member:{
-      id:u.id,name:u.n,login_email:health.email||u.pendingLoginEmail||u.email,
-      contact_email:u.contactEmail||u.email,job_title:u.jobTitle||null,
-      extension:u.extension||null,role:u.role,entity_id:u.eid,
-      department_code:u.dc,active:true
-    },
-    p_expected_revision:Number(u.memberRevision||0)
-  });
-  if(response.error){
-    alert('啟用失敗；這次人員、登入與簽核權限都沒有變更。\n\n'+friendlyErrorMessage(response.error,{action:'啟用人員'}));
+  var attemptKey=financeMemberAttemptKey(id,'');
+  var savedAttempt=financeMemberPendingAttempt(attemptKey);
+  if(savedAttempt&&savedAttempt.kind!=='activation'){
+    alert('這筆人員的上次編輯結果仍待確認。請從人員編輯視窗重試原儲存，勿改用啟用按鈕重送。');
     return;
   }
-  var saved=mapUser((response.data||{}).member||{}),idx=USERS.findIndex(function(row){return row.id===id;});
-  if(idx>-1)USERS[idx]=Object.assign({},u,saved);
-  try{await loadRemoteData();}catch(loadErr){console.warn('Atomic member activation reload failed:',loadErr&&loadErr.message?loadErr.message:loadErr);}
-  saveLocalAppStateSoon();renderUsers();renderUsersHealth();
-  alert('人員已啟用，Google 登入預留與簽核權限已在同一筆交易完成。');
+  if(FINANCE_MEMBER_ADMIN_INFLIGHT[id])return;
+  FINANCE_MEMBER_ADMIN_INFLIGHT[id]=true;
+  var client=getSb();
+  var scope=financeMemberAdminScope();
+  function current(){return scope===financeMemberAdminScope();}
+  try{
+    if(!client||S.demoLogin)throw new Error('必須使用正式公司帳號登入後才能啟用人員');
+    var health=financeGoogleLoginHealthForUser(u);
+    var member=savedAttempt?savedAttempt.args.p_member:financeMemberSnapshot(u,health.email||u.pendingLoginEmail||u.email);
+    member.id=u.id;member.active=true;
+    var expectedRevision=savedAttempt?savedAttempt.args.p_expected_revision:await financeMemberExpectedRevision(client,u);
+    if(!current())return;
+    var startedAt=Date.now();
+    var requestArgs=savedAttempt?savedAttempt.args:{p_member:member,p_expected_revision:expectedRevision,p_request_id:financeMemberRequestId()};
+    var response;
+    try{
+      if(!savedAttempt)financeMemberMarkAttempt(attemptKey,{rpc:'finance_admin_upsert_member_reliable_v1',kind:'activation',args:requestArgs,startedAt:startedAt});
+      response=await withOperationTimeout(client.rpc('finance_admin_upsert_member_reliable_v1',requestArgs),'啟用人員',45000);
+    }catch(rpcError){response={error:rpcError};}
+    if(response&&response.error&&response.status&&!response.error.status)response.error.status=response.status;
+    if(response&&response.data&&response.data.ok===true&&response.data.atomic===true&&response.data.member)financeMemberClearAttempt(attemptKey);
+    else if(response&&response.error&&(!financeMemberSaveUncertain(response.error)||financeMemberSaveConflict(response.error)))financeMemberClearAttempt(attemptKey);
+    if(!current())return;
+    if(response.error){
+      if(!financeMemberSaveUncertain(response.error)||financeMemberSaveConflict(response.error))throw response.error;
+      var recovered=await financeMemberVerifyUnknownResult(client,member,u,expectedRevision,startedAt,[]);
+      if(!current())return;
+      var uncertain=new Error(recovered?'目前人員資料與啟用內容吻合，但無法證明本次交易已完整完成；請先核對登入與簽核狀態，勿重複點擊。':'啟用結果待確認；請先重新整理人員清單核對，勿重複點擊。');
+      uncertain.code='MEMBER_SAVE_UNCERTAIN';
+      throw uncertain;
+    }
+    if(!response.data||response.data.ok!==true||response.data.atomic!==true||!response.data.member){
+      var unconfirmed=new Error('正式系統未回傳完整的啟用交易確認；即使目前資料吻合，也不能證明 Google 登入與簽核權限同步完成。請先核對，勿重複點擊。');
+      unconfirmed.code='MEMBER_SAVE_UNCERTAIN';
+      throw unconfirmed;
+    }
+    var saved=mapUser(response.data.member),idx=USERS.findIndex(function(row){return row.id===id;});
+    if(response.data.replayed===true){
+      try{
+        var latest=await financeMemberReadCanonical(client,'id',saved.id,'核對重播後的人員最新版本');
+        if(!current())return;
+        if(latest&&financeMemberRevision(mapUser(latest))>=financeMemberRevision(saved))saved=mapUser(latest);
+        else saved=null;
+      }catch(readError){saved=null;}
+    }
+    if(saved&&idx>-1&&financeMemberRevision(USERS[idx])<=financeMemberRevision(saved))USERS[idx]=Object.assign({},USERS[idx],saved);
+    saveLocalAppStateSoon();renderUsers();renderUsersHealth();
+    financeMemberRefreshAfterSave(client);
+    alert(response.data.replayed===true?'原啟用請求已完成。請核對目前人員狀態；如有後續異動，以正式人員清單為準。':'人員已啟用，Google 登入預留與簽核權限已在同一筆交易完成。');
+  }catch(error){
+    if(!current())return;
+    if(financeMemberSaveConflict(error)||error&&error.code==='PERSONNEL_STALE'){
+      alert('人員資料已由其他人更新。請重新整理人員清單，核對最新資料後再啟用；系統不會覆蓋其他人的異動。');
+    }else if(error&&error.code==='MEMBER_SAVE_UNCERTAIN'||financeMemberSaveUncertain(error)){
+      alert('啟用結果待確認。'+(error&&error.message||'請先重新整理人員清單核對登入與簽核狀態。')+' 若仍無法判定，請系統管理員查核。');
+    }else{
+      alert('人員啟用未成功確認。\n\n'+friendlyErrorMessage(error,{action:'啟用人員'}));
+    }
+  }finally{
+    delete FINANCE_MEMBER_ADMIN_INFLIGHT[id];
+  }
 };
 async function fetchFinanceGoogleLoginHealth(user){
   var identity=ensureFinanceGoogleLoginHealthScope();
@@ -39806,10 +39858,126 @@ function primeUserModal(title,submitText){
   if(el('user-modal-submit'))el('user-modal-submit').disabled=false;
   if(el('add-err')){el('add-err').style.display='none';el('add-err').textContent='';}
   if(el('user-google-save-status')){el('user-google-save-status').style.display='none';el('user-google-save-status').textContent='';}
+  if(el('user-pending-create-wrap'))el('user-pending-create-wrap').style.display='none';
+  if(el('user-retry-original')){el('user-retry-original').style.display='none';el('user-retry-original').dataset.pendingKey='';el('user-retry-original').disabled=false;}
+  var turnoverHint=el('user-personnel-turnover-hint');
+  if(turnoverHint)turnoverHint.style.display=USER_EDIT_ID?'block':'none';
+  if(USER_EDIT_ID&&financeMemberAttemptBlocked(financeMemberAttemptKey(USER_EDIT_ID,''))){
+    if(el('user-modal-submit'))el('user-modal-submit').disabled=true;
+    if(el('add-err')){el('add-err').style.display='block';el('add-err').textContent='這筆人員的上次儲存結果仍待確認。若需確認，請按「重試原儲存內容」；只重播原資料與識別碼，不會套用後續修改。';}
+    financeMemberShowRetry(financeMemberAttemptKey(USER_EDIT_ID,''));
+  }
+}
+var USER_EDIT_SNAPSHOT=null;
+var USER_EDIT_GENERATION=0;
+var FINANCE_MEMBER_SAVE_INFLIGHT=false;
+var FINANCE_MEMBER_PENDING_CONFIRMATIONS=Object.create(null);
+function financeMemberAdminScope(){
+  return JSON.stringify([currentFinanceAuthUserId(),S.user&&S.user.id,currentTenantId(),activeDataEnvironment(),financeAuthIdentityEpoch,S.demoLogin]);
+}
+function financeMemberAttemptKey(id,email){
+  return 'finance-member-pending:'+JSON.stringify([currentFinanceAuthUserId(),S.user&&S.user.id,currentTenantId(),activeDataEnvironment(),id?'id:'+id:'email:'+String(email||'').trim().toLowerCase()]);
+}
+function financeMemberPendingAttempt(key){
+  if(FINANCE_MEMBER_PENDING_CONFIRMATIONS[key])return FINANCE_MEMBER_PENDING_CONFIRMATIONS[key];
+  try{
+    var saved=JSON.parse(sessionStorage.getItem(key)||'null');
+    if(saved&&saved.rpc==='finance_admin_upsert_member_reliable_v1'&&saved.args&&saved.args.p_request_id){
+      FINANCE_MEMBER_PENDING_CONFIRMATIONS[key]=saved;
+      return saved;
+    }
+  }catch(error){}
+  return null;
+}
+function financeMemberAttemptBlocked(key){
+  return !!financeMemberPendingAttempt(key);
+}
+function financeMemberMarkAttempt(key,attempt){
+  FINANCE_MEMBER_PENDING_CONFIRMATIONS[key]=attempt;
+  try{sessionStorage.setItem(key,JSON.stringify(attempt));}catch(error){}
+}
+function financeMemberClearAttempt(key){
+  delete FINANCE_MEMBER_PENDING_CONFIRMATIONS[key];
+  try{sessionStorage.removeItem(key);}catch(error){}
+}
+function financeMemberRequestId(){
+  if(window.crypto&&typeof window.crypto.randomUUID==='function')return window.crypto.randomUUID();
+  if(window.crypto&&typeof window.crypto.getRandomValues==='function'){
+    var bytes=new Uint8Array(16);window.crypto.getRandomValues(bytes);
+    bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+    var hex=Array.from(bytes,function(byte){return byte.toString(16).padStart(2,'0');}).join('');
+    return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);
+  }
+  throw new Error('瀏覽器無法產生安全的送件識別碼，請更新瀏覽器後再試。');
+}
+function financeMemberShowRetry(key){
+  var button=el('user-retry-original');
+  if(!button)return;
+  button.dataset.pendingKey=key||'';
+  button.style.display=key&&financeMemberAttemptBlocked(key)?'inline-flex':'none';
+}
+function financeMemberPendingCreates(){
+  var keys=Object.keys(FINANCE_MEMBER_PENDING_CONFIRMATIONS);
+  try{
+    for(var i=0;i<sessionStorage.length;i++){
+      var key=sessionStorage.key(i);
+      if(key&&key.indexOf('finance-member-pending:')===0&&keys.indexOf(key)<0)keys.push(key);
+    }
+  }catch(error){}
+  return keys.map(function(key){return{key:key,attempt:financeMemberPendingAttempt(key)};}).filter(function(entry){
+    var attempt=entry.attempt,args=attempt&&attempt.args;
+    return attempt&&attempt.kind==='create'&&args&&args.p_member
+      &&entry.key===financeMemberAttemptKey('',args.p_member.login_email);
+  });
+}
+window.selectPendingCreateAttempt=function(key){
+  if(USER_EDIT_ID)return;
+  var attempt=key&&financeMemberPendingAttempt(key),member=attempt&&attempt.args&&attempt.args.p_member;
+  if(!member||key!==financeMemberAttemptKey('',member.login_email)){
+    ['un','ujob','ue','ucontact','uext'].forEach(function(id){if(el(id))el(id).value='';});
+    if(el('ur'))el('ur').value='employee';
+    var firstEnt=(ENTS[0]||{}).id||'E1';
+    if(el('uent'))el('uent').value=firstEnt;
+    initDeptSel('ud',firstEnt);
+    if(el('user-modal-submit'))el('user-modal-submit').disabled=false;
+    if(el('add-err')){el('add-err').style.display='none';el('add-err').textContent='';}
+    financeMemberShowRetry('');
+    return;
+  }
+  if(el('un'))el('un').value=member.name||'';
+  if(el('ujob'))el('ujob').value=member.job_title||'';
+  if(el('ue'))el('ue').value=member.login_email||'';
+  if(el('ucontact'))el('ucontact').value=member.contact_email||'';
+  if(el('uext'))el('uext').value=member.extension||'';
+  if(el('ur'))el('ur').value=member.role||'employee';
+  if(el('uent'))el('uent').value=member.entity_id||'E1';
+  initDeptSel('ud',member.entity_id||'E1',member.department_code||'');
+  if(el('user-modal-submit'))el('user-modal-submit').disabled=true;
+  if(el('add-err')){el('add-err').style.display='block';el('add-err').textContent='此新增請求的結果仍待確認。欄位已恢復供核對；「重試原儲存內容」只使用原識別碼與原資料，不含您之後在畫面修改的內容。';}
+  financeMemberShowRetry(key);
+};
+function financeMemberRestorePendingCreateOptions(){
+  var entries=financeMemberPendingCreates(),wrap=el('user-pending-create-wrap'),select=el('user-pending-create-select');
+  if(!wrap||!select||!entries.length)return;
+  wrap.style.display='block';
+  select.innerHTML='<option value="">新增其他人員（保留原待確認請求）</option>'+entries.map(function(entry){
+    var member=entry.attempt.args.p_member;
+    return '<option value="'+escAttr(entry.key)+'">'+escAttr(member.name||'未命名')+'｜'+escAttr(member.login_email||'')+'</option>';
+  }).join('');
+  if(entries.length===1){select.value=entries[0].key;window.selectPendingCreateAttempt(entries[0].key);}
+  else if(el('add-err')){el('add-err').style.display='block';el('add-err').textContent='有 '+entries.length+' 筆新增人員結果待確認；請選擇要核對或重試的原請求。';}
+}
+function financeMemberRequestPending(error){
+  return /MEMBER_REQUEST_PENDING/.test([error&&error.code,error&&error.message,error&&error.details,error&&error.hint].join(' '));
+}
+function financeMemberRequestPayloadMismatch(error){
+  return /MEMBER_REQUEST_PAYLOAD_MISMATCH/.test([error&&error.code,error&&error.message,error&&error.details,error&&error.hint].join(' '));
 }
 window.openAddUser=function(){
   if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return;}
   USER_EDIT_ID='';
+  USER_EDIT_SNAPSHOT=null;
+  USER_EDIT_GENERATION++;
   primeUserModal('新增人員','建立帳號');
   if(el('un'))el('un').value='';
   if(el('ujob'))el('ujob').value='';
@@ -39822,11 +39990,14 @@ window.openAddUser=function(){
   initDeptSel('ud',firstEnt);
   if(el('uactive-label'))el('uactive-label').value='啟用';
   openModal('m-add-user');
+  financeMemberRestorePendingCreateOptions();
 };
 window.openEditU=function(id){
   if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return;}
   var u=USERS.find(function(x){return x.id===id;});if(!u)return;
   USER_EDIT_ID=id;
+  USER_EDIT_SNAPSHOT=Object.assign({},u);
+  USER_EDIT_GENERATION++;
   primeUserModal('編輯人員','儲存變更');
   var eid=u.eid||entityOfDept(u.dc)||'E1';
   var loginHealth=financeGoogleLoginHealthForUser(u);
@@ -39846,6 +40017,101 @@ window.openEditU=function(id){
   }
   openModal('m-add-user');
 };
+window.openUserOffboardingFromEdit=function(){
+  var id=USER_EDIT_ID,user=USERS.find(function(row){return row.id===id;});
+  if(!id||!user||user.active===false)return;
+  if(FINANCE_MEMBER_SAVE_INFLIGHT){alert('人員儲存正在確認中，請等待結果後再辦理交接。');return;}
+  if(!confirm('離職交接會依原人員的正式紀錄處理；此編輯視窗尚未儲存的更正不會帶入。確定前往離職交接？'))return;
+  closeModal('m-add-user');
+  openUserOffboarding(id);
+};
+var FINANCE_MEMBER_ADMIN_INFLIGHT=Object.create(null);
+function financeMemberRevision(user){
+  var revision=Number(user&&user.memberRevision);
+  return Number.isSafeInteger(revision)&&revision>0?revision:0;
+}
+function financeMemberProfileMatches(row,member){
+  if(!row||!member)return false;
+  var current=mapUser(row);
+  var requestedEmail=String(member.login_email||'').trim().toLowerCase();
+  var currentEmail=String(current.email||'').trim().toLowerCase();
+  var pendingEmail=String(current.pendingLoginEmail||'').trim().toLowerCase();
+  return String(current.n||'')===String(member.name||'')
+    &&!!requestedEmail&&(requestedEmail===currentEmail||requestedEmail===pendingEmail)
+    &&String(current.contactEmail||'').toLowerCase()===String(member.contact_email||'').toLowerCase()
+    &&String(current.jobTitle||'')===String(member.job_title||'')
+    &&String(current.extension||'')===String(member.extension||'')
+    &&String(current.role||'')===String(member.role||'')
+    &&String(current.eid||'')===String(member.entity_id||'')
+    &&String(current.dc||'')===String(member.department_code||'')
+    &&(current.active!==false)===(member.active!==false);
+}
+function financeMemberSnapshot(user,requestedEmail){
+  return {
+    name:user.n||'',login_email:requestedEmail||user.pendingLoginEmail||user.email||'',
+    contact_email:user.contactEmail||user.email||'',job_title:user.jobTitle||'',
+    extension:user.extension||'',role:user.role||'',entity_id:user.eid||'',
+    department_code:user.dc||'',active:user.active!==false
+  };
+}
+function financeMemberSaveConflict(error){
+  if(financeMemberRequestPending(error)||financeMemberRequestPayloadMismatch(error))return false;
+  var code=String(error&&error.code||'').toUpperCase();
+  var status=Number(error&&(error.status||error.statusCode)||0);
+  var message=String(error&&error.message||error||'');
+  return code==='PT409'||code==='40001'||status===409
+    ||/人員資料已由其他人更新|版本.*不一致|已由其他人變更/.test(message);
+}
+function financeMemberSaveUncertain(error){
+  var code=String(error&&error.code||'').toUpperCase();
+  var status=Number(error&&(error.status||error.statusCode)||0);
+  var message=String(error&&error.message||error||'');
+  return financeMemberRequestPending(error)||financeMemberRequestPayloadMismatch(error)||code==='CLIENT_TIMEOUT'||code==='PGRST003'||[408,502,503,504].indexOf(status)>-1
+    ||/failed to fetch|networkerror|network error|fetch failed|gateway timeout|timed out|connection pool|pool exhausted|連線逾時|逾時/.test(message.toLowerCase());
+}
+async function financeMemberReadCanonical(client,column,value,label){
+  var query=client.from('finance_users').select(FINANCE_USER_SAFE_COLUMNS)
+    .eq('tenant_id',currentTenantId()).eq(column,value).limit(2);
+  var response=await withOperationTimeout(query,label||'核對正式人員資料',12000);
+  if(response&&response.error)throw response.error;
+  var rows=response&&Array.isArray(response.data)?response.data:[];
+  return rows.length===1?rows[0]:null;
+}
+async function financeMemberExpectedRevision(client,user){
+  var revision=financeMemberRevision(user);
+  if(revision)return revision;
+  var latest=await financeMemberReadCanonical(client,'id',user.id,'讀取人員最新版本');
+  if(!latest||!financeMemberRevision(mapUser(latest))||!financeMemberProfileMatches(latest,financeMemberSnapshot(user))){
+    var stale=new Error('人員資料已變更，請重新整理並核對目前資料後再儲存。');
+    stale.code='PERSONNEL_STALE';
+    throw stale;
+  }
+  return financeMemberRevision(mapUser(latest));
+}
+async function financeMemberVerifyUnknownResult(client,member,user,expectedRevision,startedAt,knownIds){
+  try{
+    var row=await financeMemberReadCanonical(client,user?'id':'email',user?user.id:member.login_email,'確認人員儲存結果');
+    if(!row||!financeMemberProfileMatches(row,member))return null;
+    var revision=financeMemberRevision(mapUser(row));
+    if(user)return revision>expectedRevision?row:null;
+    var createdAt=Date.parse(row.created_at||'');
+    return revision>0&&Number.isFinite(createdAt)&&createdAt>=startedAt-5000
+      &&(knownIds||[]).indexOf(String(row.id))<0?row:null;
+  }catch(readError){
+    console.warn('Member save result could not be verified:',readError&&readError.message||readError);
+    return null;
+  }
+}
+function financeMemberRefreshAfterSave(client){
+  // The atomic RPC already returns the saved person. A broad accounting reload
+  // can take minutes, so refresh only organization projections in the background.
+  Promise.resolve().then(function(){
+    return Promise.allSettled([
+      withOperationTimeout(refreshOrgChartRowsFromRuntime(client,'member_admin_save'),'更新主管圖',12000),
+      withOperationTimeout(window.refreshMembershipOrgGraph('member_admin_save',{silent:true}),'更新正式組織',12000)
+    ]);
+  }).catch(function(error){console.warn('Member organization refresh deferred:',error&&error.message||error);});
+}
 window.submitAddUser=async function(){
   if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return;}
   var n=el('un')?el('un').value.trim():'';
@@ -39866,53 +40132,175 @@ window.submitAddUser=async function(){
     err.textContent='請選擇目前啟用、且屬於所選法人的任職部門／課／組。公司或舊歷史代碼不能作為新的人員歸屬。';
     return;
   }
+  if(FINANCE_MEMBER_SAVE_INFLIGHT)return;
+  FINANCE_MEMBER_SAVE_INFLIGHT=true;
   var submitBtn=el('user-modal-submit');if(submitBtn)submitBtn.disabled=true;
-  var user=USER_EDIT_ID?USERS.find(function(u){return u.id===USER_EDIT_ID;}):null;
+  var editId=USER_EDIT_ID,generation=USER_EDIT_GENERATION,scope=financeMemberAdminScope();
+  function current(){return generation===USER_EDIT_GENERATION&&editId===USER_EDIT_ID&&scope===financeMemberAdminScope();}
+  var user=editId?USER_EDIT_SNAPSHOT:null;
   var client=getSb();
+  var sent=false,blockResubmit=false,attemptKey='';
   try{
     if(!client||S.demoLogin)throw new Error('必須使用正式公司帳號登入後才能維護人員');
-    var response=await client.rpc('finance_admin_upsert_member_atomic_v1',{
-      p_member:{
-        id:user?user.id:null,
-        name:n,
-        login_email:email,
-        contact_email:contactEmail,
-        job_title:jobTitle||null,
-        extension:extension||null,
-        role:role,
-        entity_id:eid,
-        department_code:dc,
-        active:user?user.active!==false:true
-      },
-      p_expected_revision:user?Number(user.memberRevision||0):0
-    });
+    if(editId&&(!user||user.id!==editId))throw new Error('目前人員資料已更新，請重新整理後再編輯。');
+    var member={
+      id:user?user.id:null,
+      name:n,
+      login_email:email,
+      contact_email:contactEmail,
+      job_title:jobTitle||null,
+      extension:extension||null,
+      role:role,
+      entity_id:eid,
+      department_code:dc,
+      active:user?user.active!==false:true
+    };
+    attemptKey=financeMemberAttemptKey(editId,email);
+    if(financeMemberAttemptBlocked(attemptKey)){
+      var pending=new Error('這筆人員的上次儲存結果仍待確認。請先核對正式人員清單，勿重複送出；如有疑問請系統管理員查核。');
+      pending.code='MEMBER_SAVE_UNCERTAIN';
+      throw pending;
+    }
+    var expectedRevision=user?await financeMemberExpectedRevision(client,user):0;
+    if(!current())return;
+    var startedAt=Date.now(),knownIds=USERS.map(function(row){return String(row.id);});
+    var requestArgs={p_member:member,p_expected_revision:expectedRevision,p_request_id:financeMemberRequestId()};
+    var response;
+    try{
+      sent=true;
+      financeMemberMarkAttempt(attemptKey,{rpc:'finance_admin_upsert_member_reliable_v1',kind:user?'edit':'create',args:requestArgs,startedAt:startedAt});
+      response=await withOperationTimeout(client.rpc('finance_admin_upsert_member_reliable_v1',requestArgs),'儲存人員資料',45000);
+    }catch(rpcError){response={error:rpcError};}
+    if(response&&response.error&&response.status&&!response.error.status)response.error.status=response.status;
+    if(response&&response.data&&response.data.ok===true&&response.data.atomic===true&&response.data.member)financeMemberClearAttempt(attemptKey);
+    else if(response&&response.error&&(!financeMemberSaveUncertain(response.error)||financeMemberSaveConflict(response.error)))financeMemberClearAttempt(attemptKey);
+    if(!current())return;
     if(response.error){
-      if(isRpcMissing(response.error))throw new Error('正式後端尚未安裝「人員一次完成」版本，系統已停止舊式分段寫入，避免再產生半套帳號。');
-      throw response.error;
+      if(isRpcMissing(response.error))throw new Error('正式後端尚未安裝「人員可靠儲存」版本，系統已停止舊式分段寫入，避免再產生半套帳號。');
+      if(!financeMemberSaveUncertain(response.error)||financeMemberSaveConflict(response.error))throw response.error;
+      var recovered=await financeMemberVerifyUnknownResult(client,member,user,expectedRevision,startedAt,knownIds);
+      if(!current())return;
+      var uncertain=new Error(recovered
+        ?'目前正式資料與您填寫的內容吻合，但無法證明本次交易與 Google 登入、簽核權限都已完整完成。請先核對，勿再次按儲存。'
+        :'正式系統尚未回傳可確認的結果。請勿再次按儲存；請重新整理人員清單，確認姓名、公司部門與登入信箱後，再決定是否需要重做。');
+      uncertain.code='MEMBER_SAVE_UNCERTAIN';
+      throw uncertain;
     }
     var payload=response.data||{};
-    if(!payload.ok||!payload.atomic||!payload.member)throw new Error('正式系統沒有回傳完整的人員儲存確認，這次不會視為成功。');
+    if(!payload.ok||!payload.atomic||!payload.member){
+      var unconfirmed=new Error('正式系統沒有回傳完整的人員儲存交易確認。即使目前資料吻合，也不能視為本次 Google 登入與簽核權限都成功；請核對後再處理，勿直接重送。');
+      unconfirmed.code='MEMBER_SAVE_UNCERTAIN';
+      throw unconfirmed;
+    }
+    if(!current())return;
     var saved=mapUser(payload.member),existingIndex=USERS.findIndex(function(row){return String(row.id)===String(saved.id);});
-    if(existingIndex>-1)USERS[existingIndex]=Object.assign({},USERS[existingIndex],saved);
+    if(existingIndex>-1){
+      if(financeMemberRevision(USERS[existingIndex])<=financeMemberRevision(saved))USERS[existingIndex]=Object.assign({},USERS[existingIndex],saved);
+    }
     else USERS.push(saved);
     rememberFinanceGoogleLoginHealth(saved,payload.login||{
       status:saved.googleLinkStatus,
       login_email:saved.pendingLoginEmail||saved.email,
       revision:saved.googleLinkRevision
     });
-    try{await loadRemoteData();}catch(loadErr){console.warn('Atomic member reload failed:',loadErr&&loadErr.message?loadErr.message:loadErr);}
     saveLocalAppStateSoon();renderUsers();renderUsersHealth();
     err.style.display='none';
     var isCreate=!user,loginView=financeGoogleLoginStatusPresentation(financeGoogleLoginHealthForUser(saved));
     USER_EDIT_ID='';closeModal('m-add-user');
     ['un','ujob','ue','ucontact','uext'].forEach(function(id){if(el(id))el(id).value='';});
+    financeMemberRefreshAfterSave(client);
     alert((isCreate?'人員已新增':'人員資料已更新')+'。\n\n公司／部門、系統權限與 Google 登入信箱已在同一筆交易完成。\n'+loginView.detail);
   }catch(saveErr){
+    if(!current())return;
     err.style.display='block';
-    err.textContent='儲存沒有完成；人員資料、登入信箱與簽核權限都維持原狀。\n'+friendlyErrorMessage(saveErr,{action:user?'更新人員':'新增人員'});
+    if(financeMemberSaveConflict(saveErr)||saveErr&&saveErr.code==='PERSONNEL_STALE'){
+      blockResubmit=true;
+      err.textContent='人員資料已由其他人更新。您填寫的內容仍在這個視窗；請先複製需要保留的內容，重新整理人員清單並核對最新資料後再編輯。系統不會自動覆蓋別人的修改。';
+    }else if(saveErr&&saveErr.code==='MEMBER_SAVE_UNCERTAIN'||sent&&financeMemberSaveUncertain(saveErr)){
+      blockResubmit=true;
+      err.textContent='儲存結果待確認；已保留您填寫的內容。'+(saveErr&&saveErr.message||'')+' 若需確認，請按「重試原儲存內容」；只重播原資料與識別碼，不會套用後續修改。若仍無法判定，請將此畫面交由系統管理員查核。';
+      if(attemptKey)financeMemberShowRetry(attemptKey);
+    }else{
+      err.textContent=(sent?'人員儲存未成功確認；已保留您填寫的內容。\n':'這次尚未送出；已保留您填寫的內容。\n')+friendlyErrorMessage(saveErr,{action:user?'更新人員':'新增人員'});
+    }
     err.style.whiteSpace='pre-line';
   }finally{
-    if(submitBtn)submitBtn.disabled=false;
+    FINANCE_MEMBER_SAVE_INFLIGHT=false;
+    if(current()&&submitBtn)submitBtn.disabled=blockResubmit;
+  }
+};
+window.retryOriginalMemberSave=async function(){
+  if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return;}
+  var button=el('user-retry-original'),key=button&&button.dataset.pendingKey||'';
+  var attempt=key&&financeMemberPendingAttempt(key),args=attempt&&attempt.args;
+  var err=el('add-err');
+  if(!attempt||!args||attempt.rpc!=='finance_admin_upsert_member_reliable_v1'
+      ||key!==financeMemberAttemptKey(args.p_member&&args.p_member.id||'',args.p_member&&args.p_member.login_email||'')
+      ||(attempt.kind==='edit'&&USER_EDIT_ID!==args.p_member.id)
+      ||(attempt.kind==='create'&&USER_EDIT_ID)){
+    if(err){err.style.display='block';err.textContent='找不到與目前登入身分及表單相符的原送件。請核對人員清單並洽系統管理員。';}
+    return;
+  }
+  if(FINANCE_MEMBER_SAVE_INFLIGHT)return;
+  FINANCE_MEMBER_SAVE_INFLIGHT=true;
+  button.disabled=true;
+  var scope=financeMemberAdminScope(),generation=USER_EDIT_GENERATION,editId=USER_EDIT_ID;
+  function current(){return scope===financeMemberAdminScope()&&generation===USER_EDIT_GENERATION&&editId===USER_EDIT_ID;}
+  var client=getSb();
+  try{
+    if(!client||S.demoLogin)throw new Error('必須使用正式公司帳號登入後才能重試原儲存');
+    // Reuse the exact saved UUID, member payload and revision. The receipt RPC
+    // returns its prior result without applying another write if it already ran.
+    var response;
+    try{response=await withOperationTimeout(client.rpc(attempt.rpc,args),'重試原人員儲存',45000);}
+    catch(rpcError){response={error:rpcError};}
+    if(response&&response.error&&response.status&&!response.error.status)response.error.status=response.status;
+    var payload=response&&response.data||{};
+    if(payload.ok===true&&payload.atomic===true&&payload.member)financeMemberClearAttempt(key);
+    else if(response&&response.error&&!financeMemberSaveUncertain(response.error))financeMemberClearAttempt(key);
+    if(!current())return;
+    if(response&&response.error)throw response.error;
+    if(!payload.ok||!payload.atomic||!payload.member){
+      var unconfirmed=new Error('原請求仍沒有完整交易確認。請稍後使用同一個重試按鈕，勿另送新內容。');
+      unconfirmed.code='MEMBER_SAVE_UNCERTAIN';
+      throw unconfirmed;
+    }
+    var saved=mapUser(payload.member);
+    if(payload.replayed===true){
+      try{
+        var latest=await financeMemberReadCanonical(client,'id',saved.id,'核對重播後的人員最新版本');
+        if(!current())return;
+        if(latest&&financeMemberRevision(mapUser(latest))>=financeMemberRevision(saved))saved=mapUser(latest);
+        else saved=null;
+      }catch(readError){saved=null;}
+    }
+    if(saved){
+      var existingIndex=USERS.findIndex(function(row){return String(row.id)===String(saved.id);});
+      if(existingIndex>-1){
+        if(financeMemberRevision(USERS[existingIndex])<=financeMemberRevision(saved))USERS[existingIndex]=Object.assign({},USERS[existingIndex],saved);
+      }else USERS.push(saved);
+      if(payload.replayed!==true)rememberFinanceGoogleLoginHealth(saved,payload.login||{status:saved.googleLinkStatus,login_email:saved.pendingLoginEmail||saved.email,revision:saved.googleLinkRevision});
+      saveLocalAppStateSoon();renderUsers();renderUsersHealth();
+    }
+    if(err){err.style.display='none';err.textContent='';}
+    financeMemberShowRetry('');
+    USER_EDIT_ID='';closeModal('m-add-user');
+    financeMemberRefreshAfterSave(client);
+    alert(saved?'原儲存請求已由正式系統確認；目前人員資料已更新。若您在等待期間改過畫面欄位，請重新進入編輯送出。':'原儲存請求已由正式系統確認；請重新整理人員清單核對後續異動。');
+  }catch(error){
+    if(!current())return;
+    if(err){
+      err.style.display='block';
+      err.textContent=financeMemberRequestPayloadMismatch(error)
+        ?'原請求識別碼與正式紀錄的內容不一致，系統已停止重試。請交由系統管理員查核。'
+        :financeMemberSaveConflict(error)
+          ?'原請求未完成：人員資料已由其他人更新。請重新整理後核對，勿覆蓋別人的修改。'
+          :'原請求結果仍待確認。系統只會以相同內容與識別碼重試；請稍後再按「重試原儲存內容」，或交由系統管理員查核。';
+    }
+    financeMemberShowRetry(key);
+  }finally{
+    FINANCE_MEMBER_SAVE_INFLIGHT=false;
+    if(current()&&button)button.disabled=false;
   }
 };
 

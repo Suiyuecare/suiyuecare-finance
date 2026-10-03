@@ -146,11 +146,12 @@ jobs:
           FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json
         run: |
           set -euo pipefail
-          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright install --with-deps chromium webkit
           node scripts/check_formal_tus_browser_integration.cjs
           node scripts/check_admin_action_browser.cjs
           node scripts/check_shareholder_invoice_ocr_browser.cjs
           node scripts/check_personnel_login_browser.cjs
+          pnpm test:personnel-save-browser
           node scripts/check_human_accounting_browser_20261002.cjs
           pnpm test:history-summary-browser
           pnpm test:hr-bridge-browser
@@ -162,6 +163,16 @@ jobs:
           pnpm test:finance-ui-interactions
           pnpm test:audit-controls-native-concurrency
           pnpm test:audit-controls-browser-20260927
+
+      - name: Retain fictional personnel save evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: finance-personnel-save-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/finance-personnel-save-browser-20261003
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
 
       - name: Retain fictional search acceptance evidence even on failure
         if: always()
@@ -319,6 +330,8 @@ jobs:
           cp scripts/finance_external_labor_postflight.sql scripts/finance_external_labor_canary.sql scripts/finance_external_labor_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_attachment_claim_postflight.sql scripts/finance_attachment_claim_canary.sql scripts/finance_attachment_claim_fingerprint.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_attachment_staged_cleanup_postflight.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_personnel_save_conflict_postflight.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_member_save_reliable_receipt_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_human_accounting_float_preflight.sql scripts/finance_human_accounting_float_postflight.sql scripts/finance_human_accounting_float_fingerprint.sql scripts/finance_human_accounting_float_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_income_reconcile_preflight.sql scripts/finance_income_reconcile_postflight.sql scripts/finance_income_reconcile_fingerprint.sql scripts/finance_income_reconcile_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_invoice_revenue_result_preflight.sql scripts/finance_invoice_revenue_result_postflight.sql scripts/finance_invoice_revenue_result_fingerprint.sql scripts/finance_invoice_revenue_result_canary.sql "$BUNDLE/release-tools/scripts/"
@@ -585,6 +598,12 @@ jobs:
             run_gate "$TOOLS/scripts/finance_production_db_postflight.sql" \
               "$RUNNER_TEMP/finance-compatibility-gate.sql" "$RUNNER_TEMP/finance-compatibility-gate.json"
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_attachment_staged_cleanup_postflight.sql --output json) > "$RUNNER_TEMP/finance-attachment-cleanup-preflight.json"
+            node "$GUARD" prepare-read-only-query --input "$TOOLS/scripts/finance_personnel_save_conflict_postflight.sql" \
+              --output "$RUNNER_TEMP/finance-personnel-conflict-preflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-personnel-conflict-preflight.sql" --output json) > "$RUNNER_TEMP/finance-personnel-conflict-preflight.json"
+            node "$GUARD" prepare-read-only-query --input "$TOOLS/scripts/finance_member_save_reliable_receipt_postflight.sql" \
+              --output "$RUNNER_TEMP/finance-personnel-receipt-preflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-personnel-receipt-preflight.sql" --output json) > "$RUNNER_TEMP/finance-personnel-receipt-preflight.json"
           elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_audit_security_20260922"; then
             node "$GUARD" prepare-audit-security-prerequisite-query --input "$TOOLS/scripts/finance_production_db_postflight.sql" \
               --output "$RUNNER_TEMP/finance-audit-security-prerequisites.sql" --ledger "$LEDGER" \
@@ -1493,6 +1512,12 @@ jobs:
             --file "$RUNNER_TEMP/promotion-postflight.sql" --output json) > "$RUNNER_TEMP/promotion-postflight.json"
           if test "$RELEASE_PHASE" = "frontend_compat"; then
             (cd "$TOOLS" && supabase db query --linked --file scripts/finance_attachment_staged_cleanup_postflight.sql --output json) > "$RUNNER_TEMP/finance-attachment-cleanup-postflight.json"
+            node "$GUARD" prepare-read-only-query --input "$TOOLS/scripts/finance_personnel_save_conflict_postflight.sql" \
+              --output "$RUNNER_TEMP/finance-personnel-conflict-postflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-personnel-conflict-postflight.sql" --output json) > "$RUNNER_TEMP/finance-personnel-conflict-postflight.json"
+            node "$GUARD" prepare-read-only-query --input "$TOOLS/scripts/finance_member_save_reliable_receipt_postflight.sql" \
+              --output "$RUNNER_TEMP/finance-personnel-receipt-postflight.sql"
+            (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/finance-personnel-receipt-postflight.sql" --output json) > "$RUNNER_TEMP/finance-personnel-receipt-postflight.json"
           fi
           if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"; then
           (cd "$TOOLS" && supabase db query --linked \

@@ -116,6 +116,9 @@ const RELEASE_PHASE_DATABASE_INCOME_RECONCILE='database_income_reconcile_2026100
 const INVOICE_REVENUE_RESULT_MIGRATIONS=Object.freeze(['20261002151725']);
 const INVOICE_REVENUE_RESULT_SOURCE_SHA256=Object.freeze({'20261002151725':'55a5e12e9eefe4c49391f832807096e3dfd1238b5bc6fe37b839b4c54e370341'});
 const RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT='database_invoice_revenue_result_20261002';
+// Applied as a source-pinned backward-compatible fix before UI promotion.
+const PERSONNEL_CONFLICT_MIGRATIONS=Object.freeze(['20261003042021']);
+const PERSONNEL_RECEIPT_MIGRATIONS=Object.freeze(['20261003044426']);
 const AR_READ_SCOPE_MIGRATIONS = Object.freeze(['20260922072737']);
 const RELEASE_PHASE_DATABASE_AR_READ_SCOPE = 'database_ar_read_scope_20260922';
 const AR_READ_SCOPE_POSTFLIGHT_FILES = Object.freeze(['finance_ar_verified_accounting_scope_postflight.sql']);
@@ -164,7 +167,9 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...ATTACHMENT_STAGED_CLEANUP_MIGRATIONS,
   ...HUMAN_FLOAT_MIGRATIONS,
   ...INCOME_RECONCILE_MIGRATIONS,
-  ...INVOICE_REVENUE_RESULT_MIGRATIONS
+  ...INVOICE_REVENUE_RESULT_MIGRATIONS,
+  ...PERSONNEL_CONFLICT_MIGRATIONS,
+  ...PERSONNEL_RECEIPT_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -669,6 +674,8 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(ATTACHMENT_STAGED_CLEANUP_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the verified owner staged-attachment cleanup policy');
     if(INCOME_RECONCILE_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the reviewed income reconciliation migration');
     if(INVOICE_REVENUE_RESULT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the invoice revenue result RPC');
+    if(PERSONNEL_CONFLICT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the nonretry personnel conflict migration');
+    if(PERSONNEL_RECEIPT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the reliable personnel receipt migration');
     return 'compat';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
@@ -2395,6 +2402,8 @@ function verifyReceipt(receiptPath, deploymentPath, manifestPath, indexPath, can
 function manifestSha(file) { return sha256File(file); }
 
 const api = {
+  PERSONNEL_CONFLICT_MIGRATIONS,
+  PERSONNEL_RECEIPT_MIGRATIONS,
   INCOME_RECONCILE_MIGRATIONS, INCOME_RECONCILE_SOURCE_SHA256,
   RELEASE_PHASE_DATABASE_INCOME_RECONCILE, prepareIncomeReconcileRehearsal,
   INVOICE_REVENUE_RESULT_MIGRATIONS, INVOICE_REVENUE_RESULT_SOURCE_SHA256,
