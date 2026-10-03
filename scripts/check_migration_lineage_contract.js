@@ -308,5 +308,9 @@ for(const[version,sha256]of Object.entries(require('./finance_production_release
  const filename=migrations.find(name=>name.startsWith(version+'_'));
  check('new controls source matches reviewed SHA-256: '+version,!!filename&&crypto.createHash('sha256').update(fs.readFileSync(path.join(MIGRATIONS_DIR,filename))).digest('hex')===sha256);
 }
+for(const[version,sha256]of Object.entries(require('./finance_production_release_guard').PERSONNEL_SAVE_SOURCE_SHA256)){
+ const filename=migrations.find(name=>name.startsWith(version+'_'));
+ check('personnel save source matches reviewed SHA-256: '+version,!!filename&&crypto.createHash('sha256').update(fs.readFileSync(path.join(MIGRATIONS_DIR,filename))).digest('hex')===sha256);
+}
 process.stdout.write(`\nAdopted migration lineage: ${passed}/${passed + failed} passed.\n`);
 if (failed) process.exit(1);

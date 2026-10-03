@@ -119,6 +119,10 @@ const RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT='database_invoice_revenue_re
 // Applied as a source-pinned backward-compatible fix before UI promotion.
 const PERSONNEL_CONFLICT_MIGRATIONS=Object.freeze(['20261003042021']);
 const PERSONNEL_RECEIPT_MIGRATIONS=Object.freeze(['20261003044426']);
+const PERSONNEL_SAVE_SOURCE_SHA256=Object.freeze({
+  '20261003042021':'6b3dd504a57692d0af9ed73b24d8b42b7f6e5cad3cfbc6bcf3b6e4074b3c34f7',
+  '20261003044426':'335b05308582788181110a891dae7adf45458e3c69bf295f95bad83de1460fdc'
+});
 const AR_READ_SCOPE_MIGRATIONS = Object.freeze(['20260922072737']);
 const RELEASE_PHASE_DATABASE_AR_READ_SCOPE = 'database_ar_read_scope_20260922';
 const AR_READ_SCOPE_POSTFLIGHT_FILES = Object.freeze(['finance_ar_verified_accounting_scope_postflight.sql']);
@@ -676,6 +680,12 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(INVOICE_REVENUE_RESULT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the invoice revenue result RPC');
     if(PERSONNEL_CONFLICT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the nonretry personnel conflict migration');
     if(PERSONNEL_RECEIPT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the reliable personnel receipt migration');
+    for(const [version,expected] of Object.entries(PERSONNEL_SAVE_SOURCE_SHA256)){
+      const filename=local.find(name=>name.startsWith(version+'_'));
+      if(!filename)fail('frontend_compat personnel migration file is missing: '+version);
+      if(sha256File(path.join(directory,filename))!==expected)
+        fail('frontend_compat personnel migration source differs from sealed SHA256: '+version);
+    }
     return 'compat';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
@@ -2170,6 +2180,8 @@ function verifyUtilityCanary(inputPath) {
 
 function verifyReportsCanary(inputPath,domain) {
   const contracts={
+    personnel_save:{marker:'personnel_save_canary_result',result:{canary:'finance_personnel_save_live_v1',ok:true,rolled_back:true,auth_rows_created:false,edoc_target_delivery_proven:false}},
+    personnel_reliable_save:{marker:'personnel_save_canary_result',result:{canary:'finance_personnel_reliable_save_live_v1',ok:true,rolled_back:true,auth_rows_created:false,edoc_target_delivery_proven:false}},
     income_reconcile:{marker:'income_reconcile_canary_result',result:{canary:'readonly_income_reconcile_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
     invoice_revenue_result:{marker:'invoice_revenue_result_canary_result',result:{canary:'readonly_invoice_revenue_result_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
     attachment_claim:{marker:'attachment_claim_canary_result',result:{canary:'finance_attachment_claim',ok:true,rolled_back:true,read_only:true}},
@@ -2404,6 +2416,7 @@ function manifestSha(file) { return sha256File(file); }
 const api = {
   PERSONNEL_CONFLICT_MIGRATIONS,
   PERSONNEL_RECEIPT_MIGRATIONS,
+  PERSONNEL_SAVE_SOURCE_SHA256,
   INCOME_RECONCILE_MIGRATIONS, INCOME_RECONCILE_SOURCE_SHA256,
   RELEASE_PHASE_DATABASE_INCOME_RECONCILE, prepareIncomeReconcileRehearsal,
   INVOICE_REVENUE_RESULT_MIGRATIONS, INVOICE_REVENUE_RESULT_SOURCE_SHA256,

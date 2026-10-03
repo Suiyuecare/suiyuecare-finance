@@ -199,6 +199,23 @@ try {
   assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/reliable personnel receipt migration/);
   fs.appendFileSync(ledger,guard.PERSONNEL_RECEIPT_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
+  const pinnedPersonnelDir=path.join(attachmentClaimTemp,'personnel-source-pin');
+  fs.mkdirSync(pinnedPersonnelDir);
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS]){
+    const filename=fs.readdirSync(migrationDir).find(name=>name.startsWith(version+'_'));
+    fs.copyFileSync(path.join(migrationDir,filename),path.join(pinnedPersonnelDir,filename));
+  }
+  assert.equal(guard.classifyLedger(ledger,pinnedPersonnelDir,'frontend_compat','none',baseline),'compat');
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS]){
+    const filename=fs.readdirSync(pinnedPersonnelDir).find(name=>name.startsWith(version+'_'));
+    const file=path.join(pinnedPersonnelDir,filename),source=fs.readFileSync(file,'utf8');
+    fs.writeFileSync(file,source+'\n-- source changed after review\n');
+    assert.throws(()=>guard.classifyLedger(ledger,pinnedPersonnelDir,'frontend_compat','none',baseline),/personnel migration source differs from sealed SHA256/);
+    fs.writeFileSync(file,source);
+  }
+  const missingReceipt=fs.readdirSync(pinnedPersonnelDir).find(name=>name.startsWith(guard.PERSONNEL_RECEIPT_MIGRATIONS[0]+'_'));
+  fs.rmSync(path.join(pinnedPersonnelDir,missingReceipt));
+  assert.throws(()=>guard.classifyLedger(ledger,pinnedPersonnelDir,'frontend_compat','none',baseline),/personnel migration file is missing/);
 } finally {fs.rmSync(attachmentClaimTemp,{recursive:true,force:true});}
 const humanFloatTemp=fs.mkdtempSync(path.join(os.tmpdir(),'finance-human-float-release-'));
 try {
@@ -972,6 +989,11 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   fs.appendFileSync(ledger,guard.PERSONNEL_CONFLICT_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/reliable personnel receipt migration/);
   fs.appendFileSync(ledger,guard.PERSONNEL_RECEIPT_MIGRATIONS.join('\n')+'\n');
+  assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/personnel migration file is missing/);
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS]){
+    const filename=fs.readdirSync(path.join(root,'supabase/migrations')).find(name=>name.startsWith(version+'_'));
+    fs.copyFileSync(path.join(root,'supabase/migrations',filename),path.join(migrations,filename));
+  }
   assert.equal(guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), 'compat');
   guard.verifyLedger('pre', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
   guard.verifyLedger('post', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
