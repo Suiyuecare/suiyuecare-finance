@@ -1934,6 +1934,7 @@ html,body{overflow-x:hidden}
 :root{
   --font-sans:"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif;
   --admin-orange:#ea880c;
+  --admin-nav-active:var(--admin-orange);
   --admin-orange-dark:#b45309;
   --admin-orange-action:#b45309;
   --admin-orange-action-hover:#92400e;
@@ -2018,7 +2019,7 @@ nav::-webkit-scrollbar-thumb{background:#e6cdaa!important}
   transition:background .18s ease,color .18s ease,transform .18s ease!important;
 }
 .ni:hover,.ni.on{
-  background:var(--admin-orange-action)!important;
+  background:var(--admin-nav-active)!important;
   color:#fff!important;
   transform:translateX(2px);
   box-shadow:none!important;
@@ -2385,7 +2386,7 @@ input:focus,select:focus,textarea:focus{
     border-radius:18px!important;
   }
   nav .ni.on,nav .ni:hover{
-    background:var(--admin-orange-action)!important;
+    background:var(--admin-nav-active)!important;
     color:#fff!important;
     transform:none!important;
   }
@@ -4655,17 +4656,18 @@ input:focus,select:focus,textarea:focus{
 #pg-orgchart .org-explorer-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,300px);align-items:start;gap:20px}
 #pg-orgchart #org-chart-results{min-width:0}
 #pg-orgchart .org-outline-list,#pg-orgchart .org-outline-list ul{list-style:none;margin:0;padding:0}
-#pg-orgchart .org-outline-list ul{padding-left:18px;border-left:1px solid var(--admin-line);margin-left:20px}
-#pg-orgchart .org-outline-list ul ul ul ul ul{padding-left:0;margin-left:0;border-left:0}
-#pg-orgchart .org-outline-row{display:flex;align-items:center;gap:4px;min-width:0;min-height:72px;border:1px solid var(--admin-line);border-left:3px solid transparent;border-radius:10px;margin:0 0 8px;background:var(--admin-surface);position:relative;transition:background .12s}
-#pg-orgchart .org-outline-row.is-selected{border-left-color:var(--admin-orange-action);background:var(--admin-soft)}
+#pg-orgchart .org-outline-list ul{--org-outline-indent:14px;padding-left:var(--org-outline-indent);border-left:1px solid var(--admin-line);margin-left:20px}
+#pg-orgchart .org-outline-list ul ul ul ul ul{--org-outline-indent:0px;padding-left:0;margin-left:0;border-left:0}
+#pg-orgchart .org-outline-row{display:flex;align-items:center;gap:4px;min-width:0;min-height:64px;border:1px solid var(--admin-line);border-radius:8px;margin:0 0 6px;background:var(--admin-surface);position:relative;transition:background .12s}
+#pg-orgchart .org-outline-list ul>li>.org-outline-row::before{content:"";position:absolute;top:50%;left:calc(-1 * var(--org-outline-indent) - 1px);width:var(--org-outline-indent);border-top:1px solid var(--admin-line);pointer-events:none}
+#pg-orgchart .org-outline-row.is-selected{border-color:var(--admin-line);background:var(--admin-soft);box-shadow:inset 3px 0 0 var(--admin-orange-action)}
 #pg-orgchart .org-outline-row.org-outline-context{background:var(--admin-paper);border-style:dashed}
 #pg-orgchart .org-outline-toggle{flex:0 0 44px;width:44px;height:44px;border:0;border-radius:8px;background:transparent;color:var(--admin-orange-action);font-size:22px;line-height:1;cursor:pointer}
 #pg-orgchart .org-outline-leaf{flex:0 0 22px;width:22px}
-#pg-orgchart .org-outline-person{flex:1;min-width:0;min-height:64px;display:flex;flex-wrap:wrap;align-content:center;align-items:baseline;justify-content:flex-start;gap:3px 8px;padding:10px 6px;border:0;border-radius:6px;background:transparent;text-align:left;color:var(--admin-brown);font:inherit;line-height:1.55;cursor:pointer;white-space:normal}
-#pg-orgchart .org-outline-name{font-size:16px;font-weight:800;overflow-wrap:anywhere}
-#pg-orgchart .org-outline-title{font-size:13px;color:var(--admin-muted)}
-#pg-orgchart .org-outline-unit{flex-basis:100%;font-size:13px;color:var(--admin-muted);overflow-wrap:anywhere}
+#pg-orgchart .org-outline-person{flex:1;min-width:0;min-height:60px;display:flex;flex-wrap:wrap;align-content:center;align-items:baseline;justify-content:flex-start;gap:2px 8px;padding:8px 6px;border:0;border-radius:6px;background:transparent;text-align:left;color:var(--admin-brown);font:inherit;font-size:14px;font-weight:400;letter-spacing:0;line-height:1.4;text-rendering:optimizeLegibility;cursor:pointer;white-space:normal}
+#pg-orgchart .org-outline-name{font-size:15px;font-weight:700;letter-spacing:0;overflow-wrap:anywhere}
+#pg-orgchart .org-outline-title{font-size:13px;font-weight:400;letter-spacing:0;color:var(--admin-muted)}
+#pg-orgchart .org-outline-unit{flex-basis:100%;font-size:13px;font-weight:400;letter-spacing:0;color:var(--admin-muted);overflow-wrap:anywhere}
 #pg-orgchart .org-outline-count{flex:0 0 auto;margin-right:12px;color:var(--admin-muted);font-size:12px;white-space:nowrap}
 #pg-orgchart .org-outline-hint{font-size:12px;color:var(--admin-muted)}
 #pg-orgchart .org-outline-warning{font-size:12px;color:var(--admin-orange-action);border-left:2px solid var(--admin-orange);padding-left:6px;flex-basis:100%}
@@ -4704,7 +4706,7 @@ input:focus,select:focus,textarea:focus{
   #pg-orgchart .org-explorer-filters{grid-template-columns:1fr 1fr}
   #pg-orgchart .org-explorer-search{grid-column:1/-1}
   #pg-orgchart .org-outline-count{display:none}
-  #pg-orgchart .org-outline-list ul{padding-left:10px;margin-left:10px}
+  #pg-orgchart .org-outline-list ul{--org-outline-indent:10px;padding-left:var(--org-outline-indent);margin-left:10px}
 }
 @media(max-width:760px){
   #pg-orgchart .org-explorer-head{padding:16px!important;gap:14px}
@@ -4717,10 +4719,10 @@ input:focus,select:focus,textarea:focus{
   #pg-orgchart .org-explorer-layout{grid-template-columns:minmax(0,1fr)}
   #pg-orgchart #org-chart-person-detail{position:static;padding:18px}
   #pg-orgchart .org-outline-name{font-size:15px}
-  #pg-orgchart .org-outline-person{padding:9px 4px}
+  #pg-orgchart .org-outline-person{padding:8px 4px}
   #pg-orgchart .org-outline-toggle{flex-basis:44px}
   #pg-orgchart .org-outline-leaf{flex-basis:12px}
-  #pg-orgchart .org-outline-list ul{padding-left:7px;margin-left:7px}
+  #pg-orgchart .org-outline-list ul{--org-outline-indent:7px;padding-left:var(--org-outline-indent);margin-left:7px}
   #pg-orgchart .org-detail-back{display:block;min-height:44px;width:100%;margin-top:12px;border:1px solid var(--admin-line);border-radius:10px;background:var(--admin-surface);color:var(--admin-orange-action);font-size:14px;cursor:pointer}
   #pg-orgchart .org-explorer-toolbar{font-size:12px;gap:8px}
   #pg-orgchart .org-explorer-toolbar button{padding:8px 10px;font-size:13px}

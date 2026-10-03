@@ -35,6 +35,12 @@ module.exports=function orgChartClarityFixture(){
     const group=i<=12?['E1','D1','mgr-care']:i<=21?['E1','D2','mgr-admin']:['E2','X1','mgr-east'];
     add(id,'虛構組員'+String(i).padStart(2,'0'),'employee',group[0],group[1],group[2]);
   }
+  // Literal punctuation and long names/titles must fit real cards and export.
+  users.find(user=>user.id==='staff-28').n='虛構長姓名測試長姓名測試員';
+  rows.find(row=>row.userId==='staff-28').userName='虛構長姓名測試長姓名測試員';
+  users.find(user=>user.id==='staff-29').n='虛構 <&\" 員';
+  rows.find(row=>row.userId==='staff-29').userName='虛構 <&\" 員';
+  users.find(user=>user.id==='staff-30').jobTitle='虛構跨部門長期照顧資源整合暨品質管理專員';
   // Two people intentionally share a name: edit navigation must target IDs.
   users.find(user=>user.id==='staff-02').n='虛構組員01';
   rows.find(row=>row.userId==='staff-02').userName='虛構組員01';
