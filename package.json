@@ -91,7 +91,8 @@
     "test:attachment-claim-migration": "node scripts/check_attachment_claim_migration_contract.js",
     "test:formal-resumable-upload": "node scripts/check_formal_resumable_upload.cjs",
     "test:personnel-save": "node scripts/check_personnel_save_reliability.cjs && node scripts/test_personnel_save_conflict_nonretry.mjs && node scripts/test_member_save_reliable_receipt.mjs",
-    "test:personnel-save-browser": "node scripts/check_personnel_save_browser.cjs"
+    "test:personnel-save-browser": "node scripts/check_personnel_save_browser.cjs",
+    "test:org-chart-browser": "node scripts/check_org_chart_clarity_browser.cjs --output /tmp/finance-org-chart-clarity-browser"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

@@ -1028,23 +1028,29 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
   <!-- 組織圖（執行長 / 人資 / 行政部門主任）-->
   <div class="pg" id="pg-orgchart">
     <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap">
-      <div><div class="ph">人員主管圖與簽核關係｜歲悅長照集團</div><div class="ps">依正式 PPT 匯入人員、主管、課別、聯絡信箱與分機；簽核仍以直屬主管設定為準。</div></div>
+      <div><div class="ph">組織圖</div><div class="ps">查看公司、部門與人員的直屬主管關係。</div></div>
     </div>
     <div id="org-readonly-notice" style="display:none;padding:8px 13px;border-radius:8px;background:#f0ece6;border:1px solid #e0d0b8;font-size:12px;color:#6a5840;margin-bottom:10px">此頁僅開放執行長、人資、行政部門主任維護。</div>
     <div class="mobile-third-tabs mobile-org-tabs" data-mobile-org-tabs role="tablist" aria-label="組織圖內容">
-      <button type="button" class="on" role="tab" aria-selected="true" data-mobile-org-tab="chart" onclick="mobileOrgTab('chart',this)">主管關係圖</button>
-      <button type="button" role="tab" aria-selected="false" data-mobile-org-tab="people" onclick="mobileOrgTab('people',this)">人員簽核設定</button>
+      <button id="org-tab-chart" type="button" class="on" role="tab" aria-selected="true" aria-controls="org-chart-panel" data-mobile-org-tab="chart" onclick="mobileOrgTab('chart',this)">主管關係</button>
+      <button id="org-tab-people" type="button" role="tab" aria-selected="false" aria-controls="org-legacy-people" data-mobile-org-tab="people" onclick="mobileOrgTab('people',this)">人員簽核設定</button>
     </div>
-    <div class="card ppt-org-card" data-mobile-org-pane="chart">
-      <div class="chd"><div><span class="cht">人員主管圖</span><span class="ppt-source-chip">直屬主管關係</span></div><span id="org-summary" style="font-size:11px;color:#94a3b8"></span></div>
-      <div class="org-runtime-status" style="padding:0 12px"></div>
-      <div class="org-chart-guide" role="note">
-        <span><i class="org-chart-guide-line" aria-hidden="true"></i>線條代表直屬主管與簽核關係</span>
-        <span class="org-chart-scroll-note">可左右滑動查看完整階層</span>
+    <div id="org-chart-panel" class="card ppt-org-card" data-mobile-org-pane="chart" role="tabpanel" aria-labelledby="org-tab-chart">
+      <div class="chd org-explorer-head"><div><span class="cht">誰負責、向誰報告</span><span id="org-summary"></span></div><div class="org-mode-switch" role="group" aria-label="組織圖呈現方式"><button id="org-chart-mode-outline" type="button" aria-pressed="true" onclick="orgExplorerMode('outline')">層級列表</button><button id="org-chart-mode-full" type="button" aria-pressed="false" onclick="orgExplorerMode('full')">完整關係圖</button></div></div>
+      <details class="org-explorer-runtime"><summary>資料同步狀態：<span id="org-explorer-runtime-label">尚未讀取</span></summary><div class="org-runtime-status" style="padding:0 12px"></div></details>
+      <div id="org-explorer">
+        <div class="org-explorer-filters">
+          <div class="org-explorer-search"><label for="org-chart-query">找人員或部門</label><div><input id="org-chart-query" type="search" placeholder="姓名、職稱、部門、分機" oninput="if(!event.isComposing)orgExplorerFilter()" oncompositionend="orgExplorerFilter()"><button type="button" id="org-chart-clear" aria-label="清除搜尋" onclick="orgExplorerClear()" hidden>清除</button></div></div>
+          <div><label for="org-chart-company">公司</label><select id="org-chart-company" data-no-search="1" onchange="orgExplorerFilter('company')"><option value="">全部公司</option></select></div>
+          <div><label for="org-chart-department">部門</label><select id="org-chart-department" data-no-search="1" onchange="orgExplorerFilter()"><option value="">全部部門</option></select></div>
+        </div>
+        <div class="org-explorer-toolbar"><span id="org-chart-result-count" role="status" aria-live="polite"></span><div><button type="button" onclick="orgExplorerExpand(true)">全部展開</button><button type="button" onclick="orgExplorerExpand(false)">收合層級</button></div></div>
+        <div class="org-explorer-layout"><div id="org-chart-results" aria-label="直屬主管層級"></div><aside id="org-chart-person-detail" aria-label="人員資料"></aside></div>
       </div>
-      <div id="org-chart-view" class="org-chart-stage"></div>
+      <div id="org-full-guide" class="org-chart-guide" role="note" hidden><span><i class="org-chart-guide-line" aria-hidden="true"></i>全部啟用人員 · 線條代表直屬主管關係</span><span>圖內可左右捲動；找人請切換「層級列表」</span></div>
+      <div id="org-chart-view" class="org-chart-stage" hidden></div>
     </div>
-    <section id="org-legacy-people" class="org-personnel-list-section" data-mobile-org-pane="people">
+    <section id="org-legacy-people" class="org-personnel-list-section" data-mobile-org-pane="people" role="tabpanel" aria-labelledby="org-tab-people" hidden>
       <div class="org-personnel-list-head">
         <div><div class="org-personnel-list-title">人員簽核設定</div><div class="org-personnel-list-subtitle">設定每位人員的直屬主管、可簽核資格、主管角色與代理人；儲存後套用到新送出的表單。</div></div>
         <div class="org-personnel-list-actions"><button class="btn-g" onclick="resetOrgChartFromUsers()">依人員重建</button><button class="btn-p" onclick="saveOrgChart()">儲存簽核設定</button></div>
@@ -7058,6 +7064,13 @@ function renderOrgAdminRuntimeStatus(){
   html+=departmentRuntimeHealthSummaryHtml(ORG_ADMIN_RUNTIME||{});
   html+=frontOfficeRuntimeHealthSummaryHtml(ORG_ADMIN_RUNTIME||{});
   nodes.forEach(function(node){node.innerHTML=html;});
+  var disclosure=document.querySelector('#pg-orgchart .org-explorer-runtime'),label=el('org-explorer-runtime-label');
+  if(disclosure&&label){
+    var needsReview=state.status==='warn'||!!disclosure.querySelector('.runtime-health-note.warn');
+    label.textContent=needsReview?'有需確認項目':state.label||'尚未讀取';
+    if(needsReview&&disclosure.dataset.orgHealthState!=='warn')disclosure.open=true;
+    disclosure.dataset.orgHealthState=needsReview?'warn':state.status;
+  }
 }
 function departmentRuntimeHealthSummaryHtml(runtime){
   var health=runtime&&runtime.departmentHealth;
@@ -42174,8 +42187,8 @@ function orgCardHtml(u,depth,visited,displaySupervisorId){
   visited=visited||{};
   if(visited[u.id])return'<div class="org-chart-empty" style="color:#8a1010">組織圖循環：'+escAttr(u.n||u.id)+'</div>';
   visited[u.id]=true;
-  var children=orgChildrenOf(u.id);
-  var d=gD(u.dc),e=gE(u.eid||entityOfDept(u.dc)||'E1');
+  var children=ORG_EXPLORER_MODEL&&ORG_EXPLORER_MODEL.children.has(String(u.id))?ORG_EXPLORER_MODEL.children.get(String(u.id)):orgChildrenOf(u.id);
+  var d=gD(u.dc),eid=orgExplorerCompanyId(u),e=ENTS.find(function(entity){return String(entity.id)===eid;})||{};
   var canDrag=false;
   var row=orgRowForUser(u.id)||{};
   var state=orgSupervisorStatus(u);
@@ -42190,7 +42203,7 @@ function orgCardHtml(u,depth,visited,displaySupervisorId){
   if(children.length)badgeHtml+='<span class="org-chart-badge reports">直屬 '+children.length+' 位</span>';
   if(state.status==='warn')badgeHtml+='<span class="org-chart-badge warn">'+escAttr(state.label)+'</span>';
   var html='<div class="org-tree-branch">'
-    +'<div class="org-chart-card '+(isRoot?'is-root ':'')+(displaySupervisorId?'has-parent ':'')+(children.length?'has-children ':'')+(state.status==='warn'?'warn':'')+'" data-supervisor-id="'+escAttr(u.id)+'" data-org-person-id="'+escAttr(u.id)+'" data-org-supervisor-id="'+escAttr(displaySupervisorId||'')+'" data-org-depth="'+depth+'" draggable="'+(canDrag?'true':'false')+'" title="'+(canDrag?'可拖曳其他人到這裡，設定為 '+escAttr(u.n||'此人員')+' 的下屬':'')+'" ondragstart="orgDragStart(event,\''+escAttr(u.id)+'\')" ondragend="orgDragEnd(event)" ondragover="orgDragOver(event)" ondragleave="orgDragLeave(event)" ondrop="orgDropOnSupervisor(event,\''+escAttr(u.id)+'\')">'
+    +'<div class="org-chart-card '+(isRoot?'is-root ':'')+(displaySupervisorId?'has-parent ':'')+(children.length?'has-children ':'')+(state.status==='warn'?'warn':'')+'" data-supervisor-id="'+escAttr(u.id)+'" data-org-person-id="'+escAttr(u.id)+'" data-org-supervisor-id="'+escAttr(displaySupervisorId||'')+'" data-org-depth="'+depth+'" draggable="'+(canDrag?'true':'false')+'" title="'+(canDrag?'可拖曳其他人到這裡，設定為 '+escAttr(u.n||'此人員')+' 的下屬':'')+'" ondragstart="orgDragStart(event,this.dataset.supervisorId)" ondragend="orgDragEnd(event)" ondragover="orgDragOver(event)" ondragleave="orgDragLeave(event)" ondrop="orgDropOnSupervisor(event,this.dataset.supervisorId)">'
     +'<div class="org-chart-avatar">'+escAttr(u.init||String(u.n||'?').slice(0,1))+'</div>'
     +'<div style="min-width:0"><div class="org-chart-name">'+escAttr(u.n||'未命名')+'</div><div class="org-chart-meta">'+escAttr(orgDisplayRoleLabel(u)+' · '+(d.c||u.dc||'未填')+' '+(d.n||''))+'</div>'+orgContactInfoHtml(u,canManageOrgChart())+'</div>'
     +'<div class="org-chart-badges">'+badgeHtml+'</div></div>';
@@ -42290,25 +42303,168 @@ function drawOrgChartConnectors(){
 }
 if(typeof window!=='undefined')window.addEventListener('resize',scheduleOrgChartConnectors);
 if(typeof document!=='undefined'&&document.fonts&&document.fonts.ready)document.fonts.ready.then(scheduleOrgChartConnectors);
+// Reading state is separate from ORG_CHART and its versioned editing draft.
+var ORG_EXPLORER_STATE={identity:'',mode:'outline',selected:'',expanded:{},filteredCollapsed:{},initialized:false};
+var ORG_EXPLORER_MODEL=null;
+function orgExplorerModel(users){
+  var model={users:users.slice().sort(orgHierarchySort),byId:new Map(),children:new Map(),parent:new Map(),states:new Map(),roots:[]};
+  model.users.forEach(function(u){model.byId.set(String(u.id),u);model.children.set(String(u.id),[]);});
+  model.users.forEach(function(u){
+    var id=String(u.id),supervisor=orgVisibleSupervisor(u);
+    if(supervisor&&model.byId.has(String(supervisor.id))){
+      model.parent.set(id,String(supervisor.id));model.children.get(String(supervisor.id)).push(u);
+    }
+    var status=orgSupervisorStatus(u),configured=orgSupervisorUser(orgRowForUser(id));
+    if(configured&&configured.active===false)status={status:'warn',label:'主管已停用',detail:'原直屬主管 '+String(configured.n||'')+' 已停用，請在簽核設定確認接任主管。'};
+    model.states.set(id,status);
+  });
+  // Retain actual assignments for details/counts; cyclic links cannot form a hierarchy.
+  model.actualParent=new Map(model.parent);model.directChildren=new Map(model.children);model.cycleIds=new Set();
+  var checked=new Set();
+  model.users.forEach(function(u){
+    var id=String(u.id),path=[],positions=new Map();
+    while(id&&!checked.has(id)&&!positions.has(id)){positions.set(id,path.length);path.push(id);id=model.parent.get(id);}
+    if(id&&positions.has(id))path.slice(positions.get(id)).forEach(function(key){model.cycleIds.add(key);});
+    path.forEach(function(key){checked.add(key);});
+  });
+  model.cycleIds.forEach(function(id){model.parent.delete(id);});
+  model.children.forEach(function(children,id){model.children.set(id,children.filter(function(u){return !model.cycleIds.has(String(u.id));}));});
+  model.roots=model.users.filter(function(u){return !model.parent.has(String(u.id));});
+  var seen=new Set();
+  function mark(u){var id=String(u.id);if(seen.has(id))return;seen.add(id);model.children.get(id).forEach(mark);}
+  model.roots.forEach(mark);
+  model.users.forEach(function(u){if(!seen.has(String(u.id))){model.roots.push(u);mark(u);}});
+  return model;
+}
+function orgExplorerCompanyId(u){return String(u.eid||entityOfDept(u.dc)||'');}
+function orgExplorerCompanyLabel(u){var eid=orgExplorerCompanyId(u),e=ENTS.find(function(entity){return String(entity.id)===eid;})||{};return String(e.full||e.n||e.s||'未指定公司');}
+function orgExplorerDepartmentLabel(u){var d=gD(u.dc)||{};return String(d.n||u.dc||'未指定部門');}
+function orgExplorerSelectOptions(){
+  var model=ORG_EXPLORER_MODEL;if(!model)return;
+  var company=el('org-chart-company'),department=el('org-chart-department');if(!company||!department)return;
+  var companyValue=company.value,departmentValue=department.value,companies=new Map(),departments=new Map();
+  model.users.forEach(function(u){companies.set(orgExplorerCompanyId(u)||'__unassigned__',orgExplorerCompanyLabel(u));});
+  function options(map,label){return '<option value="">'+label+'</option>'+Array.from(map).sort(function(a,b){return a[1].localeCompare(b[1],'zh-Hant');}).map(function(pair){return '<option value="'+escAttr(pair[0])+'">'+escAttr(pair[1])+'</option>';}).join('');}
+  company.innerHTML=options(companies,'全部公司');company.value=companies.has(companyValue)?companyValue:'';
+  model.users.forEach(function(u){if(!company.value||(orgExplorerCompanyId(u)||'__unassigned__')===company.value)departments.set(String(u.dc||'__unassigned__'),orgExplorerDepartmentLabel(u));});
+  department.innerHTML=options(departments,'全部部門');department.value=departments.has(departmentValue)?departmentValue:'';
+}
+function orgExplorerMatching(){
+  var model=ORG_EXPLORER_MODEL,q=String((el('org-chart-query')||{}).value||'').trim().normalize('NFKC').toLocaleLowerCase(),company=(el('org-chart-company')||{}).value||'',department=(el('org-chart-department')||{}).value||'';
+  var matches=new Set(),included=new Set();
+  model.users.forEach(function(u){
+    var hay=[u.n,u.jobTitle,orgDisplayRoleLabel(u),u.dc,orgExplorerDepartmentLabel(u),orgExplorerCompanyLabel(u),u.extension].join(' ').normalize('NFKC').toLocaleLowerCase();
+    if(q&&hay.indexOf(q)<0)return;
+    if(company&&(orgExplorerCompanyId(u)||'__unassigned__')!==company)return;
+    if(department&&String(u.dc||'__unassigned__')!==department)return;
+    matches.add(String(u.id));
+  });
+  matches.forEach(function(id){var seen=new Set();while(id&&!seen.has(id)){seen.add(id);included.add(id);id=model.parent.get(id);}});
+  return {matches:matches,included:included,filtering:!!(q||company||department)};
+}
+function orgExplorerRenderOutline(revealSelection){
+  var model=ORG_EXPLORER_MODEL,host=el('org-chart-results');if(!model||!host)return;
+  var match=orgExplorerMatching(),seen=new Set(),state=ORG_EXPLORER_STATE;
+  if(!match.included.has(state.selected))state.selected=match.matches.values().next().value||'';
+  if(!match.filtering&&revealSelection){var parent=model.parent.get(state.selected),ancestors=new Set();while(parent&&!ancestors.has(parent)){ancestors.add(parent);state.expanded[parent]=true;parent=model.parent.get(parent);}}
+  function branch(u,depth){
+    var id=String(u.id);if(seen.has(id)||!match.included.has(id))return '';seen.add(id);
+    var children=model.children.get(id).filter(function(child){return match.included.has(String(child.id))&&!seen.has(String(child.id));});
+    var open=match.filtering?!state.filteredCollapsed[id]:!!state.expanded[id],warning=model.states.get(id),context=!match.matches.has(id),selected=state.selected===id;
+    var supervisor=orgSupervisorUser(orgRowForUser(id));
+    var rawParent=supervisor?String(supervisor.id):String((orgRowForUser(id)||{}).supervisorId||'');
+    return '<li>'+(model.cycleIds.has(id)?'<div class="org-outline-anomaly">主管關係待確認</div>':'')+'<div class="org-outline-row'+(context?' org-outline-context':'')+(selected?' is-selected':'')+'" data-org-person-id="'+escAttr(id)+'" data-org-supervisor-id="'+escAttr(rawParent)+'">'
+      +(children.length?'<button type="button" class="org-outline-toggle" data-org-toggle="'+escAttr(id)+'" aria-expanded="'+open+'" aria-label="'+(open?'收合':'展開')+escAttr(u.n||'未命名')+'的直屬成員"><span aria-hidden="true">'+(open?'−':'+')+'</span></button>':'<span class="org-outline-leaf" aria-hidden="true"></span>')
+      +'<button type="button" class="org-outline-person" data-org-select="'+escAttr(id)+'" aria-pressed="'+selected+'"><span class="org-outline-name">'+escAttr(u.n||'未命名')+'</span><span class="org-outline-title">'+escAttr(u.jobTitle||orgDisplayRoleLabel(u))+'</span><span class="org-outline-unit">'+escAttr(orgExplorerDepartmentLabel(u))+'</span>'
+      +(context?'<span class="org-outline-hint">上層主管</span>':'')+(depth>4?'<span class="org-outline-hint">第 '+(depth+1)+' 層</span>':'')
+      +(warning.status==='warn'?'<span class="org-outline-warning">'+escAttr(warning.label)+'</span>':'')+'</button>'
+      +(model.children.get(id).length?'<span class="org-outline-count">直屬 '+model.children.get(id).length+' 位</span>':'')+'</div>'
+      +(open&&children.length?'<ul>'+children.map(function(child){return branch(child,depth+1);}).join('')+'</ul>':'')+'</li>';
+  }
+  host.innerHTML=match.matches.size?'<ul class="org-outline-list">'+model.roots.map(function(u){return branch(u,0);}).join('')+'</ul>':'<div class="org-explorer-empty"><strong>'+(model.users.length?'找不到符合條件的人員':'目前沒有啟用人員')+'</strong><p>'+(model.users.length?'試試姓名、部門或分機，或清除篩選再查看。':'人員資料載入後會顯示在這裡。')+'</p>'+(model.users.length?'<button type="button" onclick="orgExplorerClear(true)">清除全部篩選</button>':'')+'</div>';
+  var count=el('org-chart-result-count');if(count)count.textContent=match.filtering?'符合 '+match.matches.size+' / '+model.users.length+' 位'+(match.included.size>match.matches.size?' · 淡色列為上層主管':''):'共 '+model.users.length+' 位 · 點選人員查看詳細資料';
+  var clear=el('org-chart-clear');if(clear)clear.hidden=!String((el('org-chart-query')||{}).value||'');
+  // Delegation avoids interpolating personnel identifiers into inline JavaScript.
+  if(!host.dataset.orgExplorerBound){host.dataset.orgExplorerBound='1';host.addEventListener('click',function(event){var toggle=event.target.closest('[data-org-toggle]'),select=event.target.closest('[data-org-select]');if(toggle)window.orgExplorerToggle(toggle.dataset.orgToggle);else if(select)window.orgExplorerSelect(select.dataset.orgSelect);});}
+  orgExplorerRenderDetail();
+}
+function orgExplorerRenderDetail(){
+  var host=el('org-chart-person-detail'),model=ORG_EXPLORER_MODEL;if(!host||!model)return;
+  var u=model.byId.get(ORG_EXPLORER_STATE.selected);
+  host.hidden=!u;if(!u){host.innerHTML='';return;}
+  var row=orgRowForUser(u.id)||{},supervisor=orgSupervisorUser(row),state=model.states.get(String(u.id)),children=model.directChildren.get(String(u.id));
+  var supervisorText=supervisor?(supervisor.n||'未命名')+(supervisor.active===false?'（已停用）':''):String(row.supervisorId||row.supervisorName||'')?'主管資料待確認':normalizedRoleKey(u)==='ceo'?'最高層，未設定主管':'尚未設定主管';
+  function personLink(person){return '<button type="button" class="org-detail-person-link" data-org-detail-select="'+escAttr(person.id)+'">'+escAttr(person.n||'未命名')+'<span aria-hidden="true"> →</span></button>';}
+  host.innerHTML='<div class="org-detail-heading"><span class="org-detail-eyebrow">人員資料</span><h3 tabindex="-1">'+escAttr(u.n||'未命名')+'</h3><p>'+escAttr(u.jobTitle||orgDisplayRoleLabel(u))+'</p></div>'
+    +'<dl><div><dt>公司</dt><dd>'+escAttr(orgExplorerCompanyLabel(u))+'</dd></div><div><dt>部門</dt><dd>'+escAttr(orgExplorerDepartmentLabel(u))+(u.dc?'<small>'+escAttr(u.dc)+'</small>':'')+'</dd></div>'
+    +'<div><dt>直屬主管</dt><dd>'+(supervisor&&model.byId.has(String(supervisor.id))&&String(supervisor.id)!==String(u.id)?personLink(supervisor):escAttr(supervisorText))+'</dd></div><div><dt>簽核資格</dt><dd>'+(orgCanApprove(u)?'可簽核':'未啟用')+'</dd></div></dl>'
+    +(state.status==='warn'?'<div class="org-detail-warning"><strong>'+escAttr(state.label)+'</strong><p>'+escAttr(state.detail)+'</p></div>':'')
+    +'<div class="org-detail-reports"><h4>直屬成員 <span>'+children.length+' 位</span></h4>'+(children.length?'<ul>'+children.map(function(child){return '<li>'+personLink(child)+'<small>'+escAttr(orgExplorerDepartmentLabel(child))+'</small></li>';}).join('')+'</ul>':'<p>目前沒有直屬成員</p>')+'</div>'
+    +'<details class="org-detail-contact" open><summary>聯絡資料</summary>'+orgContactInfoHtml(u,canManageOrgChart())+(u.extension?'<p>分機：'+escAttr(u.extension)+'</p>':'')+'</details>'
+    +(canManageOrgChart()?'<button type="button" class="btn-g org-detail-edit" onclick="orgExplorerEditSelected()">調整主管與簽核</button>':'')
+    +'<button type="button" class="org-detail-back" onclick="orgExplorerBack()">返回人員列表</button>';
+  if(!host.dataset.orgExplorerBound){host.dataset.orgExplorerBound='1';host.addEventListener('click',function(event){var button=event.target.closest('[data-org-detail-select]');if(button)window.orgExplorerSelect(button.dataset.orgDetailSelect,true);});}
+}
+function orgExplorerFocusRow(id,selector){
+  var host=el('org-chart-results'),button=host&&Array.from(host.querySelectorAll(selector||'[data-org-select]')).find(function(b){return (b.dataset.orgSelect||b.dataset.orgToggle)===String(id);});
+  if(button){button.focus({preventScroll:true});button.scrollIntoView({block:'nearest',inline:'nearest'});}
+}
+window.orgExplorerFilter=function(source){if(source==='company')orgExplorerSelectOptions();ORG_EXPLORER_STATE.filteredCollapsed={};if(ORG_EXPLORER_MODEL){var match=orgExplorerMatching();if(!match.matches.has(ORG_EXPLORER_STATE.selected))ORG_EXPLORER_STATE.selected=match.matches.values().next().value||'';}orgExplorerRenderOutline(true);};
+window.orgExplorerClear=function(all){var q=el('org-chart-query');if(q)q.value='';if(all){el('org-chart-company').value='';el('org-chart-department').value='';orgExplorerSelectOptions();}ORG_EXPLORER_STATE.filteredCollapsed={};orgExplorerRenderOutline(true);if(q)q.focus();};
+window.orgExplorerToggle=function(id){if(orgExplorerMatching().filtering)ORG_EXPLORER_STATE.filteredCollapsed[id]=!ORG_EXPLORER_STATE.filteredCollapsed[id];else ORG_EXPLORER_STATE.expanded[id]=!ORG_EXPLORER_STATE.expanded[id];ORG_EXPLORER_STATE.selected=String(id);orgExplorerRenderOutline();orgExplorerFocusRow(id,'[data-org-toggle]');};
+window.orgExplorerExpand=function(expand){var model=ORG_EXPLORER_MODEL;if(!model)return;if(!expand&&!orgExplorerMatching().filtering)ORG_EXPLORER_STATE.selected=model.roots.length?String(model.roots[0].id):'';model.users.forEach(function(u){ORG_EXPLORER_STATE.expanded[String(u.id)]=!!expand;ORG_EXPLORER_STATE.filteredCollapsed[String(u.id)]=!expand;});orgExplorerRenderOutline();};
+window.orgExplorerSelect=function(id,fromDetail){
+  var model=ORG_EXPLORER_MODEL;if(!model||!model.byId.has(String(id)))return;
+  if(fromDetail){el('org-chart-query').value='';el('org-chart-company').value='';el('org-chart-department').value='';orgExplorerSelectOptions();}
+  ORG_EXPLORER_STATE.selected=String(id);
+  var parent=model.parent.get(String(id)),seen=new Set();while(parent&&!seen.has(parent)){seen.add(parent);ORG_EXPLORER_STATE.expanded[parent]=true;ORG_EXPLORER_STATE.filteredCollapsed[parent]=false;parent=model.parent.get(parent);}
+  orgExplorerRenderOutline();
+  if(window.matchMedia('(max-width: 760px)').matches){var heading=el('org-chart-person-detail').querySelector('h3');if(heading){heading.focus({preventScroll:true});heading.scrollIntoView({block:'start'});}}
+  else orgExplorerFocusRow(id);
+};
+window.orgExplorerBack=function(){orgExplorerFocusRow(ORG_EXPLORER_STATE.selected);};
+window.orgExplorerEditSelected=function(){
+  if(!canManageOrgChart())return;
+  var user=ORG_EXPLORER_MODEL&&ORG_EXPLORER_MODEL.byId.get(ORG_EXPLORER_STATE.selected);if(!user)return;
+  window.mobileOrgTab('people',el('org-tab-people'));
+  var q=el('org-supervisor-q'),filter=el('org-supervisor-filter');if(q)q.value=user.n||'';if(filter)filter.value='all';window.filterOrgSupervisorDashboard();var target=Array.from(document.querySelectorAll('#org-editor .org-editor-row')).find(function(row){return row.dataset.supervisorId===String(user.id);});
+  if(target){
+    target.setAttribute('aria-expanded','true');
+    var toggle=target.querySelector('.mobile-org-person-toggle');if(toggle){toggle.setAttribute('aria-expanded','true');toggle.textContent='收合設定';}
+    var rows=Array.from(document.querySelectorAll('#org-editor .org-editor-row'));el('pg-orgchart').dataset.mobileOrgVisible=String(Math.max(8,rows.indexOf(target)+1));target.hidden=false;
+    var control=target.querySelector('.org-supervisor-wrap .combo-input')||target.querySelector('.org-supervisor');if(control)control.focus({preventScroll:true});target.scrollIntoView({block:'center'});
+  }else if(q)q.focus();
+};
+window.orgExplorerMode=function(mode){
+  ORG_EXPLORER_STATE.mode=mode==='full'?'full':'outline';
+  var full=ORG_EXPLORER_STATE.mode==='full',view=el('org-chart-view');
+  if(el('org-explorer'))el('org-explorer').hidden=full;if(el('org-full-guide'))el('org-full-guide').hidden=!full;if(view)view.hidden=!full;
+  ['outline','full'].forEach(function(key){var button=el('org-chart-mode-'+key);if(button)button.setAttribute('aria-pressed',String(key===ORG_EXPLORER_STATE.mode));});
+  if(full&&view&&ORG_EXPLORER_MODEL){
+    view.removeAttribute('data-org-chart-centered');
+    view.innerHTML='<div class="org-tree-canvas"><svg class="org-chart-connectors" aria-hidden="true" focusable="false"></svg><div class="org-tree">'+(ORG_EXPLORER_MODEL.roots.map(function(u){return orgCardHtml(u,0,{},'');}).join('')||'<div class="org-chart-empty">目前沒有組織圖資料</div>')+'</div></div>';
+    scheduleOrgChartConnectors();
+  }else if(view){view.innerHTML='';if(ORG_CHART_RESIZE_OBSERVER)ORG_CHART_RESIZE_OBSERVER.disconnect();}
+};
+function renderOrgExplorer(activeUsers){
+  if(!el('org-explorer'))return;
+  var identity=String(S.user&&S.user.id||'')+'|'+currentTenantId()+'|'+activeDataEnvironment();
+  if(ORG_EXPLORER_STATE.identity!==identity){ORG_EXPLORER_STATE={identity:identity,mode:'outline',selected:'',expanded:{},filteredCollapsed:{},initialized:false};el('org-chart-query').value='';el('org-chart-company').value='';el('org-chart-department').value='';}
+  ORG_EXPLORER_MODEL=orgExplorerModel(activeUsers);
+  if(!ORG_EXPLORER_STATE.initialized){ORG_EXPLORER_MODEL.roots.forEach(function(u){ORG_EXPLORER_STATE.expanded[String(u.id)]=true;});ORG_EXPLORER_STATE.initialized=true;}
+  orgExplorerSelectOptions();orgExplorerRenderOutline();window.orgExplorerMode(ORG_EXPLORER_STATE.mode);
+}
+
 function buildOrgChart(){
   renderMembershipOrgManager();
   var notice=el('org-readonly-notice');if(notice)notice.style.display=canManageOrgChart()?'none':'block';
   renderOrgAdminRuntimeStatus();
   var activeUsers=USERS.filter(function(u){return u.active!==false;});
   renderOrgSupervisorDashboard(activeUsers);
-  var view=el('org-chart-view');
-  var roots=orgHierarchyRoots(activeUsers);
-  if(view){
-    view.removeAttribute('data-org-chart-centered');
-    view.innerHTML='<div class="org-tree-canvas">'
-      +'<svg class="org-chart-connectors" aria-hidden="true" focusable="false"></svg>'
-      +'<div class="org-tree">'+(roots.map(function(u){return orgCardHtml(u,0,{},'');}).join('')||'<div class="org-chart-empty">目前沒有組織圖資料</div>')+'</div>'
-      +'</div>';
-  }
-  scheduleOrgChartConnectors();
+  renderOrgExplorer(activeUsers);
   if(ORG_CHART_CONFLICT)orgSetDragStatus('error','主管圖已在其他視窗更新；目前編輯仍保留，請重新載入後核對再儲存。');
   var summary=el('org-summary');
-  var relationCount=Math.max(0,activeUsers.length-roots.length);
+  var relationCount=ORG_EXPLORER_MODEL?ORG_EXPLORER_MODEL.actualParent.size:0;
   if(summary)summary.textContent=activeUsers.length+' 位啟用人員 · '+relationCount+' 條主管關係';
   var actions=document.querySelector('#org-legacy-people .org-personnel-list-actions');
   if(actions)actions.style.display=canManageOrgChart()?'flex':'none';

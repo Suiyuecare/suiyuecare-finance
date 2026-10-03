@@ -133,6 +133,7 @@ jobs:
           node scripts/check_shareholder_invoice_ocr_browser.cjs
           node scripts/check_personnel_login_browser.cjs
           pnpm test:personnel-save-browser
+          pnpm test:org-chart-browser
           node scripts/check_human_accounting_browser_20261002.cjs
           pnpm test:history-summary-browser
           pnpm test:finance-ui-interactions
@@ -142,6 +143,15 @@ jobs:
           pnpm test:hr-contractor-native
           pnpm test:portal-session
           pnpm test:external-labor-browser
+
+      - name: Retain fictional organization chart evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: finance-org-chart-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/finance-org-chart-clarity-browser
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Retain fictional search acceptance evidence even on failure
         if: always()

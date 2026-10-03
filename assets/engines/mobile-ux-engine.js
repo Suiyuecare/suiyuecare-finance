@@ -629,8 +629,8 @@
   function enhanceOrgMobile(){
     var page=document.getElementById('pg-orgchart');if(!page)return;
     var panes=Array.prototype.slice.call(page.querySelectorAll('[data-mobile-org-pane]'));
-    if(!isPhone())panes.forEach(function(pane){pane.hidden=false;});
-    else panes.forEach(function(pane){pane.hidden=pane.dataset.mobileOrgPane!==mobileOrgCurrent;});
+    // The same reading/settings tabs apply on desktop and phone.
+    panes.forEach(function(pane){pane.hidden=pane.dataset.mobileOrgPane!==mobileOrgCurrent;});
     syncMobileThirdTabs('[data-mobile-org-tabs]','[data-mobile-org-tab]',mobileOrgCurrent);
     var editor=document.getElementById('org-editor');if(!editor)return;
     var rows=Array.prototype.slice.call(editor.querySelectorAll('.org-editor-row'));
