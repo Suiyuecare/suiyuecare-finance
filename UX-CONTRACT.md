@@ -15,6 +15,7 @@
 | 附件保存與檢視 | Storage `file_attachments.storage_path`、`uploadAttachmentToSupabase`、`downloadFileMeta`／檢視器 | 選檔不等於上傳完成；私有附件須在當前登入身分下簽章並核權。晚到預覽不得跨檔案、帳號、租戶或環境顯示；失敗有重試。 |
 | 發票檔案匯入 | `setBatchInvoiceUploadFile`、`analyzeBatchInvoiceUpload`、`importBatchCsv` | OCR 與 CSV／Excel 異步讀取只可更新目前選定檔案的最新嘗試；換檔、切換登入身分及重試後的舊結果不得覆蓋明細或提示。 |
 | 送件與草稿 | 正式交易 RPC、本人草稿 scoped read | 暫存可恢復；交易逾時只能顯示「結果待確認」，沿同一識別碼查核。不可再建一張替代單。見 [員工可靠性契約](docs/finance-employee-reliability.md) 與 [草稿契約](docs/finance-draft-readiness.md)。 |
+| 組織圖閱讀 | `index.html` 的 `orgExplorer*`；`mobile-ux-engine.js` 共用主管關係／人員簽核設定頁籤 | 預設縱向層級列表、點人查看詳情；完整關係圖保留。公司／部門篩選採明確原生 select（平台控制彈出選單），姓名搜尋於已載入人員本地執行，中文組字完成才更新。篩選保留標示為上層主管的上下文，不改寫隸屬；循環關係獨立警告，不畫成有效主管階層。讀取狀態只在本頁記憶體保存，切帳號／租戶／環境清除；不寫入網址或儲存草稿。編輯仍由 `canManageOrgChart` 與 `finance_save_org_chart_versioned_v2` 授權和版本契約控制。以人員 ID 定位編輯，保留唯讀登入信箱遮蔽；驗收見 `scripts/check_org_chart_clarity_browser.cjs`。 |
 | 報表 | 分類帳、公司設定與報表工作區 | 正式／暫編、資料截至時間與核對中必須可辨。未取得完整正式來源不顯示推估數字。見 [報表契約](docs/finance-reporting-contract.md)。 |
 
 驗收時使用本地虛構角色矩陣覆蓋申請人、主管、出納、會計和執行長；正式站可用匿名與唯讀資料查核，不借用或冒用員工登入。每個改動至少檢查桌面、375／390px 手機、鍵盤、慢網、失敗、重試、切換登入身分及資料更新；本地綠燈與正式部署證據需分別記錄。

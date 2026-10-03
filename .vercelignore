@@ -453,3 +453,7 @@ supabase/.temp
 !scripts/finance_personnel_reliable_save_live_canary.sql
 !scripts/test_member_save_reliable_receipt.mjs
 !scripts/finance_member_save_reliable_receipt_postflight.sql
+
+# Organization reading workspace acceptance
+!scripts/check_org_chart_clarity_browser.cjs
+!scripts/fixtures/org_chart_clarity.cjs
