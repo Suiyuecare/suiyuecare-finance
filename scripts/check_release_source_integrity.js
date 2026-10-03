@@ -61,6 +61,7 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/check_org_chart_clarity_browser.cjs',
   'scripts/fixtures/org_chart_clarity.cjs',
+  'assets/styles/org-chart-view.css',
   'scripts/check_invoice_ocr_contract.cjs',
   'scripts/check_shareholder_invoice_ocr_browser.cjs',
   'scripts/check_personnel_login_reliability.cjs',
