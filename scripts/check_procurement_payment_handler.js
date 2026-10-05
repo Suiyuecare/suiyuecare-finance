@@ -26,6 +26,13 @@ function source(name) {
 }
 const handler = html.slice(html.indexOf('var PROCUREMENT_SUBMISSION_PENDING_PREFIX='),html.indexOf('window.apprApproveInv=async function('));
 const read = name => fs.readFileSync(path.join(root,name),'utf8');
+function loadProcurementEvidenceHelpers(state) {
+  const engines = {};
+  state.window.FinanceV4Engines = { register: (key,api) => { engines[key]=api; }, get: key => engines[key] };
+  state.attachmentEngineOptions = () => ({});
+  vm.runInContext(read('assets/engines/attachment-engine.js'),state);
+  vm.runInContext(['financeAttachmentEngine','normalizeFileMeta','normalizeFiles','uniqueAttachments','attachmentIsReceiptEvidence','procurementReusableEvidence','collectProcurementExistingEvidence'].map(source).join('\n'),state);
+}
 function requestFixture() {
   const roles = ['applicant_submit','procurement_payment','direct_supervisor','dept_manager','accountant','cashier','applicant_confirm','procurement_receipt','accountant_final'];
   const owners = ['applicant','audit','manager','manager','accountant','cashier','applicant','audit','accountant'];
@@ -107,8 +114,8 @@ function faultFixture(kind, shared, newTab=false) {
     mapReq:mapped,mergeCommittedExpenseRequest:raw=>{const result=mapped(raw);state.REQS[0]=result;return result;},
     activeStep:r=>r.steps.find(step=>!step.a),canActRequest:()=>true,cloneSettingValue:clone,normalizeFiles:clone,
     collectProcurementPaymentInfo:()=>({amount:100,payee:'Anonymous supplier',bankType:'transfer',bankName:'Fixture bank',bankBranch:'Fixture branch',bankNo:'TEST-ONLY',expectedPayDate:'2026-10-02',feeBearer:'company',summary:'Anonymous account'}),
-    approvalActionPayload:async()=>({comment:'fixture',files:[{path:'staged-proof',__uploadCreatedThisAttempt:true}],addUid:''}),
-    uploadApprovalFiles:async p=>{state.uploads++;return p;},el:()=>({value:'80'}),num:Number,purchaseEstimatedAmount:r=>r.estimatedAmt,
+    approvalActionPayload:async()=>({comment:'fixture',files:[{n:'anonymous-invoice.pdf',mime:'application/pdf',path:'staged-proof',__uploadCreatedThisAttempt:true}],addUid:''}),
+    uploadApprovalFiles:async p=>{state.uploads++;return p;},el:id=>/-reuse-files$/.test(id)?null:{value:'80'},num:Number,purchaseEstimatedAmount:r=>r.estimatedAmt,
     requestBankFeeAmount:()=>0,invalidateAccountingLines:()=>{},fmt:String,
     escAttr:String,attr:String,financeInlineJsString:value=>JSON.stringify(String(value)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),
     approveActiveStep:r=>{r.steps[0].a='approved';r.step=payment?3:9;r.status=payment?'pending_section_chief':'pending_voucher';},
@@ -131,7 +138,7 @@ function faultFixture(kind, shared, newTab=false) {
       throw new Error('unexpected mode');
     }
   });
-  vm.createContext(state);vm.runInContext(handler,state);
+  vm.createContext(state);loadProcurementEvidenceHelpers(state);vm.runInContext(handler,state);
   return state;
 }
 (async()=>{
