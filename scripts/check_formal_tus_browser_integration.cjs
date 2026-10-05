@@ -20,6 +20,8 @@ const chunkSize = 6 * 1024 * 1024;
 async function main() {
   const attempts = [], uploads = new Map();
   let nextId = 1, retryInjected = false;
+  let signalAbortPostReceived;
+  const abortPostReceived = new Promise((resolve) => { signalAbortPostReceived = resolve; });
   const server = http.createServer((req, res) => {
     const body = [];
     req.on('data', (part) => body.push(part));
@@ -48,8 +50,14 @@ async function main() {
         attempts.push({ method: 'POST', id, authorization: req.headers.authorization, size: bytes.length, metadata });
         const location = `http://127.0.0.1:${server.address().port}/uploads/${id}`;
         if (metadata.objectName.includes('/abort')) {
-          // Hold the creation response until Chromium aborts the actual XHR.
-          setTimeout(() => { if (!res.destroyed) reply(201, { Location: location, 'Upload-Offset': String(upload.offset) }); }, 700);
+          // Signal only after the full POST body is recorded, then hold the
+          // response so Chromium can abort an active XHR. The watchdog fails
+          // the test if the client never aborts.
+          const watchdog = setTimeout(() => {
+            if (!res.destroyed) reply(201, { Location: location, 'Upload-Offset': String(upload.offset) });
+          }, 10000);
+          res.once('close', () => clearTimeout(watchdog));
+          signalAbortPostReceived();
           return;
         }
         reply(201, { Location: location, 'Upload-Offset': String(upload.offset) });
@@ -83,6 +91,19 @@ async function main() {
     const page = await browser.newPage();
     await page.goto(origin);
     await page.addScriptTag({ path: path.join(root, 'assets/vendor/tus-4.3.1.min.js') });
+    await page.exposeFunction('waitForAbortPost', async () => {
+      let timer;
+      try {
+        await Promise.race([
+          abortPostReceived,
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error('abort fixture POST was not received within 5 seconds')), 5000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    });
     const result = await page.evaluate(async ({ transportSource, origin, sevenMiB, fiftyMiB, chunkSize }) => {
       window.SUPABASE_URL = origin;
       window.SUPABASE_ANON_KEY = 'fictional-public-anon';
@@ -115,7 +136,8 @@ async function main() {
       const controller = new AbortController();
       const abortPromise = uploadAttachmentResumable(client, 'tenant-a/expense_requests/production/fixture/abort.pdf', blob,
         'application/pdf', { abortSignal: controller.signal }, 'auth-user-a|user-a|tenant-a|production');
-      setTimeout(() => controller.abort(), 40);
+      await window.waitForAbortPost();
+      controller.abort();
       let aborted = false;
       try { await abortPromise; } catch (error) { aborted = error.reason === 'attachment_upload_timeout'; }
       return { progress, largeProgress, aborted, browserTus: typeof window.tus?.Upload === 'function' };
