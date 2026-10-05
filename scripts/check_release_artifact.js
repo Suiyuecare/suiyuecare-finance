@@ -108,6 +108,12 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+    'scripts/check_all_applicant_withdraw_contract.js',
+    'scripts/check_applicant_withdraw_pglite.mjs',
+    'scripts/finance_applicant_withdraw_postflight.sql',
+    'scripts/fixtures/finance_applicant_withdraw_pglite.sql',
+    'scripts/fixtures/finance_applicant_withdraw_assertions.sql',
+    'supabase/migrations/20261005173534_applicant_withdraw_bill_invoice_v1.sql',
     'scripts/check_procurement_closeout_recovery.cjs',
     'scripts/check_procurement_closeout_browser.cjs',
     'scripts/check_procurement_specialized_action_guard.js',

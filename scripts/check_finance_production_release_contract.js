@@ -34,8 +34,11 @@ assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
   '20260826070814', '20260826155840', '20260827052447', '20260828015718',
   '20260831042040', '20260831043517', '20260901024020', '20260901073241',
-  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS, ...guard.OPERATIONAL_STABILITY_MIGRATIONS, ...guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, ...guard.AUDIT_CONTROLS_20260927_MIGRATIONS, ...guard.HR_CONTRACTOR_MIGRATIONS, ...guard.PORTAL_SESSION_MIGRATIONS, ...guard.EXTERNAL_LABOR_MIGRATIONS, ...guard.ATTACHMENT_CLAIM_MIGRATIONS, ...guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS, ...guard.HUMAN_FLOAT_MIGRATIONS, ...guard.INCOME_RECONCILE_MIGRATIONS, ...guard.INVOICE_REVENUE_RESULT_MIGRATIONS, ...guard.PERSONNEL_CONFLICT_MIGRATIONS, ...guard.PERSONNEL_RECEIPT_MIGRATIONS, ...guard.PROCUREMENT_ACTION_MIGRATIONS
+  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS, ...guard.OPERATIONAL_STABILITY_MIGRATIONS, ...guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, ...guard.AUDIT_CONTROLS_20260927_MIGRATIONS, ...guard.HR_CONTRACTOR_MIGRATIONS, ...guard.PORTAL_SESSION_MIGRATIONS, ...guard.EXTERNAL_LABOR_MIGRATIONS, ...guard.ATTACHMENT_CLAIM_MIGRATIONS, ...guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS, ...guard.HUMAN_FLOAT_MIGRATIONS, ...guard.INCOME_RECONCILE_MIGRATIONS, ...guard.INVOICE_REVENUE_RESULT_MIGRATIONS, ...guard.PERSONNEL_CONFLICT_MIGRATIONS, ...guard.PERSONNEL_RECEIPT_MIGRATIONS, ...guard.PROCUREMENT_ACTION_MIGRATIONS, ...guard.APPLICANT_WITHDRAW_MIGRATIONS
 ]);
+assert.deepEqual(guard.APPLICANT_WITHDRAW_SOURCE_SHA256,{
+  '20261005173534':'aa3ebaf3a098c83709de7e04c4a048c9cfb0881e42a4f8bb586caebe66e14b9f'
+});
 assert.deepEqual(guard.RELEASE_PHASES, {
   frontend_compat: 'none',
   database_v3: '20260827052447',
@@ -140,6 +143,10 @@ const root = path.resolve(__dirname, '..');
 const auditPostflight=fs.readFileSync(path.join(root,'scripts/finance_audit_20260907_postflight.sql'),'utf8');
 for(const name of ['finance_org_integrity_postflight.sql','finance_approval_audit_postflight.sql'])assert.ok(auditPostflight.includes(fs.readFileSync(path.join(root,'scripts',name),'utf8').trim()),'combined postflight must include exact domain contract: '+name);
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/finance-production-release.yml'), 'utf8');
+assert.equal((workflow.match(/cp scripts\/finance_applicant_withdraw_postflight\.sql/g)||[]).length,1,
+  'protected release bundle includes the applicant withdrawal postflight');
+assert.equal((workflow.match(/prepare-read-only-query --input "\$TOOLS\/scripts\/finance_applicant_withdraw_postflight\.sql"/g)||[]).length,2,
+  'protected frontend release checks applicant withdrawal before and after promotion');
 const cleanupPostflight=fs.readFileSync(path.join(root,'scripts/finance_attachment_staged_cleanup_postflight.sql'),'utf8');
 assert.match(cleanupPostflight,/b7552f6a6199614a0ac46c6854402a95/);
 assert.match(cleanupPostflight,/delete_policy\.qual is distinct from select_policy\.qual/);
@@ -200,10 +207,12 @@ try {
   fs.appendFileSync(ledger,guard.PERSONNEL_RECEIPT_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/procurement specialized action guard/);
   fs.appendFileSync(ledger,guard.PROCUREMENT_ACTION_MIGRATIONS.join('\n')+'\n');
+  assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/applicant withdrawal transaction guard/);
+  fs.appendFileSync(ledger,guard.APPLICANT_WITHDRAW_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
   const pinnedPersonnelDir=path.join(attachmentClaimTemp,'personnel-source-pin');
   fs.mkdirSync(pinnedPersonnelDir);
-  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS]){
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS]){
     const filename=fs.readdirSync(migrationDir).find(name=>name.startsWith(version+'_'));
     fs.copyFileSync(path.join(migrationDir,filename),path.join(pinnedPersonnelDir,filename));
   }
@@ -215,6 +224,12 @@ try {
     assert.throws(()=>guard.classifyLedger(ledger,pinnedPersonnelDir,'frontend_compat','none',baseline),/personnel migration source differs from sealed SHA256/);
     fs.writeFileSync(file,source);
   }
+  const withdrawalFilename=fs.readdirSync(pinnedPersonnelDir).find(name=>name.startsWith(guard.APPLICANT_WITHDRAW_MIGRATIONS[0]+'_'));
+  const withdrawalFile=path.join(pinnedPersonnelDir,withdrawalFilename);
+  const withdrawalSource=fs.readFileSync(withdrawalFile,'utf8');
+  fs.writeFileSync(withdrawalFile,withdrawalSource+'\n-- unreviewed source change\n');
+  assert.throws(()=>guard.classifyLedger(ledger,pinnedPersonnelDir,'frontend_compat','none',baseline),/applicant withdrawal migration source differs from sealed SHA256/);
+  fs.writeFileSync(withdrawalFile,withdrawalSource);
   const missingReceipt=fs.readdirSync(pinnedPersonnelDir).find(name=>name.startsWith(guard.PERSONNEL_RECEIPT_MIGRATIONS[0]+'_'));
   fs.rmSync(path.join(pinnedPersonnelDir,missingReceipt));
   assert.throws(()=>guard.classifyLedger(ledger,pinnedPersonnelDir,'frontend_compat','none',baseline),/personnel migration file is missing/);
@@ -993,8 +1008,10 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   fs.appendFileSync(ledger,guard.PERSONNEL_RECEIPT_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/procurement specialized action guard/);
   fs.appendFileSync(ledger,guard.PROCUREMENT_ACTION_MIGRATIONS.join('\n')+'\n');
+  assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/applicant withdrawal transaction guard/);
+  fs.appendFileSync(ledger,guard.APPLICANT_WITHDRAW_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/personnel migration file is missing/);
-  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS]){
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS]){
     const filename=fs.readdirSync(path.join(root,'supabase/migrations')).find(name=>name.startsWith(version+'_'));
     fs.copyFileSync(path.join(root,'supabase/migrations',filename),path.join(migrations,filename));
   }

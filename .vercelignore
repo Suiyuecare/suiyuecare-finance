@@ -15,6 +15,9 @@ scripts/*
 !scripts/finance_build_environment.js
 !scripts/check_environment_isolation_contract.js
 !scripts/check_release_source_integrity.js
+!scripts/check_all_applicant_withdraw_contract.js
+!scripts/check_applicant_withdraw_pglite.mjs
+!scripts/finance_applicant_withdraw_postflight.sql
 !scripts/check_migration_lineage_contract.js
 !scripts/check_root_cause_regressions.js
 !scripts/check_submission_identity_directory_contract.js
