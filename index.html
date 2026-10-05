@@ -22585,7 +22585,7 @@ function procurementReusableEvidence(r){
 function procurementExistingEvidenceHtml(r,prefix){
   var files=procurementReusableEvidence(r);if(!files.length)return '';
   return '<fieldset id="'+attr(prefix+'-reuse-files')+'" style="border:1px solid #efd7b8;border-radius:8px;padding:10px;margin:8px 0"><legend>沿用這張單的既有憑據</legend><p style="font-size:12px;line-height:1.6">請核對本人先前上傳的檔案後，勾選本次實際支出的憑據，不必重複上傳。最終金額仍需依憑據填寫。</p>'
-    +files.map(function(file,index){return '<label style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;overflow-wrap:anywhere"><input type="checkbox" data-procurement-evidence-index="'+index+'"><span>'+escAttr(file.n||file.name||'附件')+'</span></label>';}).join('')+'</fieldset>';
+    +files.map(function(file,index){return '<label style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;overflow-wrap:anywhere"><input type="checkbox" style="width:18px;height:18px;min-width:18px;padding:0;margin:2px 0;flex:none" data-procurement-evidence-index="'+index+'"><span>'+escAttr(file.n||file.name||'附件')+'</span></label>';}).join('')+'</fieldset>';
 }
 function collectProcurementExistingEvidence(r,prefix){
   var box=el(prefix+'-reuse-files');if(!box)return [];
