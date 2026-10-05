@@ -14,7 +14,12 @@ const stages = [
 const db = new PGlite();
 try {
   for (const stage of stages) {
-    const sql = await readFile(resolve(root, stage), 'utf8');
+    let sql = await readFile(resolve(root, stage), 'utf8');
+    if (stage === 'scripts/finance_applicant_withdraw_postflight.sql') {
+      const directive = /^\\set ON_ERROR_STOP on\r?\n/;
+      if (!directive.test(sql)) throw new Error(`${stage}: missing fail-closed psql directive`);
+      sql = sql.replace(directive, '');
+    }
     try {
       await db.exec(sql);
     } catch (error) {

@@ -1,3 +1,4 @@
+\set ON_ERROR_STOP on
 -- Read-only release check. Run against the accounting project after applying
 -- 20261005173534_applicant_withdraw_bill_invoice_v1.sql.
 do $postflight$
