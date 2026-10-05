@@ -120,6 +120,10 @@ const RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT='database_invoice_revenue_re
 const PERSONNEL_CONFLICT_MIGRATIONS=Object.freeze(['20261003042021']);
 const PERSONNEL_RECEIPT_MIGRATIONS=Object.freeze(['20261003044426']);
 const PROCUREMENT_ACTION_MIGRATIONS=Object.freeze(['20261005035438']);
+const APPLICANT_WITHDRAW_MIGRATIONS=Object.freeze(['20261005173534']);
+const APPLICANT_WITHDRAW_SOURCE_SHA256=Object.freeze({
+  '20261005173534':'aa3ebaf3a098c83709de7e04c4a048c9cfb0881e42a4f8bb586caebe66e14b9f'
+});
 const PERSONNEL_SAVE_SOURCE_SHA256=Object.freeze({
   '20261003042021':'6b3dd504a57692d0af9ed73b24d8b42b7f6e5cad3cfbc6bcf3b6e4074b3c34f7',
   '20261003044426':'335b05308582788181110a891dae7adf45458e3c69bf295f95bad83de1460fdc'
@@ -175,7 +179,8 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...INVOICE_REVENUE_RESULT_MIGRATIONS,
   ...PERSONNEL_CONFLICT_MIGRATIONS,
   ...PERSONNEL_RECEIPT_MIGRATIONS,
-  ...PROCUREMENT_ACTION_MIGRATIONS
+  ...PROCUREMENT_ACTION_MIGRATIONS,
+  ...APPLICANT_WITHDRAW_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -683,11 +688,18 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(PERSONNEL_CONFLICT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the nonretry personnel conflict migration');
     if(PERSONNEL_RECEIPT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the reliable personnel receipt migration');
     if(PROCUREMENT_ACTION_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the procurement specialized action guard');
+    if(APPLICANT_WITHDRAW_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the applicant withdrawal transaction guard');
     for(const [version,expected] of Object.entries(PERSONNEL_SAVE_SOURCE_SHA256)){
       const filename=local.find(name=>name.startsWith(version+'_'));
       if(!filename)fail('frontend_compat personnel migration file is missing: '+version);
       if(sha256File(path.join(directory,filename))!==expected)
         fail('frontend_compat personnel migration source differs from sealed SHA256: '+version);
+    }
+    for(const [version,expected] of Object.entries(APPLICANT_WITHDRAW_SOURCE_SHA256)){
+      const filename=local.find(name=>name.startsWith(version+'_'));
+      if(!filename)fail('frontend_compat applicant withdrawal migration file is missing: '+version);
+      if(sha256File(path.join(directory,filename))!==expected)
+        fail('frontend_compat applicant withdrawal migration source differs from sealed SHA256: '+version);
     }
     return 'compat';
   }
@@ -2420,6 +2432,8 @@ const api = {
   PERSONNEL_CONFLICT_MIGRATIONS,
   PERSONNEL_RECEIPT_MIGRATIONS,
   PROCUREMENT_ACTION_MIGRATIONS,
+  APPLICANT_WITHDRAW_MIGRATIONS,
+  APPLICANT_WITHDRAW_SOURCE_SHA256,
   PERSONNEL_SAVE_SOURCE_SHA256,
   INCOME_RECONCILE_MIGRATIONS, INCOME_RECONCILE_SOURCE_SHA256,
   RELEASE_PHASE_DATABASE_INCOME_RECONCILE, prepareIncomeReconcileRehearsal,

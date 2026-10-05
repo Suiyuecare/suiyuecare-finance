@@ -59,6 +59,12 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'scripts/check_all_applicant_withdraw_contract.js',
+  'scripts/check_applicant_withdraw_pglite.mjs',
+  'scripts/finance_applicant_withdraw_postflight.sql',
+  'scripts/fixtures/finance_applicant_withdraw_pglite.sql',
+  'scripts/fixtures/finance_applicant_withdraw_assertions.sql',
+  'supabase/migrations/20261005173534_applicant_withdraw_bill_invoice_v1.sql',
   'scripts/check_procurement_closeout_recovery.cjs',
   'scripts/check_procurement_closeout_browser.cjs',
   'scripts/check_procurement_specialized_action_guard.js',
@@ -493,6 +499,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
 ]);
 
 const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
+  'test:all-applicant-withdraw': 'node scripts/check_all_applicant_withdraw_contract.js && node scripts/check_applicant_withdraw_pglite.mjs',
   'test:procurement-closeout': 'node scripts/check_procurement_closeout_recovery.cjs && node scripts/check_procurement_payment_handler.js && node scripts/check_procurement_specialized_action_guard.js',
   'test:procurement-closeout-browser': 'node scripts/check_procurement_closeout_browser.cjs',
   'test:personnel-save-browser': 'node scripts/check_personnel_save_browser.cjs',
@@ -551,7 +558,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   "test:finance-ui-interactions": "node scripts/check_finance_ui_interaction_browser.cjs",
   'test:hr-bridge-release': 'node scripts/test_hr_bridge_release_batch.mjs',
   'test:hr-bridge-browser': 'HR_BRIDGE_BROWSER=1 node scripts/test_hr_private_bridge.mjs',
-  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor && pnpm test:submission-cashier-preflight && pnpm test:attachment-claim-migration && pnpm test:human-accounting-float && pnpm test:invoice-revenue-result && pnpm test:formal-resumable-upload && pnpm test:personnel-save && pnpm test:procurement-closeout",
+  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor && pnpm test:submission-cashier-preflight && pnpm test:attachment-claim-migration && pnpm test:human-accounting-float && pnpm test:invoice-revenue-result && pnpm test:formal-resumable-upload && pnpm test:personnel-save && pnpm test:procurement-closeout && pnpm test:all-applicant-withdraw",
   'release:verify-artifact': 'node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js',
   'release:build': 'pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact'
 });
