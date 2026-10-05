@@ -147,6 +147,9 @@ assert.equal((workflow.match(/cp scripts\/finance_applicant_withdraw_postflight\
   'protected release bundle includes the applicant withdrawal postflight');
 assert.equal((workflow.match(/prepare-read-only-query --input "\$TOOLS\/scripts\/finance_applicant_withdraw_postflight\.sql"/g)||[]).length,2,
   'protected frontend release checks applicant withdrawal before and after promotion');
+const applicantWithdrawPostflight=fs.readFileSync(path.join(root,'scripts/finance_applicant_withdraw_postflight.sql'),'utf8');
+assert.match(applicantWithdrawPostflight,/^\\set ON_ERROR_STOP on\r?\n/,
+  'applicant withdrawal postflight starts with the release guard fail-closed directive');
 const cleanupPostflight=fs.readFileSync(path.join(root,'scripts/finance_attachment_staged_cleanup_postflight.sql'),'utf8');
 assert.match(cleanupPostflight,/b7552f6a6199614a0ac46c6854402a95/);
 assert.match(cleanupPostflight,/delete_policy\.qual is distinct from select_policy\.qual/);
