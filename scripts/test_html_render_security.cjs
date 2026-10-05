@@ -8,6 +8,11 @@ vm.runInContext(between('function escAttr(', 'function normalizeFileMeta('),cont
 vm.runInContext(between('function fileChipDownloadHtml(', 'var STEP_DOWNLOADS='),context);
 vm.runInContext(between('function expenseRevisionRecoveryHtml(', 'function expenseRevisionReplyMatches('),context);
 vm.runInContext(between('function expensePostingRecoveryHtml(', 'function expensePostingResultValid('),context);
+// openDetail now also renders the dedicated purchase recovery warning. Load its
+// real implementation; these existing injection fixtures remain payment rows.
+context.num=Number;
+vm.runInContext(between('function purchaseActualAmount(', 'function purchaseVarianceAmount('),context);
+vm.runInContext(between('function purchaseFinalRecoveryHtml(', 'function purchaseAmountCompareHtml('),context);
 vm.runInContext(between('window.openDetail=function(', 'window.doApprove='),context);
 const attack='<img src=x onerror="globalThis.injected=true">';
 context.REQS.push({id:'r1',type:'payment_request',status:'completed',amt:100,files:[],steps:[],no:'R1',dc:'D1',eid:'E1',desc:attack,app:attack,payee:attack,bankName:attack,bankBranch:attack,bankNo:attack,bankAcc:attack,expectedPayDate:attack,date:attack,drN:attack,crN:attack});

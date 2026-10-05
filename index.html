@@ -13773,6 +13773,7 @@ function canReviseAccountingDetails(){
 function isRestrictedReturnedMiddleStep(r){
   var step=r&&activeStep(r);
   if(!step||step.a||/^applicant_/.test(String(step.rk||''))||!approvalStepWasReopenedByReturn(step))return false;
+  if(procurementRequiresDedicatedAction(r))return false;
   return ['accountant','accountant_final','admin_director','ceo'].indexOf(step.rk)<0;
 }
 function canApplicantEditReturnedAccountingLines(r){
@@ -22557,14 +22558,137 @@ function expensePostingAmount(r){
   if(r.type==='advance_request')return advanceActualAmount(r)||num(r.actualAmt||r.actual_amount)||num(r.amt||r.amount);
   return num(r.amt||r.amount);
 }
+function procurementRequiresDedicatedAction(r){
+  var step=r&&activeStep(r);
+  return !!(r&&r.type==='purchase_request'&&step&&['procurement_payment','procurement_receipt','procurement_review'].indexOf(step.rk)>-1);
+}
+function procurementDedicatedActionMessage(r){
+  var step=r&&activeStep(r);
+  return step&&step.rk==='procurement_payment'?'採購付款資料請開啟單張填寫，不能以一般核准或整批通過略過。':'採購憑據請開啟單張，填寫最終實際金額並確認發票憑據後送出，不能以一般核准或整批通過略過。';
+}
+var PROCUREMENT_EVIDENCE_RUNTIME={identity:'',entries:{}};
+function procurementEvidenceCandidates(r){
+  if(!r||r.type!=='purchase_request')return [];
+  var fp=r.formPayload||r.form_payload||{};
+  var files=normalizeFiles(r.files||[]).concat(normalizeFiles(r.actualFiles||r.actual_files||[]),normalizeFiles((fp.purchaseActual||{}).files||[]));
+  (r.steps||[]).forEach(function(step){files=files.concat(normalizeFiles(step&&step.files||[]));});
+  return uniqueAttachments(files).filter(function(file){return file.bucket===SUPABASE_ATTACHMENT_BUCKET&&String(file.dataEnv)===String(r.dataEnv||r.data_environment)&&!!file.path&&attachmentIsReceiptEvidence(file);});
+}
+function procurementEvidenceScope(r){
+  if(!r||r.type!=='purchase_request'||r.status!=='pending_procurement')return null;
+  var identity=expenseSubmissionOperationIdentity(),step=r&&activeStep(r),user=S.user||{};
+  var tenant=r&&(r.tenantId||r.tenant_id),environment=r&&(r.dataEnv||r.data_environment);
+  if(!identity||!user.id||!r||r.type!=='purchase_request'||r.status!=='pending_procurement'||!step||['procurement_receipt','procurement_review'].indexOf(step.rk)<0||!canActRequest(r)
+    ||!tenant||String(tenant)!==String(currentTenantId())||String(environment)!==String(activeDataEnvironment())||!r.id||!r.no)return null;
+  var scope={identity:identity,actor:String(user.id),tenant:String(tenant),environment:String(environment),id:String(r.id),no:String(r.no)};
+  scope.key=JSON.stringify([identity,typeof financeAuthIdentityEpoch==='undefined'?0:financeAuthIdentityEpoch,scope.id,scope.no,scope.tenant,scope.environment,r.ver,r.updatedAt||r.updated_at,r.status,r.step,r.steps,procurementEvidenceCandidates(r)]);
+  return scope;
+}
+function procurementEvidenceCurrent(scope){
+  var current=scope&&REQS.find(function(row){return String(row.id)===scope.id;});
+  var latest=current&&procurementEvidenceScope(current);
+  return !!(latest&&latest.key===scope.key);
+}
+function procurementEvidenceEntries(scope){
+  if(PROCUREMENT_EVIDENCE_RUNTIME.identity!==scope.identity)PROCUREMENT_EVIDENCE_RUNTIME={identity:scope.identity,entries:{}};
+  return PROCUREMENT_EVIDENCE_RUNTIME.entries;
+}
+function procurementReusableEvidence(r){
+  var scope=procurementEvidenceScope(r);if(!scope)return [];
+  var entry=procurementEvidenceEntries(scope)[scope.key];
+  return entry&&entry.state==='ready'?entry.files:[];
+}
+async function readProcurementEvidenceOwnership(scope,files){
+  if(!procurementEvidenceCurrent(scope)||!hasSupabase())throw new Error('目前無法核對既有憑據，請稍後重試。');
+  if(files.length>200)throw new Error('本單憑據數量超過單次核對上限，請聯絡管理員協助。');
+  if(!files.length)return [];
+  var client=getSb();if(!client)throw new Error('附件查核服務尚未連線，請稍後重試。');
+  var batches=[];
+  for(var offset=0;offset<files.length;offset+=50){
+    var paths=files.slice(offset,offset+50).map(function(file){return file.path;});
+    batches.push(Promise.resolve(client.from('file_attachments')
+      .select('bucket_id,storage_path,record_type,record_no,uploaded_by,tenant_id,data_environment')
+      .eq('tenant_id',scope.tenant).eq('data_environment',scope.environment)
+      .eq('bucket_id',SUPABASE_ATTACHMENT_BUCKET).eq('uploaded_by',scope.actor)
+      .eq('record_type','expense_requests').eq('record_no',scope.no)
+      .in('storage_path',paths).limit(51)));
+  }
+  // This deadline does not await an unresponsive abort drain. Late reads cannot
+  // populate another record/session because the captured scope is checked below.
+  var results=await withOperationTimeout(Promise.all(batches),'核對既有憑據上傳者',10000);
+  if(!procurementEvidenceCurrent(scope))throw new Error('登入身分或原單內容已變更，請重新開啟原單核對憑據。');
+  var owned=Object.create(null);
+  results.forEach(function(result){
+    if(!result||result.error||!Array.isArray(result.data)||result.data.length>50)throw new Error('既有憑據核對未完成，請重試；已填寫內容會保留。');
+    result.data.forEach(function(meta){
+      if(meta&&meta.bucket_id===SUPABASE_ATTACHMENT_BUCKET&&meta.record_type==='expense_requests'&&String(meta.record_no)===scope.no
+        &&String(meta.tenant_id)===scope.tenant&&String(meta.data_environment)===scope.environment&&String(meta.uploaded_by)===scope.actor)owned[String(meta.storage_path)]=true;
+    });
+  });
+  return files.filter(function(file){return !!owned[file.path];});
+}
+function procurementEvidenceOptionsHtml(r,prefix,entry){
+  var heading='<legend>沿用這張單的既有憑據</legend>';
+  if(!entry||entry.state==='loading')return heading+'<p role="status">正在核對本人上傳的既有憑據…</p>';
+  if(entry.state==='error')return heading+'<p role="status">既有憑據核對未完成。金額、備註與新選檔案會保留，您也可以上傳新憑據。</p><button type="button" class="btn-s" onclick="loadProcurementExistingEvidence('+financeInlineJsString(r.id)+','+financeInlineJsString(prefix)+',true)">重新核對既有憑據</button>';
+  if(!entry.files.length)return heading+'<p role="status">未找到可由本人沿用的已登錄憑據；請上傳本次實際支出的發票或憑據。</p>';
+  return heading+'<p style="font-size:12px;line-height:1.6">請核對本人先前上傳的檔案後，勾選本次實際支出的憑據，不必重複上傳。最終金額仍需依憑據填寫。</p>'
+    +entry.files.map(function(file,index){return '<label style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;overflow-wrap:anywhere"><input type="checkbox" style="width:18px;height:18px;min-width:18px;padding:0;margin:2px 0;flex:none" data-procurement-evidence-index="'+index+'"><span>'+escAttr(file.n||file.name||'附件')+'</span></label>';}).join('');
+}
+function procurementExistingEvidenceHtml(r,prefix){
+  if(!procurementEvidenceScope(r))return '';
+  return '<fieldset id="'+attr(prefix+'-reuse-files')+'" data-procurement-evidence-state="loading" style="border:1px solid #efd7b8;border-radius:8px;padding:10px;margin:8px 0">'+procurementEvidenceOptionsHtml(r,prefix,null)+'</fieldset>';
+}
+async function loadProcurementExistingEvidence(rid,prefix,force){
+  var r=REQS.find(function(row){return String(row.id)===String(rid);}),scope=procurementEvidenceScope(r),box=el(prefix+'-reuse-files');
+  if(!scope||!box)return false;
+  var entries=procurementEvidenceEntries(scope),entry=entries[scope.key];
+  if(!entry||(force&&entry.state!=='loading')){
+    if(Object.keys(entries).length>20){PROCUREMENT_EVIDENCE_RUNTIME.entries={};entries=PROCUREMENT_EVIDENCE_RUNTIME.entries;}
+    entry={key:scope.key,state:'loading',files:[]};entries[scope.key]=entry;
+    entry.promise=readProcurementEvidenceOwnership(scope,procurementEvidenceCandidates(r)).then(function(files){entry.files=files;entry.state='ready';},function(){entry.files=[];entry.state='error';});
+  }
+  box.__procurementEvidenceEntry=null;
+  box.setAttribute('data-procurement-evidence-state',entry.state);
+  box.innerHTML=procurementEvidenceOptionsHtml(r,prefix,entry);
+  if(entry.promise)await entry.promise;
+  if(!procurementEvidenceCurrent(scope)||el(prefix+'-reuse-files')!==box)return false;
+  box.__procurementEvidenceEntry=entry;
+  box.setAttribute('data-procurement-evidence-state',entry.state);
+  box.innerHTML=procurementEvidenceOptionsHtml(r,prefix,entry);
+  return entry.state==='ready';
+}
+window.loadProcurementExistingEvidence=loadProcurementExistingEvidence;
+function collectProcurementExistingEvidence(r,prefix){
+  var box=el(prefix+'-reuse-files');if(!box)return [];
+  var selected=Array.from(box.querySelectorAll('input[data-procurement-evidence-index]:checked'));if(!selected.length)return [];
+  var scope=procurementEvidenceScope(r),entry=box.__procurementEvidenceEntry;
+  if(!scope||!entry||entry.key!==scope.key||entry.state!=='ready')throw new Error('既有憑據清單尚未核對或已變更，請重新核對後再勾選。');
+  var files=entry.files,seen={};
+  return selected.map(function(input){
+    var raw=input.getAttribute('data-procurement-evidence-index');
+    if(!/^(0|[1-9][0-9]*)$/.test(raw||'')||seen[raw])return null;
+    seen[raw]=true;return files[Number(raw)]||null;
+  }).filter(Boolean);
+}
+function requireProcurementEvidenceCurrent(scope){
+  if(procurementEvidenceCurrent(scope))return true;
+  alert('登入身分或原單內容已變更，這次採購資料尚未送出。請重新開啟原單核對。');
+  return false;
+}
+function purchaseFinalRecoveryHtml(r){
+  if(!r||r.type!=='purchase_request'||r.status!=='pending_voucher'||purchaseReadyForFinalAccounting(r).ok)return '';
+  return '<div role="status" class="ux-health-card warn"><strong>請先補齊採購結算資料</strong><p>'+escAttr(purchaseReadyForFinalAccounting(r).msg)+'</p><p>已上傳的檔案會保留。請由目前會計按「退回上一關」，讓總務填寫最終實際金額並勾選沿用既有憑據（或補上新憑據），再送回會計確認入帳；不需重跑先前的主管與出納關卡。</p></div>';
+}
 function purchaseHasFinalEvidence(r){
   if(!r||r.type!=='purchase_request')return true;
-  var files=normalizeFiles((r.actualFiles||[]).concat(((r.formPayload||{}).purchaseActual||{}).files||[]));
+  var fp=r.formPayload||r.form_payload||{};
+  var files=normalizeFiles(r.actualFiles||r.actual_files||[]).concat(normalizeFiles((fp.purchaseActual||{}).files||[]));
   return files.some(attachmentIsReceiptEvidence);
 }
 function purchaseReadyForFinalAccounting(r){
   if(!r||r.type!=='purchase_request')return {ok:true};
-  if(!purchaseActualAmount(r))return {ok:false,msg:'採購申請需先由總務填寫最後實際支出金額。'};
+  if(!isFinite(purchaseActualAmount(r))||purchaseActualAmount(r)<=0)return {ok:false,msg:'採購申請需先由總務填寫最後實際支出金額。'};
   if(!purchaseHasFinalEvidence(r))return {ok:false,msg:'採購申請需先由總務上傳最後採購發票或憑據，會計才可以銷帳入帳。'};
   return {ok:true};
 }
@@ -26393,7 +26517,7 @@ window.openDetail=function(rid){
   var approveLabel=returnedMiddle?'補件完成並繼續':(curStep&&curStep.rk==='cashier'?'出納放款並更新現金流':'核准此申請');
   if(canActRequest(r)&&returnedMiddle)acts.push(detailUpload+'<button class="btn-p" onclick="doApprove(\''+r.id+'\')">補件完成並繼續</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">不通過</button>');
   else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request'&&curStep&&curStep.rk==='procurement_payment')acts.push(procurementPaymentActionHtml(r,false,'detail-proc')+'<button class="btn-p" style="background:#0f766e" onclick="submitProcurementPaymentInfo(\''+r.id+'\',\'detail-proc\')">送出總務付款資料</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
-  else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request')acts.push('<div style="min-width:280px;max-width:520px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計銷帳與三表只會以這個實際金額入帳，預估金額只保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="detail-proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+approvalActionFields('detail-proc-c','detail-proc-files','detail-proc-add-user',{excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#0f766e" onclick="submitProcurementActual(\''+r.id+'\',\'detail-proc\')">提交憑據與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
+  else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request')acts.push('<div style="min-width:280px;max-width:520px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計銷帳與三表只會以這個實際金額入帳，預估金額只保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="detail-proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+procurementExistingEvidenceHtml(r,'detail-proc')+approvalActionFields('detail-proc-c','detail-proc-files','detail-proc-add-user',{allowAddSign:false,excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#0f766e" onclick="submitProcurementActual(\''+r.id+'\',\'detail-proc\')">提交憑據與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
   else if(canActRequest(r)&&r.status!=='pending_applicant_confirm'&&r.status!=='pending_voucher')acts.push(detailUpload+'<button class="btn-p" onclick="doApprove(\''+r.id+'\')">'+approveLabel+'</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">不通過</button>');
   if(r.status==='pending_applicant_confirm'&&canActRequest(r)){
     if(curStep&&curStep.rk==='applicant_revision'){
@@ -26405,6 +26529,7 @@ window.openDetail=function(rid){
   }
   // FIX 1：會計確認後自動生成傳票
   if(r.status==='pending_voucher'&&canActRequest(r))acts.push('<div style="min-width:260px;max-width:460px;flex:1">'+advanceFinalAmtField+approvalActionFields('detail-appr-c','detail-appr-files','detail-appr-add-user',{excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\',\'detail-appr\',\'detail-advance-final\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn);
+  var purchaseRecovery=purchaseFinalRecoveryHtml(r);if(purchaseRecovery&&canActRequest(r))acts=[purchaseRecovery+returnBtn];
   var revisionRecovery=expenseRevisionRecoveryHtml(r);if(revisionRecovery)acts=[revisionRecovery];
   var postingRecovery=expensePostingRecoveryHtml(r);if(postingRecovery)acts=[postingRecovery];
   var procurementRecovery=procurementSubmissionRecoveryHtml(r);if(procurementRecovery)acts=[procurementRecovery];
@@ -26449,11 +26574,13 @@ window.openDetail=function(rid){
   var progressCard='<div class="card detail-progress-card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">'+approvalTimelineProgressText(r)+(progressRows.length>5?' · 可上下滑動':'')+'</span></div><div class="detail-progress-scroll">'+tl+'</div></div>';
   el('detail-body').innerHTML=managerCard+infoCard+(laborMarker?laborElectronicDetailHtml(r,laborEntry):'')+progressCard+'<div class="detail-full-row">'+(laborMarker?'':paidReturnBoundaryHtml(r)+(typeof accountingCorrectionPanelHtml==='function'?accountingCorrectionPanelHtml(r):''))+'</div>'+(invoiceReviewCard&&!laborMarker?'<div class="detail-full-row">'+invoiceReviewCard+'</div>':'')+'<div class="detail-full-row">'+accountingCard+'</div>'+(lineAccountingCard&&!laborMarker?'<div class="detail-full-row">'+lineAccountingCard+'</div>':'');
   hydrateApprovalRuntimeLogsForRecord('expense',r,tlRuntime.slotId);
+  if(r.type==='purchase_request'&&r.status==='pending_procurement'&&canActRequest(r))loadProcurementExistingEvidence(rid,'detail-proc');
   if(laborMarker)loadLaborElectronicDetail(rid,false);
 };
 
 window.doApprove=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
+  if(procurementRequiresDedicatedAction(r)){alert(procurementDedicatedActionMessage(r));openDetail(rid);return;}
   if(laborElectronicMarker(r)){
     var laborEntry=laborElectronicCached(r),laborState=laborEntry&&laborEntry.loaded&&!laborEntry.error?laborEntry.data:null,laborStep=activeStep(r);
     var laborReviewReady=!!laborState&&['reviewed','accrued','partially_paid','paid'].indexOf(laborState.status)>-1;
@@ -26773,9 +26900,8 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
   try{
   if(pendingPosting)return await finishExpensePostingTransaction(original,pendingPosting.args);
   var r=cloneSettingValue(original);
-  if(r.type==='purchase_request'&&!purchaseFinalAmount(r)){alert('採購申請需先由總務填寫最終實際支出並上傳發票憑據');return;}
   var purchaseReady=purchaseReadyForFinalAccounting(r);
-  if(!purchaseReady.ok){alert(purchaseReady.msg);return;}
+  if(!purchaseReady.ok){alert(purchaseReady.msg+' 已上傳的檔案會保留；請退回總務補齊實際金額並確認沿用憑據後，再送回會計入帳。');return;}
   var pettyReady=pettyReadyForFinalAccounting(r);
   if(!pettyReady.ok){alert(pettyReady.msg);return;}
   var p=await approvalActionPayload(prefix+'-c',prefix+'-files',prefix+'-add-user');
@@ -28707,6 +28833,8 @@ function applyExpenseApprovalWorkCopy(row,work){
 }
 async function expenseActiveStepTransaction(rows,action,comment,files,addUid,patches){
   rows=(rows||[]).filter(Boolean);
+  var procurementRow=(action==='approve'||action==='add_sign')&&rows.find(procurementRequiresDedicatedAction);
+  if(procurementRow)return{available:true,ok:false,clientValidation:true,error:new Error(procurementDedicatedActionMessage(procurementRow))};
   var actionValidation=approvalActionValidation(action,comment,addUid);
   if(!actionValidation.ok)return{available:true,ok:false,clientValidation:true,error:approvalActionValidationError(actionValidation)};
   if(action!=='withdraw'){
@@ -29664,6 +29792,9 @@ async function bulkRunSelected(action){
       if(!canActRequest(row)){
         skipped++;skipDetails.push(label+'：目前不是您的簽核關卡');return;
       }
+      if((action==='approve'||action==='countersign')&&procurementRequiresDedicatedAction(row)){
+        skipped++;skipDetails.push(label+'：'+procurementDedicatedActionMessage(row));return;
+      }
       if(before&&before.rk==='applicant_revision'){
         skipped++;skipDetails.push(label+'：申請人補件需進入單張重新送出');return;
       }
@@ -29880,7 +30011,7 @@ function showApprD(r){
   else if(canAct&&r.status==='pending_procurement'&&r.type==='purchase_request'){
     var pCur=activeStep(r);
     if(pCur&&pCur.rk==='procurement_payment')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+procurementPaymentActionHtml(r,true)+'<button class="btn-p" style="width:100%;justify-content:center;background:#0f766e;margin-bottom:5px" onclick="submitProcurementPaymentInfo(\''+r.id+'\')">送出總務付款資料</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':'')+'</div>';
-    else actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計最後會以此實際支出金額切傳票與認列三表，預估金額僅保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+approvalActionFields('proc-c','proc-files','proc-add-user',{excludeUserIds:approvalApplicantIds([r])})+'<button class="btn-p" style="width:100%;justify-content:center;background:#0f766e;margin-bottom:5px" onclick="submitProcurementActual(\''+r.id+'\')">提交憑據發票與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':'')+'</div>';
+    else actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計最後會以此實際支出金額切傳票與認列三表，預估金額僅保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+procurementExistingEvidenceHtml(r,'proc')+approvalActionFields('proc-c','proc-files','proc-add-user',{allowAddSign:false,excludeUserIds:approvalApplicantIds([r])})+'<button class="btn-p" style="width:100%;justify-content:center;background:#0f766e;margin-bottom:5px" onclick="submitProcurementActual(\''+r.id+'\')">提交憑據發票與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':'')+'</div>';
   }
   else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+advanceFinalAmtField+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080;margin-bottom:5px" onclick="doConfirmVoucher(\''+r.id+'\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn+'</div>';
   else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+(cur.rk==='cashier'?'<div style="font-size:11px;color:#7a3b00;line-height:1.6;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px;margin-bottom:8px">按下出納放款後，系統會先在現金流量表認列撥款 '+fmt(ceoCashImpactAmount(r))+'；最後一關會計收到憑據後才更新資產負債表與損益表。</div>':'')+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">'+(cur.rk==='cashier'?'出納放款並更新現金流':'核准此申請')+'</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">不通過</button></div>';
@@ -29888,6 +30019,7 @@ function showApprD(r){
   if(!actH&&canWithdrawRequest(r))actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-top:6px">單子尚未進入出納放款關卡，因此申請人可以抽單取消。</div></div>';
   if(requestCashPostedAt(r))actH+=paymentConcernButtonHtml(r);
   actH=approvalActionSectionHtml(actH);
+  var purchaseRecovery=purchaseFinalRecoveryHtml(r);if(purchaseRecovery&&canAct)actH=purchaseRecovery+returnBtn;
   var revisionRecovery=expenseRevisionRecoveryHtml(r);if(revisionRecovery)actH=revisionRecovery;
   var postingRecovery=expensePostingRecoveryHtml(r);if(postingRecovery)actH=postingRecovery;
   el('appr-inner').innerHTML=
@@ -29907,6 +30039,7 @@ function showApprD(r){
     +actH;
   el('appr-inner').insertAdjacentHTML('beforeend',paidReturnBoundaryHtml(r)+(typeof accountingCorrectionPanelHtml==='function'?accountingCorrectionPanelHtml(r):''));
   hydrateApprovalRuntimeLogsForRecord('expense',r,shRuntime.slotId);
+  if(r.type==='purchase_request'&&r.status==='pending_procurement'&&canAct)loadProcurementExistingEvidence(r.id,'proc');
 }
 function showBillApprD(b){
   openApprModal();
@@ -30023,6 +30156,7 @@ document.addEventListener('keydown',function(event){
 });
 window.apprApprove=async function(rid){
   var r=REQS.find(function(x){return x.id===rid;});if(!r)return;
+  if(procurementRequiresDedicatedAction(r)){alert(procurementDedicatedActionMessage(r));openDetail(rid);return;}
   if(laborElectronicMarker(r)){openDetail(rid);return;}
   if(!canActRequest(r)){alert('目前不是您的簽核步驟');return;}
   if(!requireApprovalRecordsActionAvailability('expense_requests',[r]))return;
@@ -30299,7 +30433,7 @@ async function persistProcurementSubmission(rid,kind,record,beforeRequest,values
   try{result=await withOperationTimeout(dbUpdate('expense_requests',rid,values),label,15000);}
   catch(error){result={ok:false,error:error,uncertain:true};}
   if(pending.owner!==procurementSubmissionOwner())return false;
-  if(result&&result.ok===true){clearProcurementSubmissionPending(rid);return true;}
+  if(result&&result.ok===true){if(requestIndex>-1)REQS[requestIndex]=record;clearProcurementSubmissionPending(rid);return true;}
   if(!result||result.uncertain||!procurementSubmissionDefinitivelyRejected(result)){
     var confirmed=await reconcilePendingProcurementSubmission(rid);
     if(confirmed.state==='committed')return true;
@@ -30418,12 +30552,28 @@ window.submitProcurementActual=async function(rid,prefix){
   cur=activeStep(r);
   var beforeRequest=cloneSettingValue(r);
   if(!canActRequest(r)||r.status!=='pending_procurement'||!cur||['procurement_receipt','procurement_review'].indexOf(cur.rk)<0){alert('目前不是總務提交憑據關卡');return;}
+  var submissionScope=procurementEvidenceScope(r);
+  if(!requireProcurementEvidenceCurrent(submissionScope))return false;
   var actual=num((el(prefix+'-actual-amt')||{}).value||0);
-  if(!actual){alert('請填寫最終採購實際支出');return;}
+  if(!isFinite(actual)||actual<=0){alert('請填寫大於零的最終採購實際支出');return;}
+  var existingEvidence;
+  try{existingEvidence=collectProcurementExistingEvidence(r,prefix);}catch(error){alert(error.message);return false;}
   var p=await approvalActionPayload(prefix+'-c',prefix+'-files',prefix+'-add-user');
+  if(!requireProcurementEvidenceCurrent(submissionScope))return false;
   if(p.addUid){alert('採購憑據送出不能同時加簽。請先送出憑據，再由下一位簽核人提出加簽。');return;}
+  if(!existingEvidence.concat(normalizeFiles(p.files||[])).some(attachmentIsReceiptEvidence)){alert('請勾選沿用既有發票憑據，或上傳採購完成後的發票或憑據');return;}
+  if(existingEvidence.length){
+    try{
+      var verified=await readProcurementEvidenceOwnership(submissionScope,existingEvidence);
+      if(verified.length!==existingEvidence.length)throw new Error('選取的既有憑據已無法確認為本人上傳，請重新核對清單或改上傳新憑據。');
+    }catch(error){if(requireProcurementEvidenceCurrent(submissionScope))alert(error.message);return false;}
+  }
+  if(!requireProcurementEvidenceCurrent(submissionScope))return false;
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'procurement_actual');
-  if(!p.files.length){alert('請上傳採購完成後的發票或憑據');return;}
+  if(!requireProcurementEvidenceCurrent(submissionScope))return false;
+  p.files=existingEvidence.concat(p.files||[]);
+  if(!p.files.some(attachmentIsReceiptEvidence)){alert('請確認發票憑據已成功上傳');return;}
+  r=cloneSettingValue(beforeRequest);
   var operationId=membershipOrgDraftUuid();
   r.estimatedAmt=purchaseEstimatedAmount(r)||r.amt;
   r.actualAmt=actual;
@@ -30448,6 +30598,7 @@ window.submitProcurementActual=async function(rid,prefix){
   });
   approveActiveStep(r,'approved',p.comment||('總務填寫實際支出 '+fmt(actual)),p.files,'');
   var receiptValues={amount:r.amt,estimated_amount:r.estimatedAmt,actual_amount:r.actualAmt,actual_files:r.actualFiles,status:r.status,step:r.step,steps:r.steps,files:r.files,form_payload:r.formPayload||{}};
+  if(!requireProcurementEvidenceCurrent(submissionScope))return false;
   if(!await persistProcurementSubmission(rid,'actual',r,beforeRequest,receiptValues,p.files,'送出採購憑據'))return false;
   buildAll();openDetail(rid);
   });

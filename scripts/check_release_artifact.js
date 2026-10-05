@@ -108,6 +108,12 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+    'scripts/check_procurement_closeout_recovery.cjs',
+    'scripts/check_procurement_closeout_browser.cjs',
+    'scripts/check_procurement_specialized_action_guard.js',
+    'scripts/fixtures/finance_procurement_specialized_action_20261005.sql',
+    'scripts/fixtures/finance_procurement_action_helpers_20261005.sql',
+    'scripts/sql/procurement_specialized_action_postflight.sql',
   'scripts/check_invoice_ocr_contract.cjs',
   'scripts/check_shareholder_invoice_ocr_browser.cjs',
   'scripts/check_personnel_login_reliability.cjs',

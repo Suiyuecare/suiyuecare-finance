@@ -457,3 +457,10 @@ supabase/.temp
 # Organization reading workspace acceptance
 !scripts/check_org_chart_clarity_browser.cjs
 !scripts/fixtures/org_chart_clarity.cjs
+
+# Procurement receipt closeout regressions and read-only postflight.
+!scripts/check_procurement_closeout_recovery.cjs
+!scripts/check_procurement_closeout_browser.cjs
+!scripts/check_procurement_specialized_action_guard.js
+!scripts/sql
+!scripts/sql/procurement_specialized_action_postflight.sql

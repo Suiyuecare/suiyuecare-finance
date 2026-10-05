@@ -119,6 +119,7 @@ const RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT='database_invoice_revenue_re
 // Applied as a source-pinned backward-compatible fix before UI promotion.
 const PERSONNEL_CONFLICT_MIGRATIONS=Object.freeze(['20261003042021']);
 const PERSONNEL_RECEIPT_MIGRATIONS=Object.freeze(['20261003044426']);
+const PROCUREMENT_ACTION_MIGRATIONS=Object.freeze(['20261005035438']);
 const PERSONNEL_SAVE_SOURCE_SHA256=Object.freeze({
   '20261003042021':'6b3dd504a57692d0af9ed73b24d8b42b7f6e5cad3cfbc6bcf3b6e4074b3c34f7',
   '20261003044426':'335b05308582788181110a891dae7adf45458e3c69bf295f95bad83de1460fdc'
@@ -173,7 +174,8 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...INCOME_RECONCILE_MIGRATIONS,
   ...INVOICE_REVENUE_RESULT_MIGRATIONS,
   ...PERSONNEL_CONFLICT_MIGRATIONS,
-  ...PERSONNEL_RECEIPT_MIGRATIONS
+  ...PERSONNEL_RECEIPT_MIGRATIONS,
+  ...PROCUREMENT_ACTION_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -680,6 +682,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(INVOICE_REVENUE_RESULT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the invoice revenue result RPC');
     if(PERSONNEL_CONFLICT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the nonretry personnel conflict migration');
     if(PERSONNEL_RECEIPT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the reliable personnel receipt migration');
+    if(PROCUREMENT_ACTION_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the procurement specialized action guard');
     for(const [version,expected] of Object.entries(PERSONNEL_SAVE_SOURCE_SHA256)){
       const filename=local.find(name=>name.startsWith(version+'_'));
       if(!filename)fail('frontend_compat personnel migration file is missing: '+version);
@@ -2416,6 +2419,7 @@ function manifestSha(file) { return sha256File(file); }
 const api = {
   PERSONNEL_CONFLICT_MIGRATIONS,
   PERSONNEL_RECEIPT_MIGRATIONS,
+  PROCUREMENT_ACTION_MIGRATIONS,
   PERSONNEL_SAVE_SOURCE_SHA256,
   INCOME_RECONCILE_MIGRATIONS, INCOME_RECONCILE_SOURCE_SHA256,
   RELEASE_PHASE_DATABASE_INCOME_RECONCILE, prepareIncomeReconcileRehearsal,
