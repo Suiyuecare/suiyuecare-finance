@@ -30,7 +30,7 @@ function load(c, names, assigned = []) {
 const proof = { n: 'anonymous-invoice.pdf', mime: 'application/pdf', bucket: 'finance-attachments', path: 'production/expense_requests/anonymous-purchase/invoice.pdf' };
 const spreadsheet = { n: 'expense-detail.xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bucket: 'finance-attachments', path: 'production/expense_requests/anonymous-purchase/details.xlsx' };
 function row(role = 'procurement_receipt') {
-  return { id: 'fixture', no: 'anonymous-purchase', type: 'purchase_request', status: role === 'accountant_final' ? 'pending_voucher' : 'pending_procurement',
+  return { id: 'fixture', no: 'anonymous-purchase', tenantId: 'fixture-tenant', dataEnv: 'production', type: 'purchase_request', status: role === 'accountant_final' ? 'pending_voucher' : 'pending_procurement',
     amt: 12500, estimatedAmt: 12500, actualAmt: 0, actualFiles: [], files: [], step: role === 'accountant_final' ? 9 : 8,
     steps: [{ rk: 'procurement_payment', a: 'approved', uid: 'ga', n: 'General Affairs', actionLog: [{ action: '簽核通過', byId: 'ga' }], files: [clone(proof), clone(spreadsheet)] },
       { rk: role, a: '', uid: role === 'accountant_final' ? 'accountant' : 'ga', files: [] }],
@@ -40,7 +40,8 @@ function context(request = row()) {
   const engines = {};
   const c = { window: { FinanceV4Engines: { register: (key, api) => { engines[key] = api; }, get: key => engines[key] } }, console, Date, Number, Math, JSON, Promise, Error, Set, Map, URL,
     S: { user: { id: 'ga', n: 'General Affairs' }, demoLogin: false, aT: 'p' }, REQS: [request],
-    alerts: [], payloads: 0, uploads: 0, transactions: [], writes: [], opened: [], nodes: {}, POSTING_IN_FLIGHT: {} };
+    alerts: [], payloads: 0, uploads: 0, transactions: [], writes: [], opened: [], nodes: {}, POSTING_IN_FLIGHT: {},
+    PROCUREMENT_EVIDENCE_RUNTIME: { identity: '', entries: {} }, SUPABASE_ATTACHMENT_BUCKET: 'finance-attachments', registry: [], registryCalls: [] };
   Object.assign(c, {
     cloneSettingValue: clone, num: value => { const n = Number(String(value == null ? '' : value).replace(/,/g, '')); return Number.isFinite(n) ? n : 0; },
     attachmentEngineOptions: () => ({}), activeStep: r => r.steps.find(s => !s.a), canActRequest: () => true,
@@ -56,7 +57,20 @@ function context(request = row()) {
     expenseActiveStepTransaction: async (rows, action) => { c.transactions.push({ ids: rows.map(r => r.id), action }); return { available: true, ok: true, count: rows.length }; },
     canEditRequestAccountingLines: () => true,
     recordApprovalWriteFailure: () => { throw Error('Unexpected approval write'); },
-    getSb: () => { throw Error('Unexpected generic RPC access'); }, fmt: String, attr: String,
+    currentTenantId: () => 'fixture-tenant', activeDataEnvironment: () => 'production',
+    expenseSubmissionOperationIdentity: () => JSON.stringify([c.S.user.id, c.currentTenantId(), c.activeDataEnvironment()]),
+    setTimeout, clearTimeout,
+    getSb: () => ({ from: table => {
+      assert.equal(table, 'file_attachments', 'Only the read-only registry is queried');
+      const filters = {}, query = { select(fields) { query.fields = fields; return query; }, eq(key, value) { filters[key] = value; return query; },
+        in(key, values) { query.paths = values; assert.equal(key, 'storage_path'); return query; }, limit(value) { query.limitValue = value; return query; },
+        then(resolve, reject) {
+          c.registryCalls.push({ fields: query.fields, filters: clone(filters), paths: clone(query.paths), limit: query.limitValue });
+          const response = c.registryResponse ? c.registryResponse(query, filters) : { data: c.registry.filter(meta => Object.keys(filters).every(key => meta[key] === filters[key]) && query.paths.includes(meta.storage_path)), error: null };
+          return Promise.resolve(response).then(resolve, reject);
+        } };
+      return query;
+    } }), fmt: String, attr: String,
     withProcurementSubmissionLock: (_id, fn) => fn(), loadProcurementSubmissionPending: () => null,
     membershipOrgDraftUuid: () => 'anonymous-operation-id',
     invalidateAccountingLines: r => { r.formPayload.accountingLines = []; r.formPayload.accountingInvalidatedReason = 'actual evidence changed'; },
@@ -78,13 +92,31 @@ function context(request = row()) {
   });
   vm.createContext(c);
   vm.runInContext(fs.readFileSync(path.join(root, 'assets/engines/attachment-engine.js'), 'utf8'), c);
-  load(c, ['financeAttachmentEngine', 'normalizeFileMeta', 'normalizeFiles', 'uniqueAttachments', 'attachmentStoragePath', 'attachmentIsReceiptEvidence', 'escAttr',
+  load(c, ['financeAttachmentEngine', 'normalizeFileMeta', 'normalizeFiles', 'uniqueAttachments', 'attachmentStoragePath', 'attachmentIsReceiptEvidence', 'escAttr', 'financeInlineJsString', 'withOperationTimeout',
     'purchaseActualAmount', 'purchaseEstimatedAmount', 'purchaseFinalAmount', 'expensePostingAmount', 'purchaseHasFinalEvidence', 'purchaseReadyForFinalAccounting',
-    'procurementRequiresDedicatedAction', 'procurementDedicatedActionMessage', 'procurementReusableEvidence', 'procurementExistingEvidenceHtml', 'collectProcurementExistingEvidence', 'purchaseFinalRecoveryHtml',
+    'procurementRequiresDedicatedAction', 'procurementDedicatedActionMessage', 'procurementEvidenceCandidates', 'procurementEvidenceScope', 'procurementEvidenceCurrent', 'procurementEvidenceEntries',
+    'procurementReusableEvidence', 'readProcurementEvidenceOwnership', 'procurementEvidenceOptionsHtml', 'procurementExistingEvidenceHtml', 'loadProcurementExistingEvidence',
+    'collectProcurementExistingEvidence', 'requireProcurementEvidenceCurrent', 'purchaseFinalRecoveryHtml',
     'isRestrictedReturnedMiddleStep', 'expenseStepAllowsAccountingPatch', 'shouldCollectAccountingLines', 'canBulkApproveWithoutAccountingLineCollection']);
+  registerOwned(c, request, [proof, spreadsheet]);
   return c;
 }
 function check(label, condition = true) { assert(condition, label); passed++; console.log('PASS ' + label); }
+function registerOwned(c, r, files, actor = 'ga') {
+  files.forEach(file => c.registry.push({ bucket_id: 'finance-attachments', storage_path: file.path || file.storagePath || file.storage_path,
+    record_type: 'expense_requests', record_no: r.no, uploaded_by: actor, tenant_id: r.tenantId, data_environment: r.dataEnv }));
+}
+function evidenceBox() {
+  const box = { selected: [], attributes: {}, setAttribute(key, value) { this.attributes[key] = value; }, querySelectorAll() { return this.selected; } };
+  Object.defineProperty(box, 'innerHTML', { get() { return this.html || ''; }, set(value) { this.html = value; this.selected = []; } });
+  return box;
+}
+async function primeEvidence(c, r = c.REQS[0], prefix = 'proc', selected = []) {
+  const box = c.nodes[prefix + '-reuse-files'] || (c.nodes[prefix + '-reuse-files'] = evidenceBox());
+  await c.loadProcurementExistingEvidence(r.id, prefix);
+  box.selected = selected.map(index => ({ getAttribute: () => String(index) }));
+  return box;
+}
 
 (async () => {
   for (const role of ['procurement_payment', 'procurement_receipt', 'procurement_review']) {
@@ -123,25 +155,27 @@ function check(label, condition = true) { assert(condition, label); passed++; co
     r.files = [clone(proof), { n: 'name-only.pdf' }, { n: 'signed-only.pdf', url: 'https://example.invalid/signed.pdf?token=fixture' }];
     r.actualFiles = [{ name: 'duplicate.pdf', storage_path: proof.path, uploadedBy: 'ga' }];
     r.steps[0].files.push({ name: 'receipt.png', type: 'image/png', storagePath: 'production/expense_requests/anonymous-purchase/receipt.png' });
+    registerOwned(c, r, [r.steps[0].files[2]]);
+    const box = await primeEvidence(c, r);
     const evidence = c.procurementReusableEvidence(r);
     check('Reusable evidence deduplicates persisted paths across eligible historical locations', evidence.length === 2 && new Set(evidence.map(f => f.path)).size === 2);
     check('Reusable evidence normalizes legacy storage_path/storagePath metadata', evidence.every(f => f.path && f.bucket));
-    const markup = c.procurementExistingEvidenceHtml(r, 'proc');
-    check('Existing evidence requires explicit unchecked selection', markup.includes('proc-reuse-files') && /type=["']checkbox/.test(markup) && !/\schecked(?:[\s=>])/.test(markup));
+    const markup = box.innerHTML;
+    check('Existing evidence requires explicit unchecked selection', /type=["']checkbox/.test(markup) && !/\schecked(?:[\s=>])/.test(markup));
     check('Missing selection never auto-promotes historical attachments', c.collectProcurementExistingEvidence(r, 'proc').length === 0);
     // Simulate only the checked DOM nodes. The implementation must resolve
     // their indices against the current eligible evidence, not trust raw paths.
-    c.nodes['proc-reuse-files'] = { querySelectorAll: () => [{ value: '0', dataset: { index: '0', procurementEvidenceIndex: '0' }, getAttribute: name => /index/.test(name) ? '0' : null }] };
+    box.selected = [{ getAttribute: () => '0' }];
     const selected = c.collectProcurementExistingEvidence(r, 'proc');
     check('Explicit selection returns only the selected persisted evidence', selected.length === 1 && selected[0].path === evidence[0].path);
-    c.nodes['proc-reuse-files'] = { querySelectorAll: () => [{ value: '999', dataset: { index: '999', procurementEvidenceIndex: '999' }, getAttribute: () => '999' }] };
+    box.selected = [{ getAttribute: () => '999' }];
     check('Out-of-range selection cannot fabricate evidence', c.collectProcurementExistingEvidence(r, 'proc').length === 0);
     for (const index of ['-1', '00', '0.1', 'NaN', '0 OR 1']) {
-      c.nodes['proc-reuse-files'] = { querySelectorAll: () => [{ getAttribute: () => index }] };
+      box.selected = [{ getAttribute: () => index }];
       assert.equal(c.collectProcurementExistingEvidence(r, 'proc').length, 0, 'Invalid selection index: ' + index);
     }
     check('Malformed evidence indices are refused');
-    c.nodes['proc-reuse-files'] = { querySelectorAll: () => [{ getAttribute: () => '0' }, { getAttribute: () => '0' }] };
+    box.selected = [{ getAttribute: () => '0' }, { getAttribute: () => '0' }];
     check('Duplicate checkbox indices do not double-count proof', c.collectProcurementExistingEvidence(r, 'proc').length === 1);
     c.S.user = { id: 'other', n: 'Other Employee' };
     check('Another actor is not offered the prior GA evidence', c.procurementReusableEvidence(r).length === 0);
@@ -149,7 +183,86 @@ function check(label, condition = true) { assert(condition, label); passed++; co
   {
     const r = row(), c = context(r); r.steps[0].files = [];
     r.files = [{ ...clone(proof), uploaded_by: 'ga' }];
-    check('Explicit raw uploader metadata survives candidate normalization', c.procurementReusableEvidence(r).length === 1);
+    check('Unverified JSON uploader metadata is not ownership proof', c.procurementReusableEvidence(r).length === 0);
+    await primeEvidence(c, r);
+    check('Registry confirms ownership independently of JSON normalization', c.procurementReusableEvidence(r).length === 1);
+  }
+  {
+    const r = row(), c = context(r), foreign = { ...clone(proof), n: 'accountant-return.pdf', path: 'production/expense_requests/anonymous-purchase/accountant.pdf' };
+    r.steps[0].files.push(foreign); r.steps[0].actionLog.push({ action: '退回上一關', byId: 'accountant' });
+    registerOwned(c, r, [foreign], 'accountant');
+    await primeEvidence(c, r);
+    const files = c.procurementReusableEvidence(r), call = c.registryCalls[0];
+    check('An accountant return file in a GA-approved step is never offered to GA', files.length === 1 && files[0].path === proof.path);
+    assert.deepEqual(call.filters, { tenant_id: r.tenantId, data_environment: 'production', bucket_id: 'finance-attachments', uploaded_by: 'ga', record_type: 'expense_requests', record_no: r.no });
+    check('Registry query binds actor, tenant, environment, bucket, record and referenced paths', call.paths.length === 2 && call.paths.includes(foreign.path) && call.limit === 51);
+    await primeEvidence(c, r, 'detail-proc');
+    check('Two opened surfaces share the same verified record read', c.registryCalls.length === 1);
+  }
+  {
+    const r = row(), c = context(r);
+    const forged = ['constructor', '__proto__'].map(name => ({ ...clone(proof), path: name }));
+    const wrongEnv = { ...clone(proof), path: 'different-environment', dataEnv: 'test' };
+    r.steps[0].files.push(...forged, wrongEnv);
+    registerOwned(c, r, [wrongEnv]);
+    c.registryResponse = () => ({ data: [
+      { ...c.registry[0], uploaded_by: 'accountant' }, { ...c.registry[0], tenant_id: 'foreign' },
+      { ...c.registry[0], data_environment: 'test' }, { ...c.registry[0], record_no: 'foreign' },
+      { ...c.registry[0], record_type: 'bills' }, { ...c.registry[0], bucket_id: 'foreign' }
+    ], error: null });
+    await primeEvidence(c, r);
+    check('Foreign registry scope and prototype property paths cannot prove ownership', c.procurementReusableEvidence(r).length === 0);
+    check('Wrong-environment JSON file metadata is excluded before registry read', !c.registryCalls[0].paths.includes(wrongEnv.path));
+  }
+  {
+    const r = row(), c = context(r), more = Array.from({ length: 100 }, (_, i) => ({ ...clone(proof), path: 'proof-' + i }));
+    r.files = more; registerOwned(c, r, more);
+    await primeEvidence(c, r);
+    check('Large evidence sets use bounded 50-path batches', c.registryCalls.length === 3 && c.registryCalls.every(call => call.paths.length <= 50) && c.procurementReusableEvidence(r).length === 101);
+    r.files.push(...Array.from({ length: 101 }, (_, i) => ({ ...clone(proof), path: 'extra-' + i })));
+    const priorReads = c.registryCalls.length; await c.loadProcurementExistingEvidence(r.id, 'proc', true);
+    check('Oversized evidence sets fail visibly without unbounded queries', c.registryCalls.length === priorReads && c.nodes['proc-reuse-files'].attributes['data-procurement-evidence-state'] === 'error');
+  }
+  {
+    const r = row(), c = context(r); c.registryResponse = () => ({ data: null, error: { message: 'offline' } });
+    c.nodes['proc-actual-amt'] = { value: '11350' }; c.nodes['proc-c'] = { value: 'keep this note' }; c.nodes['proc-files'] = { files: [proof] };
+    const box = await primeEvidence(c, r);
+    check('Registry failure is visible and never becomes an empty successful result', box.attributes['data-procurement-evidence-state'] === 'error' && /重新核對/.test(box.innerHTML));
+    delete c.registryResponse; await c.loadProcurementExistingEvidence(r.id, 'proc', true);
+    check('Registry retry preserves amount, note and new file input', box.attributes['data-procurement-evidence-state'] === 'ready' && c.nodes['proc-actual-amt'].value === '11350' && c.nodes['proc-c'].value === 'keep this note' && c.nodes['proc-files'].files.length === 1);
+  }
+  {
+    const r = row(), c = context(r); c.registryResponse = () => new Promise(() => {});
+    c.setTimeout = (fn, ms) => setTimeout(fn, Math.min(ms, 5));
+    const box = await primeEvidence(c, r);
+    check('Never-settling registry read has a bounded error state', box.attributes['data-procurement-evidence-state'] === 'error');
+  }
+  for (const changed of ['identity', 'record', 'dom']) {
+    const r = row(), c = context(r); let resolveRead;
+    c.registryResponse = () => new Promise(resolve => { resolveRead = resolve; });
+    c.nodes['proc-reuse-files'] = evidenceBox(); const oldBox = c.nodes['proc-reuse-files'];
+    const pending = c.loadProcurementExistingEvidence(r.id, 'proc'); await new Promise(resolve => setImmediate(resolve));
+    if (changed === 'identity') c.S.user = { id: 'other', n: 'Other' };
+    if (changed === 'record') r.ver = 2;
+    if (changed === 'dom') c.nodes['proc-reuse-files'] = evidenceBox();
+    resolveRead({ data: c.registry, error: null }); const result = await pending;
+    check('Late registry read cannot publish into changed ' + changed, result === false && !oldBox.__procurementEvidenceEntry && !c.nodes['proc-reuse-files'].__procurementEvidenceEntry);
+  }
+  for (const phase of ['payload', 'registry', 'upload']) {
+    const r = row(), before = clone(r), c = context(r); await primeEvidence(c, r, 'proc', [0]); c.nodes['proc-actual-amt'] = { value: '11350' };
+    const switchActor = () => { c.S.user = { id: 'other', n: 'Other' }; };
+    if (phase === 'payload') c.approvalActionPayload = async () => { switchActor(); return { files: [], comment: '', addUid: '' }; };
+    if (phase === 'registry') c.registryResponse = () => { switchActor(); return { data: c.registry, error: null }; };
+    if (phase === 'upload') c.uploadApprovalFiles = async p => { switchActor(); return p; };
+    load(c, [], ['submitProcurementActual']); await c.window.submitProcurementActual(r.id, 'proc');
+    assert.deepEqual(r, before);
+    check('Identity switch during ' + phase + ' cannot submit under the next actor', c.writes.length === 0 && c.transactions.length === 0);
+  }
+  {
+    const r = row(), c = context(r); await primeEvidence(c, r, 'proc', [0]); c.nodes['proc-actual-amt'] = { value: '11350' };
+    c.registry = [];
+    load(c, [], ['submitProcurementActual']); await c.window.submitProcurementActual(r.id, 'proc');
+    check('Submit freshly verifies selected ownership instead of trusting the open-time cache', c.writes.length === 0 && c.uploads === 0 && c.registryCalls.length === 2);
   }
   for (const actual of ['', '0', '-1', 'Infinity', 'NaN']) {
     const r = row(), c = context(r); c.nodes['proc-actual-amt'] = { value: actual };
@@ -190,7 +303,7 @@ function check(label, condition = true) { assert(condition, label); passed++; co
     ];
     let failSecond = true;
     c.nodes['proc-actual-amt'] = { value: '11350' };
-    c.nodes['proc-reuse-files'] = { querySelectorAll: () => [{ getAttribute: () => '0' }] };
+    await primeEvidence(c, r, 'proc', [0]);
     Object.assign(c, {
       PROCUREMENT_SUBMISSION_RUNNING: {}, ATTACHMENT_RESUMABLE_THRESHOLD_BYTES: 10000000,
       ATTACHMENT_LARGE_UPLOAD_TIMEOUT_MS: 30000, ATTACHMENT_UPLOAD_TIMEOUT_MS: 10000,
@@ -223,7 +336,7 @@ function check(label, condition = true) { assert(condition, label); passed++; co
   }
   {
     const r = row(), before = clone(r), c = context(r); c.nodes['proc-actual-amt'] = { value: '11350' };
-    c.nodes['proc-reuse-files'] = { querySelectorAll: () => [{ value: '0', dataset: { index: '0', procurementEvidenceIndex: '0' }, getAttribute: name => /index/.test(name) ? '0' : null }] };
+    await primeEvidence(c, r, 'proc', [0]);
     const persist = c.persistProcurementSubmission;
     c.persistProcurementSubmission = async (...args) => { assert.deepEqual(r, before, 'REQS must not be mutated before durable persistence'); return persist(...args); };
     load(c, [], ['submitProcurementActual']); await c.window.submitProcurementActual(r.id, 'proc');

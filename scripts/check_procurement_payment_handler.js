@@ -30,8 +30,11 @@ function loadProcurementEvidenceHelpers(state) {
   const engines = {};
   state.window.FinanceV4Engines = { register: (key,api) => { engines[key]=api; }, get: key => engines[key] };
   state.attachmentEngineOptions = () => ({});
+  state.SUPABASE_ATTACHMENT_BUCKET = 'finance-attachments';
+  state.PROCUREMENT_EVIDENCE_RUNTIME = {identity:'',entries:{}};
   vm.runInContext(read('assets/engines/attachment-engine.js'),state);
-  vm.runInContext(['financeAttachmentEngine','normalizeFileMeta','normalizeFiles','uniqueAttachments','attachmentIsReceiptEvidence','procurementReusableEvidence','collectProcurementExistingEvidence'].map(source).join('\n'),state);
+  vm.runInContext(['financeAttachmentEngine','normalizeFileMeta','normalizeFiles','uniqueAttachments','attachmentIsReceiptEvidence',
+    'procurementEvidenceCandidates','procurementEvidenceScope','procurementEvidenceCurrent','procurementEvidenceEntries','procurementReusableEvidence','collectProcurementExistingEvidence','requireProcurementEvidenceCurrent'].map(source).join('\n'),state);
 }
 function requestFixture() {
   const roles = ['applicant_submit','procurement_payment','direct_supervisor','dept_manager','accountant','cashier','applicant_confirm','procurement_receipt','accountant_final'];
@@ -95,7 +98,7 @@ function faultFixture(kind, shared, newTab=false) {
   }
   if(newTab)shared.session=new Map();
   const state={REQS:[],S:{user:{id:'audit',n:'Audit'},detailRid:'fixture'},window:{},Date,console,alerts:[],uploads:0,cleanups:0,failures:0,shared};
-  const mapped=raw=>({id:raw.id,no:raw.no,type:raw.type,status:raw.status,step:raw.step,amt:raw.amount,estimatedAmt:raw.estimated_amount,
+  const mapped=raw=>({id:raw.id,no:raw.no,tenantId:tenant,dataEnv:'production',type:raw.type,status:raw.status,step:raw.step,amt:raw.amount,estimatedAmt:raw.estimated_amount,
     actualAmt:raw.actual_amount,actualFiles:clone(raw.actual_files||[]),files:clone(raw.files||[]),steps:clone(raw.steps),formPayload:clone(raw.form_payload||{})});
   state.REQS=[mapped(shared.row)];
   shared.commit=values=>{

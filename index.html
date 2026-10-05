@@ -22566,35 +22566,115 @@ function procurementDedicatedActionMessage(r){
   var step=r&&activeStep(r);
   return step&&step.rk==='procurement_payment'?'採購付款資料請開啟單張填寫，不能以一般核准或整批通過略過。':'採購憑據請開啟單張，填寫最終實際金額並確認發票憑據後送出，不能以一般核准或整批通過略過。';
 }
-function procurementReusableEvidence(r){
+var PROCUREMENT_EVIDENCE_RUNTIME={identity:'',entries:{}};
+function procurementEvidenceCandidates(r){
   if(!r||r.type!=='purchase_request')return [];
-  var actor=S.user||{},files=[];
-  if(!actor.id)return files;
-  // Only suggest evidence attributed to this actor; the database also verifies
-  // the registry uploader, record, tenant, environment and Storage object.
-  var stored=(Array.isArray(r.files)?r.files:[]).concat(Array.isArray(r.actualFiles||r.actual_files)?(r.actualFiles||r.actual_files):[]);
-  files=normalizeFiles(stored.filter(function(file){return file&&(file.uploaded_by||file.uploadedBy)===actor.id;}));
-  (r.steps||[]).forEach(function(step){
-    var signedByActor=(step.actionLog||[]).some(function(event){return event.byId===actor.id&&event.action==='簽核通過';});
-    if(signedByActor||(step.uid===actor.id&&step.n===actor.n))files=files.concat(normalizeFiles(step.files||[]));
+  var fp=r.formPayload||r.form_payload||{};
+  var files=normalizeFiles(r.files||[]).concat(normalizeFiles(r.actualFiles||r.actual_files||[]),normalizeFiles((fp.purchaseActual||{}).files||[]));
+  (r.steps||[]).forEach(function(step){files=files.concat(normalizeFiles(step&&step.files||[]));});
+  return uniqueAttachments(files).filter(function(file){return file.bucket===SUPABASE_ATTACHMENT_BUCKET&&String(file.dataEnv)===String(r.dataEnv||r.data_environment)&&!!file.path&&attachmentIsReceiptEvidence(file);});
+}
+function procurementEvidenceScope(r){
+  if(!r||r.type!=='purchase_request'||r.status!=='pending_procurement')return null;
+  var identity=expenseSubmissionOperationIdentity(),step=r&&activeStep(r),user=S.user||{};
+  var tenant=r&&(r.tenantId||r.tenant_id),environment=r&&(r.dataEnv||r.data_environment);
+  if(!identity||!user.id||!r||r.type!=='purchase_request'||r.status!=='pending_procurement'||!step||['procurement_receipt','procurement_review'].indexOf(step.rk)<0||!canActRequest(r)
+    ||!tenant||String(tenant)!==String(currentTenantId())||String(environment)!==String(activeDataEnvironment())||!r.id||!r.no)return null;
+  var scope={identity:identity,actor:String(user.id),tenant:String(tenant),environment:String(environment),id:String(r.id),no:String(r.no)};
+  scope.key=JSON.stringify([identity,typeof financeAuthIdentityEpoch==='undefined'?0:financeAuthIdentityEpoch,scope.id,scope.no,scope.tenant,scope.environment,r.ver,r.updatedAt||r.updated_at,r.status,r.step,r.steps,procurementEvidenceCandidates(r)]);
+  return scope;
+}
+function procurementEvidenceCurrent(scope){
+  var current=scope&&REQS.find(function(row){return String(row.id)===scope.id;});
+  var latest=current&&procurementEvidenceScope(current);
+  return !!(latest&&latest.key===scope.key);
+}
+function procurementEvidenceEntries(scope){
+  if(PROCUREMENT_EVIDENCE_RUNTIME.identity!==scope.identity)PROCUREMENT_EVIDENCE_RUNTIME={identity:scope.identity,entries:{}};
+  return PROCUREMENT_EVIDENCE_RUNTIME.entries;
+}
+function procurementReusableEvidence(r){
+  var scope=procurementEvidenceScope(r);if(!scope)return [];
+  var entry=procurementEvidenceEntries(scope)[scope.key];
+  return entry&&entry.state==='ready'?entry.files:[];
+}
+async function readProcurementEvidenceOwnership(scope,files){
+  if(!procurementEvidenceCurrent(scope)||!hasSupabase())throw new Error('目前無法核對既有憑據，請稍後重試。');
+  if(files.length>200)throw new Error('本單憑據數量超過單次核對上限，請聯絡管理員協助。');
+  if(!files.length)return [];
+  var client=getSb();if(!client)throw new Error('附件查核服務尚未連線，請稍後重試。');
+  var batches=[];
+  for(var offset=0;offset<files.length;offset+=50){
+    var paths=files.slice(offset,offset+50).map(function(file){return file.path;});
+    batches.push(Promise.resolve(client.from('file_attachments')
+      .select('bucket_id,storage_path,record_type,record_no,uploaded_by,tenant_id,data_environment')
+      .eq('tenant_id',scope.tenant).eq('data_environment',scope.environment)
+      .eq('bucket_id',SUPABASE_ATTACHMENT_BUCKET).eq('uploaded_by',scope.actor)
+      .eq('record_type','expense_requests').eq('record_no',scope.no)
+      .in('storage_path',paths).limit(51)));
+  }
+  // This deadline does not await an unresponsive abort drain. Late reads cannot
+  // populate another record/session because the captured scope is checked below.
+  var results=await withOperationTimeout(Promise.all(batches),'核對既有憑據上傳者',10000);
+  if(!procurementEvidenceCurrent(scope))throw new Error('登入身分或原單內容已變更，請重新開啟原單核對憑據。');
+  var owned=Object.create(null);
+  results.forEach(function(result){
+    if(!result||result.error||!Array.isArray(result.data)||result.data.length>50)throw new Error('既有憑據核對未完成，請重試；已填寫內容會保留。');
+    result.data.forEach(function(meta){
+      if(meta&&meta.bucket_id===SUPABASE_ATTACHMENT_BUCKET&&meta.record_type==='expense_requests'&&String(meta.record_no)===scope.no
+        &&String(meta.tenant_id)===scope.tenant&&String(meta.data_environment)===scope.environment&&String(meta.uploaded_by)===scope.actor)owned[String(meta.storage_path)]=true;
+    });
   });
-  return uniqueAttachments(files).filter(function(file){
-    return !!(file.path||file.storagePath||file.storage_path)&&attachmentIsReceiptEvidence(file);
-  });
+  return files.filter(function(file){return !!owned[file.path];});
+}
+function procurementEvidenceOptionsHtml(r,prefix,entry){
+  var heading='<legend>沿用這張單的既有憑據</legend>';
+  if(!entry||entry.state==='loading')return heading+'<p role="status">正在核對本人上傳的既有憑據…</p>';
+  if(entry.state==='error')return heading+'<p role="status">既有憑據核對未完成。金額、備註與新選檔案會保留，您也可以上傳新憑據。</p><button type="button" class="btn-s" onclick="loadProcurementExistingEvidence('+financeInlineJsString(r.id)+','+financeInlineJsString(prefix)+',true)">重新核對既有憑據</button>';
+  if(!entry.files.length)return heading+'<p role="status">未找到可由本人沿用的已登錄憑據；請上傳本次實際支出的發票或憑據。</p>';
+  return heading+'<p style="font-size:12px;line-height:1.6">請核對本人先前上傳的檔案後，勾選本次實際支出的憑據，不必重複上傳。最終金額仍需依憑據填寫。</p>'
+    +entry.files.map(function(file,index){return '<label style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;overflow-wrap:anywhere"><input type="checkbox" style="width:18px;height:18px;min-width:18px;padding:0;margin:2px 0;flex:none" data-procurement-evidence-index="'+index+'"><span>'+escAttr(file.n||file.name||'附件')+'</span></label>';}).join('');
 }
 function procurementExistingEvidenceHtml(r,prefix){
-  var files=procurementReusableEvidence(r);if(!files.length)return '';
-  return '<fieldset id="'+attr(prefix+'-reuse-files')+'" style="border:1px solid #efd7b8;border-radius:8px;padding:10px;margin:8px 0"><legend>沿用這張單的既有憑據</legend><p style="font-size:12px;line-height:1.6">請核對本人先前上傳的檔案後，勾選本次實際支出的憑據，不必重複上傳。最終金額仍需依憑據填寫。</p>'
-    +files.map(function(file,index){return '<label style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;overflow-wrap:anywhere"><input type="checkbox" style="width:18px;height:18px;min-width:18px;padding:0;margin:2px 0;flex:none" data-procurement-evidence-index="'+index+'"><span>'+escAttr(file.n||file.name||'附件')+'</span></label>';}).join('')+'</fieldset>';
+  if(!procurementEvidenceScope(r))return '';
+  return '<fieldset id="'+attr(prefix+'-reuse-files')+'" data-procurement-evidence-state="loading" style="border:1px solid #efd7b8;border-radius:8px;padding:10px;margin:8px 0">'+procurementEvidenceOptionsHtml(r,prefix,null)+'</fieldset>';
 }
+async function loadProcurementExistingEvidence(rid,prefix,force){
+  var r=REQS.find(function(row){return String(row.id)===String(rid);}),scope=procurementEvidenceScope(r),box=el(prefix+'-reuse-files');
+  if(!scope||!box)return false;
+  var entries=procurementEvidenceEntries(scope),entry=entries[scope.key];
+  if(!entry||(force&&entry.state!=='loading')){
+    if(Object.keys(entries).length>20){PROCUREMENT_EVIDENCE_RUNTIME.entries={};entries=PROCUREMENT_EVIDENCE_RUNTIME.entries;}
+    entry={key:scope.key,state:'loading',files:[]};entries[scope.key]=entry;
+    entry.promise=readProcurementEvidenceOwnership(scope,procurementEvidenceCandidates(r)).then(function(files){entry.files=files;entry.state='ready';},function(){entry.files=[];entry.state='error';});
+  }
+  box.__procurementEvidenceEntry=null;
+  box.setAttribute('data-procurement-evidence-state',entry.state);
+  box.innerHTML=procurementEvidenceOptionsHtml(r,prefix,entry);
+  if(entry.promise)await entry.promise;
+  if(!procurementEvidenceCurrent(scope)||el(prefix+'-reuse-files')!==box)return false;
+  box.__procurementEvidenceEntry=entry;
+  box.setAttribute('data-procurement-evidence-state',entry.state);
+  box.innerHTML=procurementEvidenceOptionsHtml(r,prefix,entry);
+  return entry.state==='ready';
+}
+window.loadProcurementExistingEvidence=loadProcurementExistingEvidence;
 function collectProcurementExistingEvidence(r,prefix){
   var box=el(prefix+'-reuse-files');if(!box)return [];
-  var files=procurementReusableEvidence(r),seen={};
-  return Array.from(box.querySelectorAll('input[data-procurement-evidence-index]:checked')).map(function(input){
+  var selected=Array.from(box.querySelectorAll('input[data-procurement-evidence-index]:checked'));if(!selected.length)return [];
+  var scope=procurementEvidenceScope(r),entry=box.__procurementEvidenceEntry;
+  if(!scope||!entry||entry.key!==scope.key||entry.state!=='ready')throw new Error('既有憑據清單尚未核對或已變更，請重新核對後再勾選。');
+  var files=entry.files,seen={};
+  return selected.map(function(input){
     var raw=input.getAttribute('data-procurement-evidence-index');
     if(!/^(0|[1-9][0-9]*)$/.test(raw||'')||seen[raw])return null;
     seen[raw]=true;return files[Number(raw)]||null;
   }).filter(Boolean);
+}
+function requireProcurementEvidenceCurrent(scope){
+  if(procurementEvidenceCurrent(scope))return true;
+  alert('登入身分或原單內容已變更，這次採購資料尚未送出。請重新開啟原單核對。');
+  return false;
 }
 function purchaseFinalRecoveryHtml(r){
   if(!r||r.type!=='purchase_request'||r.status!=='pending_voucher'||purchaseReadyForFinalAccounting(r).ok)return '';
@@ -26494,6 +26574,7 @@ window.openDetail=function(rid){
   var progressCard='<div class="card detail-progress-card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">'+approvalTimelineProgressText(r)+(progressRows.length>5?' · 可上下滑動':'')+'</span></div><div class="detail-progress-scroll">'+tl+'</div></div>';
   el('detail-body').innerHTML=managerCard+infoCard+(laborMarker?laborElectronicDetailHtml(r,laborEntry):'')+progressCard+'<div class="detail-full-row">'+(laborMarker?'':paidReturnBoundaryHtml(r)+(typeof accountingCorrectionPanelHtml==='function'?accountingCorrectionPanelHtml(r):''))+'</div>'+(invoiceReviewCard&&!laborMarker?'<div class="detail-full-row">'+invoiceReviewCard+'</div>':'')+'<div class="detail-full-row">'+accountingCard+'</div>'+(lineAccountingCard&&!laborMarker?'<div class="detail-full-row">'+lineAccountingCard+'</div>':'');
   hydrateApprovalRuntimeLogsForRecord('expense',r,tlRuntime.slotId);
+  if(r.type==='purchase_request'&&r.status==='pending_procurement'&&canActRequest(r))loadProcurementExistingEvidence(rid,'detail-proc');
   if(laborMarker)loadLaborElectronicDetail(rid,false);
 };
 
@@ -29958,6 +30039,7 @@ function showApprD(r){
     +actH;
   el('appr-inner').insertAdjacentHTML('beforeend',paidReturnBoundaryHtml(r)+(typeof accountingCorrectionPanelHtml==='function'?accountingCorrectionPanelHtml(r):''));
   hydrateApprovalRuntimeLogsForRecord('expense',r,shRuntime.slotId);
+  if(r.type==='purchase_request'&&r.status==='pending_procurement'&&canAct)loadProcurementExistingEvidence(r.id,'proc');
 }
 function showBillApprD(b){
   openApprModal();
@@ -30470,13 +30552,25 @@ window.submitProcurementActual=async function(rid,prefix){
   cur=activeStep(r);
   var beforeRequest=cloneSettingValue(r);
   if(!canActRequest(r)||r.status!=='pending_procurement'||!cur||['procurement_receipt','procurement_review'].indexOf(cur.rk)<0){alert('目前不是總務提交憑據關卡');return;}
+  var submissionScope=procurementEvidenceScope(r);
+  if(!requireProcurementEvidenceCurrent(submissionScope))return false;
   var actual=num((el(prefix+'-actual-amt')||{}).value||0);
   if(!isFinite(actual)||actual<=0){alert('請填寫大於零的最終採購實際支出');return;}
-  var existingEvidence=collectProcurementExistingEvidence(r,prefix);
+  var existingEvidence;
+  try{existingEvidence=collectProcurementExistingEvidence(r,prefix);}catch(error){alert(error.message);return false;}
   var p=await approvalActionPayload(prefix+'-c',prefix+'-files',prefix+'-add-user');
+  if(!requireProcurementEvidenceCurrent(submissionScope))return false;
   if(p.addUid){alert('採購憑據送出不能同時加簽。請先送出憑據，再由下一位簽核人提出加簽。');return;}
   if(!existingEvidence.concat(normalizeFiles(p.files||[])).some(attachmentIsReceiptEvidence)){alert('請勾選沿用既有發票憑據，或上傳採購完成後的發票或憑據');return;}
+  if(existingEvidence.length){
+    try{
+      var verified=await readProcurementEvidenceOwnership(submissionScope,existingEvidence);
+      if(verified.length!==existingEvidence.length)throw new Error('選取的既有憑據已無法確認為本人上傳，請重新核對清單或改上傳新憑據。');
+    }catch(error){if(requireProcurementEvidenceCurrent(submissionScope))alert(error.message);return false;}
+  }
+  if(!requireProcurementEvidenceCurrent(submissionScope))return false;
   p=await uploadApprovalFiles(p,'expense_requests',r.no,'procurement_actual');
+  if(!requireProcurementEvidenceCurrent(submissionScope))return false;
   p.files=existingEvidence.concat(p.files||[]);
   if(!p.files.some(attachmentIsReceiptEvidence)){alert('請確認發票憑據已成功上傳');return;}
   r=cloneSettingValue(beforeRequest);
@@ -30504,6 +30598,7 @@ window.submitProcurementActual=async function(rid,prefix){
   });
   approveActiveStep(r,'approved',p.comment||('總務填寫實際支出 '+fmt(actual)),p.files,'');
   var receiptValues={amount:r.amt,estimated_amount:r.estimatedAmt,actual_amount:r.actualAmt,actual_files:r.actualFiles,status:r.status,step:r.step,steps:r.steps,files:r.files,form_payload:r.formPayload||{}};
+  if(!requireProcurementEvidenceCurrent(submissionScope))return false;
   if(!await persistProcurementSubmission(rid,'actual',r,beforeRequest,receiptValues,p.files,'送出採購憑據'))return false;
   buildAll();openDetail(rid);
   });
