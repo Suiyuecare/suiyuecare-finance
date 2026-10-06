@@ -17,6 +17,11 @@ scripts/*
 !scripts/check_release_source_integrity.js
 !scripts/check_all_applicant_withdraw_contract.js
 !scripts/check_applicant_withdraw_pglite.mjs
+!scripts/check_purchase_final_amount_contract.js
+!scripts/finance_purchase_final_amount_preflight.sql
+!scripts/finance_purchase_final_amount_postflight.sql
+!scripts/finance_purchase_final_amount_fingerprint.sql
+!scripts/finance_purchase_final_amount_canary.sql
 !scripts/finance_applicant_withdraw_postflight.sql
 !scripts/check_migration_lineage_contract.js
 !scripts/check_root_cause_regressions.js

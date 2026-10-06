@@ -18497,8 +18497,40 @@ function shouldCollectAccountingLines(r,step){
 function canBulkApproveWithoutAccountingLineCollection(r,step){
   return !!(r&&step&&step.rk==='cashier'&&r.status==='pending_cashier');
 }
+function purchaseVoucherAmountCents(value){
+  var raw=typeof value==='string'?value.trim():'';
+  if(raw!==''&&!/^\d+(?:\.\d{1,2})?$/.test(raw)){
+    throw new Error('採購實際金額與會計明細須以元、角、分填寫，最多到小數第 2 位。');
+  }
+  var amount=Number(value),scaled=amount*100,cents=Math.round(scaled);
+  var tolerance=Math.min(0.025,Number.EPSILON*Math.max(1,Math.abs(scaled))*8);
+  if(!Number.isFinite(amount)||amount<0||!Number.isSafeInteger(cents)||(amount>0&&cents===0)||Math.abs(scaled-cents)>tolerance){
+    throw new Error('採購實際金額與會計明細須以元、角、分填寫，最多到小數第 2 位。');
+  }
+  if(raw!==''){
+    var parts=raw.split('.');
+    var exactCents=BigInt(parts[0])*100n+BigInt((parts[1]||'').padEnd(2,'0'));
+    if(exactCents!==BigInt(cents))throw new Error('採購金額過大，無法精確保留到分；請核對並聯絡會計處理。');
+  }
+  return cents;
+}
+function assertPurchaseAccountingLinesMatchActual(r,lines,actualAmount,bankFee){
+  if(!r||r.type!=='purchase_request')return;
+  if(!lines.length)throw new Error('採購最後入帳缺少會計明細，請重新載入並依總務憑據覆核。');
+  var actualCents=purchaseVoucherAmountCents(actualAmount),lineCents=0;
+  lines.forEach(function(line){
+    var net=purchaseVoucherAmountCents(line.netAmount),tax=purchaseVoucherAmountCents(line.taxAmount),gross=purchaseVoucherAmountCents(line.grossAmount);
+    if(gross<=0)throw new Error('採購會計明細的含稅金額須大於零，請核對後再入帳。');
+    if(net+tax!==gross)throw new Error('採購會計明細的未稅與稅額合計須等於含稅金額，請核對後再入帳。');
+    lineCents+=gross;
+  });
+  purchaseVoucherAmountCents(bankFee||0);
+  if(lineCents!==actualCents)throw new Error('採購會計明細含稅合計與總務第 8 關實際支出不一致，請核對明細或退回總務更正。');
+}
 function entriesFromAccountingLines(r,totalFallback,bankFee){
   var lines=principalAccountingLines(buildAccountingLines(r)),entries=[];
+  var purchase=!!(r&&r.type==='purchase_request');
+  if(purchase)assertPurchaseAccountingLinesMatchActual(r,lines,totalFallback,bankFee);
   if(!lines.length)return null;
   if(!requestPostingLocked(r)&&lines.some(function(line){return accountingUtilityBillDetected(line)&&(num(line.taxAmount)!==0||num(line.netAmount)!==num(line.grossAmount));})){
     throw new Error('水費、電費須全額列費用且進項稅額為 0，請回會計明細覆核後再入帳。');
@@ -18507,9 +18539,10 @@ function entriesFromAccountingLines(r,totalFallback,bankFee){
   var current=lines.reduce(function(s,line){return s+num(line.grossAmount);},0);
   var hasHumanAmounts=lines.some(function(line){return ['netAmount','taxAmount','grossAmount'].some(function(field){return accountingLineFieldIsHuman(line,field);});});
   var factor=!hasHumanAmounts&&target&&current&&Math.abs(target-current)>0.5?target/current:1;
+  if(purchase)factor=1;
   lines.forEach(function(line){
-    var net=Math.round(num(line.netAmount)*factor);
-    var tax=Math.round(num(line.taxAmount)*factor);
+    var net=purchase?purchaseVoucherAmountCents(line.netAmount)/100:Math.round(num(line.netAmount)*factor);
+    var tax=purchase?purchaseVoucherAmountCents(line.taxAmount)/100:Math.round(num(line.taxAmount)*factor);
     if(r&&r.type==='hr_expense_request'&&!accountingLineFieldIsHuman(line,'taxAmount')&&!accountingLineFieldIsHuman(line,'netAmount')){
       tax=0;
       net=Math.round(num(line.grossAmount)*factor);
@@ -18522,14 +18555,14 @@ function entriesFromAccountingLines(r,totalFallback,bankFee){
   lines.forEach(function(line){
     var key=(line.creditAccount||r.cr)+'|'+(line.creditAccountName||r.crN);
     if(!creditMap[key])creditMap[key]={t:'cr',ac:line.creditAccount||r.cr,an:line.creditAccountName||r.crN,dept:line.departmentCode||r.dc,amt:0};
-    creditMap[key].amt+=Math.round(num(line.grossAmount)*factor);
+    creditMap[key].amt+=purchase?purchaseVoucherAmountCents(line.grossAmount):Math.round(num(line.grossAmount)*factor);
   });
-  Object.keys(creditMap).forEach(function(k){entries.push(creditMap[k]);});
+  Object.keys(creditMap).forEach(function(k){if(purchase)creditMap[k].amt/=100;entries.push(creditMap[k]);});
   if(bankFee>0){
     entries.push({t:'dr',ac:'6290',an:'手續費',dept:r.dc,amt:bankFee});
     var cr=entries.find(function(e){return e.t==='cr'&&String(e.ac)===String(r.cr||'1112');})||entries.find(function(e){return e.t==='cr';});
-    if(cr)cr.amt+=bankFee;
-    else entries.push({t:'cr',ac:r.cr||'1112',an:r.crN||acctName(r.cr||'1112'),dept:r.dc,amt:num(totalFallback)+bankFee});
+    if(cr)cr.amt=purchase?(purchaseVoucherAmountCents(cr.amt)+purchaseVoucherAmountCents(bankFee))/100:cr.amt+bankFee;
+    else entries.push({t:'cr',ac:r.cr||'1112',an:r.crN||acctName(r.cr||'1112'),dept:r.dc,amt:purchase?(purchaseVoucherAmountCents(totalFallback)+purchaseVoucherAmountCents(bankFee))/100:num(totalFallback)+bankFee});
   }
   return entries.filter(function(e){return num(e.amt)>0;});
 }
@@ -26669,7 +26702,7 @@ window.openDetail=function(rid){
   var approveLabel=returnedMiddle?'補件完成並繼續':(curStep&&curStep.rk==='cashier'?'出納放款並更新現金流':'核准此申請');
   if(canActRequest(r)&&returnedMiddle)acts.push(detailUpload+'<button class="btn-p" onclick="doApprove(\''+r.id+'\')">補件完成並繼續</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">不通過</button>');
   else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request'&&curStep&&curStep.rk==='procurement_payment')acts.push(procurementPaymentActionHtml(r,false,'detail-proc')+'<button class="btn-p" style="background:#0f766e" onclick="submitProcurementPaymentInfo(\''+r.id+'\',\'detail-proc\')">送出總務付款資料</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
-  else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request')acts.push('<div style="min-width:280px;max-width:520px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計銷帳與三表只會以這個實際金額入帳，預估金額只保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="detail-proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+procurementExistingEvidenceHtml(r,'detail-proc')+approvalActionFields('detail-proc-c','detail-proc-files','detail-proc-add-user',{allowAddSign:false,excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#0f766e" onclick="submitProcurementActual(\''+r.id+'\',\'detail-proc\')">提交憑據與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
+  else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request')acts.push('<div style="min-width:280px;max-width:520px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計銷帳與三表只會以這個實際金額入帳，預估金額只保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0.01" step="0.01" id="detail-proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+procurementExistingEvidenceHtml(r,'detail-proc')+approvalActionFields('detail-proc-c','detail-proc-files','detail-proc-add-user',{allowAddSign:false,excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#0f766e" onclick="submitProcurementActual(\''+r.id+'\',\'detail-proc\')">提交憑據與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
   else if(canActRequest(r)&&r.status!=='pending_applicant_confirm'&&r.status!=='pending_voucher')acts.push(detailUpload+'<button class="btn-p" onclick="doApprove(\''+r.id+'\')">'+approveLabel+'</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">不通過</button>');
   if(r.status==='pending_applicant_confirm'&&canActRequest(r)){
     if(curStep&&curStep.rk==='applicant_revision'){
@@ -27065,6 +27098,10 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
   if(hasVisibleAccountingInputs('appr-acct-line'))collectAccountingLinesFromDom(r,'appr-acct-line');
   else if(hasVisibleAccountingInputs('detail-acct-line'))collectAccountingLinesFromDom(r,'detail-acct-line');
   rememberAccountingReviewDraft(r);
+  if(r.type==='purchase_request'){
+    try{assertPurchaseAccountingLinesMatchActual(r,principalAccountingLines(buildAccountingLines(r)),purchaseActualAmount(r),requestBankFeeAmount(r));}
+    catch(error){alert(error.message+' 尚未上傳附件或取得傳票編號。');return;}
+  }
   if(['purchase_request','advance_request'].indexOf(r.type)<0&&Math.abs(expensePostingAmount(r)-num(original.amt||original.amount))>0.01){
     if(['expense_reimbursement','payment_request','travel_request','refund_request','welfare_request','hr_expense_request'].indexOf(r.type)>-1)await startExpenseAccountingCorrection(original,r);
     else alert('人工修改已保留。本類單據本金不可在最後入帳關直接變更，請使用原有核銷／零用金更正流程；尚未上傳附件或取得傳票編號。');
@@ -27226,8 +27263,10 @@ window.doConfirmVoucher=async function(rid,prefix,advancePrefix){
     alert((accountingError.message||'請重新核對會計明細。')+' 尚未取得傳票編號或入帳。');
     return;
   }
-  var creditAmount=voucherEntries.reduce(function(s,e){return s+(e.t==='cr'?e.amt:0);},0);
-  var debitAmount=voucherEntries.reduce(function(s,e){return s+(e.t==='dr'?e.amt:0);},0);
+  var purchaseVoucher=r.type==='purchase_request';
+  var creditAmount=voucherEntries.reduce(function(s,e){return s+(e.t==='cr'?(purchaseVoucher?purchaseVoucherAmountCents(e.amt):e.amt):0);},0);
+  var debitAmount=voucherEntries.reduce(function(s,e){return s+(e.t==='dr'?(purchaseVoucher?purchaseVoucherAmountCents(e.amt):e.amt):0);},0);
+  if(purchaseVoucher){creditAmount/=100;debitAmount/=100;}
   if(!voucherEntries.length||voucherEntries.some(function(e){return !e.ac||['dr','cr'].indexOf(e.t)<0||!Number.isFinite(e.amt)||e.amt<0;})||!Number.isFinite(creditAmount)||!Number.isFinite(debitAmount)||creditAmount<=0||Math.abs(creditAmount-debitAmount)>0.01){
     delete POSTING_IN_FLIGHT[lockKey];
     alert('傳票明細尚未符合入帳條件：請確認科目、金額及借貸平衡。人工修改仍保留為本分頁草稿，系統尚未取得傳票編號或入帳。');
@@ -30172,7 +30211,7 @@ function showApprD(r){
   else if(canAct&&r.status==='pending_procurement'&&r.type==='purchase_request'){
     var pCur=activeStep(r);
     if(pCur&&pCur.rk==='procurement_payment')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+procurementPaymentActionHtml(r,true)+'<button class="btn-p" style="width:100%;justify-content:center;background:#0f766e;margin-bottom:5px" onclick="submitProcurementPaymentInfo(\''+r.id+'\')">送出總務付款資料</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':'')+'</div>';
-    else actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計最後會以此實際支出金額切傳票與認列三表，預估金額僅保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0" id="proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+procurementExistingEvidenceHtml(r,'proc')+approvalActionFields('proc-c','proc-files','proc-add-user',{allowAddSign:false,excludeUserIds:approvalApplicantIds([r])})+'<button class="btn-p" style="width:100%;justify-content:center;background:#0f766e;margin-bottom:5px" onclick="submitProcurementActual(\''+r.id+'\')">提交憑據發票與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':'')+'</div>';
+    else actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計最後會以此實際支出金額切傳票與認列三表，預估金額僅保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0.01" step="0.01" id="proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+procurementExistingEvidenceHtml(r,'proc')+approvalActionFields('proc-c','proc-files','proc-add-user',{allowAddSign:false,excludeUserIds:approvalApplicantIds([r])})+'<button class="btn-p" style="width:100%;justify-content:center;background:#0f766e;margin-bottom:5px" onclick="submitProcurementActual(\''+r.id+'\')">提交憑據發票與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':'')+'</div>';
   }
   else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+advanceFinalAmtField+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080;margin-bottom:5px" onclick="doConfirmVoucher(\''+r.id+'\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn+'</div>';
   else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+(cur.rk==='cashier'?'<div style="font-size:11px;color:#7a3b00;line-height:1.6;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px;margin-bottom:8px">按下出納放款後，系統會先在現金流量表認列撥款 '+fmt(ceoCashImpactAmount(r))+'；最後一關會計收到憑據後才更新資產負債表與損益表。</div>':'')+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove(\''+r.id+'\')">'+(cur.rk==='cashier'?'出納放款並更新現金流':'核准此申請')+'</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject(\''+r.id+'\')">不通過</button></div>';
@@ -30715,8 +30754,10 @@ window.submitProcurementActual=async function(rid,prefix){
   if(!canActRequest(r)||r.status!=='pending_procurement'||!cur||['procurement_receipt','procurement_review'].indexOf(cur.rk)<0){alert('目前不是總務提交憑據關卡');return;}
   var submissionScope=procurementEvidenceScope(r);
   if(!requireProcurementEvidenceCurrent(submissionScope))return false;
-  var actual=num((el(prefix+'-actual-amt')||{}).value||0);
+  var actualInput=(el(prefix+'-actual-amt')||{}).value||'';
+  var actual=num(actualInput||0);
   if(!isFinite(actual)||actual<=0){alert('請填寫大於零的最終採購實際支出');return;}
+  try{purchaseVoucherAmountCents(actualInput);}catch(error){alert(error.message);return;}
   var existingEvidence;
   try{existingEvidence=collectProcurementExistingEvidence(r,prefix);}catch(error){alert(error.message);return false;}
   var p=await approvalActionPayload(prefix+'-c',prefix+'-files',prefix+'-add-user');
