@@ -93,7 +93,8 @@ function context(request = row()) {
   vm.createContext(c);
   vm.runInContext(fs.readFileSync(path.join(root, 'assets/engines/attachment-engine.js'), 'utf8'), c);
   load(c, ['financeAttachmentEngine', 'normalizeFileMeta', 'normalizeFiles', 'uniqueAttachments', 'attachmentStoragePath', 'attachmentIsReceiptEvidence', 'escAttr', 'financeInlineJsString', 'withOperationTimeout',
-    'purchaseActualAmount', 'purchaseEstimatedAmount', 'purchaseFinalAmount', 'expensePostingAmount', 'purchaseHasFinalEvidence', 'purchaseReadyForFinalAccounting',
+    'purchaseActualAmount', 'purchaseEstimatedAmount', 'purchaseVarianceAmount', 'purchaseFinalAmount', 'expensePostingAmount', 'purchaseHasFinalEvidence', 'purchaseReadyForFinalAccounting',
+    'purchaseVoucherAmountCents', 'assertPurchaseAccountingLinesMatchActual',
     'procurementRequiresDedicatedAction', 'procurementDedicatedActionMessage', 'procurementEvidenceCandidates', 'procurementEvidenceScope', 'procurementEvidenceCurrent', 'procurementEvidenceEntries',
     'procurementReusableEvidence', 'readProcurementEvidenceOwnership', 'procurementEvidenceOptionsHtml', 'procurementExistingEvidenceHtml', 'loadProcurementExistingEvidence',
     'collectProcurementExistingEvidence', 'requireProcurementEvidenceCurrent', 'purchaseFinalRecoveryHtml',
@@ -346,6 +347,81 @@ async function primeEvidence(c, r = c.REQS[0], prefix = 'proc', selected = []) {
     check('Both final-evidence payloads agree with the canonical amount', sent.values.form_payload.purchaseActual.actualAmount === 11350 && sent.values.form_payload.procurementReceiptInfo.actualAmount === 11350);
     check('Actual submission uses the dedicated transaction and records GA approval', sent.kind === 'actual' && sent.values.steps[1].a === 'approved' && c.transactions.length === 0);
     check('Receipt correction invalidates old accounting before final review', sent.values.form_payload.accountingLines.length === 0);
+  }
+  {
+    const r = row(), c = context(r); c.nodes['proc-actual-amt'] = { value: '945.50' };
+    await primeEvidence(c, r, 'proc', [0]);
+    load(c, [], ['submitProcurementActual']); await c.window.submitProcurementActual(r.id, 'proc');
+    check('Stage 8 preserves a cent-valued actual amount for stage 9', c.writes.length === 1 && c.writes[0].values.actual_amount === 945.5 && c.writes[0].values.amount === 12500);
+  }
+  for (const invalidAmount of ['945.501', '0.00000001', '600000000000.001', '80000000000000.01']) {
+    const r = row(), c = context(r); c.nodes['proc-actual-amt'] = { value: invalidAmount };
+    await primeEvidence(c, r, 'proc', [0]);
+    load(c, [], ['submitProcurementActual']); await c.window.submitProcurementActual(r.id, 'proc');
+    check('Stage 8 rejects imprecise cents ' + invalidAmount + ' before evidence upload or approval', c.writes.length === 0 && c.uploads === 0 && c.payloads === 0 && c.alerts.some(message => /小數第 2 位|金額過大/.test(message)));
+  }
+  {
+    const r = row('accountant_final'), c = context(r);
+    Object.assign(c, { principalAccountingLines: lines => lines.filter(line => !line.systemFee),
+      buildAccountingLines: request => clone(request.formPayload.accountingLines || []),
+      accountingUtilityBillDetected: () => false, accountingLineFieldIsHuman: () => false });
+    load(c, ['entriesFromAccountingLines']);
+    const line = (net, tax, gross, account = '6222') => ({ id: 'line_' + account, netAmount: net, taxAmount: tax, grossAmount: gross,
+      debitAccount: account, debitAccountName: '採購費用', creditAccount: '1112', creditAccountName: '銀行存款', departmentCode: 'D1' });
+    r.formPayload.accountingLines = [line(900.24, 45.26, 945.5)];
+    let entries = c.entriesFromAccountingLines(r, 945.5, 0);
+    check('Purchase voucher keeps exact cents in expense, tax, and bank entries', entries.length === 3 && entries[0].amt === 900.24 && entries[1].amt === 45.26 && entries[2].amt === 945.5);
+    r.formPayload.accountingLines = [line(0.1, 0, 0.1), line(0.2, 0, 0.2)];
+    entries = c.entriesFromAccountingLines(r, 0.3, 0.05);
+    check('Purchase credit aggregation and bank fee use integer cents', entries.filter(entry => entry.t === 'cr').length === 1 && entries.find(entry => entry.t === 'cr').amt === 0.35 && entries.find(entry => entry.ac === '6290').amt === 0.05);
+    assert.throws(() => c.entriesFromAccountingLines(r, 0.31, 0), /第 8 關實際支出/);
+    check('Purchase builder refuses to scale reviewed gross away from stage 8 actual');
+    assert.throws(() => c.entriesFromAccountingLines({ ...r, formPayload: { accountingLines: [line(95.235, 4.765, 100)] } }, 100, 0), /小數第 2 位/);
+    check('Purchase builder rejects fractional-cent net and tax before posting');
+    const ordinary = { ...r, type: 'payment_request', formPayload: { accountingLines: [line(945.5, 0, 945.5)] } };
+    check('Unrelated voucher builder behavior is unchanged', c.entriesFromAccountingLines(ordinary, 945.5, 0).find(entry => entry.t === 'cr').amt === 946);
+  }
+  {
+    const r = row('accountant_final'), c = context(r), postings = [];
+    r.actualAmt = 945.5; r.actualFiles = [clone(proof)];
+    r.formPayload.purchaseActual = { actualAmount: 945.5, files: [clone(proof)], stage: 'procurement_actual_receipt' };
+    r.formPayload.accountingLines = [{ id: 'line_1', source: 'purchase_actual', description: '採購最後實際支出',
+      netAmount: 900.24, taxAmount: 45.26, grossAmount: 945.5, debitAccount: '6222', debitAccountName: '採購費用',
+      creditAccount: '1112', creditAccountName: '銀行存款', departmentCode: 'D1' }];
+    Object.assign(c, { principalAccountingLines: lines => lines.filter(line => !line.systemFee),
+      buildAccountingLines: request => clone(request.formPayload.accountingLines || []),
+      accountingUtilityBillDetected: () => false, accountingLineFieldIsHuman: () => false,
+      hasVisibleAccountingInputs: () => false, rememberAccountingReviewDraft: () => {}, requestBankFeeAmount: () => 0,
+      requestTaxAmount: () => 0, requestWorkflowStepCount: request => request.steps.length,
+      approvedStepCount: request => request.steps.filter(step => step.a === 'approved').length,
+      approveActiveStep: request => { const step = request.steps.find(item => !item.a); step.a = 'approved'; request.step = request.steps.length; request.status = 'completed'; },
+      nextVoucherNo: async () => { c.serials = (c.serials || 0) + 1; return 'V-FIXTURE'; },
+      gE: () => ({ s: 'Anonymous company' }), todaySlash: () => '2026/10/05',
+      finishExpensePostingTransaction: async (_original, args) => { postings.push(clone(args)); return true; },
+      uploadApprovalFiles: async p => { c.uploadCalls = (c.uploadCalls || 0) + 1; return p; } });
+    load(c, ['entriesFromAccountingLines'], ['doConfirmVoucher']);
+    const before = clone(r);
+    await c.window.doConfirmVoucher(r.id);
+    const posted = postings[0];
+    check('Stage 9 sends exact cent-valued actual, tax split and voucher total', postings.length === 1 && c.serials === 1 && posted.p_amount === 945.5 && posted.p_voucher_total === 945.5
+      && posted.p_voucher_entries[0].amt === 900.24 && posted.p_voucher_entries[1].amt === 45.26 && posted.p_voucher_entries[2].amt === 945.5
+      && posted.p_form_payload.purchaseFinalizedAmount === 945.5 && c.alerts.length === 0);
+    assert.deepEqual(r, before); check('Successful stage 9 submission leaves original request unchanged until transaction confirms', !c.POSTING_IN_FLIGHT['request-ledger:' + r.id]);
+    r.actualAmt = 0.3; r.formPayload.purchaseActual.actualAmount = 0.3;
+    r.formPayload.accountingLines = [0.1, 0.2].map((amount, index) => ({ ...before.formPayload.accountingLines[0], id: 'cent_' + index,
+      netAmount: amount, taxAmount: 0, grossAmount: amount }));
+    postings.length = 0; c.serials = 0; c.alerts.length = 0;
+    await c.window.doConfirmVoucher(r.id);
+    check('Stage 9 sums 0.10 and 0.20 as an exact 0.30 voucher total', postings.length === 1 && postings[0].p_amount === 0.3 && postings[0].p_voucher_total === 0.3
+      && postings[0].p_voucher_entries.filter(entry => entry.t === 'dr').length === 2 && c.alerts.length === 0);
+    r.actualAmt = 945.5; r.formPayload.purchaseActual.actualAmount = 945.5;
+    r.formPayload.accountingLines = clone(before.formPayload.accountingLines);
+    r.formPayload.accountingLines[0].netAmount = 900.25; r.formPayload.accountingLines[0].grossAmount = 945.51;
+    postings.length = 0; c.serials = 0; c.uploadCalls = 0; c.alerts.length = 0;
+    const mismatchBefore = clone(r);
+    await c.window.doConfirmVoucher(r.id);
+    check('Stage 9 rejects line gross mismatch before upload, serial or posting', postings.length === 0 && c.serials === 0 && c.uploadCalls === 0 && c.alerts.some(message => /第 8 關實際支出/.test(message)));
+    assert.deepEqual(r, mismatchBefore); check('Rejected stage 9 mismatch preserves request and releases posting lock', !c.POSTING_IN_FLIGHT['request-ledger:' + r.id]);
   }
   for (const data of [
     { actualAmt: 0, actualFiles: [clone(proof)] },

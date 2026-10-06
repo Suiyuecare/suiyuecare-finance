@@ -33,7 +33,7 @@ function loadProcurementEvidenceHelpers(state) {
   state.SUPABASE_ATTACHMENT_BUCKET = 'finance-attachments';
   state.PROCUREMENT_EVIDENCE_RUNTIME = {identity:'',entries:{}};
   vm.runInContext(read('assets/engines/attachment-engine.js'),state);
-  vm.runInContext(['financeAttachmentEngine','normalizeFileMeta','normalizeFiles','uniqueAttachments','attachmentIsReceiptEvidence',
+  vm.runInContext(['financeAttachmentEngine','normalizeFileMeta','normalizeFiles','uniqueAttachments','attachmentIsReceiptEvidence','purchaseVoucherAmountCents',
     'procurementEvidenceCandidates','procurementEvidenceScope','procurementEvidenceCurrent','procurementEvidenceEntries','procurementReusableEvidence','collectProcurementExistingEvidence','requireProcurementEvidenceCurrent'].map(source).join('\n'),state);
 }
 function requestFixture() {
