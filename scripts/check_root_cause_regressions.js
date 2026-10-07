@@ -380,6 +380,7 @@ async function runBehaviorRegressions() {
 }
 
 function runAccountLineClassificationRegressions() {
+  let nextFixtureItemId = 0;
   const accounts = Object.fromEntries([
     ['1141','預付費用'],['6203','郵電費'],['6205','辦公用品'],['6217','伙食費'],
     ['6219','燃料費'],['6221','勞務費'],['6299','其他營業費用']
@@ -398,6 +399,7 @@ function runAccountLineClassificationRegressions() {
     accountingLineIsSystemFee:line=>!!line.systemFee,
     accountingLineFieldIsHuman:(line,field)=>(line.manualFields||[]).includes(field),
     normalizeLazyInvoiceIdentity:()=>({invoiceNo:'',buyerTaxId:'',sellerTaxId:''}),
+    membershipOrgDraftUuid:()=> 'fixture-item-' + ++nextFixtureItemId,
     todayIso:()=> '2026-10-03'
   });
   vm.runInContext(section('function requestTypeAccountingLabel(', 'function sourceRowsForAccounting('),runtime);
