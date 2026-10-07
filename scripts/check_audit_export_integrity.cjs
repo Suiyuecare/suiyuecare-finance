@@ -11,9 +11,10 @@ const c={window:{FinanceDocumentSearch:search},S:{lazyRows:[]},VOUCHERS:[],el:id
 vm.runInContext(['csvCell','csvNumericValue','lazyCsvAttachment','voucherMonthKey','voucherFilteredRows','voucherListPage','refreshVoucherMonths','financeDocumentMatchesQuery'].map(n=>fn(n)).join('\n')+'\n'+fn('exportVoucherCSV',true),c);
 check('employee expense export neutralizes formula text but preserves numeric values and identifiers',()=>{
  const inputs=['=1+1','+SUM(1,1)','-SUM(1,1)','@SUM(1,1)',' \t=1+1','\ufeff=1+1','\tordinary','\rordinary','\nordinary'];
- c.S.lazyRows=inputs.map(item=>({no:'0000123',buyerTaxId:'00123456',date:'2026-09-22',item,qty:'-2',unitPrice:'-3.5',total:-7,file:'invoice "A,B"\nsecond.pdf'}));
+ c.S.lazyRows=inputs.map((item,i)=>({no:'0000123',buyerTaxId:'00123456',date:'2026-09-22',item,applicantItemNote:'=note('+i+')',qty:'-2',unitPrice:'-3.5',total:-7,file:'invoice "A,B"\nsecond.pdf'}));
  const attachment=c.lazyCsvAttachment(),csv=decodeURIComponent(attachment.url.split(',').slice(1).join(',')),rows=parse(csv);
- assert.equal(rows.length,inputs.length+1);rows.slice(1).forEach((row,i)=>{assert.equal(row.length,13);assert.equal(row[4],"'"+inputs[i]);assert.equal(row[0],'0000123');assert.equal(row[2],'00123456');assert.equal(row[5],'-2');assert.equal(row[7],'-3.5');assert.equal(row[9],'-7');assert.equal(row[12],'invoice "A,B"\nsecond.pdf');});
+ assert.equal(rows[0][5],'品項備註');
+ assert.equal(rows.length,inputs.length+1);rows.slice(1).forEach((row,i)=>{assert.equal(row.length,14);assert.equal(row[4],"'"+inputs[i]);assert.equal(row[5],"'=note("+i+")");assert.equal(row[0],'0000123');assert.equal(row[2],'00123456');assert.equal(row[6],'-2');assert.equal(row[8],'-3.5');assert.equal(row[10],'-7');assert.equal(row[13],'invoice "A,B"\nsecond.pdf');});
  if(process.env.FINANCE_EXPORT_EVIDENCE_DIR){fs.mkdirSync(process.env.FINANCE_EXPORT_EVIDENCE_DIR,{recursive:true});fs.writeFileSync(path.join(process.env.FINANCE_EXPORT_EVIDENCE_DIR,'expense-formula-neutralized.csv'),csv);}
 });
 check('voucher export includes all filtered pages with exact Unicode/quote/newline round trip',()=>{
