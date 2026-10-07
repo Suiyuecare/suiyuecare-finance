@@ -4593,6 +4593,24 @@ input:focus,select:focus,textarea:focus{
 .finance-invoice-source dd{margin:0;font-size:12px;overflow-wrap:anywhere}
 .finance-invoice-expand{display:inline-flex;align-items:center;justify-content:center;min-width:68px;min-height:44px;border:1px solid #d7e3f4;border-radius:6px;background:#eff6ff;color:#315c94;cursor:pointer;font:inherit;font-size:12px}
 .finance-invoice-expand:focus-visible{outline:2px solid #315c94;outline-offset:2px}
+.expense-invoice-review-body{padding:11px;min-width:0}
+.expense-accounting-review{min-width:0;margin-top:10px;border-color:#f0c982}
+.expense-accounting-review>.chd{background:var(--brxxl)}
+.expense-accounting-review-count{font-size:12px;color:var(--brtxt);font-variant-numeric:tabular-nums}
+.expense-accounting-invoices{min-width:0;border-bottom:1px solid #f0e6d6}
+.expense-accounting-invoices>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:9px 12px;cursor:pointer;color:#334155;font-size:12px;font-weight:650;list-style:none}
+.expense-accounting-invoices>summary::-webkit-details-marker{display:none}
+.expense-accounting-invoices>summary:hover{background:var(--brxxl)}
+.expense-accounting-invoices>summary:focus-visible{outline:2px solid var(--br);outline-offset:-3px}
+.expense-accounting-invoice-action{color:var(--brtxt);font-weight:500}
+.expense-accounting-invoice-action::after{content:'⌄';display:inline-block;margin-left:7px}
+.expense-accounting-invoices[open] .expense-accounting-invoice-action::after{transform:rotate(180deg)}
+.expense-accounting-invoice-close,.expense-accounting-invoices[open] .expense-accounting-invoice-open{display:none}
+.expense-accounting-invoices[open] .expense-accounting-invoice-close{display:inline}
+.expense-accounting-invoices .expense-invoice-review-body{padding:8px 12px 12px;min-width:0}
+.expense-accounting-review>[data-accounting-request]{border:0;border-radius:0;margin-top:0!important;box-shadow:none}
+.expense-accounting-review>[data-accounting-request]>.chd{padding:8px 12px;background:#fff;border-bottom:0}
+.expense-accounting-review>[data-accounting-request]>.chd .cht{font-size:12px}
 @media(max-width:760px){
   #pg-newreq #nr-content :is(.sheet-full-scroll,.lazy-sheet-scroll,.hr-sheet-scroll),#pg-invoices :is(#invoice-single-sheet,#invoice-batch-sheet) :is(.sheet-full-scroll,.invoice-sheet-scroll),#pg-bills #bill-entry-sheet .sheet-full-scroll{overflow-x:auto!important;overflow-y:auto!important;max-width:100%!important}
 }

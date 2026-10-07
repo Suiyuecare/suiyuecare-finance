@@ -18348,7 +18348,7 @@ window.toggleExpenseInvoiceDetailRow=function(id){
   document.querySelectorAll('[aria-controls]').forEach(function(button){if(button.getAttribute('aria-controls')===id)button.setAttribute('aria-expanded',row.style.display!=='none'?'true':'false');});
   window.refreshFinancialTableScrollHints();
 };
-function expenseInvoiceReviewHtml(r){
+function expenseInvoiceReviewHtml(r,embedded){
   var groups=expenseInvoiceReviewGroups(r);
   if(!groups.length)return '';
   var key=safeStorageSegment((r&&r.no)||((r&&r.id)||'request'),'request');
@@ -18361,17 +18361,30 @@ function expenseInvoiceReviewHtml(r){
       +'</dl><div class="finance-detail-scroll" tabindex="0" role="region" aria-label="發票品項，可左右捲動"><table class="finance-detail-table finance-invoice-items-table"><thead><tr><th>#</th><th>品項明細</th><th>數量</th><th>單價</th><th style="text-align:right">未稅</th><th style="text-align:right">營業稅</th><th style="text-align:right">含稅</th></tr></thead><tbody>'
       +g.items.map(function(item,i){return'<tr><td style="text-align:center;color:#94a3b8">'+(i+1)+'</td><td><div style="font-weight:750;color:#334155">'+escAttr(item.item)+'</div></td><td>'+escAttr(item.qty||'—')+' '+escAttr(item.unitName||'')+'</td><td>'+fmt(item.unitPrice||0)+'</td><td style="text-align:right">'+fmt(item.net||0)+'</td><td style="text-align:right">'+fmt(item.tax||0)+'</td><td style="text-align:right;font-weight:800">'+fmt(item.total||0)+'</td></tr>';}).join('')
       +'</tbody></table></div></div>';
-    return '<tr onclick="toggleExpenseInvoiceDetailRow(\''+rid+'\')" style="cursor:pointer">'
-      +'<td><button type="button" class="finance-invoice-expand" aria-controls="'+rid+'" aria-expanded="false" onclick="event.stopPropagation();toggleExpenseInvoiceDetailRow(\''+rid+'\')">#'+(idx+1)+' 明細</button></td>'
+    return '<tr>'
+      +'<td><button type="button" class="finance-invoice-expand" aria-controls="'+rid+'" aria-expanded="false" onclick="toggleExpenseInvoiceDetailRow(\''+rid+'\')">#'+(idx+1)+' 明細</button></td>'
       +'<td>'+escAttr(g.date||'—')+'</td>'
       +'<td><div style="font-family:var(--font-sans);font-weight:800;color:#334155">'+escAttr(g.no||'—')+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">'+(g.file?'來源：'+escAttr(g.file):'點開看細項')+'</div></td>'
       +'<td style="text-align:right;font-weight:900;color:#3b2410">'+fmt(g.total||0)+'</td>'
       +'</tr><tr id="'+rid+'" style="display:none"><td colspan="4" style="padding:8px 12px;background:#fff">'+detail+'</td></tr>';
   }).join('');
+  var body='<div class="expense-invoice-review-body"><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">主管先核對每張發票的日期、號碼與含稅總金額；點選明細可展開品項、稅額、來源檔案與統編資訊。</div>'
+    +'<div class="finance-detail-scroll" tabindex="0" role="region" aria-label="發票核對明細，可左右捲動"><table class="invoice-review-table finance-detail-table" style="min-width:760px"><thead><tr><th style="width:110px">發票序號</th><th style="width:140px">發票日期</th><th>發票號碼 / 來源</th><th style="width:190px;text-align:right">發票含稅總金額</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  if(embedded)return body;
   return'<div class="card" style="margin-top:10px;border-color:#f0c982;background:#fff">'
     +'<div class="chd"><span class="cht">發票核對表</span><span style="font-size:11px;color:#a08060">共 '+groups.length+' 張 · '+fmt(total)+'</span></div>'
-    +'<div style="padding:11px"><div style="font-size:11px;color:#8b7358;line-height:1.6;margin-bottom:8px">主管先核對每張發票的日期、號碼與含稅總金額；點選任一列可展開品項、稅額、來源檔案與統編資訊。</div>'
-    +'<div class="finance-detail-scroll" tabindex="0" role="region" aria-label="發票核對明細，可左右捲動"><table class="invoice-review-table finance-detail-table" style="min-width:760px"><thead><tr><th style="width:110px">發票序號</th><th style="width:140px">發票日期</th><th>發票號碼 / 來源</th><th style="width:190px;text-align:right">發票含稅總金額</th></tr></thead><tbody>'+rows+'</tbody></table></div></div></div>';
+    +body+'</div>';
+}
+function expenseInvoiceAccountingReviewHtml(r,editable,title,prefix){
+  var accounting=shouldShowRequestAccountingLines(r)?accountingLinesHtml(r,editable,title,prefix):'';
+  var groups=expenseInvoiceReviewGroups(r);
+  if(!groups.length)return accounting;
+  if(!accounting)return expenseInvoiceReviewHtml(r);
+  var total=groups.reduce(function(sum,group){return sum+num(group.total);},0);
+  return'<section class="card expense-accounting-review" aria-label="發票與入帳科目核對">'
+    +'<div class="chd"><span class="cht">發票與入帳科目核對</span><span class="expense-accounting-review-count">發票 '+groups.length+' 張 · '+fmt(total)+'</span></div>'
+    +'<details class="expense-accounting-invoices"><summary><span>發票核對清單</span><span class="expense-accounting-invoice-action"><span class="expense-accounting-invoice-open">展開核對 '+groups.length+' 張發票</span><span class="expense-accounting-invoice-close">收合發票清單</span></span></summary>'+expenseInvoiceReviewHtml(r,true)+'</details>'
+    +accounting+'</section>';
 }
 function collectAccountingLinesFromDom(r){
   var prefix=arguments.length>1&&arguments[1]?arguments[1]:'acct-line';
@@ -26747,10 +26760,9 @@ window.openDetail=function(rid){
   if(r.files&&r.files.length)filesHtml='<div style="margin-top:8px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">已上傳憑據（'+r.files.length+'個）</div><div>'+r.files.map(function(f,i){return fileChipDownloadHtml(f,r.id,i);}).join('')+'</div></div>';
   var tlRuntime=approvalTimelineWithRuntimeLogs('expense',r,{includeSubmitFallback:true});
   var tl=tlRuntime.html;
-  var invoiceReviewCard=expenseInvoiceReviewHtml(r);
   var canEditAccountingLines=canActRequest(r)&&!returnedMiddle&&canEditRequestAccountingLines(r);
   var lineAccountingTitle=accountingLinesTitleForRequest(r);
-  var lineAccountingCard=shouldShowRequestAccountingLines(r)?accountingLinesHtml(r,canEditAccountingLines,lineAccountingTitle,'detail-acct-line'):'';
+  var invoiceAccountingCard=expenseInvoiceAccountingReviewHtml(r,canEditAccountingLines,lineAccountingTitle,'detail-acct-line');
   var accountingCard=isFinance()
     ?'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById(\''+r.voucherId+'\')">'+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+escAttr(r.dr)+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+escAttr(r.drN)+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+escAttr(r.cr)+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+escAttr(r.crN)+'</div></div></div>'+(feeAmt?'<div style="font-size:11px;color:#6a5840;margin-top:6px;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:6px">己方支出手續費會自動增加：Dr 6290 手續費 '+fmt(feeAmt)+'，Cr '+escAttr(r.cr)+' 銀行存款合計 '+fmt(r.amt+feeAmt)+'。</div>':'')+'<div style="font-size:11px;color:#94a3b8;margin-top:6px">提醒：數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
     :'<div class="card" style="padding:12px;background:#fff8ed;border-color:#efd7b8"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:5px">會計處理</div><div style="font-size:11px;color:#8b7358;line-height:1.7">這張單完成簽核後，會計會確認憑據與金流並由系統處理入帳。您不用填寫會計科目、分錄或傳票，只需要追蹤簽核狀態與補齊附件。</div></div>';
@@ -26760,7 +26772,7 @@ window.openDetail=function(rid){
   var infoCard='<div class="card detail-info-card"><div class="chd"><span class="cht">申請資訊</span></div>'+entityDeptEditorHtml('expense',r.id,r.eid,r.dc)+'<div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px">'+cells+'</div><div style="padding:0 12px 12px"><div style="font-size:11px;color:#a08060;margin-bottom:4px">申請說明</div><div style="background:var(--warm);border-radius:8px;padding:8px;font-size:12px;border:1px solid #f0e0c8">'+escAttr(r.desc)+'</div>'+purchaseAmountCompareHtml(r)+advanceTwoEventHtml(r)+pettyAccountingHtml(r)+filesHtml+'</div></div>';
   var progressRows=approvalTimelineRows(r,{includeSubmitFallback:true});
   var progressCard='<div class="card detail-progress-card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">'+approvalTimelineProgressText(r)+(progressRows.length>5?' · 可上下滑動':'')+'</span></div><div class="detail-progress-scroll">'+tl+'</div></div>';
-  el('detail-body').innerHTML=managerCard+infoCard+(laborMarker?laborElectronicDetailHtml(r,laborEntry):'')+progressCard+'<div class="detail-full-row">'+(laborMarker?'':paidReturnBoundaryHtml(r)+(typeof accountingCorrectionPanelHtml==='function'?accountingCorrectionPanelHtml(r):''))+'</div>'+(invoiceReviewCard&&!laborMarker?'<div class="detail-full-row">'+invoiceReviewCard+'</div>':'')+'<div class="detail-full-row">'+accountingCard+'</div>'+(lineAccountingCard&&!laborMarker?'<div class="detail-full-row">'+lineAccountingCard+'</div>':'');
+  el('detail-body').innerHTML=managerCard+infoCard+(laborMarker?laborElectronicDetailHtml(r,laborEntry):'')+progressCard+'<div class="detail-full-row">'+(laborMarker?'':paidReturnBoundaryHtml(r)+(typeof accountingCorrectionPanelHtml==='function'?accountingCorrectionPanelHtml(r):''))+'</div>'+'<div class="detail-full-row">'+accountingCard+'</div>'+(invoiceAccountingCard&&!laborMarker?'<div class="detail-full-row">'+invoiceAccountingCard+'</div>':'');
   hydrateApprovalRuntimeLogsForRecord('expense',r,tlRuntime.slotId);
   if(r.type==='purchase_request'&&r.status==='pending_procurement'&&canActRequest(r))loadProcurementExistingEvidence(rid,'detail-proc');
   if(laborMarker)loadLaborElectronicDetail(rid,false);
@@ -30189,10 +30201,9 @@ function showApprD(r){
   var isApplicantRevision=cur.rk==='applicant_revision';
   var returnedMiddle=isRestrictedReturnedMiddleStep(r);
   var fieldsH=approvalActionFields('appr-c','appr-files','appr-add-user',{allowAddSign:!returnedMiddle,excludeUserIds:approvalApplicantIds([r])});
-  var invoiceReviewH=expenseInvoiceReviewHtml(r);
   var canEditAccountingReview=canAct&&!returnedMiddle&&canEditRequestAccountingLines(r);
   var accountingReviewTitle=accountingLinesTitleForRequest(r);
-  var accountingReviewH=shouldShowRequestAccountingLines(r)?accountingLinesHtml(r,canEditAccountingReview,accountingReviewTitle,'appr-acct-line'):'';
+  var invoiceAccountingReviewH=expenseInvoiceAccountingReviewHtml(r,canEditAccountingReview,accountingReviewTitle,'appr-acct-line');
   var rejectInfo=requestRejectReason(r);
   var rejectBanner=requestIsRejected(r)?'<div class="ux-reject-card" style="margin:10px 12px 0"><div class="ux-reject-title">這張單已被駁回</div><div>駁回人：'+escAttr(rejectInfo.by||'—')+(rejectInfo.date?' · '+escAttr(rejectInfo.date):'')+'</div>'+(rejectInfo.comment?'<div style="margin-top:4px;color:#6a1b1b">原因：'+escAttr(rejectInfo.comment)+'</div>':'')+(requestIsMine(r)?'<button class="btn-p" style="margin-top:8px" onclick="copyRejectedRequestToDraft(\''+r.id+'\')">複製成修正草稿</button>':'')+'</div>':'';
   var advanceFieldsH=r.type==='advance_request'&&!isApplicantRevision?'<div style="font-size:10px;color:#8b7358;line-height:1.5;margin-bottom:7px">請上傳最後實際花費的憑據照片/PDF，以及即時 Excel 明細表。兩種檔案都要上傳。</div>'+fieldsH:fieldsH;
@@ -30232,8 +30243,7 @@ function showApprD(r){
     +(r.type==='purchase_request'?'<div style="padding:0 12px 10px">'+purchaseAmountCompareHtml(r)+'</div>':'')
     +(r.type==='advance_request'?'<div style="padding:0 12px 10px">'+advanceTwoEventHtml(r)+'</div>':'')
     +(r.type==='petty_cash_request'?'<div style="padding:0 12px 10px">'+pettyAccountingHtml(r)+'</div>':'')
-    +(invoiceReviewH?'<div style="padding:0 12px 10px">'+invoiceReviewH+'</div>':'')
-    +(accountingReviewH?'<div style="padding:0 12px 10px">'+accountingReviewH+'</div>':'')
+    +(invoiceAccountingReviewH?'<div style="padding:0 12px 10px">'+invoiceAccountingReviewH+'</div>':'')
     +'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">主管檢核附件</div>'+requestPrimaryFilesHtml(r)+'</div>'
     +(r.steps.length?'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">簽核進度</div>'+sh+'</div>':"")
     +actH;

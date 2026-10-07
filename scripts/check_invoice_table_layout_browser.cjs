@@ -33,7 +33,7 @@ const setup=`(async()=>{
  window.__tableShow=function(mode){
   closeAppr();el('appr-inner').innerHTML='';
   document.querySelectorAll('.pg').forEach(function(n){n.classList.remove('on');});el('pg-detail').classList.add('on');S.page='detail';el('detail-hd').textContent='發票與會計明細 · 虛構資料';el('detail-act').innerHTML='';el('detail-body').style.gridTemplateColumns='minmax(0,1fr)';
-  if(mode==='expense')el('detail-body').innerHTML=expenseInvoiceReviewHtml(__tableRequest)+accountingLinesHtml(__tableRequest,true,'逐項會計覆核','detail-acct');
+  if(mode==='expense')el('detail-body').innerHTML=expenseInvoiceAccountingReviewHtml(__tableRequest,true,'逐項會計覆核','detail-acct');
   if(mode==='approval'||mode==='invoice-approval'){el('pg-detail').classList.remove('on');el('pg-approvals').classList.add('on');S.page='approvals';if(mode==='approval')showApprD(__tableRequest);else showInvApprD(INVS[0]);}
   if(mode==='invoice')el('detail-body').innerHTML=invoiceReviewDetailHtml(INVS[0],{editable:true});
   if(mode==='posted'){
@@ -53,7 +53,20 @@ let browser;
   await page.setViewportSize({width,height:1000});await scope(`__tableShow('${mode}')`);
   if(mode==='expense'||mode==='approval'){
    const area=mode==='approval'?'#appr-inner':'#detail-body';
-   if(!before){for(const button of await page.locator(area+' .finance-invoice-expand').all()){await button.click();assert.equal(await button.getAttribute('aria-expanded'),'true');}}
+   if(!before){
+    const review=page.locator(area+' .expense-accounting-review');
+    assert.equal(await review.count(),1,mode+' combines invoices and accounting in one review card');
+    const disclosure=review.locator('.expense-accounting-invoices');
+    assert.equal(await disclosure.count(),1);
+    assert.equal(await disclosure.evaluate(n=>n.open),false,'invoice list starts collapsed');
+    assert.equal(await disclosure.locator('summary').evaluate(n=>n.getBoundingClientRect().height<=60),true,'collapsed invoice list stays compact');
+    assert.equal(await review.locator('.accounting-lines-table').isVisible(),true,'accounting remains visible and editable');
+    await review.evaluate(n=>n.scrollIntoView({block:'start',inline:'nearest'}));
+    await page.screenshot({path:path.join(out,phase+'-'+mode+'-'+width+'-collapsed.png')});
+    await disclosure.locator('summary').focus();await page.keyboard.press('Enter');
+    assert.equal(await disclosure.evaluate(n=>n.open),true,'keyboard opens the invoice list');
+    for(const button of await review.locator('.finance-invoice-expand').all()){await button.click();assert.equal(await button.getAttribute('aria-expanded'),'true');}
+   }
    else await scope(`Array.from(document.querySelectorAll('${area} tr[id]')).forEach(function(n){n.style.display='table-row';});`);
   }else if(before&&(mode==='invoice'||mode==='invoice-approval'))await scope(`Array.from(document.querySelectorAll('#detail-body tr[id],#appr-inner tr[id]')).forEach(function(n){n.style.display='table-row';});`);
   await page.waitForTimeout(180);
@@ -85,10 +98,20 @@ let browser;
   }
   evidence.push({mode,...result});
  }
+ await scope(`openDetail(__tableRequest.id)`);
+ assert.equal(await page.locator('#detail-body .expense-accounting-review').count(),1,'real expense detail uses the unified review card');
+ assert.equal(await page.locator('#detail-body .expense-accounting-invoices').evaluate(n=>n.open),false,'real expense detail starts compact');
+ assert.equal(await page.locator('#detail-acct-line-dr-0').count(),1,'real expense detail keeps the accounting input prefix');
+ const noInvoice=await scope(`(function(){var copy=Object.assign({},__tableRequest,{formPayload:Object.assign({},__tableRequest.formPayload,{lazyRows:[]})});return expenseInvoiceAccountingReviewHtml(copy,true,'逐項會計覆核','no-invoice-acct');})()`);
+ assert(noInvoice.includes('data-accounting-prefix="no-invoice-acct"')&&!noInvoice.includes('expense-accounting-invoices'),'accounting-only requests keep their review without an empty invoice disclosure');
  await page.setViewportSize({width:1440,height:1000});await scope(`__tableShow('expense')`);await page.waitForTimeout(100);
  const beforeData=await scope(`JSON.stringify(__tableRequest.formPayload.lazyRows)`);
  await page.locator('#detail-acct-net-0').fill('1100');await page.locator('#detail-acct-net-0').dispatchEvent('input');await page.locator('#detail-acct-tax-0').fill('55');await page.locator('#detail-acct-tax-0').dispatchEvent('input');
  await page.locator('#detail-acct-dr-0').selectOption('6201');
+ await page.locator('#detail-body .expense-accounting-invoices summary').click();
+ assert.equal(await page.locator('#detail-acct-net-0').inputValue(),'1100','opening invoice list preserves unsubmitted accounting amount');
+ await page.locator('#detail-body .expense-accounting-invoices summary').click();
+ assert.equal(await page.locator('#detail-acct-dr-0').inputValue(),'6201','closing invoice list preserves unsubmitted account selection');
  const edit=await scope(`(function(){var lines=collectAccountingLinesFromDom(__tableRequest,'detail-acct');return{line:lines[0],count:lines.length,amount:__tableRequest.amt,raw:JSON.stringify(__tableRequest.formPayload.lazyRows),calls:__fixtureCalls};})()`);
  assert.equal(edit.line.netAmount,1100);assert.equal(edit.line.taxAmount,55);assert.equal(edit.line.grossAmount,1155);assert.equal(edit.line.debitAccount,'6201');assert.equal(edit.line.manualOverride,true);assert.equal(edit.line.valueAuthority,'human');assert.equal(edit.count,4);assert.equal(edit.amount,2100);assert.equal(edit.raw,beforeData);assert.deepEqual(edit.calls,[]);
  await scope(`__tableShow('invoice')`);await page.waitForTimeout(100);await scope(`Array.from(document.querySelectorAll('#detail-body tr[id]')).forEach(function(n){n.style.display='table-row';});`);
