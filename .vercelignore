@@ -220,6 +220,7 @@ supabase/.temp
 !scripts/check_expense_submission_identity.cjs
 !scripts/check_expense_posting_reliability.cjs
 !scripts/check_expense_revision_reliability.cjs
+!scripts/check_expense_revision_export_version.cjs
 !scripts/fixtures/finance_expense_revision_runtime_20260912.sql
 !scripts/fixtures/finance_expense_revision_operations_20260912.sql
 !scripts/fixtures/finance_employee_payment_concerns_fixture.cjs
@@ -234,6 +235,7 @@ supabase/.temp
 !docs/finance-approval-performance.md
 !scripts/check_approval_navigation_browser.cjs
 !scripts/check_invoice_table_layout_browser.cjs
+!scripts/check_invoice_accounting_unified_contract.cjs
 !scripts/check_startup_read_coordination.cjs
 !scripts/check_realtime_scoped_refresh.cjs
 !scripts/check_startup_read_coordination_browser.cjs
