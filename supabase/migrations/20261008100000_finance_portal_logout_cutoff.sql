@@ -1,5 +1,3 @@
-begin;
-
 -- The original logout receipt fixes a cutoff for durable retries. Sessions
 -- created at or after that instant belong to a later login and survive.
 create function public.portal_revoke_google_sessions(
@@ -32,4 +30,3 @@ revoke all on function public.portal_revoke_google_sessions(text,text,timestampt
 grant execute on function public.portal_revoke_google_sessions(text,text,timestamptz)
   to service_role;
 notify pgrst,'reload schema';
-commit;

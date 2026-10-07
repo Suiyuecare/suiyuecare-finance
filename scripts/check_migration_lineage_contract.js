@@ -50,9 +50,26 @@ function read(relativePath) {
 const config = read('supabase/config.toml');
 const workflow = read('.github/workflows/stability-gate.yml');
 const releaseGuide = read('docs/RELEASE_GATES.md');
-const migrations = fs.readdirSync(MIGRATIONS_DIR)
+const allMigrations = fs.readdirSync(MIGRATIONS_DIR)
   .filter((name) => name.endsWith('.sql'))
   .sort();
+const LOGOUT_CUTOFF_MIGRATION = '20261008100000_finance_portal_logout_cutoff.sql';
+// Preserve every pinned predecessor check against the already-reviewed
+// production lineage. Review the additive logout migration separately rather
+// than silently shifting all historical suffix offsets by one.
+const migrations = allMigrations.filter((name) => name !== LOGOUT_CUTOFF_MIGRATION);
+const logoutCutoffSql = read(`supabase/migrations/${LOGOUT_CUTOFF_MIGRATION}`);
+check('cutoff-aware logout is the sole additive migration after the reviewed lineage',
+  allMigrations.length === migrations.length + 1
+    && allMigrations[allMigrations.length - 1] === LOGOUT_CUTOFF_MIGRATION
+    && migrations[migrations.length - 1] === '20261006153719_purchase_final_amount_exact_lock_v1.sql');
+check('logout cutoff migration is atomic-safe and can only revoke pre-request sessions',
+  /create function public\.portal_revoke_google_sessions\(\s*google_subject text, verified_email text, created_before timestamptz\s*\)/.test(logoutCutoffSql)
+    && /delete from auth\.sessions where user_id=\$1 and created_at<\$2/.test(logoutCutoffSql)
+    && /grant execute on function public\.portal_revoke_google_sessions\(text,text,timestamptz\)\s+to service_role/.test(logoutCutoffSql)
+    && /revoke all on function public\.portal_revoke_google_sessions\(text,text,timestamptz\)\s+from public,anon,authenticated/.test(logoutCutoffSql)
+    && !/^(?:begin|commit|rollback)\s*;/im.test(logoutCutoffSql)
+    && !/\b(?:create|alter|drop)\s+table\b/i.test(logoutCutoffSql));
 
 check('migration lineage is present', migrations.length > 0);
 check('migration versions are canonical and strictly ordered',
