@@ -11,6 +11,13 @@ async function coordinate(client,fetcher){
  if(!token)throw new Error('登入狀態已失效，其他模組登出結果尚未確認。');
  var response=await fetcher('https://login.suiyuecare.com/api/portal-handoff?action=logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({source:'finance'}),credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',cache:'no-store',signal:AbortSignal.timeout(30000)});
  var value=await response.json();
+ if(response.status===202&&value&&value.pending===true&&value.sourceRevoked===true&&
+   typeof value.receiptId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.receiptId)&&
+   Array.isArray(value.revokedModules)&&value.revokedModules.includes('finance')){
+   try{await client.auth.signOut({scope:'local'});}catch{};
+   try{global.localStorage.removeItem('suiyuecare-finance-auth-v3');}catch{};
+   return{pending:true,receiptId:value.receiptId};
+ }
  if(!response.ok||value.ok!==true||!Array.isArray(value.revokedModules)||!known.every(function(id){return value.revokedModules.includes(id);})){var error=new Error('登出尚未全部完成，請重試。');error.pendingModules=Array.isArray(value.pendingModules)?value.pendingModules.filter(function(id){return known.includes(id);}):known;throw error;}
  var local=await client.auth.signOut({scope:'local'});if(local&&local.error)throw new Error('本機登入資料尚未清除，請重試。');
  return known.slice();
@@ -23,7 +30,7 @@ function panel(message,busy,retry,complete){
 }
 async function start(options){
  if(running)return false;running=true;mark(true);options.clearPrivate();panel('正在登出人資、會計、敏捷專案管理與模組頁…',true);
- try{await options.stopRealtime();await coordinate(options.client(),options.fetch||global.fetch.bind(global));mark(false);panel('已登出人資、會計、敏捷專案管理與模組頁。',false,options.returnToPortal,true);return true;}
+ try{await options.stopRealtime();var outcome=await coordinate(options.client(),options.fetch||global.fetch.bind(global));mark(false);if(outcome.pending){panel('此裝置已登出，其他系統登出處理中。請稍後再重新登入。',false,options.pendingToPortal||options.returnToPortal,true);try{(options.pendingToPortal||options.returnToPortal)();}catch{}return true;}panel('已登出人資、會計、敏捷專案管理與模組頁。',false,options.returnToPortal,true);return true;}
  catch(error){var names={hr:'人資',finance:'會計',portal:'模組頁',apm:'敏捷專案管理'};var scope=error.pendingModules&&error.pendingModules.length?error.pendingModules.map(function(id){return names[id];}).join('、'):'人資、會計、敏捷專案管理與模組頁';panel(scope+'：'+error.message,false,function(){start(options);});return false;}
  finally{running=false;}
 }
