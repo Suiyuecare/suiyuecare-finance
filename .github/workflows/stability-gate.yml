@@ -111,6 +111,9 @@ jobs:
       - name: Install locked dependencies and browser
         run: |
           pnpm install --frozen-lockfile
+          # GitHub's Azure HTTP apt mirror can hang during Playwright's
+          # --with-deps step. Use the Ubuntu HTTPS mirror for this CI runner.
+          sudo sed -i 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list.d/ubuntu.sources
           pnpm exec playwright install --with-deps chromium webkit
       - name: Configure private disposable PostgreSQL for browser concurrency
         env:
