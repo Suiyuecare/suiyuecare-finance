@@ -34,6 +34,7 @@ const accounts = Object.fromEntries([
 ].map(([c, n]) => [c, { c, n }]));
 let dom = Object.create(null);
 let postedView = null;
+let nextFixtureItemId = 0;
 const runtime = {
   console, Math, Date, JSON, Set, Map,
   num: value => Number(value || 0), BUSINESS_TAX_RATE: 0.05,
@@ -49,6 +50,7 @@ const runtime = {
   // amount calculation, aggregation, collection and audit are real functions.
   inferDebitAccountForLine: () => ({ code: '6202', name: '水電瓦斯費', reason: 'Anonymous account fixture' }),
   normalizeLazyInvoiceIdentity: () => ({ invoiceNo: '', buyerTaxId: '', sellerTaxId: '' }),
+  membershipOrgDraftUuid: () => 'fixture-item-' + ++nextFixtureItemId,
   todayIso: () => '2026-09-09', normDate: value => value,
   requestTypeLabel: () => '費用報銷',
   renderLazySheet() {}, applyLazySummary() {}, syncLazyBankFeeRow() {},
