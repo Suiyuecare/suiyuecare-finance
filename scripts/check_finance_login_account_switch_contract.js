@@ -167,6 +167,39 @@ check(
     elements['login-switch-account'].textContent.includes('重新選擇')
 );
 
+const oauthErrorFns = [
+  functionSource('safeOAuthErrorCode'),
+  functionSource('safeOAuthDiagnosticText'),
+  functionSource('oauthProviderErrorInfo'),
+  functionSource('financeOAuthErrorDisplayText')
+].join('\n');
+function oauthErrorResult(code, description) {
+  const context = { result: null };
+  vm.runInNewContext(`${oauthErrorFns}\nresult=oauthProviderErrorInfo(${JSON.stringify(code)},${JSON.stringify(description)});`, context);
+  return context.result;
+}
+const blockedIdentity = oauthErrorResult('server_error', 'Google 主信箱尚未由人員管理核准換綁，已取消這次身分變更。');
+check(
+  'unapproved Google primary-email change is explained without suggesting blind retries',
+  blockedIdentity.message.includes('未核准') && blockedIdentity.next.includes('人員管理') &&
+    !blockedIdentity.next.includes('稍後重新登入')
+);
+const genericServerError = oauthErrorResult('server_error', 'Database error updating user');
+check(
+  'generic Auth callback errors ask for account review without asserting an outage or identity transfer',
+  genericServerError.message.includes('Finance') && genericServerError.next.includes('核對帳號綁定') &&
+    !genericServerError.message.includes('暫時') && !genericServerError.message.includes('換綁')
+);
+const temporaryError = oauthErrorResult('temporarily_unavailable', 'provider offline');
+check('provider outage keeps a retry path', temporaryError.next.includes('稍後重新登入'));
+const displayContext = { result: '' };
+vm.runInNewContext(`${oauthErrorFns}\nresult=financeOAuthErrorDisplayText('oauth_provider_return','OAUTH-TEST',oauthProviderErrorInfo('server_error','access_token=secret'));`, displayContext);
+check(
+  'visible OAuth diagnostic includes a safe stage/code but never prints the raw provider description',
+  displayContext.result.includes('oauth_provider_return / server_error') &&
+    displayContext.result.includes('OAUTH-TEST') && !displayContext.result.includes('secret')
+);
+
 const loginSection = section('window.googleLogin=async function()', 'async function completeOAuthFromUrl');
 const switchSection = section('window.switchFinanceGoogleAccount=async function()', 'window.googleLogin=async function()');
 const callbackSection = section('async function completeOAuthFromUrl', 'async function handleOAuthReturn');
