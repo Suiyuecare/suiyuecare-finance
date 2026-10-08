@@ -18310,9 +18310,11 @@ function accountingLinesHtml(r,editable,title){
 }
 function expenseInvoiceReviewGroups(r){
   var fp=(r&&r.formPayload)||{};
-  var rows=(fp.lazyRows||[]).filter(function(x){return x&&!x.systemFee;});
+  var rows=(fp.lazyRows||[]).map(function(row,sourceIndex){return {row:row,sourceIndex:sourceIndex};})
+    .filter(function(source){return source.row&&!source.row.systemFee;});
   var groups=[],map={};
-  rows.forEach(function(row,idx){
+  rows.forEach(function(source){
+    var row=source.row,idx=source.sourceIndex;
     var parts=lazyAmountParts(row,requestPostingLocked(r));
     var gross=parts.gross;
     var hasSignal=!!(row.no||row.date||row.file||row.buyerTaxId||row.buyerTax||row.sellerTaxId||row.sellerTax);
@@ -18441,12 +18443,34 @@ function expenseInvoiceAccountingReviewHtml(r,editable,title,prefix){
   });
   // Historical rows have no durable source ID. Associate only a unique exact
   // description and amount tuple; duplicate or changed lines remain separate.
-  function itemSignature(item){return JSON.stringify([String(item.item||'').trim(),Math.round(num(item.net)*100),Math.round(num(item.tax)*100),Math.round(num(item.total)*100)]);}
-  function lineSignature(line){return JSON.stringify([String(line.description||'').trim(),Math.round(num(line.netAmount)*100),Math.round(num(line.taxAmount)*100),Math.round(num(line.grossAmount)*100)]);}
+  function itemSignature(item){return JSON.stringify([String(item.item||'').trim(),Math.round(num(item.net)*10000),Math.round(num(item.tax)*10000),Math.round(num(item.total)*10000)]);}
+  function lineSignature(line){return JSON.stringify([String(line.description||'').trim(),Math.round(num(line.netAmount)*10000),Math.round(num(line.taxAmount)*10000),Math.round(num(line.grossAmount)*10000)]);}
   var itemBuckets=Object.create(null),lineBuckets=Object.create(null);
   sourceItems.filter(function(item){return !matched.has(item);}).forEach(function(item){var key=itemSignature(item);(itemBuckets[key]||(itemBuckets[key]=[])).push(item);});
   lines.forEach(function(line,i){if(usedLines.has(i)||accountingLineIsSystemFee(line)||line.sourceItemId)return;var key=lineSignature(line);(lineBuckets[key]||(lineBuckets[key]=[])).push(i);});
   Object.keys(itemBuckets).forEach(function(key){if(itemBuckets[key].length===1&&lineBuckets[key]&&lineBuckets[key].length===1){matched.set(itemBuckets[key][0],lineBuckets[key][0]);legacyMatched.add(itemBuckets[key][0]);usedLines.add(lineBuckets[key][0]);}});
+  // Ambiguous legacy rows require an explicit, persisted choice. The source
+  // invoice index is never treated as an accounting-line index.
+  var storedLines=(r&&r.formPayload||{}).accountingLines;
+  var storedLineIdCounts=Object.create(null);
+  if(Array.isArray(storedLines))storedLines.forEach(function(line){var id=String(line&&line.id||'');if(id)storedLineIdCounts[id]=(storedLineIdCounts[id]||0)+1;});
+  var manualBindAllowed=!!(editAllowed&&Array.isArray(storedLines)&&canEditAccountingLineSubjects(r)&&canActRequest(r)&&['accountant','ceo','admin_director'].indexOf(currentRoleKey())>-1
+    &&!posted&&!requestPostingLocked(r)&&!requestLedgerRowsExist(r));
+  function manualBindHtml(item){
+    if(!manualBindAllowed||matched.has(item))return '';
+    if(item.sourceItemId&&sourceCounts[item.sourceItemId]!==1)return '<div class="invoice-accounting-bind-empty">來源品項識別碼重複，請由會計核對原單。</div>';
+    var candidates=lines.map(function(line,i){return {line:line,index:i};}).filter(function(pair){
+      return !usedLines.has(pair.index)&&!pair.line.sourceItemId&&!accountingLineIsSystemFee(pair.line)
+        &&storedLineIdCounts[String(pair.line.id||'')]===1&&itemSignature(item)===lineSignature(pair.line);
+    });
+    if(!candidates.length)return '<div class="invoice-accounting-bind-empty">沒有品名與金額相符、尚未配對的明細；請先核對原單。</div>';
+    return '<details class="invoice-accounting-bind" data-invoice-manual-bind="true"><summary>指定對應會計明細</summary>'
+      +'<div class="invoice-accounting-bind-fields"><label>對應明細<select aria-label="第 '+item.idx+' 項的對應會計明細">'
+      +'<option value="">請選擇明細</option>'
+      +candidates.map(function(pair){return '<option value="'+escAttr(pair.line.id)+'">第 '+(pair.index+1)+' 列 · '+escAttr(pair.line.description)+' · '+fmt(pair.line.grossAmount)+' · 借 '+escAttr(pair.line.debitAccount||'—')+'／貸 '+escAttr(pair.line.creditAccount||'—')+'</option>';}).join('')
+      +'</select></label><button type="button" class="btn-g" data-request-id="'+escAttr(r.id)+'" data-source-index="'+item.idx+'" data-prefix="'+escAttr(prefix)+'" onclick="bindLegacyInvoiceAccountingItem(this)">確認配對</button></div>'
+      +'<small>請核對上方發票號碼、日期與本品項；配對只建立明細關聯，金額與科目仍需在簽核時確認。</small><span role="status" aria-live="polite" class="invoice-accounting-bind-status"></span></details>';
+  }
   var reclassPlan=showAccounting&&!posted?accountingDebitReclassificationPlan(r):null;
   var reclassSuggestions=Object.create(null),reclassReviewHints=Object.create(null);
   if(reclassPlan&&reclassPlan.ok)reclassPlan.changes.forEach(function(change){reclassSuggestions[change.index]=change;});
@@ -18488,7 +18512,8 @@ function expenseInvoiceAccountingReviewHtml(r,editable,title,prefix){
       +'<div class="invoice-accounting-cell invoice-accounting-main" role="cell"><div class="invoice-accounting-name"><span class="invoice-accounting-index">'+escAttr(String(idx).padStart(2,'0'))+'</span><strong>'+escAttr(name)+'</strong></div>'
       +(!unmatched&&(item.qty||item.unitPrice)?'<div class="invoice-accounting-quantity">數量 '+escAttr(item.qty||'—')+' '+escAttr(item.unitName||'')+' · 單價 '+(item.unitPrice?fmt(item.unitPrice):'—')+'</div>':'')
       +(unmatched?'<div class="invoice-accounting-note">尚未可靠對應來源品項，請會計核對</div>':note?'<div class="invoice-accounting-note"><b>員工備註</b>　'+escAttr(note)+'</div>':'<div class="invoice-accounting-note invoice-accounting-note-empty">備註　<span class="invoice-accounting-empty">未填</span></div>')
-      +(legacyMatched.has(item)?'<span class="invoice-accounting-legacy" role="note" aria-label="此品項為舊單暫配，請逐項核對">暫配・待核對</span>':'')+'</div>'
+      +(legacyMatched.has(item)?'<span class="invoice-accounting-legacy" role="note" aria-label="此品項為舊單暫配，請逐項核對">暫配・待核對</span>':'')
+      +(!unmatched?manualBindHtml(item):'')+'</div>'
       +renderAmount(item,line,i)
       +(showAccounting?renderSubject(line,i,'debit')+renderSubject(line,i,'credit'):'')+'</div>';
   }
@@ -18535,6 +18560,82 @@ function expenseInvoiceAccountingReviewHtml(r,editable,title,prefix){
     +head+(showAccounting&&typeof accountingReviewDraftHtml==='function'?accountingReviewDraftHtml(r,prefix):'')
     +columnHead+'<div class="invoice-accounting-groups">'+groupHtml+orphanHtml+'</div>'+voucherHtml+'</section>';
 }
+var INVOICE_ACCOUNTING_BIND_RUNNING=Object.create(null);
+window.bindLegacyInvoiceAccountingItem=async function(button){
+  if(!button||!button.dataset)return false;
+  var rid=String(button.dataset.requestId||''),sourceIndex=Number(button.dataset.sourceIndex),prefix=String(button.dataset.prefix||'');
+  var picker=button.closest('.invoice-accounting-bind'),select=picker&&picker.querySelector('select'),lineId=String(select&&select.value||'');
+  var status=picker&&picker.querySelector('.invoice-accounting-bind-status');
+  var r=REQS.find(function(row){return row.id===rid;}),role=currentRoleKey();
+  if(!r||!Number.isSafeInteger(sourceIndex)||sourceIndex<1||!lineId||!prefix){if(status)status.textContent='請先選擇一列相符的會計明細。';return false;}
+  if(!canActRequest(r)||['accountant','ceo','admin_director'].indexOf(role)<0||!canEditAccountingLineSubjects(r)
+    ||requestPostingLocked(r)||requestLedgerRowsExist(r)||isRestrictedReturnedMiddleStep(r)){
+    if(status)status.textContent='目前沒有此單的配對權限，請重新整理後確認簽核關卡。';return false;
+  }
+  var source=(r.formPayload&&r.formPayload.lazyRows||[])[sourceIndex-1];
+  var persistedLines=(r.formPayload||{}).accountingLines;
+  var target=Array.isArray(persistedLines)&&persistedLines.find(function(line){return String(line&&line.id||'')===lineId;});
+  if(!source||source.systemFee||!target||target.systemFee||target.sourceItemId){if(status)status.textContent='明細已變更，請重新整理後核對。';return false;}
+  var key=[expensePostingIdentity(),rid,sourceIndex,lineId,r.ver].join('|');
+  if(INVOICE_ACCOUNTING_BIND_RUNNING[key])return false;
+  INVOICE_ACCOUNTING_BIND_RUNNING[key]=true;
+  var actorIdentity=expensePostingIdentity(),parent=button.closest('[data-accounting-request]');
+  if(parent)captureAccountingReviewDraftForElement(parent);
+  var draft=accountingReviewDraft(r);
+  button.disabled=true;button.setAttribute('aria-busy','true');if(status)status.textContent='正在保存品項配對…';
+  try{
+    var operationId='invoice-item-bind:'+rid+':'+r.ver+':'+sourceIndex+':'+lineId;
+    var result;
+    try{result=await withOperationTimeout(getSb().rpc('finance_bind_expense_invoice_item_v1',{
+      p_request_id:rid,p_expected_ver:r.ver,p_source_index:sourceIndex,p_accounting_line_id:lineId,
+      p_data_environment:activeDataEnvironment(),p_idempotency_key:operationId
+    }),'保存發票品項配對',15000);}catch(error){result={data:null,error:error};}
+    if(!expenseTransactionIdentityCurrent(actorIdentity))return false;
+    var response=await withOperationTimeout(getSb().from('expense_requests').select('*')
+      .eq('id',rid).eq('tenant_id',currentTenantId()).eq('data_environment',activeDataEnvironment()).limit(1),'核對發票品項配對',12000);
+    if(!expenseTransactionIdentityCurrent(actorIdentity))return false;
+    if(response.error)throw response.error;
+    var raw=response.data&&response.data[0],latest=raw&&mapReq(raw);
+    var latestSource=latest&&latest.formPayload&&latest.formPayload.lazyRows&&latest.formPayload.lazyRows[sourceIndex-1];
+    var latestLine=latest&&buildAccountingLines(latest).find(function(line){return String(line.id||'')===lineId;});
+    if(!latestSource||!latestLine||!latestSource.id||String(latestLine.sourceItemId||'')!==String(latestSource.id)){
+      if(result&&result.error)throw result.error;
+      throw new Error('原單目前尚未確認配對完成，請重新整理後核對；勿以其他明細重複配對。');
+    }
+    if(draft&&Array.isArray(draft.lines)){
+      var saved=draft.lines.find(function(line){return String(line.id||'')===lineId;});
+      if(saved){saved.sourceItemId=String(latestSource.id);draft.savedAt=Date.now();HUMAN_ACCOUNTING_DRAFTS[draft.key]=draft;
+        try{sessionStorage.setItem(draft.key,JSON.stringify(draft));}catch(ignore){}
+      }
+    }
+    mergeCommittedExpenseRequest(raw);
+    // Replace only the accounting card. Rebuilding the entire approval modal
+    // would discard the reviewer's comment, selected attachments and add-sign.
+    var review=button.closest('.invoice-accounting-review');
+    if(review&&review.isConnected){
+      var titleNode=review.querySelector('.chd .cht'),reviewTitle=titleNode?titleNode.textContent:'發票與入帳明細';
+      var stillEditable=canActRequest(latest)&&!isRestrictedReturnedMiddleStep(latest)&&canEditRequestAccountingLines(latest);
+      review.outerHTML=expenseInvoiceAccountingReviewHtml(latest,stillEditable,reviewTitle,prefix);
+      var updated=Array.from(document.querySelectorAll('[data-accounting-request][data-accounting-prefix]')).find(function(node){
+        return node.dataset.accountingRequest===rid&&node.dataset.accountingPrefix===prefix&&node.isConnected;
+      });
+      if(updated){
+        var linked=Array.from(updated.querySelectorAll('.invoice-accounting-item')).find(function(node){return node.dataset.sourceItemId===String(latestSource.id);});
+        var savedIndex=buildAccountingLines(latest).findIndex(function(line){return String(line.id||'')===lineId;});
+        var nextField=linked&&savedIndex>=0&&linked.querySelector('select[id$="-dr-'+savedIndex+'"]');
+        if(nextField)nextField.focus({preventScroll:true});
+        else{updated.setAttribute('tabindex','-1');updated.setAttribute('aria-label','品項配對已保存，請核對最新會計明細');updated.focus({preventScroll:true});}
+      }
+    }
+    return true;
+  }catch(error){
+    if(status)status.textContent='配對結果尚未確認：'+String(error&&error.message||error)+'。請重新整理原單後核對。';
+    return false;
+  }finally{
+    delete INVOICE_ACCOUNTING_BIND_RUNNING[key];
+    if(button.isConnected){button.disabled=false;button.removeAttribute('aria-busy');}
+  }
+};
 function collectAccountingLinesFromDom(r){
   var prefix=arguments.length>1&&arguments[1]?arguments[1]:'acct-line';
   var lines=buildAccountingLines(r);
@@ -29011,7 +29112,7 @@ function accountingReviewDraftKey(r){
   return ['finance-accounting-review-v1',tenant,actor,activeDataEnvironment(),r.id].map(encodeURIComponent).join('|');
 }
 function accountingReviewLineIdentity(line){
-  return JSON.stringify([line.id||'',line.source||'',line.description||'',line.departmentCode||'']);
+  return JSON.stringify([line.id||'',line.sourceItemId||'',line.source||'',line.description||'',line.departmentCode||'']);
 }
 function accountingReviewValuesMatch(a,b){
   return accountingManualFieldNames().every(function(field){return String(a[field])===String(b[field]);})

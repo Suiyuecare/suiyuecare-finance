@@ -129,6 +129,11 @@ const PURCHASE_FINAL_AMOUNT_SOURCE_SHA256=Object.freeze({
   '20261006153719':'8759835fe6f02605306b188af3be770de764e4f0efc82953df5be22c821fb72a'
 });
 const RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT='database_purchase_final_amount_20261006';
+const INVOICE_ITEM_BIND_MIGRATIONS=Object.freeze(['20261008031845']);
+const INVOICE_ITEM_BIND_SOURCE_SHA256=Object.freeze({
+  '20261008031845':'f0649d6350adc5ab1e34fe63662753c70f09dcbf9669cef49a88f0ca002f6ba6'
+});
+const RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND='database_invoice_item_bind_20261008';
 const PERSONNEL_SAVE_SOURCE_SHA256=Object.freeze({
   '20261003042021':'6b3dd504a57692d0af9ed73b24d8b42b7f6e5cad3cfbc6bcf3b6e4074b3c34f7',
   '20261003044426':'335b05308582788181110a891dae7adf45458e3c69bf295f95bad83de1460fdc'
@@ -186,7 +191,8 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...PERSONNEL_RECEIPT_MIGRATIONS,
   ...PROCUREMENT_ACTION_MIGRATIONS,
   ...APPLICANT_WITHDRAW_MIGRATIONS,
-  ...PURCHASE_FINAL_AMOUNT_MIGRATIONS
+  ...PURCHASE_FINAL_AMOUNT_MIGRATIONS,
+  ...INVOICE_ITEM_BIND_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -221,6 +227,7 @@ const RELEASE_PHASES = Object.freeze({
   [RELEASE_PHASE_DATABASE_INCOME_RECONCILE]: INCOME_RECONCILE_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT]: INVOICE_REVENUE_RESULT_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT]: PURCHASE_FINAL_AMOUNT_MIGRATIONS.join(','),
+  [RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND]: INVOICE_ITEM_BIND_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_AR_READ_SCOPE]: AR_READ_SCOPE_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY]: EMPLOYEE_RELIABILITY_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_AUDIT_READINESS]: AUDIT_READINESS_MIGRATIONS.join(','),
@@ -268,7 +275,8 @@ const SUPPORTED_GATE_PHASES = Object.freeze([
   HUMAN_FLOAT_MIGRATIONS,
   INCOME_RECONCILE_MIGRATIONS,
   INVOICE_REVENUE_RESULT_MIGRATIONS,
-  PURCHASE_FINAL_AMOUNT_MIGRATIONS
+  PURCHASE_FINAL_AMOUNT_MIGRATIONS,
+  INVOICE_ITEM_BIND_MIGRATIONS
 ]);
 const SUPPORTED_GATE_SUFFIXES = SUPPORTED_GATE_PHASES;
 
@@ -342,7 +350,7 @@ function deploymentHost(record) { return String(record.url || '').replace(/^http
 function validateTarget(env, candidate, releasePhase, versionsText, expectedRef) {
   canonicalSha(candidate);
   releasePlan(releasePhase, versionsText);
-  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT,RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use a reviewed current fixed database phase');
+  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT,RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT,RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use a reviewed current fixed database phase');
   expectedRef = projectRef(expectedRef);
   if (expectedRef !== PRODUCTION_CATALOG.supabaseProjectRef) fail('Supabase project ref is not the immutable Finance production catalog target');
   for (const name of ['SUPABASE_ACCESS_TOKEN', 'FINANCE_SUPABASE_URL', 'FINANCE_SUPABASE_ANON_KEY', 'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']) {
@@ -428,6 +436,16 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
   const remote = readLedgerVersions(ledgerPath);
   assertProductionLedgerBaseline(remote, baseline);
   const missing = MIGRATION_CHAIN.filter((version) => !remote.includes(version));
+  if (plan.releasePhase === RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND) {
+    const target = INVOICE_ITEM_BIND_MIGRATIONS[0];
+    const prerequisites = REVIEWED_MIGRATION_CATALOG.filter(version => version < target);
+    if (prerequisites.some(version => !remote.includes(version))) fail('Invoice item binding phase requires every reviewed prerequisite migration');
+    const filename = local.find(name => name.startsWith(target + '_'));
+    if (!filename) fail('Invoice item binding migration file is missing');
+    if (sha256File(path.join(directory, filename)) !== INVOICE_ITEM_BIND_SOURCE_SHA256[target])
+      fail('Invoice item binding migration source differs from sealed SHA256');
+    return remote.includes(target) ? 'applied' : 'pending';
+  }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT) {
     const target = PURCHASE_FINAL_AMOUNT_MIGRATIONS[0];
     const prerequisites = REVIEWED_MIGRATION_CATALOG.filter(version => version < target);
@@ -708,6 +726,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(PROCUREMENT_ACTION_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the procurement specialized action guard');
     if(APPLICANT_WITHDRAW_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the applicant withdrawal transaction guard');
     if(PURCHASE_FINAL_AMOUNT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the purchase final amount exact lock');
+    if(INVOICE_ITEM_BIND_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the durable historical invoice item binding RPC');
     for(const [version,expected] of Object.entries(PERSONNEL_SAVE_SOURCE_SHA256)){
       const filename=local.find(name=>name.startsWith(version+'_'));
       if(!filename)fail('frontend_compat personnel migration file is missing: '+version);
@@ -725,6 +744,12 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
       if(!filename)fail('frontend_compat purchase final amount migration file is missing: '+version);
       if(sha256File(path.join(directory,filename))!==expected)
         fail('frontend_compat purchase final amount migration source differs from sealed SHA256: '+version);
+    }
+    for(const [version,expected] of Object.entries(INVOICE_ITEM_BIND_SOURCE_SHA256)){
+      const filename=local.find(name=>name.startsWith(version+'_'));
+      if(!filename)fail('frontend_compat invoice item binding migration file is missing: '+version);
+      if(sha256File(path.join(directory,filename))!==expected)
+        fail('frontend_compat invoice item binding migration source differs from sealed SHA256: '+version);
     }
     return 'compat';
   }
@@ -836,7 +861,7 @@ function prepareRehearsal(sourcePath, outputPath, target, fingerprintPath, canar
 
 function sqlLiteral(value) { return `'${String(value).replace(/'/g, "''")}'`; }
 function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATABASE_AUDIT) {
-  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT,RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT].includes(releasePhase))fail('unsupported fixed database batch');
+  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT,RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT,RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND].includes(releasePhase))fail('unsupported fixed database batch');
   releasePlan(releasePhase,versionsText);
   const files=migrationFiles(directory);
   return migrationPhase(versionsText).map(version=>{
@@ -852,6 +877,7 @@ function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATA
     if(releasePhase===RELEASE_PHASE_DATABASE_INCOME_RECONCILE && sha256File(path.join(directory,filename))!==INCOME_RECONCILE_SOURCE_SHA256[version])fail('Income reconciliation migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT && sha256File(path.join(directory,filename))!==INVOICE_REVENUE_RESULT_SOURCE_SHA256[version])fail('Invoice revenue result migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT && sha256File(path.join(directory,filename))!==PURCHASE_FINAL_AMOUNT_SOURCE_SHA256[version])fail('Purchase final amount migration source differs from sealed SHA256: '+version);
+    if(releasePhase===RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND && sha256File(path.join(directory,filename))!==INVOICE_ITEM_BIND_SOURCE_SHA256[version])fail('Invoice item binding migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_HR_CONTRACTOR && sha256File(path.join(directory,filename))!==HR_CONTRACTOR_SOURCE_SHA256[version])fail('HR contractor migration source differs from sealed SHA256: '+version);
     return {version,filename,source};
   });
@@ -1286,6 +1312,72 @@ begin
   if (select pg_catalog.array_agg(version order by version) from supabase_migrations.schema_migrations)
      is distinct from array[${remote.map(sqlLiteral).join(',')}]::text[] then
     raise exception 'purchase final amount rollback rehearsal changed migration ledger';
+  end if;
+end;
+${tag};
+rollback;
+`);
+  return true;
+}
+function prepareInvoiceItemBindRehearsal(directory,outputPath,versionsText,ledgerPath,
+  fingerprintPath,canaryPath,preflightPath,postflightPath,
+  baseline=PRODUCTION_BASELINE_LEDGER){
+  const phase=RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND;
+  verifyLedger('pre',ledgerPath,directory,phase,versionsText,baseline);
+  const batch=readAuditBatch(directory,versionsText,phase);
+  if(batch.length!==1)fail('Invoice item binding rehearsal requires exactly one sealed migration');
+  const remote=readLedgerVersions(ledgerPath);
+  const fingerprint=stripPsqlDirectives(fs.readFileSync(fingerprintPath,'utf8'),path.basename(fingerprintPath))
+    .trim().replace(/^(?:--[^\n]*(?:\n|$)\s*)+/,'');
+  if(!/^with\b/i.test(fingerprint)
+      || /\b(?:insert\s+into|update\s+\S+\s+set|delete\s+from|alter\s+table|create\s+(?:table|index|schema|function|policy)|drop\s+(?:table|index|schema|function|policy)|truncate\s+|vacuum\b|call\s+|copy\s+)\b/i.test(fingerprint))
+    fail('Invoice item binding fingerprint must be one pure read-only CTE query');
+  const preflight=stripPsqlDirectives(fs.readFileSync(preflightPath,'utf8'),path.basename(preflightPath));
+  const postflight=stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
+  assertCliAtomicMigration(preflight,'invoice item binding preflight');
+  assertCliAtomicMigration(postflight,'invoice item binding postflight');
+  const canary=authenticatedCanarySections(canaryPath);
+  const tag='$finance_invoice_item_bind_rehearsal$';
+  const source=batch[0].source.trimEnd();
+  const quote=`$finance_invoice_item_bind_migration_${batch[0].version}$`;
+  const name=batch[0].filename.replace(/^\d{14}_/,'').replace(/\.sql$/,'');
+  const ledgerInsert=`insert into supabase_migrations.schema_migrations(version,statements,name,created_by) values (${sqlLiteral(batch[0].version)},array[${quote}${source}${quote}]::text[],${sqlLiteral(name)},'github-actions');`;
+  if([source,fingerprint,preflight,postflight,canary.core,canary.rollbackCheck,ledgerInsert]
+      .some(value=>value.includes(tag)))fail('Invoice item binding rehearsal tag collision');
+  writeExclusive(outputPath,`begin isolation level repeatable read;
+set local lock_timeout='5s';
+set local statement_timeout='180s';
+select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('finance-production-release-v1',0));
+lock table supabase_migrations.schema_migrations in share row exclusive mode;
+do ${tag}
+begin
+  if (select pg_catalog.array_agg(version order by version) from supabase_migrations.schema_migrations)
+     is distinct from array[${remote.map(sqlLiteral).join(',')}]::text[] then
+    raise exception 'invoice item binding migration ledger changed before rehearsal';
+  end if;
+end;
+${tag};
+${preflight}
+create temporary table finance_release_fingerprint_before on commit drop as
+${fingerprint}
+savepoint finance_release_migration;
+${source}
+${ledgerInsert}
+${postflight}
+${canary.core}
+rollback to savepoint finance_release_migration;
+${canary.rollbackCheck}
+create temporary table finance_release_fingerprint_after on commit drop as
+${fingerprint}
+do ${tag}
+begin
+  if (select fingerprint from finance_release_fingerprint_before)
+     is distinct from (select fingerprint from finance_release_fingerprint_after) then
+    raise exception 'invoice item binding rollback rehearsal changed schema fingerprints';
+  end if;
+  if (select pg_catalog.array_agg(version order by version) from supabase_migrations.schema_migrations)
+     is distinct from array[${remote.map(sqlLiteral).join(',')}]::text[] then
+    raise exception 'invoice item binding rollback rehearsal changed migration ledger';
   end if;
 end;
 ${tag};
@@ -2049,6 +2141,14 @@ function prepareGateQuery(sourcePath, outputPath, versionsText) {
 function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
   const plan = releasePlan(releasePhase, versionsText);
   const sourceName = path.basename(sourcePath);
+  if(plan.releasePhase===RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND){
+    if(sourceName!=='finance_invoice_item_bind_postflight.sql')
+      fail('Invoice item binding phase requires its exact sealed postflight');
+    const postflight=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),sourceName);
+    assertCliAtomicMigration(postflight,'invoice item binding postflight');
+    writeExclusive(outputPath,`begin read only;\nset local statement_timeout='60s';\n${postflight}\nrollback;\n`);
+    return true;
+  }
   if(plan.releasePhase===RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT){
     if(sourceName!=='finance_purchase_final_amount_postflight.sql')
       fail('Purchase final amount phase requires its exact sealed postflight');
@@ -2300,6 +2400,7 @@ function verifyReportsCanary(inputPath,domain) {
     income_reconcile:{marker:'income_reconcile_canary_result',result:{canary:'readonly_income_reconcile_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
     invoice_revenue_result:{marker:'invoice_revenue_result_canary_result',result:{canary:'readonly_invoice_revenue_result_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
     purchase_final_amount:{marker:'purchase_final_amount_canary_result',result:{canary:'readonly_purchase_final_amount_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
+    invoice_item_bind:{marker:'invoice_item_bind_canary_result',result:{canary:'readonly_invoice_item_bind_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
     attachment_claim:{marker:'attachment_claim_canary_result',result:{canary:'finance_attachment_claim',ok:true,rolled_back:true,read_only:true}},
     external_labor:{marker:'finance_external_labor_canary_result',result:{canary:'readonly_external_labor_v1',ok:true,rolled_back:true,privacy_preserved:true,legacy_finalization_blocked:true,posting_sealed:true}},
     portal_session:{marker:'portal_session_canary_result',result:{canary:'readonly_portal_session_v1',ok:true,rolled_back:true,privacy_preserved:true}},
@@ -2537,6 +2638,9 @@ const api = {
   APPLICANT_WITHDRAW_SOURCE_SHA256,
   PURCHASE_FINAL_AMOUNT_MIGRATIONS,
   PURCHASE_FINAL_AMOUNT_SOURCE_SHA256,
+  INVOICE_ITEM_BIND_MIGRATIONS,
+  INVOICE_ITEM_BIND_SOURCE_SHA256,
+  RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND, prepareInvoiceItemBindRehearsal,
   RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT, preparePurchaseFinalAmountRehearsal,
   PERSONNEL_SAVE_SOURCE_SHA256,
   INCOME_RECONCILE_MIGRATIONS, INCOME_RECONCILE_SOURCE_SHA256,
@@ -2628,6 +2732,8 @@ if (require.main === module) {
     else if(command==='prepare-invoice-revenue-result-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT);
     else if(command==='prepare-purchase-final-amount-rehearsal')preparePurchaseFinalAmountRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('preflight'),arg('postflight'));
     else if(command==='prepare-purchase-final-amount-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT);
+    else if(command==='prepare-invoice-item-bind-rehearsal')prepareInvoiceItemBindRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('preflight'),arg('postflight'));
+    else if(command==='prepare-invoice-item-bind-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND);
     else if (command === 'prepare-audit-controls-20260927-rehearsal') prepareAuditControls20260927Rehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('receivables-postflight'),arg('profiles-postflight'));
     else if (command === 'prepare-audit-controls-20260927-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('receivables-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,arg('profiles-postflight'));
     else if (command === 'prepare-demo-password-retirement-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('authenticated-canary'),arg('receivables-postflight'),RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,null,null,[],arg('profiles-postflight'));

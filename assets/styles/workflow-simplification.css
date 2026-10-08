@@ -83,6 +83,7 @@
 .workflow-simplification-v1 #pg-approvals .approval-tabs-scroll{
   flex-wrap:nowrap!important;
   scrollbar-width:none;
+  scrollbar-color:auto;
 }
 
 .workflow-simplification-v1 #pg-approvals .approval-tabs-scroll::-webkit-scrollbar{display:none}
