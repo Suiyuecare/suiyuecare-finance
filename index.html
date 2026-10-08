@@ -18363,6 +18363,31 @@ window.toggleExpenseInvoiceDetailRow=function(id){
   document.querySelectorAll('[aria-controls]').forEach(function(button){if(button.getAttribute('aria-controls')===id)button.setAttribute('aria-expanded',row.style.display!=='none'?'true':'false');});
   window.refreshFinancialTableScrollHints();
 };
+window.copyExpenseInvoiceNumber=async function(button){
+  var number=String(button&&button.dataset.invoiceNumber||'').trim();
+  if(!number)return false;
+  var copied=false;
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(number);copied=true;}
+  }catch(_error){}
+  if(!copied){
+    var field=document.createElement('textarea');
+    field.value=number;
+    field.setAttribute('readonly','');
+    field.style.cssText='position:fixed;left:-9999px;top:0';
+    document.body.appendChild(field);
+    field.select();
+    try{copied=!!document.execCommand('copy');}catch(_error){}
+    field.remove();
+    button.focus({preventScroll:true});
+  }
+  var status=button.nextElementSibling;
+  if(status&&status.classList.contains('invoice-accounting-copy-status'))status.textContent=copied?'已複製發票號碼':'複製失敗，請手動選取發票號碼';
+  button.textContent=copied?'已複製':'未複製';
+  clearTimeout(button._invoiceCopyTimer);
+  button._invoiceCopyTimer=setTimeout(function(){if(button.isConnected)button.textContent='複製';},2200);
+  return copied;
+};
 function expenseInvoiceReviewHtml(r,embedded){
   var groups=expenseInvoiceReviewGroups(r);
   if(!groups.length)return '';
@@ -18462,7 +18487,8 @@ function expenseInvoiceAccountingReviewHtml(r,editable,title,prefix){
     return '<div class="invoice-accounting-item'+(unmatched?' invoice-accounting-unmatched':'')+'" role="row" data-source-item-id="'+escAttr(item.sourceItemId||'')+'">'
       +'<div class="invoice-accounting-cell invoice-accounting-main" role="cell"><div class="invoice-accounting-name"><span class="invoice-accounting-index">'+escAttr(String(idx).padStart(2,'0'))+'</span><strong>'+escAttr(name)+'</strong></div>'
       +(!unmatched&&(item.qty||item.unitPrice)?'<div class="invoice-accounting-quantity">數量 '+escAttr(item.qty||'—')+' '+escAttr(item.unitName||'')+' · 單價 '+(item.unitPrice?fmt(item.unitPrice):'—')+'</div>':'')
-      +(unmatched?'<div class="invoice-accounting-note">尚未可靠對應來源品項，請會計核對</div>':'<div class="invoice-accounting-note"><b>員工備註</b>　'+(note?escAttr(note):'<span class="invoice-accounting-empty">未填</span>')+'</div>'+(legacyMatched.has(item)?'<div class="invoice-accounting-legacy">舊單依品名與金額暫配，請核對</div>':''))+'</div>'
+      +(unmatched?'<div class="invoice-accounting-note">尚未可靠對應來源品項，請會計核對</div>':note?'<div class="invoice-accounting-note"><b>員工備註</b>　'+escAttr(note)+'</div>':'<div class="invoice-accounting-note invoice-accounting-note-empty">備註　<span class="invoice-accounting-empty">未填</span></div>')
+      +(legacyMatched.has(item)?'<span class="invoice-accounting-legacy" role="note" aria-label="此品項為舊單暫配，請逐項核對">暫配・待核對</span>':'')+'</div>'
       +renderAmount(item,line,i)
       +(showAccounting?renderSubject(line,i,'debit')+renderSubject(line,i,'credit'):'')+'</div>';
   }
@@ -18480,7 +18506,11 @@ function expenseInvoiceAccountingReviewHtml(r,editable,title,prefix){
   var duplicateHeaders=Object.create(null);
   groups.forEach(function(group){var key=JSON.stringify([group.no||'',group.date||'']);duplicateHeaders[key]=(duplicateHeaders[key]||0)+1;});
   var groupHtml=groups.map(function(group,gi){
-    var invoiceLabel=group.no?'發票 '+group.no:(group.file?'憑據 · '+group.file:'未填發票號碼');
+    var invoiceLabel=group.no?'發票號碼 '+group.no:(group.file?'憑據 · '+group.file+'，發票號碼未填':'發票號碼未填');
+    var numberHtml='<span class="invoice-accounting-number-label">發票號碼</span><strong class="invoice-accounting-invoice-number">'+escAttr(group.no||'未填')+'</strong>'
+      +(group.no?'<button type="button" class="invoice-accounting-copy" data-invoice-number="'+escAttr(group.no)+'" aria-label="複製發票號碼 '+escAttr(group.no)+'" onclick="copyExpenseInvoiceNumber(this)">複製</button><span class="invoice-accounting-copy-status" role="status" aria-live="polite"></span>':'');
+    var legacyCount=group.items.filter(function(item){return legacyMatched.has(item);}).length;
+    var legacyNotice=legacyCount?'<div class="invoice-accounting-group-risk" role="note"><strong>'+legacyCount+' 項暫配</strong><span>舊單依品名與金額配對，請逐項核對標示品項。</span></div>':'';
     var sameHeader=duplicateHeaders[JSON.stringify([group.no||'',group.date||''])]>1;
     var discriminator=sameHeader?'<span class="invoice-accounting-discriminator">來源 '+escAttr(group.file||'未附檔')+' · 賣方統編 '+escAttr(group.sellerTaxId||'未填')+' · 買方統編 '+escAttr(group.buyerTaxId||'未填')+'</span>':'';
     var sourceDetails=group.file||group.buyerTaxId||group.sellerTaxId
@@ -18488,7 +18518,7 @@ function expenseInvoiceAccountingReviewHtml(r,editable,title,prefix){
         +[['來源檔案',group.file||'未附檔'],['買方統編',group.buyerTaxId||'未填'],['賣方統編',group.sellerTaxId||'未填']].map(function(pair){return'<div><dt>'+pair[0]+'</dt><dd>'+escAttr(pair[1])+'</dd></div>';}).join('')
         +'</dl></details>':'';
     return '<section class="invoice-accounting-group'+(gi%2?' invoice-accounting-alt':'')+'" data-invoice-number="'+escAttr(group.no||'')+'" data-invoice-date="'+escAttr(group.date||'')+'" aria-label="'+escAttr(invoiceLabel)+'，'+escAttr(group.date||'日期未填')+'，'+group.items.length+' 個品項">'
-      +'<div class="invoice-accounting-group-head"><div><strong>'+escAttr(invoiceLabel)+'</strong><span>發票日期 '+escAttr(group.date||'未填')+'</span>'+discriminator+sourceDetails+'</div><span>'+group.items.length+' 品項 · 含稅小計 '+fmt(group.total)+'</span></div>'
+      +'<div class="invoice-accounting-group-head"><div class="invoice-accounting-group-identity">'+numberHtml+'<span class="invoice-accounting-date">發票日期 '+escAttr(group.date||'未填')+'</span>'+discriminator+sourceDetails+'</div><span class="invoice-accounting-group-total">'+group.items.length+' 品項 · 含稅小計 '+fmt(group.total)+'</span>'+legacyNotice+'</div>'
       +'<div class="invoice-accounting-group-items" role="table" aria-label="'+escAttr(invoiceLabel)+'品項">'+semanticHead+group.items.map(function(item){var i=matched.has(item)?matched.get(item):null;return renderItem(item,i===null?null:lines[i],i,false);}).join('')+'</div>'
       +'</section>';
   }).join('');

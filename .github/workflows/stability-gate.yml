@@ -136,6 +136,7 @@ jobs:
           pnpm test:personnel-save-browser
           pnpm test:org-chart-browser
           node scripts/check_human_accounting_browser_20261002.cjs
+          FINANCE_BROWSER_CHANNEL=chromium node scripts/check_invoice_table_layout_browser.cjs --review-only
           pnpm test:history-summary-browser
           pnpm test:finance-ui-interactions
           pnpm test:audit-controls-native-concurrency
