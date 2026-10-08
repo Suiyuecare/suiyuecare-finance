@@ -3,11 +3,9 @@
 // injected only in this server response; no production source exposes them.
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const assert=require('node:assert/strict');
-const {execFile}=require('node:child_process');
-const {promisify}=require('node:util');
+const {chromium}=require('playwright');
 const {applyBuildEnvironment}=require('./finance_build_environment');
-const run=promisify(execFile),root=path.resolve(__dirname,'..');
-const session='finance-auth-regression-'+process.pid;
+const root=path.resolve(__dirname,'..');
 let html=applyBuildEnvironment(fs.readFileSync(path.join(root,'index.html'),'utf8'),{target:'local',supabaseUrl:'',supabaseAnonKey:''});
 html=html.replace('bootAuthGate();\n\n})();',`window.__financeRecoveryTest={run:async function(code){return await eval(code);}};\nbootAuthGate();\n\n})();`);
 assert.ok(html.includes('window.__financeRecoveryTest='));
@@ -18,7 +16,36 @@ const server=http.createServer((req,res)=>{
   if(!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404);res.end();return;}
   res.setHeader('content-type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'application/octet-stream');res.end(fs.readFileSync(file));
 });
-async function browser(...args){return (await run('agent-browser',['--session',session,...args],{maxBuffer:8*1024*1024})).stdout;}
+let browserInstance=null,page=null;
+const pageErrors=[];
+async function browser(action,...args){
+  if(action==='open'){
+    browserInstance=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||process.env.FINANCE_BROWSER_CHANNEL||'chrome'});
+    page=await browserInstance.newPage();
+    page.on('pageerror',error=>pageErrors.push(error.message));
+    await page.goto(args[0],{waitUntil:'domcontentloaded'});
+    return '';
+  }
+  if(action==='wait'){
+    if(args[0]==='--load')await page.waitForLoadState(args[1]);
+    else await page.waitForTimeout(Number(args[0]));
+    return '';
+  }
+  if(action==='snapshot')return '';
+  if(action==='errors')return pageErrors.join('\n');
+  if(action==='set'&&args[0]==='viewport'){
+    await page.setViewportSize({width:Number(args[1]),height:Number(args[2])});
+    return '';
+  }
+  if(action==='eval'){
+    const expression=args[0]==='--base64'?Buffer.from(args[1],'base64').toString('utf8'):args[0];
+    return JSON.stringify(await page.evaluate(code=>eval(code),expression));
+  }
+  if(action==='reload'){await page.reload({waitUntil:'domcontentloaded'});return '';}
+  if(action==='screenshot'){await page.screenshot({path:args[0]});return '';}
+  if(action==='close'){if(browserInstance)await browserInstance.close();return '';}
+  throw new Error('unsupported browser test action: '+action);
+}
 async function scoped(code){
   const expression='(async()=>JSON.stringify(await window.__financeRecoveryTest.run('+JSON.stringify(code)+')))()';
   const raw=await browser('eval','--base64',Buffer.from(expression).toString('base64'));
