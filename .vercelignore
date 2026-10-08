@@ -42,6 +42,12 @@ scripts/*
 !scripts/finance_approval_search_permission_postflight.sql
 !scripts/finance_approval_search_permission_canary.sql
 !scripts/check_finance_personal_history.cjs
+!scripts/check_bill_batch_bulk_insert_20261008.cjs
+!scripts/fixtures/finance_bill_batch_live_before_20261008.sql
+!scripts/finance_bill_batch_bulk_preflight.sql
+!scripts/finance_bill_batch_bulk_postflight.sql
+!scripts/finance_bill_batch_bulk_fingerprint.sql
+!scripts/finance_bill_batch_bulk_canary.sql
 !scripts/finance_applicant_withdraw_postflight.sql
 !scripts/check_migration_lineage_contract.js
 !scripts/check_root_cause_regressions.js
