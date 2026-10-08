@@ -28,7 +28,7 @@ async function runCases(f){
   const out=await db.query('select public.finalize_expense_request('+keys.map((_,i)=>'$'+(i+1)).join(',')+') result',values);return {data:out.rows[0].result,error:null};
  }
  function context(row,opts={}){
-  const store=opts.store||new Map(),c={S:{user:{id:actorId,n:actorName,authUserId:auth},demoLogin:false},REQS:[map(row)],NOTIFS:[],VOUCHERS:[],LEDGER:[],POSTING_IN_FLIGHT:{},window:{},Date,Promise,Error,Number,Math,JSON,console:{error:()=>{},warn:()=>{}},alerts:[],calls:[],serials:0,uploads:0,notices:0,external:0,reloaded:0,upserts:0,pending:{},store};
+  const store=opts.store||new Map(),c={S:{user:{id:actorId,n:actorName,authUserId:auth},demoLogin:false},REQS:[map(row)],NOTIFS:[],VOUCHERS:[],LEDGER:[],POSTING_IN_FLIGHT:{},APPROVAL_HISTORY_MODAL_CONTEXT:null,window:{},Date,Promise,Error,Number,Math,JSON,console:{error:()=>{},warn:()=>{}},alerts:[],calls:[],serials:0,uploads:0,notices:0,external:0,reloaded:0,upserts:0,pending:{},store};
   let callIndex=0;
   const client={rpc:async(name,args)=>{assert.equal(name,'finalize_expense_request');const i=callIndex++;c.calls.push(clone(args));if(opts.transport)return opts.transport({args,i,c,commit:()=>rpc(args,opts.actor)});return rpc(args,opts.actor);}};
   Object.assign(c,{
