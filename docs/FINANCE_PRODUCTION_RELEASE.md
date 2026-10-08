@@ -294,3 +294,27 @@ production employee OAuth acceptance is a separate check.
 The frontend compatibility gate uses successor read-only history postflights and
 canaries that require the retired grants to stay revoked. Archived DB phases
 retain their original postflight contracts.
+
+## 2026-10-08 繳費單批次送件耗時修正（獨立 DB phase）
+
+`database_bill_batch_bulk_20261008` 固定對應 `20261008100000`，須在較早的
+`20261008055528` 申請人／簽核參與者可見性版本及 `20261008090000` 權限修正版
+正式套用後，另行以受保護流程發布。
+這是資料庫專用階段；不得順帶提升 Vercel 候選版。此版本不補建或改寫既有繳費單。
+
+舊版 `finance_submit_bill_batch` 在每一筆繳費單後執行一次 `INSERT`，使
+`bills` 的歷史投影 AFTER STATEMENT trigger 對同批資料反覆重建。
+新版本仍逐筆檢查租戶、法人、部門、付款人、金額及簽核路線，仍逐筆分配相同的
+`bill_batch`／`bill` 流水號；僅將已驗證的資料集中成一個 `INSERT`。
+業務 BEFORE／AFTER ROW trigger 仍逐筆執行，簽核步驟、申請人、操作碼、
+結果格式及已完成操作的重試語意保持不變。若任一筆驗證或 row trigger 失敗，
+整筆交易（包含流水號與操作紀錄）回滾。
+
+發布前須檢查固定 SHA256、正式 migration ledger、舊 RPC 與歷史 trigger
+來源雜湊、函式 owner/security definer/search path 與角色授權。受保護 workflow
+先以 savepoint 演練 migration、ledger、postflight 和唯讀 canary，再回滾並比對
+函式／trigger 指紋與 ledger；正式套用以同一交易原子提交。已套用後重試只跑
+postflight/canary，且確認正式站別名與前端 manifest 沒變。
+`pnpm test:bill-batch-bulk` 比對正式舊 RPC 快照與新 RPC 的回傳及資料欄位，
+測試 150 筆觸發次數、冪等重試、失敗回滾及角色授權。這些本機測試不能單獨證明
+正式資料庫的耗時已降至目標；發布後仍須追蹤實際批次量、逾時率與資料庫執行時間。
