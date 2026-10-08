@@ -101,7 +101,8 @@ check('Accounting inputs follow durable item IDs, not accounting array order', (
   assert.doesNotMatch(first, /id="acct-dr-0"/);
   assert.match(second, /id="acct-dr-0"/);
   assert.match(markup, /data-accounting-request="fictional-request"/);
-  assert.match(markup, /發票 AB12345678/);
+  assert.match(markup, /發票號碼<\/span><strong class="invoice-accounting-invoice-number">AB12345678<\/strong>/);
+  assert.match(markup, /aria-label="複製發票號碼 AB12345678"/);
   assert.match(markup, /發票日期 2026-10-01/);
   assert.doesNotMatch(markup, /發票核對表/);
 });
@@ -113,6 +114,17 @@ check('Unique historical lines can match exactly; ambiguous legacy lines remain 
   ]), true, '入帳科目', 'acct');
   assert.match(markup, /id="acct-dr-0"/);
   assert.doesNotMatch(markup, /invoice-accounting-orphans/);
+  assert.match(markup, /1 項暫配/);
+  assert.equal((markup.match(/class="invoice-accounting-legacy"/g)||[]).length,1);
+
+  context.fixtureLines = [line('', '品項甲', 100), line('', '品項乙', 200)];
+  markup = context.expenseInvoiceAccountingReviewHtml(request([
+    row('', '品項甲', 'CD12345678', '2026-10-01', 'legacy.pdf', 100),
+    row('', '品項乙', 'CD12345678', '2026-10-01', 'legacy.pdf', 200),
+  ]), true, '入帳科目', 'acct');
+  assert.match(markup, /2 項暫配/);
+  assert.equal((markup.match(/舊單依品名與金額配對，請逐項核對標示品項/g)||[]).length,1);
+  assert.equal((markup.match(/class="invoice-accounting-legacy"/g)||[]).length,2);
 
   context.fixtureLines = [line('', '同名品項', 100), line('', '同名品項', 100)];
   markup = context.expenseInvoiceAccountingReviewHtml(request([
@@ -123,6 +135,17 @@ check('Unique historical lines can match exactly; ambiguous legacy lines remain 
   assert.match(sourceRows, /待會計核對品項與科目/);
   assert.doesNotMatch(sourceRows, /id="acct-dr-[01]"/);
   assert.match(markup, /無法可靠配對來源品項；不依列序號猜測/);
+  assert.doesNotMatch(markup, /項暫配/);
+});
+
+check('Unnumbered source keeps the missing number visible without a copy action', () => {
+  context.fixtureLines = [];
+  const markup = context.expenseInvoiceAccountingReviewHtml(request([
+    row('no-number', '無號碼品項', '', '2026-10-01', 'receipt.pdf', 100),
+  ]), false, '入帳科目', 'acct');
+  assert.match(markup, /發票號碼<\/span><strong class="invoice-accounting-invoice-number">未填<\/strong>/);
+  assert.doesNotMatch(markup, /class="invoice-accounting-copy"/);
+  assert.match(markup, /invoice-accounting-note-empty/);
 });
 
 check('Applicant remarks are escaped and do not reveal accounting controls without permission', () => {

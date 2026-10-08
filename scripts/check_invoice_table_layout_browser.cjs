@@ -3,7 +3,7 @@
 // pre-change source overlay; this script never authenticates or calls a backend.
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
 const {applyBuildEnvironment}=require('./finance_build_environment');
-const root=path.resolve(__dirname,'..'),before=process.argv.includes('--before'),serve=process.argv.includes('--serve');
+const root=path.resolve(__dirname,'..'),before=process.argv.includes('--before'),serve=process.argv.includes('--serve'),reviewOnly=process.argv.includes('--review-only');
 const overlay=before?'/tmp/finance-table-baseline-20260913':root;
 const out=process.env.FINANCE_TABLE_EVIDENCE||'/tmp/finance-table-layout-20260913';
 const phase=before?'before':'after';
@@ -61,8 +61,14 @@ async function assertGroupedReview(review,mode,width){
   assert.equal(await group.getAttribute('data-invoice-number'),want.no,mode+' '+width+' invoice number grouping '+i);
   assert.equal(await group.getAttribute('data-invoice-date'),want.date,mode+' '+width+' invoice date grouping '+i);
   const visibleText=await group.innerText();
+  assert(visibleText.includes('發票號碼')&&visibleText.includes('發票日期'),mode+' '+width+' labels the invoice identity and date '+i);
   assert(visibleText.includes(want.no)&&new RegExp(want.date.replace(/-/g,'[-/]')).test(visibleText),mode+' '+width+' exposes invoice number and date in the header '+i);
   assert(visibleText.includes(want.subtotal),mode+' '+width+' shows the correct invoice subtotal '+i);
+  const copy=group.locator('.invoice-accounting-copy');
+  assert.equal(await copy.count(),1,mode+' '+width+' offers invoice number copy '+i);
+  assert.equal(await copy.getAttribute('aria-label'),'複製發票號碼 '+want.no,mode+' '+width+' copy action names its invoice '+i);
+  const copyBounds=await copy.evaluate(node=>({height:node.getBoundingClientRect().height,display:getComputedStyle(node).display,visible:!!node.getClientRects().length}));
+  assert(copyBounds.height>=43.9,mode+' '+width+' copy action has a 44px touch target '+i+' '+JSON.stringify(copyBounds));
   const items=group.locator('.invoice-accounting-item');
   assert.equal(await items.count(),want.items.length,mode+' '+width+' item count '+i);
   for(let j=0;j<want.items.length;j++){
@@ -82,6 +88,16 @@ async function assertGroupedReview(review,mode,width){
    const overlappingCells=await item.evaluate(node=>{const boxes=[...node.querySelectorAll(':scope > .invoice-accounting-cell')].map(cell=>cell.getBoundingClientRect());return boxes.some((a,i)=>boxes.slice(i+1).some(b=>Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left))*Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top))>1));});
    assert(!overlappingCells,mode+' '+width+' item cells do not overlap '+source.item);
   }
+  if(width===1440){
+   const fields=await items.first().locator('.invoice-accounting-amount-fields label').evaluateAll(nodes=>nodes.map(node=>({top:node.getBoundingClientRect().top,width:node.getBoundingClientRect().width})));
+   assert.equal(fields.length,3,mode+' '+width+' keeps gross, net, and tax visible');
+   assert(Math.max(...fields.map(field=>field.top))-Math.min(...fields.map(field=>field.top))<=1,mode+' '+width+' places the three amounts on one line '+JSON.stringify(fields));
+   if(mode!=='posted'){
+    const minMoneyWidth=await items.first().locator('.invoice-accounting-amount-fields input').evaluateAll(nodes=>Math.min(...nodes.map(node=>node.getBoundingClientRect().width)));
+    assert(minMoneyWidth>=100,mode+' '+width+' leaves room for multi-digit amounts '+minMoneyWidth);
+   }
+   assert((await items.first().boundingBox()).height<160,mode+' '+width+' first item stays compact');
+  }
   styles.push(await group.evaluate(node=>({background:getComputedStyle(node).backgroundColor,border:getComputedStyle(node).borderLeftColor})));
  }
  assert(styles.every(style=>style.background!=='rgba(0, 0, 0, 0)'),mode+' '+width+' groups have a continuous background');
@@ -93,10 +109,15 @@ async function assertGroupedReview(review,mode,width){
 }
 (async()=>{fs.mkdirSync(out,{recursive:true});await new Promise(r=>server.listen(0,'127.0.0.1',r));const url='http://127.0.0.1:'+server.address().port;
  if(serve){console.log(JSON.stringify({url,setup}));return;}
- const {chromium}=require('playwright');browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||'chrome'});const context=await browser.newContext({viewport:{width:1440,height:1000}});await context.route('**/*',route=>{const u=new URL(route.request().url());return u.origin===url?route.continue():route.abort();});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url);await page.waitForFunction(()=>window.__tableFixture);const scope=code=>page.evaluate(code=>__tableFixture.run(code),code);
+ const {chromium}=require('playwright');browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||process.env.FINANCE_BROWSER_CHANNEL||'chrome'});const context=await browser.newContext({viewport:{width:1440,height:1000}});await context.route('**/*',route=>{const u=new URL(route.request().url());return u.origin===url?route.continue():route.abort();});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url);await page.waitForFunction(()=>window.__tableFixture);const scope=code=>page.evaluate(code=>__tableFixture.run(code),code);
  const permissions=await scope(setup);console.log({permissions});assert(permissions.canEditSubjects&&permissions.invoiceEdit&&permissions.invoiceActionCount===2);
+ // doEnter schedules its initial dashboard route on the next animation frame.
+ // Let that complete before fixtures select a review page, or the route can
+ // hide the page between DOM assertions and screenshots.
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await page.waitForTimeout(20);
  const evidence=[];
- for(const mode of ['expense','invoice','posted','entry','approval','invoice-approval'])for(const width of (!before&&(mode==='expense'||mode==='approval')?[1440,1024,390,320]:[1440,390])){
+ for(const mode of (reviewOnly?['expense','posted','approval']:['expense','invoice','posted','entry','approval','invoice-approval']))for(const width of (!before&&(mode==='expense'||mode==='approval')?[1440,1024,390,320]:[1440,390])){
   await page.setViewportSize({width,height:1000});await scope(`__tableShow('${mode}')`);
   const unified=!before&&(mode==='expense'||mode==='approval'||mode==='posted');
   if(mode==='expense'||mode==='approval'||unified&&mode==='posted'){
@@ -117,6 +138,9 @@ async function assertGroupedReview(review,mode,width){
    else await scope(`Array.from(document.querySelectorAll('${area} tr[id]')).forEach(function(n){n.style.display='table-row';});`);
   }else if(before&&(mode==='invoice'||mode==='invoice-approval'))await scope(`Array.from(document.querySelectorAll('#detail-body tr[id],#appr-inner tr[id]')).forEach(function(n){n.style.display='table-row';});`);
   await page.waitForTimeout(180);
+  if(!unified){
+   await page.waitForFunction(mode=>[...document.querySelectorAll(mode.includes('approval')?'#appr-inner table':'.pg.on table')].some(table=>table.getClientRects().length>0),mode,{timeout:5000});
+  }
   const result=await page.evaluate(mode=>({width:innerWidth,documentWidth:document.documentElement.scrollWidth,tables:[...document.querySelectorAll(mode.includes('approval')?'#appr-inner table':'.pg.on table')].filter(t=>t.getClientRects().length).map(t=>({class:t.className,display:getComputedStyle(t).display,headDisplay:t.tHead?getComputedStyle(t.tHead).display:null,headers:t.tHead?[...t.tHead.rows[0].cells].map(c=>c.textContent.trim()):[],rows:[...t.tBodies].flatMap(b=>[...b.rows]).map(r=>[...r.cells].map(c=>({text:c.innerText.trim(),label:c.dataset.label||null,before:getComputedStyle(c,'::before').content,display:getComputedStyle(c).display}))),scrollParent:t.parentElement.className,parentClient:t.parentElement.clientWidth,parentScroll:t.parentElement.scrollWidth,scrollHint:t.parentElement.previousElementSibling&&t.parentElement.previousElementSibling.classList.contains('finance-table-scroll-hint')?{hidden:t.parentElement.previousElementSibling.hidden,text:t.parentElement.previousElementSibling.textContent}:null,controls:[...t.querySelectorAll('input,select,button')].map(n=>({id:n.id,handler:n.getAttribute('onchange')||n.getAttribute('oninput'),height:n.getBoundingClientRect().height,hidden:n.classList.contains('combo-native-select')}))})),postedCards:document.querySelectorAll('.posted-accounting-mobile-line').length}),mode);
   if(!before){
    assert(result.documentWidth<=width+1,mode+' '+width+' full page overflow '+JSON.stringify(result));
@@ -159,6 +183,23 @@ async function assertGroupedReview(review,mode,width){
   assert.equal(await unverified.locator('.invoice-accounting-item').count(),rows.length,'unverified posted lines do not hide source items');
   assert.equal(await unverified.locator('.invoice-accounting-voucher-unverified').count(),1,'unverified posted lines still show the formal voucher');
   assert.equal(await unverified.locator('input,select').count(),0,'unverified posted view remains read-only');
+ }
+ await page.setViewportSize({width:1440,height:1000});await scope(`__tableShow('expense')`);await page.waitForTimeout(100);
+ await page.evaluate(()=>{window.__invoiceCopied='';Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.__invoiceCopied=value;}}});});
+ const copyInvoice=page.locator('#detail-body .invoice-accounting-group').first().locator('.invoice-accounting-copy');
+ await copyInvoice.click();
+ assert.equal(await page.evaluate(()=>window.__invoiceCopied),'FX00000001','copy action writes exactly the displayed invoice number');
+ assert.equal(await copyInvoice.innerText(),'已複製','copy action confirms success');
+ await page.evaluate(()=>{Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('clipboard unavailable');}}});document.execCommand=()=>false;});
+ await copyInvoice.click();
+ assert.equal(await copyInvoice.innerText(),'未複製','copy action reports failure when both clipboard methods fail');
+ assert.equal(await copyInvoice.evaluate(node=>document.activeElement===node),true,'clipboard fallback returns keyboard focus to the action');
+ if(reviewOnly){
+  assert.deepEqual(errors,[],'review actions do not raise browser errors');
+  assert.deepEqual(await scope(`__fixtureCalls`),[],'review actions do not call the backend');
+  fs.writeFileSync(path.join(out,phase+'-review-evidence.json'),JSON.stringify({phase,permissions,fixtures:rows,evidence,errors,noBusinessCalls:true},null,2));
+  console.log('PASS '+phase+' invoice review desktop/mobile, copy, and posted voucher: '+out);
+  return;
  }
  await scope(`openDetail(__tableRequest.id)`);
  assert.equal(await page.locator('#detail-body .expense-accounting-review').count(),1,'real expense detail uses the unified review card');

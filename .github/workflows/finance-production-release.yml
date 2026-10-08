@@ -155,6 +155,7 @@ jobs:
           pnpm test:personnel-save-browser
           pnpm test:org-chart-browser
           node scripts/check_human_accounting_browser_20261002.cjs
+          node scripts/check_invoice_table_layout_browser.cjs --review-only
           pnpm test:history-summary-browser
           pnpm test:hr-bridge-browser
           pnpm test:hr-voucher-browser
