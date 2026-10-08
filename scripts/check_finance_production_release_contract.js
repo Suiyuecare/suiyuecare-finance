@@ -608,6 +608,9 @@ try {
   assert.match(fs.readFileSync(scripts('finance_bill_batch_bulk_preflight.sql'),'utf8'),
     /version='20261008055528'[\s\S]+name='finance_personal_document_history_v1'/,
     'bill batch phase must follow the applied personal history migration');
+  assert.match(fs.readFileSync(scripts('finance_bill_batch_bulk_preflight.sql'),'utf8'),
+    /version='20261008090000'[\s\S]+name='finance_personal_history_permission_guard_v1'/,
+    'bill batch phase must follow the applied personal history permission hotfix');
   fs.writeFileSync(ledger,prior.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'pending');
   const rehearsal=path.join(billBatchBulkTemp,'rehearsal.sql');
@@ -1148,7 +1151,7 @@ assert.match(databaseJob,/prepare-invoice-item-bind-rehearsal[\s\S]+prepare-invo
   'invoice item binding phase must rehearse, apply atomically, and verify independently');
 assert.match(databaseJob,/prepare-personal-history-rehearsal[\s\S]+prepare-personal-history-apply[\s\S]+finance_personal_history_postflight\.sql[\s\S]+finance_personal_history_canary\.sql/,
   'personal document history phase must rehearse, apply atomically, and verify independently');
-assert.equal((databaseJob.match(/if test "\$RELEASE_PHASE" = "database_human_float_20261002"[^\n]*test "\$RELEASE_PHASE" = "database_personal_history_permission_20261008"; then/g)||[]).length,2,
+assert.equal((databaseJob.match(/if test "\$RELEASE_PHASE" = "database_human_float_20261002"[^\n]*test "\$RELEASE_PHASE" = "database_personal_history_permission_20261008" \|\| test "\$RELEASE_PHASE" = "database_bill_batch_bulk_20261008"; then/g)||[]).length,2,
   'both DB-only alias checks must cover personal history permission');
 assert.match(databaseJob,/prepare-personal-history-permission-rehearsal[\s\S]+prepare-personal-history-permission-apply[\s\S]+finance_personal_history_permission_postflight\.sql[\s\S]+finance_personal_history_permission_canary\.sql/,
   'personal history permission phase must rehearse, apply atomically, and verify independently');
@@ -1158,8 +1161,8 @@ assert.equal((workflow.match(/case "\$RELEASE_PHASE" in frontend_compat\) APPROV
   'frontend compatibility and promotion use the successor search canary after retiring the oldest history RPC');
 assert.match(databaseJob,/prepare-bill-batch-bulk-rehearsal[\s\S]+prepare-bill-batch-bulk-apply[\s\S]+finance_bill_batch_bulk_postflight\.sql[\s\S]+finance_bill_batch_bulk_canary\.sql/,
   'bill batch bulk phase must rehearse, apply atomically, and verify independently');
-assert.equal((databaseJob.match(/if test "\$RELEASE_PHASE" = "database_human_float_20261002" \|\| test "\$RELEASE_PHASE" = "database_income_reconcile_20261002" \|\| test "\$RELEASE_PHASE" = "database_invoice_revenue_result_20261002" \|\| test "\$RELEASE_PHASE" = "database_purchase_final_amount_20261006" \|\| test "\$RELEASE_PHASE" = "database_invoice_item_bind_20261008" \|\| test "\$RELEASE_PHASE" = "database_personal_history_20261008" \|\| test "\$RELEASE_PHASE" = "database_bill_batch_bulk_20261008"; then/g)||[]).length,2,
-  'both DB-only alias checks must cover invoice item binding');
+assert.equal((databaseJob.match(/if test "\$RELEASE_PHASE" = "database_human_float_20261002" \|\| test "\$RELEASE_PHASE" = "database_income_reconcile_20261002" \|\| test "\$RELEASE_PHASE" = "database_invoice_revenue_result_20261002" \|\| test "\$RELEASE_PHASE" = "database_purchase_final_amount_20261006" \|\| test "\$RELEASE_PHASE" = "database_invoice_item_bind_20261008" \|\| test "\$RELEASE_PHASE" = "database_personal_history_20261008" \|\| test "\$RELEASE_PHASE" = "database_personal_history_permission_20261008" \|\| test "\$RELEASE_PHASE" = "database_bill_batch_bulk_20261008"; then/g)||[]).length,2,
+  'both DB-only alias checks must cover invoice item binding, permission, and bill batch bulk');
 assert.match(promoteJob,/inputs\.release_phase != 'database_income_reconcile_20261002'/,
   'income reconciliation DB-only phase must not promote a frontend candidate');
 assert.match(promoteJob,/inputs\.release_phase != 'database_invoice_revenue_result_20261002'/,
