@@ -50,8 +50,8 @@ let browser;
   await combo.fill('不存在');await combo.press('ArrowDown');await combo.press('Escape');
   check(width+' empty options retain saved value',await run("el('v-ent').value")==='F7');
   await run(`(function(){
-   REQS=[1200,600].map(function(amount,i){return mapReq({id:'fixture-expense-'+i,no:'UI-'+i,applicant:'匿名主管',applicant_id:'fixture-ceo',entity_id:'F1',department_code:'DAYCARE',type:'payment_request',status:'pending_ceo',amount:amount,description:'日照物資 '+i,request_date:'2026-09-20',data_environment:'test',steps:[{rk:'ceo',uid:'fixture-ceo',a:'pending',status:'pending_ceo',r:'執行長'}]})});
-   window.__originalRequests=JSON.stringify(REQS);nav('approvals');S.aT='mine';setApprovalTabVisual('mine');buildApprovals();
+   REQS=[1200,600].map(function(amount,i){return mapReq({id:'fixture-expense-'+i,no:'UI-'+i,applicant:'匿名主管',applicant_id:'fixture-ceo',entity_id:'F1',department_code:'DAYCARE',type:'payment_request',status:'pending_ceo',amount:amount,description:'日照物資 '+i,request_date:'2026-09-20',data_environment:'test',steps:[{rk:'ceo',uid:'fixture-ceo',a:'',status:'pending_ceo',r:'執行長'}]})});
+   window.__originalRequests=JSON.stringify(REQS);nav('approvals');S.aT='p';setApprovalTabVisual('p');buildApprovals();
   })()`);
   if(width>=600){
   const sort=page.locator('[data-approval-sort="amount"]');await sort.focus();await sort.press('Enter');
