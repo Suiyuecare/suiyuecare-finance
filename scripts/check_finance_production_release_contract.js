@@ -15,7 +15,7 @@ assert.deepEqual(guard.PRODUCTION_CATALOG, {
   productionDomain: 'finance.suiyuecare.com'
 });
 assert.deepEqual(guard.SUPPORTED_GATE_PHASES, [
-  [], ['20260826070814'], ['20260826155840'], ['20260827052447'], ['20260902054834'], guard.AUDIT_MIGRATIONS, guard.CASE_MIGRATIONS, guard.UTILITY_MIGRATIONS, guard.REPORT_MIGRATIONS, guard.AMOUNT_SEARCH_MIGRATIONS, guard.REPORTING_INTEGRITY_MIGRATIONS, guard.AUDIT_READINESS_MIGRATIONS, guard.EMPLOYEE_RELIABILITY_MIGRATIONS, guard.HISTORY_PERFORMANCE_MIGRATIONS, guard.READ_LATENCY_MIGRATIONS, guard.AR_MAPPING_MIGRATIONS, guard.AUDIT_REMEDIATION_MIGRATIONS, guard.APPROVAL_SEARCH_BATCH, guard.HISTORY_SUMMARY_MIGRATIONS, guard.INVOICE_READ_SCOPE_MIGRATIONS, guard.AR_READ_SCOPE_MIGRATIONS, guard.HR_BRIDGE_MIGRATIONS, guard.AUDIT_SECURITY_MIGRATIONS, guard.REVENUE_REPAIR_MIGRATIONS, guard.OPERATIONAL_STABILITY_MIGRATIONS, guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, guard.AUDIT_CONTROLS_20260927_MIGRATIONS, guard.HR_CONTRACTOR_MIGRATIONS, guard.PORTAL_SESSION_MIGRATIONS, guard.EXTERNAL_LABOR_MIGRATIONS, guard.ATTACHMENT_CLAIM_MIGRATIONS, guard.HUMAN_FLOAT_MIGRATIONS, guard.INCOME_RECONCILE_MIGRATIONS, guard.INVOICE_REVENUE_RESULT_MIGRATIONS, guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS, guard.INVOICE_ITEM_BIND_MIGRATIONS, guard.PERSONAL_HISTORY_MIGRATIONS
+  [], ['20260826070814'], ['20260826155840'], ['20260827052447'], ['20260902054834'], guard.AUDIT_MIGRATIONS, guard.CASE_MIGRATIONS, guard.UTILITY_MIGRATIONS, guard.REPORT_MIGRATIONS, guard.AMOUNT_SEARCH_MIGRATIONS, guard.REPORTING_INTEGRITY_MIGRATIONS, guard.AUDIT_READINESS_MIGRATIONS, guard.EMPLOYEE_RELIABILITY_MIGRATIONS, guard.HISTORY_PERFORMANCE_MIGRATIONS, guard.READ_LATENCY_MIGRATIONS, guard.AR_MAPPING_MIGRATIONS, guard.AUDIT_REMEDIATION_MIGRATIONS, guard.APPROVAL_SEARCH_BATCH, guard.HISTORY_SUMMARY_MIGRATIONS, guard.INVOICE_READ_SCOPE_MIGRATIONS, guard.AR_READ_SCOPE_MIGRATIONS, guard.HR_BRIDGE_MIGRATIONS, guard.AUDIT_SECURITY_MIGRATIONS, guard.REVENUE_REPAIR_MIGRATIONS, guard.OPERATIONAL_STABILITY_MIGRATIONS, guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, guard.AUDIT_CONTROLS_20260927_MIGRATIONS, guard.HR_CONTRACTOR_MIGRATIONS, guard.PORTAL_SESSION_MIGRATIONS, guard.EXTERNAL_LABOR_MIGRATIONS, guard.ATTACHMENT_CLAIM_MIGRATIONS, guard.HUMAN_FLOAT_MIGRATIONS, guard.INCOME_RECONCILE_MIGRATIONS, guard.INVOICE_REVENUE_RESULT_MIGRATIONS, guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS, guard.INVOICE_ITEM_BIND_MIGRATIONS, guard.PERSONAL_HISTORY_MIGRATIONS, guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS
 ]);
 assert.deepEqual(guard.HR_BRIDGE_MIGRATIONS,['20260922072109','20260922072737','20260922075604']);
 assert.deepEqual(guard.AR_READ_SCOPE_MIGRATIONS,['20260922072737']);
@@ -34,7 +34,7 @@ assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
   '20260826070814', '20260826155840', '20260827052447', '20260828015718',
   '20260831042040', '20260831043517', '20260901024020', '20260901073241',
-  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS, ...guard.OPERATIONAL_STABILITY_MIGRATIONS, ...guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, ...guard.AUDIT_CONTROLS_20260927_MIGRATIONS, ...guard.HR_CONTRACTOR_MIGRATIONS, ...guard.PORTAL_SESSION_MIGRATIONS, ...guard.EXTERNAL_LABOR_MIGRATIONS, ...guard.ATTACHMENT_CLAIM_MIGRATIONS, ...guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS, ...guard.HUMAN_FLOAT_MIGRATIONS, ...guard.INCOME_RECONCILE_MIGRATIONS, ...guard.INVOICE_REVENUE_RESULT_MIGRATIONS, ...guard.PERSONNEL_CONFLICT_MIGRATIONS, ...guard.PERSONNEL_RECEIPT_MIGRATIONS, ...guard.PROCUREMENT_ACTION_MIGRATIONS, ...guard.APPLICANT_WITHDRAW_MIGRATIONS, ...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS, ...guard.INVOICE_ITEM_BIND_MIGRATIONS, ...guard.PERSONAL_HISTORY_MIGRATIONS
+  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS, ...guard.OPERATIONAL_STABILITY_MIGRATIONS, ...guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, ...guard.AUDIT_CONTROLS_20260927_MIGRATIONS, ...guard.HR_CONTRACTOR_MIGRATIONS, ...guard.PORTAL_SESSION_MIGRATIONS, ...guard.EXTERNAL_LABOR_MIGRATIONS, ...guard.ATTACHMENT_CLAIM_MIGRATIONS, ...guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS, ...guard.HUMAN_FLOAT_MIGRATIONS, ...guard.INCOME_RECONCILE_MIGRATIONS, ...guard.INVOICE_REVENUE_RESULT_MIGRATIONS, ...guard.PERSONNEL_CONFLICT_MIGRATIONS, ...guard.PERSONNEL_RECEIPT_MIGRATIONS, ...guard.PROCUREMENT_ACTION_MIGRATIONS, ...guard.APPLICANT_WITHDRAW_MIGRATIONS, ...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS, ...guard.INVOICE_ITEM_BIND_MIGRATIONS, ...guard.PERSONAL_HISTORY_MIGRATIONS, ...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS
 ]);
 assert.deepEqual(guard.APPLICANT_WITHDRAW_SOURCE_SHA256,{
   '20261005173534':'aa3ebaf3a098c83709de7e04c4a048c9cfb0881e42a4f8bb586caebe66e14b9f'
@@ -47,6 +47,9 @@ assert.deepEqual(guard.INVOICE_ITEM_BIND_SOURCE_SHA256,{
 });
 assert.deepEqual(guard.PERSONAL_HISTORY_SOURCE_SHA256,{
   '20261008055528':'f9b3eb3890767a4283c953c6069505bd5a8f979088c3887251b2424c83469886'
+});
+assert.deepEqual(guard.PERSONAL_HISTORY_PERMISSION_SOURCE_SHA256,{
+  '20261008090000':'27cd24e182ad839ffcf10b5b304d98f5e51086b7009cdad2d8ad65ab6977b350'
 });
 assert.deepEqual(guard.RELEASE_PHASES, {
   frontend_compat: 'none',
@@ -83,7 +86,8 @@ assert.deepEqual(guard.RELEASE_PHASES, {
   database_invoice_revenue_result_20261002:'20261002151725',
   database_purchase_final_amount_20261006:'20261006153719',
   database_invoice_item_bind_20261008:'20261008031845',
-  database_personal_history_20261008:'20261008055528'
+  database_personal_history_20261008:'20261008055528',
+  database_personal_history_permission_20261008:'20261008090000'
 });
 assert.deepEqual(guard.migrationVersions('none'), []);
 assert.throws(() => guard.migrationVersions('20260826070814,20260826070814'), /unique/);
@@ -238,10 +242,12 @@ try {
   fs.appendFileSync(ledger,guard.INVOICE_ITEM_BIND_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/personal document history RPC/);
   fs.appendFileSync(ledger,guard.PERSONAL_HISTORY_MIGRATIONS.join('\n')+'\n');
+  assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/personal history permission guard/);
+  fs.appendFileSync(ledger,guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
   const pinnedPersonnelDir=path.join(attachmentClaimTemp,'personnel-source-pin');
   fs.mkdirSync(pinnedPersonnelDir);
-  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS]){
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS,...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS]){
     const filename=fs.readdirSync(migrationDir).find(name=>name.startsWith(version+'_'));
     fs.copyFileSync(path.join(migrationDir,filename),path.join(pinnedPersonnelDir,filename));
   }
@@ -513,6 +519,66 @@ try {
   assert.throws(()=>guard.verifyLedger('pre',ledger,migrationDir,phase,versions,baseline),/must be pending/);
   guard.verifyLedger('post',ledger,migrationDir,phase,versions,baseline);
 } finally {fs.rmSync(personalHistoryTemp,{recursive:true,force:true});}
+const permissionHistoryTemp=fs.mkdtempSync(path.join(os.tmpdir(),'finance-personal-history-permission-release-'));
+try {
+  const migrationDir=path.join(root,'supabase/migrations');
+  const prior=['20260825000000',...guard.REVIEWED_MIGRATION_CATALOG.filter(version=>version<guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS[0])];
+  const baseline={count:1,lastVersion:prior[0],sha256:guard.ledgerSha256([prior[0]])};
+  const ledger=path.join(permissionHistoryTemp,'ledger.txt');
+  const phase=guard.RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION;
+  const versions=guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS.join(',');
+  const scripts=name=>path.join(root,'scripts',name);
+  fs.writeFileSync(ledger,prior.join('\n')+'\n');
+  assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'pending');
+  const canary=fs.readFileSync(scripts('finance_personal_history_permission_canary.sql'),'utf8');
+  assert.doesNotMatch(canary,/^\s*\\(?:set|i|include)\b/m);
+  const canaryOutput=path.join(permissionHistoryTemp,'canary.json');
+  const expected={canary:'readonly_personal_history_permission_v1',ok:true,rolled_back:true,permission_guard_preserved:true};
+  fs.writeFileSync(canaryOutput,JSON.stringify([{personal_history_permission_canary_result:expected}]));
+  assert.equal(guard.verifyReportsCanary(canaryOutput,'personal_history_permission'),true);
+  fs.writeFileSync(canaryOutput,JSON.stringify([{personal_history_permission_canary_result:{...expected,permission_guard_preserved:false}}]));
+  assert.throws(()=>guard.verifyReportsCanary(canaryOutput,'personal_history_permission'));
+  const rehearsal=path.join(permissionHistoryTemp,'rehearsal.sql');
+  guard.preparePersonalHistoryRehearsal(migrationDir,rehearsal,versions,ledger,
+    scripts('finance_personal_history_permission_fingerprint.sql'),
+    scripts('finance_personal_history_permission_canary.sql'),
+    scripts('finance_personal_history_permission_preflight.sql'),
+    scripts('finance_personal_history_permission_postflight.sql'),baseline,phase);
+  assert.match(fs.readFileSync(rehearsal,'utf8'),/savepoint finance_release_migration;[\s\S]+finance_personal_history_page_allows_v1[\s\S]+insert into supabase_migrations\.schema_migrations[\s\S]+rollback to savepoint finance_release_migration;/);
+  const apply=path.join(permissionHistoryTemp,'apply.sql');
+  guard.prepareAuditBatchApply(migrationDir,apply,versions,ledger,
+    scripts('finance_personal_history_permission_postflight.sql'),baseline,phase);
+  assert.match(fs.readFileSync(apply,'utf8'),/finance_personal_history_page_allows_v1[\s\S]+insert into supabase_migrations\.schema_migrations[\s\S]+commit;/);
+  const gate=path.join(permissionHistoryTemp,'postflight.sql');
+  guard.preparePhaseQuery(scripts('finance_personal_history_permission_postflight.sql'),gate,phase,versions);
+  assert.match(fs.readFileSync(gate,'utf8'),/^begin read only;[\s\S]+rollback;/);
+  const tampered=path.join(permissionHistoryTemp,'tampered');fs.mkdirSync(tampered);
+  fs.writeFileSync(path.join(tampered,'20261008090000_finance_personal_history_permission_guard_v1.sql'),
+    fs.readFileSync(path.join(migrationDir,'20261008090000_finance_personal_history_permission_guard_v1.sql'),'utf8')+'\n-- tampered\n');
+  assert.throws(()=>guard.readAuditBatch(tampered,versions,phase),/sealed SHA256/);
+  fs.appendFileSync(ledger,versions+'\n');
+  assert.equal(guard.classifyLedger(ledger,migrationDir,phase,versions,baseline),'applied');
+  guard.verifyLedger('post',ledger,migrationDir,phase,versions,baseline);
+} finally {fs.rmSync(permissionHistoryTemp,{recursive:true,force:true});}
+for(const name of ['finance_personal_history_permission_preflight.sql',
+  'finance_personal_history_permission_postflight.sql',
+  'finance_personal_history_permission_fingerprint.sql',
+  'finance_personal_history_permission_canary.sql',
+  'finance_approval_history_summary_permission_postflight.sql',
+  'finance_approval_history_permission_postflight.sql',
+  'finance_amount_search_permission_postflight.sql',
+  'finance_approval_search_permission_postflight.sql',
+  'finance_approval_search_permission_canary.sql']){
+  for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])
+    assert.ok(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'scripts/"+name+"'"),
+      'personal history permission SQL gate must be source-sealed: '+name);
+  assert.ok(workflow.includes('scripts/'+name),
+    'personal history permission SQL gate must be in the verified bundle: '+name);
+}
+for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])
+  assert.ok(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes(
+    "'supabase/migrations/20261008090000_finance_personal_history_permission_guard_v1.sql'"),
+    'personal history permission migration must be source-sealed');
 for(const name of ['finance_personal_history_preflight.sql','finance_personal_history_postflight.sql',
   'finance_personal_history_fingerprint.sql','finance_personal_history_canary.sql']){
   for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])
@@ -545,7 +611,7 @@ for(const name of ['finance_purchase_final_amount_preflight.sql','finance_purcha
   assert.ok(workflow.includes('scripts/'+name), 'purchase final amount SQL gate must be in the verified bundle: '+name);
 assert.deepEqual(guard.REPORT_POSTFLIGHT_FILES,['finance_production_db_postflight.sql','finance_audit_20260907_postflight.sql','finance_finalize_accounting_lines_postflight.sql','finance_utility_tax_postflight.sql','finance_production_human_accounting_canary.sql','finance_canonical_receivables_postflight.sql','finance_reporting_profiles_postflight.sql'],'Reports must retain every inherited/new postflight in its transaction');
 for(const name of guard.REPORT_POSTFLIGHT_FILES){assert.ok(workflow.includes('cp scripts/'+name+' "$BUNDLE/release-tools/scripts/"'),'Every reports transaction check must be sealed: '+name);for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert.ok(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'scripts/"+name+"'"),'Reports postflight must be source-pinned: '+name);}
-assert.deepEqual([...workflow.matchAll(/^          - (frontend_compat|database_\S+)$/gm)].map(match=>match[1]), ['frontend_compat','database_audit_security_20260922','database_revenue_repair_20260924','database_operational_stability_20260924','database_demo_password_retirement_20260925','database_audit_controls_20260927','database_hr_contractor_20260928','database_portal_session_20260928','database_external_labor_20260928','database_attachment_claim_20261001','database_human_float_20261002','database_income_reconcile_20261002','database_invoice_revenue_result_20261002','database_purchase_final_amount_20261006','database_invoice_item_bind_20261008','database_personal_history_20261008'], 'Only reviewed current phases may be dispatched');
+assert.deepEqual([...workflow.matchAll(/^          - (frontend_compat|database_\S+)$/gm)].map(match=>match[1]), ['frontend_compat','database_audit_security_20260922','database_revenue_repair_20260924','database_operational_stability_20260924','database_demo_password_retirement_20260925','database_audit_controls_20260927','database_hr_contractor_20260928','database_portal_session_20260928','database_external_labor_20260928','database_attachment_claim_20261001','database_human_float_20261002','database_income_reconcile_20261002','database_invoice_revenue_result_20261002','database_purchase_final_amount_20261006','database_invoice_item_bind_20261008','database_personal_history_20261008','database_personal_history_permission_20261008'], 'Only reviewed current phases may be dispatched');
 const releaseGuide = fs.readFileSync(path.join(root, 'docs/FINANCE_PRODUCTION_RELEASE.md'), 'utf8');
 const required = [
   'actions: read',
@@ -599,7 +665,7 @@ const required = [
   'PHASE_STATE="$(node "$GUARD" classify-ledger',
   'if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then',
   'elif test "$PHASE_STATE" = "pending" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then',
-  'elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_personal_history_20261008" || test "$RELEASE_PHASE" = "database_invoice_item_bind_20261008" || test "$RELEASE_PHASE" = "database_purchase_final_amount_20261006" || test "$RELEASE_PHASE" = "database_invoice_revenue_result_20261002" || test "$RELEASE_PHASE" = "database_income_reconcile_20261002" || test "$RELEASE_PHASE" = "database_human_float_20261002" || test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912" || test "$RELEASE_PHASE" = "database_history_performance_20260913" || test "$RELEASE_PHASE" = "database_read_latency_20260913" || test "$RELEASE_PHASE" = "database_ar_mapping_20260913" || test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_demo_password_retirement_20260925" || test "$RELEASE_PHASE" = "database_hr_contractor_20260928" || test "$RELEASE_PHASE" = "database_portal_session_20260928" || test "$RELEASE_PHASE" = "database_external_labor_20260928" || test "$RELEASE_PHASE" = "database_attachment_claim_20261001" || test "$RELEASE_PHASE" = "database_audit_controls_20260927" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922"; }; then',
+  'elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_personal_history_permission_20261008" || test "$RELEASE_PHASE" = "database_personal_history_20261008" || test "$RELEASE_PHASE" = "database_invoice_item_bind_20261008" || test "$RELEASE_PHASE" = "database_purchase_final_amount_20261006" || test "$RELEASE_PHASE" = "database_invoice_revenue_result_20261002" || test "$RELEASE_PHASE" = "database_income_reconcile_20261002" || test "$RELEASE_PHASE" = "database_human_float_20261002" || test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912" || test "$RELEASE_PHASE" = "database_history_performance_20260913" || test "$RELEASE_PHASE" = "database_read_latency_20260913" || test "$RELEASE_PHASE" = "database_ar_mapping_20260913" || test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_demo_password_retirement_20260925" || test "$RELEASE_PHASE" = "database_hr_contractor_20260928" || test "$RELEASE_PHASE" = "database_portal_session_20260928" || test "$RELEASE_PHASE" = "database_external_labor_20260928" || test "$RELEASE_PHASE" = "database_attachment_claim_20261001" || test "$RELEASE_PHASE" = "database_audit_controls_20260927" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922"; }; then',
   '--allow-production-alias true',
   'for ATTEMPT in 1 2 3',
   'promote "$DEPLOYMENT_URL" --yes',
@@ -670,7 +736,7 @@ assert.match(promoteJob, /frontend-app-path[\s\S]+production-app\.js[\s\S]+cmp -
 assert.doesNotMatch(promoteJob, /vercel@59\.3\.0 (?:build|deploy)|prepare-apply/, 'retryable promote job must not rebuild, redeploy or reapply DB migrations');
 const compatAt = databaseJob.indexOf('if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then');
 const pendingAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "pending" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then');
-const appliedAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_personal_history_20261008" || test "$RELEASE_PHASE" = "database_invoice_item_bind_20261008" || test "$RELEASE_PHASE" = "database_purchase_final_amount_20261006"');
+const appliedAt = databaseJob.indexOf('elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_personal_history_permission_20261008" || test "$RELEASE_PHASE" = "database_personal_history_20261008" || test "$RELEASE_PHASE" = "database_invoice_item_bind_20261008" || test "$RELEASE_PHASE" = "database_purchase_final_amount_20261006"');
 const auditPendingAt=databaseJob.indexOf('elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_audit_20260907"; then');
 assert.ok(auditPendingAt>compatAt&&auditPendingAt<pendingAt);
 assert.ok(databaseJob.indexOf('prepare-audit-rehearsal')>auditPendingAt);
@@ -714,7 +780,7 @@ assert.doesNotMatch(promoteJob,/prepare-read-latency-(?:apply|rehearsal)/);
 assert.equal((workflow.match(/verify-reports-canary --domain statement_source/g)||[]).length,2);
 assert.match(databaseJob,/name: Prove authenticated submit[^\n]+\n\s+if: inputs\.release_phase != 'database_read_latency_20260913' && inputs\.release_phase != 'database_ar_mapping_20260913'/);
 for(const job of [databaseJob,promoteJob]) {
-  const guarded=job.indexOf('if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"' + (job === databaseJob ? ' && test "$RELEASE_PHASE" != "database_human_float_20261002" && test "$RELEASE_PHASE" != "database_income_reconcile_20261002" && test "$RELEASE_PHASE" != "database_invoice_revenue_result_20261002" && test "$RELEASE_PHASE" != "database_purchase_final_amount_20261006" && test "$RELEASE_PHASE" != "database_invoice_item_bind_20261008" && test "$RELEASE_PHASE" != "database_personal_history_20261008"' : '') + '; then');
+  const guarded=job.indexOf('if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"' + (job === databaseJob ? ' && test "$RELEASE_PHASE" != "database_human_float_20261002" && test "$RELEASE_PHASE" != "database_income_reconcile_20261002" && test "$RELEASE_PHASE" != "database_invoice_revenue_result_20261002" && test "$RELEASE_PHASE" != "database_purchase_final_amount_20261006" && test "$RELEASE_PHASE" != "database_invoice_item_bind_20261008" && test "$RELEASE_PHASE" != "database_personal_history_20261008" && test "$RELEASE_PHASE" != "database_personal_history_permission_20261008"' : '') + '; then');
   assert.ok(guarded>=0);
   assert.match(job.slice(guarded,job.indexOf('\n          fi',guarded)),/finance_production_authenticated_canary\.sql[\s\S]+verify-authenticated-canary/);
   assert.match(job,/if test "\$RELEASE_PHASE" = "database_read_latency_20260913"; then[\s\S]+finance_statement_source_canary\.sql[\s\S]+verify-reports-canary --domain statement_source/);
@@ -1028,8 +1094,14 @@ assert.match(databaseJob,/prepare-invoice-item-bind-rehearsal[\s\S]+prepare-invo
   'invoice item binding phase must rehearse, apply atomically, and verify independently');
 assert.match(databaseJob,/prepare-personal-history-rehearsal[\s\S]+prepare-personal-history-apply[\s\S]+finance_personal_history_postflight\.sql[\s\S]+finance_personal_history_canary\.sql/,
   'personal document history phase must rehearse, apply atomically, and verify independently');
-assert.equal((databaseJob.match(/if test "\$RELEASE_PHASE" = "database_human_float_20261002" \|\| test "\$RELEASE_PHASE" = "database_income_reconcile_20261002" \|\| test "\$RELEASE_PHASE" = "database_invoice_revenue_result_20261002" \|\| test "\$RELEASE_PHASE" = "database_purchase_final_amount_20261006" \|\| test "\$RELEASE_PHASE" = "database_invoice_item_bind_20261008" \|\| test "\$RELEASE_PHASE" = "database_personal_history_20261008"; then/g)||[]).length,2,
-  'both DB-only alias checks must cover invoice item binding');
+assert.equal((databaseJob.match(/if test "\$RELEASE_PHASE" = "database_human_float_20261002"[^\n]*test "\$RELEASE_PHASE" = "database_personal_history_permission_20261008"; then/g)||[]).length,2,
+  'both DB-only alias checks must cover personal history permission');
+assert.match(databaseJob,/prepare-personal-history-permission-rehearsal[\s\S]+prepare-personal-history-permission-apply[\s\S]+finance_personal_history_permission_postflight\.sql[\s\S]+finance_personal_history_permission_canary\.sql/,
+  'personal history permission phase must rehearse, apply atomically, and verify independently');
+assert.equal((workflow.match(/if test "\$RELEASE_PHASE" = "frontend_compat"; then\n\s+\(cd "\$TOOLS" && supabase db query --linked --file scripts\/finance_personal_history_permission_canary\.sql/g)||[]).length,2,
+  'frontend compatibility and promotion both recheck personal history grants and retired legacy RPCs');
+assert.equal((workflow.match(/case "\$RELEASE_PHASE" in frontend_compat\) APPROVAL_SEARCH_CANARY="scripts\/finance_approval_search_permission_canary\.sql" ;; esac/g)||[]).length,2,
+  'frontend compatibility and promotion use the successor search canary after retiring the oldest history RPC');
 assert.match(promoteJob,/inputs\.release_phase != 'database_income_reconcile_20261002'/,
   'income reconciliation DB-only phase must not promote a frontend candidate');
 assert.match(promoteJob,/inputs\.release_phase != 'database_invoice_revenue_result_20261002'/,
@@ -1038,6 +1110,8 @@ assert.match(promoteJob,/inputs\.release_phase != 'database_purchase_final_amoun
   'purchase final amount DB-only phase must not promote a frontend candidate');
 assert.match(promoteJob,/inputs\.release_phase != 'database_personal_history_20261008'/,
   'personal document history DB-only phase must not promote a frontend candidate');
+assert.match(promoteJob,/inputs\.release_phase != 'database_personal_history_permission_20261008'/,
+  'personal history permission DB-only phase must not promote a frontend candidate');
 assert.match(promoteJob, /finance_production_db_postflight\.sql[\s\S]+promotion-authenticated-canary\.json[\s\S]+promote "\$DEPLOYMENT_URL" --yes/);
 const rehearsalAt = databaseJob.indexOf('node "$GUARD" prepare-rehearsal');
 const finalLiveFrontendProofAt = databaseJob.lastIndexOf('node "$GUARD" verify-production-baseline');
@@ -1215,8 +1289,10 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   fs.appendFileSync(ledger,guard.INVOICE_ITEM_BIND_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline),/personal document history RPC/);
   fs.appendFileSync(ledger,guard.PERSONAL_HISTORY_MIGRATIONS.join('\n')+'\n');
+  assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/personal history permission guard/);
+  fs.appendFileSync(ledger,guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/personnel migration file is missing/);
-  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS]){
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS,...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS]){
     const filename=fs.readdirSync(path.join(root,'supabase/migrations')).find(name=>name.startsWith(version+'_'));
     fs.copyFileSync(path.join(root,'supabase/migrations',filename),path.join(migrations,filename));
   }
@@ -1283,6 +1359,11 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   fs.writeFileSync(path.join(temp,'finance_operational_stability_postflight.sql'), '\\set ON_ERROR_STOP on\nselect 24;\n');
   guard.APPROVAL_SEARCH_POSTFLIGHT_FILES.forEach(name=>fs.writeFileSync(path.join(temp,name),'\\set ON_ERROR_STOP on\nselect 18;\n'));
   guard.HISTORY_SUMMARY_POSTFLIGHT_FILES.forEach(name=>fs.writeFileSync(path.join(temp,name),'\\set ON_ERROR_STOP on\nselect 19;\n'));
+  fs.writeFileSync(path.join(temp,'finance_approval_history_summary_permission_postflight.sql'),'\\set ON_ERROR_STOP on\nselect 29;\n');
+  fs.writeFileSync(path.join(temp,'finance_personal_history_permission_postflight.sql'),'\\set ON_ERROR_STOP on\nselect 30;\n');
+  fs.writeFileSync(path.join(temp,'finance_approval_history_permission_postflight.sql'),'\\set ON_ERROR_STOP on\nselect 31;\n');
+  fs.writeFileSync(path.join(temp,'finance_amount_search_permission_postflight.sql'),'\\set ON_ERROR_STOP on\nselect 32;\n');
+  fs.writeFileSync(path.join(temp,'finance_approval_search_permission_postflight.sql'),'\\set ON_ERROR_STOP on\nselect 33;\n');
   guard.HR_BRIDGE_POSTFLIGHT_FILES.forEach(name=>fs.writeFileSync(path.join(temp,name),'\\set ON_ERROR_STOP on\nselect 22;\n'));
   guard.AUDIT_SECURITY_POSTFLIGHT_FILES.forEach(name=>fs.writeFileSync(path.join(temp,name),'\\set ON_ERROR_STOP on\nselect 23;\n-- addd18c5a918fb28b9781e41622eda30\n'));
   guard.INVOICE_READ_SCOPE_POSTFLIGHT_FILES.forEach(name=>fs.writeFileSync(path.join(temp,name),'\\set ON_ERROR_STOP on\nselect 20;\n'));
@@ -1291,7 +1372,12 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   for(const name of ['finance_demo_password_retirement_postflight.sql','finance_audit_controls_20260927_postflight.sql','finance_payroll_accrual_v1_postflight.sql','finance_hr_contractor_postflight.sql','finance_portal_session_logout_postflight.sql','finance_external_labor_postflight.sql'])fs.writeFileSync(path.join(temp,name),'\\set ON_ERROR_STOP on\nselect 27;\n');
   fs.writeFileSync(path.join(temp,'finance_attachment_claim_postflight.sql'),'\\set ON_ERROR_STOP on\nselect 28;\n');
   guard.preparePhaseQuery(phasePostflightSource, compatGateOutput, 'frontend_compat', 'none');
-  assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 10;[\s\S]+select 11;[\s\S]+select 12;[\s\S]+select 13;[\s\S]+select 14;[\s\S]+select 15;[\s\S]+select 16;[\s\S]+select 17;[\s\S]+select 18;[\s\S]+select 19;[\s\S]+select 20;[\s\S]+select 21;[\s\S]+select 22;[\s\S]+select 23;/,'Current frontend cannot omit prior, AR scope, HR bridge or audit security postflights');
+  assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 10;[\s\S]+select 11;[\s\S]+select 12;[\s\S]+select 31;[\s\S]+select 14;[\s\S]+select 15;[\s\S]+select 16;[\s\S]+select 17;[\s\S]+select 33;[\s\S]+select 29;[\s\S]+select 20;[\s\S]+select 21;[\s\S]+select 22;[\s\S]+select 23;[\s\S]+select 30;/,'Current frontend requires successor history ACL and personal permission postflights');
+  assert.doesNotMatch(fs.readFileSync(compatGateOutput,'utf8'),/select (8|13|18|19);/,'Current frontend cannot retain retired grouped-history grant contracts');
+  const historicalClaimOutput=path.join(temp,'attachment-claim-historical-gate.sql');
+  guard.preparePhaseQuery(phasePostflightSource,historicalClaimOutput,guard.RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,guard.ATTACHMENT_CLAIM_MIGRATIONS.join(','));
+  assert.match(fs.readFileSync(historicalClaimOutput,'utf8'),/select 8;[\s\S]+select 13;[\s\S]+select 18;[\s\S]+select 19;[\s\S]+select 28;/,'Historical attachment-claim phase keeps all immutable grouped-history postflights');
+  assert.doesNotMatch(fs.readFileSync(historicalClaimOutput,'utf8'),/select (29|30|31|32|33);/);
   const hrBridgeGateOutput=path.join(temp,'hr-bridge-gate-rendered.sql');
   guard.preparePhaseQuery(phasePostflightSource,hrBridgeGateOutput,guard.RELEASE_PHASE_DATABASE_HR_BRIDGE,guard.HR_BRIDGE_MIGRATIONS.join(','));
   assert.match(fs.readFileSync(hrBridgeGateOutput,'utf8'),/select 20;[\s\S]+select 21;[\s\S]+select 22;/,'HR phase includes both AR and private HR postflights');
@@ -1304,7 +1390,7 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   assert.match(fs.readFileSync(operationalGateOutput,'utf8'),/select 23;[\s\S]+select 24;[\s\S]+rollback;/,'Operational stability gate retains every prior postflight and its new checks');
   assert.match(fs.readFileSync(compatGateOutput, 'utf8'), /'20260827052447'/);
   assert.match(fs.readFileSync(compatGateOutput, 'utf8'), /select 2;[\s\S]+select 3;[\s\S]+select 4;/, 'Frontend compatibility requires audit, finalize and utility postflights');
-  assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 6;[\s\S]+select 8;[\s\S]+select 9;[\s\S]+select 10;/,'Frontend cannot omit amount search contract');
+  assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 6;[\s\S]+select 32;[\s\S]+select 9;[\s\S]+select 10;/,'Frontend cannot omit updated amount search contract');
   assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 4;[\s\S]+select 5;[\s\S]+select 6;/,'Frontend requires both reports domains');
   assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 4;[\s\S]+select 7;[\s\S]+select 5;/,'Recovery and frontend gates preserve the human accounting check in the shared full chain');
   const reportsGateOutput=path.join(temp,'reports-gate-rendered.sql');

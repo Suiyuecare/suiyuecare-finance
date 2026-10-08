@@ -126,8 +126,15 @@ fs.appendFileSync(ledger,guard.AUDIT_SECURITY_MIGRATIONS.join('\n')+'\n');
 fs.appendFileSync(ledger,guard.HR_DIRECTORY_EXPORT_MIGRATIONS.join('\n')+'\n');
 assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/20260927 audit controls/);check();
  const futurePostflights=guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES.concat(guard.APPROVAL_SEARCH_POSTFLIGHT_FILES,guard.HISTORY_SUMMARY_POSTFLIGHT_FILES,guard.INVOICE_READ_SCOPE_POSTFLIGHT_FILES,guard.AR_READ_SCOPE_POSTFLIGHT_FILES,guard.HR_BRIDGE_POSTFLIGHT_FILES,guard.AUDIT_SECURITY_POSTFLIGHT_FILES,guard.REVENUE_REPAIR_POSTFLIGHT_FILES,['finance_operational_stability_postflight.sql','finance_demo_password_retirement_postflight.sql','finance_audit_controls_20260927_postflight.sql','finance_payroll_accrual_v1_postflight.sql','finance_hr_contractor_postflight.sql','finance_portal_session_logout_postflight.sql','finance_external_labor_postflight.sql','finance_attachment_claim_postflight.sql']);
- const frontendPostflights=postflights.concat(futurePostflights);
+ const successorPostflights=['finance_approval_history_permission_postflight.sql','finance_amount_search_permission_postflight.sql','finance_approval_search_permission_postflight.sql','finance_approval_history_summary_permission_postflight.sql','finance_personal_history_permission_postflight.sql'];
+ const frontendPostflights=postflights.concat(futurePostflights).map(name=>({
+  'finance_approval_history_postflight.sql':successorPostflights[0],
+  'finance_amount_search_postflight.sql':successorPostflights[1],
+  'finance_approval_search_postflight.sql':successorPostflights[2],
+  'finance_approval_history_summary_postflight.sql':successorPostflights[3]
+ }[name]||name)).concat(successorPostflights[4]);
  futurePostflights.forEach(name=>write(name,'\\set ON_ERROR_STOP on\nselect 1;\n'+(name==='finance_audit_security_postflight.sql'?'-- Baseline audit-security function source md5: addd18c5a918fb28b9781e41622eda30\n':'')));
+ successorPostflights.forEach(name=>write(name,'\\set ON_ERROR_STOP on\nselect 1;\n'));
  for(const p of [phase,'frontend_compat']){const out=path.join(dir,p+'_recovery.sql');guard.preparePhaseQuery(path.join(dir,postflights[0]),out,p,p===phase?versions:'none');const raw=fs.readFileSync(out,'utf8');assert.match(raw,/^begin read only;/);for(const name of p==='frontend_compat'?frontendPostflights:postflights)assert.ok(raw.includes('-- Reviewed reports postflight: '+name));if(p===phase)for(const name of futurePostflights)assert.ok(!raw.includes('-- Reviewed reports postflight: '+name),'historical AR phase does not require future contract '+name);await db.exec(raw);assert.equal(await fp(),applied);check();}
  for(const [domain,markerKey,result] of [['ar_mapping','ar_mapping_canary_result',{canary:'readonly_ar_mapping_v1',ok:true,rolled_back:true,mapping_preserved:true}]]){
  const marker=value=>({[markerKey]:value}),out=write(domain+'_canary.json','[]');
@@ -182,6 +189,7 @@ assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','no
   const standalone=await real.exec(fs.readFileSync(path.join(repo,'scripts/finance_ar_mapping_canary.sql'),'utf8'));assert.equal(await realFp(),realApplied,'standalone actual read-only canary rolls back after installation');
   const realResult=path.join(realDir,'canary.json');fs.writeFileSync(realResult,JSON.stringify(standalone));guard.verifyReportsCanary(realResult,'ar_mapping');check();
   futurePostflights.forEach(name=>fs.writeFileSync(path.join(realDir,name),'\\set ON_ERROR_STOP on\nselect 1;\n'+(name==='finance_audit_security_postflight.sql'?'-- Baseline audit-security function source md5: addd18c5a918fb28b9781e41622eda30\n':'')));
+  successorPostflights.forEach(name=>fs.writeFileSync(path.join(realDir,name),'\\set ON_ERROR_STOP on\nselect 1;\n'));
   for(const current of [phase,'frontend_compat']){const file=path.join(realDir,current+'-readonly.sql');guard.preparePhaseQuery(path.join(realDir,postflights[0]),file,current,current===phase?versions:'none');await real.exec(fs.readFileSync(file,'utf8'));assert.equal(await realFp(),realApplied);check();}
  }finally{await real.close();}
  console.log('PASS AR mapping release: '+checks+' exact phase/prerequisites, one read-only parity canary, fifteen pre-COMMIT contracts, full rollback fingerprint and strict CLI checks');

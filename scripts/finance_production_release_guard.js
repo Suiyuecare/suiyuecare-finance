@@ -139,6 +139,11 @@ const PERSONAL_HISTORY_SOURCE_SHA256=Object.freeze({
   '20261008055528':'f9b3eb3890767a4283c953c6069505bd5a8f979088c3887251b2424c83469886'
 });
 const RELEASE_PHASE_DATABASE_PERSONAL_HISTORY='database_personal_history_20261008';
+const PERSONAL_HISTORY_PERMISSION_MIGRATIONS=Object.freeze(['20261008090000']);
+const PERSONAL_HISTORY_PERMISSION_SOURCE_SHA256=Object.freeze({
+  '20261008090000':'27cd24e182ad839ffcf10b5b304d98f5e51086b7009cdad2d8ad65ab6977b350'
+});
+const RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION='database_personal_history_permission_20261008';
 const PERSONNEL_SAVE_SOURCE_SHA256=Object.freeze({
   '20261003042021':'6b3dd504a57692d0af9ed73b24d8b42b7f6e5cad3cfbc6bcf3b6e4074b3c34f7',
   '20261003044426':'335b05308582788181110a891dae7adf45458e3c69bf295f95bad83de1460fdc'
@@ -198,7 +203,8 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...APPLICANT_WITHDRAW_MIGRATIONS,
   ...PURCHASE_FINAL_AMOUNT_MIGRATIONS,
   ...INVOICE_ITEM_BIND_MIGRATIONS,
-  ...PERSONAL_HISTORY_MIGRATIONS
+  ...PERSONAL_HISTORY_MIGRATIONS,
+  ...PERSONAL_HISTORY_PERMISSION_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -235,6 +241,7 @@ const RELEASE_PHASES = Object.freeze({
   [RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT]: PURCHASE_FINAL_AMOUNT_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND]: INVOICE_ITEM_BIND_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_PERSONAL_HISTORY]: PERSONAL_HISTORY_MIGRATIONS.join(','),
+  [RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION]: PERSONAL_HISTORY_PERMISSION_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_AR_READ_SCOPE]: AR_READ_SCOPE_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY]: EMPLOYEE_RELIABILITY_MIGRATIONS.join(','),
   [RELEASE_PHASE_DATABASE_AUDIT_READINESS]: AUDIT_READINESS_MIGRATIONS.join(','),
@@ -284,7 +291,8 @@ const SUPPORTED_GATE_PHASES = Object.freeze([
   INVOICE_REVENUE_RESULT_MIGRATIONS,
   PURCHASE_FINAL_AMOUNT_MIGRATIONS,
   INVOICE_ITEM_BIND_MIGRATIONS,
-  PERSONAL_HISTORY_MIGRATIONS
+  PERSONAL_HISTORY_MIGRATIONS,
+  PERSONAL_HISTORY_PERMISSION_MIGRATIONS
 ]);
 const SUPPORTED_GATE_SUFFIXES = SUPPORTED_GATE_PHASES;
 
@@ -358,7 +366,7 @@ function deploymentHost(record) { return String(record.url || '').replace(/^http
 function validateTarget(env, candidate, releasePhase, versionsText, expectedRef) {
   canonicalSha(candidate);
   releasePlan(releasePhase, versionsText);
-  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT,RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT,RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND,RELEASE_PHASE_DATABASE_PERSONAL_HISTORY].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use a reviewed current fixed database phase');
+  if (![RELEASE_PHASE_FRONTEND_COMPAT,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT,RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT,RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND,RELEASE_PHASE_DATABASE_PERSONAL_HISTORY,RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION].includes(releasePhase)) fail('legacy database phases are archived for this candidate; use a reviewed current fixed database phase');
   expectedRef = projectRef(expectedRef);
   if (expectedRef !== PRODUCTION_CATALOG.supabaseProjectRef) fail('Supabase project ref is not the immutable Finance production catalog target');
   for (const name of ['SUPABASE_ACCESS_TOKEN', 'FINANCE_SUPABASE_URL', 'FINANCE_SUPABASE_ANON_KEY', 'VERCEL_TOKEN', 'VERCEL_ORG_ID', 'VERCEL_PROJECT_ID']) {
@@ -462,6 +470,16 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if (!filename) fail('Personal history migration file is missing');
     if (sha256File(path.join(directory, filename)) !== PERSONAL_HISTORY_SOURCE_SHA256[target])
       fail('Personal history migration source differs from sealed SHA256');
+    return remote.includes(target) ? 'applied' : 'pending';
+  }
+  if (plan.releasePhase === RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION) {
+    const target = PERSONAL_HISTORY_PERMISSION_MIGRATIONS[0];
+    const prerequisites = REVIEWED_MIGRATION_CATALOG.filter(version => version < target);
+    if (prerequisites.some(version => !remote.includes(version))) fail('Personal history permission phase requires every reviewed prerequisite migration');
+    const filename = local.find(name => name.startsWith(target + '_'));
+    if (!filename) fail('Personal history permission migration file is missing');
+    if (sha256File(path.join(directory, filename)) !== PERSONAL_HISTORY_PERMISSION_SOURCE_SHA256[target])
+      fail('Personal history permission migration source differs from sealed SHA256');
     return remote.includes(target) ? 'applied' : 'pending';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT) {
@@ -746,6 +764,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(PURCHASE_FINAL_AMOUNT_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the purchase final amount exact lock');
     if(INVOICE_ITEM_BIND_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the durable historical invoice item binding RPC');
     if(PERSONAL_HISTORY_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the personal document history RPC');
+    if(PERSONAL_HISTORY_PERMISSION_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the personal history permission guard');
     for(const [version,expected] of Object.entries(PERSONNEL_SAVE_SOURCE_SHA256)){
       const filename=local.find(name=>name.startsWith(version+'_'));
       if(!filename)fail('frontend_compat personnel migration file is missing: '+version);
@@ -775,6 +794,12 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
       if(!filename)fail('frontend_compat personal history migration file is missing: '+version);
       if(sha256File(path.join(directory,filename))!==expected)
         fail('frontend_compat personal history migration source differs from sealed SHA256: '+version);
+    }
+    for(const [version,expected] of Object.entries(PERSONAL_HISTORY_PERMISSION_SOURCE_SHA256)){
+      const filename=local.find(name=>name.startsWith(version+'_'));
+      if(!filename)fail('frontend_compat personal history permission migration file is missing: '+version);
+      if(sha256File(path.join(directory,filename))!==expected)
+        fail('frontend_compat personal history permission migration source differs from sealed SHA256: '+version);
     }
     return 'compat';
   }
@@ -886,7 +911,7 @@ function prepareRehearsal(sourcePath, outputPath, target, fingerprintPath, canar
 
 function sqlLiteral(value) { return `'${String(value).replace(/'/g, "''")}'`; }
 function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATABASE_AUDIT) {
-  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT,RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT,RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND,RELEASE_PHASE_DATABASE_PERSONAL_HISTORY].includes(releasePhase))fail('unsupported fixed database batch');
+  if(![RELEASE_PHASE_DATABASE_AUDIT,RELEASE_PHASE_DATABASE_CASES,RELEASE_PHASE_DATABASE_UTILITY,RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING,RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION,RELEASE_PHASE_DATABASE_APPROVAL_SEARCH,RELEASE_PHASE_DATABASE_HISTORY_SUMMARY,RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE,RELEASE_PHASE_DATABASE_AR_READ_SCOPE,RELEASE_PHASE_DATABASE_HR_BRIDGE,RELEASE_PHASE_DATABASE_AUDIT_SECURITY,RELEASE_PHASE_DATABASE_REVENUE_REPAIR,RELEASE_PHASE_DATABASE_OPERATIONAL_STABILITY,RELEASE_PHASE_DATABASE_DEMO_PASSWORD_RETIREMENT,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,RELEASE_PHASE_DATABASE_HR_CONTRACTOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_HUMAN_FLOAT,RELEASE_PHASE_DATABASE_INCOME_RECONCILE,RELEASE_PHASE_DATABASE_INVOICE_REVENUE_RESULT,RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT,RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND,RELEASE_PHASE_DATABASE_PERSONAL_HISTORY,RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION].includes(releasePhase))fail('unsupported fixed database batch');
   releasePlan(releasePhase,versionsText);
   const files=migrationFiles(directory);
   return migrationPhase(versionsText).map(version=>{
@@ -904,6 +929,7 @@ function readAuditBatch(directory, versionsText, releasePhase=RELEASE_PHASE_DATA
     if(releasePhase===RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT && sha256File(path.join(directory,filename))!==PURCHASE_FINAL_AMOUNT_SOURCE_SHA256[version])fail('Purchase final amount migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND && sha256File(path.join(directory,filename))!==INVOICE_ITEM_BIND_SOURCE_SHA256[version])fail('Invoice item binding migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_PERSONAL_HISTORY && sha256File(path.join(directory,filename))!==PERSONAL_HISTORY_SOURCE_SHA256[version])fail('Personal history migration source differs from sealed SHA256: '+version);
+    if(releasePhase===RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION && sha256File(path.join(directory,filename))!==PERSONAL_HISTORY_PERMISSION_SOURCE_SHA256[version])fail('Personal history permission migration source differs from sealed SHA256: '+version);
     if(releasePhase===RELEASE_PHASE_DATABASE_HR_CONTRACTOR && sha256File(path.join(directory,filename))!==HR_CONTRACTOR_SOURCE_SHA256[version])fail('HR contractor migration source differs from sealed SHA256: '+version);
     return {version,filename,source};
   });
@@ -1080,6 +1106,28 @@ function attachmentClaimPostflightChain(postflightPath,profilePostflightPath){
  if(!prior.includes('-- Reviewed reports postflight: finance_audit_security_postflight.sql')||prior.split(oldMd5).length!==2)fail('Attachment claim cannot adapt the reviewed audit-security source exactly once');
  const versionedPrior=prior.replace(oldMd5,newMd5);
  return versionedPrior+`\n-- Reviewed reports postflight: ${name}\n${checks.trimEnd()}`;
+}
+function frontendCompatPostflightChain(postflightPath,profilePostflightPath){
+ const directory=path.dirname(postflightPath);
+ const permissionName='finance_personal_history_permission_postflight.sql';
+ const permission=stripPsqlDirectives(fs.readFileSync(path.join(directory,permissionName),'utf8'),permissionName).trimEnd();
+ const replacements=[
+   ['finance_approval_history_postflight.sql','finance_approval_history_permission_postflight.sql'],
+   ['finance_amount_search_postflight.sql','finance_amount_search_permission_postflight.sql'],
+   ['finance_approval_search_postflight.sql','finance_approval_search_permission_postflight.sql'],
+   ['finance_approval_history_summary_postflight.sql','finance_approval_history_summary_permission_postflight.sql']
+ ];
+ let chain=attachmentClaimPostflightChain(postflightPath,profilePostflightPath);
+ for(const [oldName,successorName] of replacements){
+   const oldSource=stripPsqlDirectives(fs.readFileSync(path.join(directory,oldName),'utf8'),oldName).trimEnd();
+   const successor=stripPsqlDirectives(fs.readFileSync(path.join(directory,successorName),'utf8'),successorName).trimEnd();
+   assertCliAtomicMigration(successor,`frontend compatibility ${successorName}`);
+   const oldBlock=`-- Reviewed reports postflight: ${oldName}\n${oldSource}`;
+   if(chain.split(oldBlock).length!==2)fail(`Frontend compatibility must replace ${oldName} exactly once`);
+   chain=chain.replace(oldBlock,`-- Reviewed reports postflight: ${successorName}\n${successor}`);
+ }
+ assertCliAtomicMigration(permission,`frontend compatibility ${permissionName}`);
+ return chain+`\n-- Reviewed reports postflight: ${permissionName}\n${permission}`;
 }
 function prepareHumanFloatRehearsal(directory,outputPath,versionsText,ledgerPath,
   fingerprintPath,canaryPath,preflightPath,postflightPath,
@@ -1413,8 +1461,8 @@ rollback;
 }
 function preparePersonalHistoryRehearsal(directory,outputPath,versionsText,ledgerPath,
   fingerprintPath,canaryPath,preflightPath,postflightPath,
-  baseline=PRODUCTION_BASELINE_LEDGER){
-  const phase=RELEASE_PHASE_DATABASE_PERSONAL_HISTORY;
+  baseline=PRODUCTION_BASELINE_LEDGER,releasePhase=RELEASE_PHASE_DATABASE_PERSONAL_HISTORY){
+  const phase=releasePhase;
   verifyLedger('pre',ledgerPath,directory,phase,versionsText,baseline);
   const batch=readAuditBatch(directory,versionsText,phase);
   if(batch.length!==1)fail('Personal history rehearsal requires exactly one sealed migration');
@@ -2249,6 +2297,14 @@ function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
     writeExclusive(outputPath,`begin read only;\nset local statement_timeout='60s';\n${postflight}\nrollback;\n`);
     return true;
   }
+  if(plan.releasePhase===RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION){
+    if(sourceName!=='finance_personal_history_permission_postflight.sql')
+      fail('Personal history permission phase requires its exact sealed postflight');
+    const postflight=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),sourceName);
+    assertCliAtomicMigration(postflight,'personal history permission postflight');
+    writeExclusive(outputPath,`begin read only;\nset local statement_timeout='60s';\n${postflight}\nrollback;\n`);
+    return true;
+  }
   if(plan.releasePhase===RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT){
     if(sourceName!=='finance_purchase_final_amount_postflight.sql')
       fail('Purchase final amount phase requires its exact sealed postflight');
@@ -2284,7 +2340,7 @@ function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
   if([RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,RELEASE_PHASE_DATABASE_PORTAL_SESSION,RELEASE_PHASE_FRONTEND_COMPAT].includes(plan.releasePhase)){
     if(sourceName!=='finance_production_db_postflight.sql')fail('Portal session compatibility requires the reviewed existing-v3 postflight');
     const directory=path.dirname(sourcePath);
-    const postflight=plan.releasePhase===RELEASE_PHASE_DATABASE_PORTAL_SESSION?portalSessionPostflightChain(path.join(directory,'finance_canonical_receivables_postflight.sql'),path.join(directory,'finance_reporting_profiles_postflight.sql')):plan.releasePhase===RELEASE_PHASE_DATABASE_EXTERNAL_LABOR?externalLaborPostflightChain(path.join(directory,'finance_canonical_receivables_postflight.sql'),path.join(directory,'finance_reporting_profiles_postflight.sql')):attachmentClaimPostflightChain(path.join(directory,'finance_canonical_receivables_postflight.sql'),path.join(directory,'finance_reporting_profiles_postflight.sql'));
+    const postflight=plan.releasePhase===RELEASE_PHASE_DATABASE_PORTAL_SESSION?portalSessionPostflightChain(path.join(directory,'finance_canonical_receivables_postflight.sql'),path.join(directory,'finance_reporting_profiles_postflight.sql')):plan.releasePhase===RELEASE_PHASE_DATABASE_EXTERNAL_LABOR?externalLaborPostflightChain(path.join(directory,'finance_canonical_receivables_postflight.sql'),path.join(directory,'finance_reporting_profiles_postflight.sql')):plan.releasePhase===RELEASE_PHASE_FRONTEND_COMPAT?frontendCompatPostflightChain(path.join(directory,'finance_canonical_receivables_postflight.sql'),path.join(directory,'finance_reporting_profiles_postflight.sql')):attachmentClaimPostflightChain(path.join(directory,'finance_canonical_receivables_postflight.sql'),path.join(directory,'finance_reporting_profiles_postflight.sql'));
     writeExclusive(outputPath,`begin read only;\nset local statement_timeout='60s';\n${postflight}\nrollback;\n`);return true;
   }
   if(plan.releasePhase===RELEASE_PHASE_DATABASE_HR_CONTRACTOR){
@@ -2502,6 +2558,7 @@ function verifyReportsCanary(inputPath,domain) {
     purchase_final_amount:{marker:'purchase_final_amount_canary_result',result:{canary:'readonly_purchase_final_amount_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
     invoice_item_bind:{marker:'invoice_item_bind_canary_result',result:{canary:'readonly_invoice_item_bind_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
     personal_history:{marker:'personal_history_canary_result',result:{canary:'readonly_personal_history_v1',ok:true,rolled_back:true,identity_scope_preserved:true}},
+    personal_history_permission:{marker:'personal_history_permission_canary_result',result:{canary:'readonly_personal_history_permission_v1',ok:true,rolled_back:true,permission_guard_preserved:true}},
     attachment_claim:{marker:'attachment_claim_canary_result',result:{canary:'finance_attachment_claim',ok:true,rolled_back:true,read_only:true}},
     external_labor:{marker:'finance_external_labor_canary_result',result:{canary:'readonly_external_labor_v1',ok:true,rolled_back:true,privacy_preserved:true,legacy_finalization_blocked:true,posting_sealed:true}},
     portal_session:{marker:'portal_session_canary_result',result:{canary:'readonly_portal_session_v1',ok:true,rolled_back:true,privacy_preserved:true}},
@@ -2744,6 +2801,8 @@ const api = {
   RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND, prepareInvoiceItemBindRehearsal,
   PERSONAL_HISTORY_MIGRATIONS, PERSONAL_HISTORY_SOURCE_SHA256,
   RELEASE_PHASE_DATABASE_PERSONAL_HISTORY, preparePersonalHistoryRehearsal,
+  PERSONAL_HISTORY_PERMISSION_MIGRATIONS, PERSONAL_HISTORY_PERMISSION_SOURCE_SHA256,
+  RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION,
   RELEASE_PHASE_DATABASE_PURCHASE_FINAL_AMOUNT, preparePurchaseFinalAmountRehearsal,
   PERSONNEL_SAVE_SOURCE_SHA256,
   INCOME_RECONCILE_MIGRATIONS, INCOME_RECONCILE_SOURCE_SHA256,
@@ -2838,6 +2897,8 @@ if (require.main === module) {
     else if(command==='prepare-invoice-item-bind-rehearsal')prepareInvoiceItemBindRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('preflight'),arg('postflight'));
     else if(command==='prepare-invoice-item-bind-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_INVOICE_ITEM_BIND);
     else if(command==='prepare-personal-history-rehearsal')preparePersonalHistoryRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('preflight'),arg('postflight'));
+    else if(command==='prepare-personal-history-permission-rehearsal')preparePersonalHistoryRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('preflight'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION);
+    else if(command==='prepare-personal-history-permission-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_PERSONAL_HISTORY_PERMISSION);
     else if(command==='prepare-personal-history-apply')prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_PERSONAL_HISTORY);
     else if (command === 'prepare-audit-controls-20260927-rehearsal') prepareAuditControls20260927Rehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('fingerprint'),arg('authenticated-canary'),arg('receivables-postflight'),arg('profiles-postflight'));
     else if (command === 'prepare-audit-controls-20260927-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('receivables-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927,arg('profiles-postflight'));
