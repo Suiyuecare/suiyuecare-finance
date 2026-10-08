@@ -93,6 +93,28 @@ async function scoped(code){
   const reload=await scoped(`(async()=>{quickLogin('employee');S.user.authUserId='10000000-0000-0000-0000-000000000001';S.user.tenantId=currentTenantId();var unrelated=el('m-voucher');unrelated.style.display='flex';var ok=await restoreFinanceAuthRecoveryDraft();var unrelatedPreserved=unrelated.style.display==='flex';unrelated.style.display='none';await new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve);});});return {ok:ok,type:S.nrType,item:S.purchaseRows[0]&&S.purchaseRows[0].itemName,qty:S.purchaseRows[0]&&S.purchaseRows[0].qty,unrelatedPreserved:unrelatedPreserved,leaveGuardOpen:!!(el('m-leave-guard')&&getComputedStyle(el('m-leave-guard')).display!=='none')};})()`);
   assert.deepEqual(reload,{ok:true,type:'purchase_request',item:'重新載入後仍須保留',qty:7,unrelatedPreserved:true,leaveGuardOpen:false});
   console.log('PASS A02 browser: invoice/bill rows and a full page reload preserve owned draft.');
+  const billFailure=await scoped(`(async()=>{
+    BILL_ROWS=[{payer:'虛構繳費人',item:'虛構服務',period:'2026-10',amt:'3456'}];renderBillEntryTable();
+    var before=JSON.stringify(BILL_ROWS),messages=[],originalAlert=window.alert;
+    window.alert=function(message){messages.push(String(message));};
+    try{
+      recordBillWriteFailure('建立批次繳費單',{payer:'虛構繳費人',amt:3456},{ok:false,confirmedRollback:true,error:{code:'57014',message:'canceling statement due to statement timeout'}},{insertedCount:0,totalCount:1});
+      recordBillWriteFailure('建立批次繳費單',null,{ok:false,error:{code:'FINANCE_MUTATION_RESULT_UNKNOWN',message:'原送件待確認，請先確認原送單結果'}});
+      recordBillWriteFailure('建立批次繳費單',null,{ok:false,error:{code:'22023',message:'第 1 筆繳費單缺少項目名稱'}});
+    }finally{window.alert=originalAlert;}
+    return {confirmed:messages[0],unknown:messages[1],validation:messages[2],rowsUnchanged:JSON.stringify(BILL_ROWS)===before,
+      visiblePayer:el('bill-entry-body').querySelector('[data-bill-field="payer"]').value};
+  })()`);
+  assert.match(billFailure.confirmed,/已確認這次交易取消/);
+  assert.match(billFailure.confirmed,/原畫面檢查、修正後直接重新送出/);
+  assert.doesNotMatch(billFailure.confirmed,/重新整理/);
+  assert.match(billFailure.unknown,/原送件待確認，請先確認原送單結果/);
+  assert.doesNotMatch(billFailure.unknown,/重新送出/);
+  assert.match(billFailure.validation,/依錯誤內容在原畫面檢查、修正後再試/);
+  assert.doesNotMatch(billFailure.validation,/重新整理/);
+  assert.equal(billFailure.rowsUnchanged,true);
+  assert.equal(billFailure.visiblePayer,'虛構繳費人');
+  console.log('PASS bill browser: confirmed rollback keeps the form and explains safe retry; unknown result still requires reconciliation.');
   await browser('wait','1400');
   await browser('screenshot',process.env.FINANCE_AUTH_SCREENSHOT||'/tmp/finance-auth-recovery-browser.png');
   const locked=await scoped(`(async()=>{S.demoLogin=false;var before=document.createElement('div');before.className='modal-bg';before.style.display='flex';before.setAttribute('aria-hidden','false');document.body.appendChild(before);var cb;bindSupabaseAuthState({auth:{onAuthStateChange:function(fn){cb=fn;return {data:{subscription:{}}};}}});cb('SIGNED_IN',{access_token:'fixture',user:{id:'different-auth-uuid',email:'other@suiyuecare.com',email_confirmed_at:'2026-09-01',app_metadata:{provider:'google'},identities:[{provider:'google',identity_data:{email:'other@suiyuecare.com',email_verified:true}}]}});await new Promise(function(resolve){setTimeout(resolve,10);});hideFinanceAuthRecovery();var after=document.createElement('div');after.className='modal-bg';after.style.display='flex';document.body.appendChild(after);return {existingDialogHidden:getComputedStyle(before).visibility==='hidden',pendingDialogHidden:getComputedStyle(after).visibility==='hidden',locked:financeWorkspaceIdentityBlocked,inert:el('main-wrap').inert,visibility:el('main-wrap').style.visibility,dialog:el('finance-auth-recovery').style.display,hasClose:el('finance-auth-recovery').innerHTML.indexOf('onclick="hideFinanceAuthRecovery()"')>-1};})()`);

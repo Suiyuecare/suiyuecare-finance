@@ -34200,6 +34200,21 @@ function recordBillWriteFailure(actionLabel,bill,result,meta){
   if(validationError&&validationError.code==='FINANCE_MUTATION_RESULT_UNKNOWN'){alert(validationError.message);return false;}
   var detail=(actionLabel||'繳費單寫入')+'失敗：'+settingsWriteErrorMessage(result);
   recordOpsEvent('bill_write_failed','critical','繳費單寫入失敗',detail,{billId:bill&&bill.id||'',billNo:bill&&bill.no||'',payer:bill&&bill.payer||'',amount:bill&&bill.amt||0,action:actionLabel||'',insertedCount:meta.insertedCount||0,totalCount:meta.totalCount||0,batchLimit:BILL_BATCH_MAX_ITEMS,error:settingsWriteErrorMessage(result),dataEnv:activeDataEnvironment(),tenantId:currentTenantId()});
+  if(actionLabel==='建立批次繳費單'){
+    var confirmedRollback=!!(result&&result.confirmedRollback);
+    var failureReason=confirmedRollback
+      ?(validationError&&String(validationError.code||'').toUpperCase()==='57014'
+        ?'資料庫作業逾時，這次交易已取消。'
+        :String(validationError&&validationError.message||'正式查核確認這次交易未成立。'))
+      :(validationError&&String(validationError.code||'').toUpperCase()==='57014'
+        ?'資料庫作業逾時，請先確認原送單結果。'
+        :String(validationError&&validationError.message||'系統暫時無法完成，請保留目前畫面。'));
+    alert('建立批次繳費單失敗：'+(confirmedRollback?'已確認這次交易取消，沒有建立正式繳費單。':'這次沒有取得完整的正式送件結果。')
+      +'\n\n'+failureReason
+      +'\n\n目前畫面仍保留已填寫或匯入的繳費單資料。'
+      +(confirmedRollback?'請在原畫面檢查、修正後直接重新送出；留在目前畫面即可。':'請依錯誤內容在原畫面檢查、修正後再試；若送件結果不明，須先確認原送單結果，勿直接重送。'));
+    return false;
+  }
   alert((actionLabel||'繳費單寫入')+'失敗：這次繳費單資料沒有完整保存到正式資料。\n\n'+friendlyErrorMessage(result&&result.error?result.error:detail,{action:actionLabel||'繳費單寫入'})+'\n\n系統不會保留這次尚未確認成功的狀態，請重新整理後再試。');
   return false;
 }
