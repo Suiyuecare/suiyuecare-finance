@@ -1093,9 +1093,10 @@ const workflow = fs.existsSync(path.join(ROOT, '.github/workflows/stability-gate
 check('CI runs source and root-cause gates before build',
   workflow.indexOf('pnpm release:preflight') > -1
     && workflow.indexOf('pnpm release:preflight') < workflow.indexOf('pnpm release:build'));
-check('CI runs invoice binding browser coverage only after installing browsers',
-  workflow.indexOf('pnpm test:invoice-item-bind-browser') > workflow.indexOf('pnpm exec playwright install')
-    && workflow.indexOf('pnpm test:invoice-item-bind-browser') < workflow.indexOf('pnpm release:build'));
+const interactionGate = workflow.slice(workflow.indexOf('  interaction-gate:'));
+check('CI runs invoice binding browser coverage after installing browsers in the interaction gate',
+  interactionGate.indexOf('pnpm test:invoice-item-bind-browser') > interactionGate.indexOf('pnpm exec playwright install')
+    && interactionGate.indexOf('pnpm exec playwright install') >= 0);
 check('CI explicitly runs the environment isolation contract before preflight and build',
   workflow.indexOf('pnpm release:environment-isolation') > -1
     && workflow.indexOf('pnpm release:environment-isolation') < workflow.indexOf('pnpm release:preflight')
