@@ -2,18 +2,18 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
 const html=fs.readFileSync(path.resolve(__dirname,'../index.html'),'utf8');
-const block=html.slice(html.indexOf('function approvalHistoryIdentity(){'),html.indexOf('async function performRemoteDataLoad(){'));
+const block=html.slice(html.indexOf('function approvalPersonalTab('),html.indexOf('async function performRemoteDataLoad(){'));
 const fn=name=>{const start=html.indexOf('function '+name+'(');return html.slice(start,html.indexOf('\n}',start)+2);};
 let checks=0;function check(name,condition=true){assert(condition,name);checks++;console.log('PASS '+name);}
 const tick=()=>new Promise(r=>setImmediate(r));
 function fixture(mode){
  const c={window:{},Promise,Date,Number,String,Object,Array,Math,JSON,Error,AbortController,console:{warn(){},error(){}},setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,20)),clearTimeout,
  S:{user:{id:'FICTION',authUserId:'AUTH'},page:'approvals',aT:'h',apprPage:1,apprQuery:'',demoLogin:false},REQS:[],BILLS:[],INVS:[],calls:[],paint:[],env:'test',tenant:'T',financeWorkspaceIdentityBlocked:false,approvalHistorySearchTimer:null,financeAuthIdentityEpoch:1,
- APPROVAL_HISTORY_RUNTIME:{identity:'',status:'idle',items:[],total:0,allTotal:0,page:1,limit:50,query:'',error:'',updatedAt:'',promise:null,requestSeq:0}};
+ APPROVAL_HISTORY_RUNTIME:{identity:'',status:'idle',items:[],total:0,allTotal:0,page:1,limit:50,query:'',error:'',updatedAt:'',promise:null,requestSeq:0},APPROVAL_PERSONAL_COUNTS:{identity:'',mine:null,h:null}};
  Object.assign(c,{canAccessPage:()=>true,approvalFastBootstrapIdentity:()=>c.tenant+'|auth:'+c.S.user?.authUserId,currentTenantId:()=>c.tenant,activeDataEnvironment:()=>c.env,DEFAULT_TENANT_ID:'T',getSb:()=>({rpc:(name,args)=>{c.calls.push(args);return mode(args,c);}}),updateApprovalTodoBadge:()=>{},buildApprovals:()=>c.paint.push(c.APPROVAL_HISTORY_RUNTIME.status),remoteReadIssueText:e=>e.message,recordRemoteReadIssue:()=>{},escAttr:x=>String(x),el:()=>null,mapReq:x=>({...x}),mapBill:x=>({...x}),mapInv:x=>({...x}),mergeRemoteRowsByKey:(a,b)=>[...a,...b.filter(x=>!a.some(y=>x.id===y.id))]});
  vm.createContext(c);vm.runInContext(fn('withOperationTimeout')+'\n'+block,c);return c;
 }
-function payload(c,{offset=0,total=1,all=total,ids=null}={}){const rows=ids||Array.from({length:Math.min(50,Math.max(0,total-offset))},(_,i)=>'R'+(i+offset));return{ok:true,mode:'summary',identity:{finance_user_id:c.S.user.id,auth_user_id:c.S.user.authUserId,tenant_id:c.tenant,data_environment:c.env},total,all_total:all,page:{limit:50,offset,has_more:offset+50<total},items:rows.map(id=>({record_type:'expense_requests',kind:'req',record_id:id,history_key:'expense_requests:'+id,summary:{source_count:1,has_attachments:false,amount:1250},personally_acted:true}))};}
+function payload(c,{offset=0,total=1,all=total,ids=null}={}){const rows=ids||Array.from({length:Math.min(50,Math.max(0,total-offset))},(_,i)=>'R'+(i+offset));return{ok:true,mode:'summary',projection_complete:true,identity:{finance_user_id:c.S.user.id,auth_user_id:c.S.user.authUserId,tenant_id:c.tenant,data_environment:c.env},total,all_total:all,page:{limit:50,offset,has_more:offset+50<total},items:rows.map(id=>({record_type:'expense_requests',kind:'req',record_id:id,history_key:'expense_requests:'+id,source_count:1,summary:{source_count:1,has_attachments:false,amount:1250},personally_applied:false,personally_acted:true,participation_label:'本人已處理'}))};}
 (async()=>{
  for(const mode of ['57014','hang','sync']){
   const c=fixture(()=>{if(mode==='sync')throw Error('Client init failed');if(mode==='hang')return new Promise(()=>{});return Promise.resolve({error:{code:'57014',message:'canceling statement due to statement timeout'}});});

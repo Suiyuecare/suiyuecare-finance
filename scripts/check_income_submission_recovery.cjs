@@ -8,12 +8,12 @@ function fn(name){const match=new RegExp('^(?:async )?function '+name+'\\(','m')
 const clone=x=>JSON.parse(JSON.stringify(x));let checks=0;function check(name,condition){assert(condition,name);checks++;}
 function fixture(shared={}){
  const storage=shared.storage||new Map(),durable=shared.durable||new Map(),server=shared.server||new Map(),canceled=shared.canceled||new Set(),calls=shared.calls||[],lockQueues=shared.lockQueues||new Map(),hooks={};
- const state={lost:0,statementTimeouts:0,deny:false,hang:false,hangBeforeCommit:false,reconcileState:'',reconcileError:null,reconcileResult:null,reconciliations:0,reconcileRequests:[],storageOk:true,durableOk:true,uploads:0,cleanup:0,notifications:0,reads:0,events:[],alerts:[],hooks};
+ const state={lost:0,statementTimeouts:0,deny:false,hang:false,hangBeforeCommit:false,reconcileState:'',reconcileError:null,reconcileResult:null,reconciliations:0,reconcileRequests:[],storageOk:true,durableOk:true,uploads:0,cleanup:0,notifications:0,reads:0,events:[],alerts:[],navTabs:[],hooks};
  const user={id:'fictional-A',n:'Fictional A',email:'a@example.invalid',role:'accountant',dc:'FICT-D'};
  const fields={'inv-buyer':'Fictional buyer','inv-amt':'100','inv-identifier-type':'電子發票','inv-desc':'Fictional service','inv-tax':'5','inv-ent':'FICT-E','inv-date':'2026-09-22','bill-reason':'Fictional reason','bill-dept':'FICT-D','b-ent2':'FICT-E','b-ent':'FICT-E','b-month':'2026-09'};
  const nodes=Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{value,style:{},classList:{remove(){}}}]));
  nodes['batch-pw']={style:{}};nodes['batch-dz']={classList:{remove(){}}};
- const c={S:{user,demoLogin:false,invOcrFile:null,bRows:[{buyer:'Fictional buyer',total:105,amt:100,rate:5,itemType:'home_care',identifierType:'電子發票',desc:'Service'}]},USERS:[user],INVS:[],BILLS:[],BILL_ROWS:[{payer:'Fictional payer',item:'Service',amt:100,period:'2026-09'}],INCOME_SUBMISSION_RETRY_STATE:{},POSTING_IN_FLIGHT:{},FINANCE_DRAFT_IDENTITY_EPOCH:0,financeAuthIdentityEpoch:0,CURRENT_PERMISSION_SNAPSHOT:{},financeLogoutInProgress:false,financeGoogleAccountSwitchInProgress:false,financeWorkspaceIdentityBlocked:false,
+ const c={S:{user,demoLogin:false,invOcrFile:null,bRows:[{buyer:'Fictional buyer',total:105,amt:100,rate:5,itemType:'home_care',identifierType:'電子發票',desc:'Service'}]},USERS:[user],INVS:[],BILLS:[],BILL_ROWS:[{payer:'Fictional payer',item:'Service',amt:100,period:'2026-09'}],INCOME_SUBMISSION_RETRY_STATE:{},POSTING_IN_FLIGHT:{},BILL_CONFIRMED_SUBMISSION:null,FINANCE_DRAFT_IDENTITY_EPOCH:0,financeAuthIdentityEpoch:0,CURRENT_PERMISSION_SNAPSHOT:{},financeLogoutInProgress:false,financeGoogleAccountSwitchInProgress:false,financeWorkspaceIdentityBlocked:false,
   currentFinanceAuthUserId:()=> 'auth-'+c.S.user.id,currentTenantId:()=> 'fictional-tenant',activeDataEnvironment:()=> 'test',hasSupabase:()=>true,
   sessionGetItem:key=>storage.get(key),sessionSetItem:(key,value)=>{if(!state.storageOk)return false;storage.set(key,value);return true;},sessionRemoveItem:key=>storage.delete(key),safeGetItem:key=>durable.get(key)||null,safeJsonSet:(key,value)=>{if(!state.durableOk)return false;durable.set(key,JSON.stringify(value));return true;},safeRemoveItem:key=>durable.delete(key),crypto:require('node:crypto').webcrypto,
   navigator:{locks:{request:(name,options,callback)=>{
@@ -29,7 +29,7 @@ function fixture(shared={}){
   invoiceInitialStepFiles:async(_raw,_rows,ctx)=>{state.uploads++;if(hooks.upload)await hooks.upload();return[{n:'發票明細_'+ctx.recordNo+'.xls',size:100,mime:'application/vnd.ms-excel',kind:'invoice_excel',path:'fictional/'+ctx.recordNo}];},normalizeFiles:x=>x,invoiceSuggestedRevenueAccount:()=> '4101',invoiceDescriptionWithReason:d=>d,invoiceEmployeeDescription:r=>r.desc,invoiceDbRow:x=>x,billDbRow:x=>x,settingsWriteResultOk:r=>r&&r.ok,
   cleanupUploadedSupabaseAttachments:async()=>state.cleanup++,recordInvoiceWriteFailure:()=>false,recordBillWriteFailure:()=>false,applyMembershipOrgActorsToSteps:()=>{},saveLocalAppStateSoon:()=>{},notifyInvoiceReceivable:async()=>{state.notifications++;if(hooks.notify)await hooks.notify();},notifyBatchInvoiceReceivable:async()=>{state.notifications++;if(hooks.notify)await hooks.notify();},
   loadRowsByIdsForApprovalFallback:async(_client,_table,ids)=>{state.reads++;if(hooks.reload)await hooks.reload();const rows=Array.from(server.values()).flatMap(x=>x.data.rows).filter(r=>ids.includes(r.id)).map(row=>({...row,tenant_id:'fictional-tenant',data_environment:'test'}));rows.approvalLoadComplete=true;return rows;},mapInv:x=>x,mapBill:x=>x,approvalRowsMarkVerified:()=>{},approvalRowsMarkUnavailable:()=>{},
-  renderInvTable:()=>{},renderBatchInvTable:()=>{},visibleInvoicesForCurrentUser:()=>c.INVS,markIncomeDocClean:()=>{},buildRecv:()=>{},buildApprovals:()=>{},buildDash:()=>{},buildInvoices:()=>{},renderBatchTable:()=>{},renderBillEntryTable:()=>{},buildBills:()=>{},renderNotifs:()=>{},renderBillList:()=>{},defaultInvoiceBatchRow:()=>({}),defaultBillRow:()=>({}),
+  renderInvTable:()=>{},renderBatchInvTable:()=>{},visibleInvoicesForCurrentUser:()=>c.INVS,markIncomeDocClean:()=>{},buildRecv:()=>{},buildApprovals:()=>{},buildDash:()=>{},buildInvoices:()=>{},renderBatchTable:()=>{},renderBillEntryTable:()=>{},buildBills:()=>{},renderNotifs:()=>{},renderBillList:()=>{},openApprovalTab:tab=>{state.navTabs.push(tab);c.S.page='approvals';c.S.aT=tab;},defaultInvoiceBatchRow:()=>({}),defaultBillRow:()=>({}),
   syncBatchRowsFromDom:()=>{},syncBillRowsFromDom:()=>{},invoiceBatchOverflowMessage:()=>'',billBatchOverflowMessage:()=>'',billBatchLimitError:()=>'',formFieldRequired:()=>false,invoiceBatchValidationError:()=>'',invoiceAmountsFromTotal:(total,rate,amt)=>({total,amount:amt,tax:total-amt}),invoiceGroupNo:r=>r.batchId||r.no,billItemKey:k=>k,
   num:value=>Number(value)||0,cloneApprovalStepsForRecord:clone,cloneSettingValue:clone,todayIso:()=> '2026-09-22',todaySlash:()=> '2026/09/22',todayMonth:()=> '2026-09',stableSnapshotValue:x=>x,normalizeSettingValue:x=>x,isRpcMissing:()=>false,expenseApplicantRevisionRpcErrorIsAmbiguous:e=>['NETWORK','CLIENT_TIMEOUT'].includes(e.code)||/fetch/.test(e.message||''),
   Math,Date,JSON,Error,Promise,Set,console:{warn(){},error:console.error},alert:value=>state.alerts.push(value),setTimeout:(cb,ms)=>setTimeout(cb,Math.min(ms,shared.timeoutMs||15)),clearTimeout};
@@ -55,6 +55,7 @@ function fixture(shared={}){
  ['expenseSubmissionOperationIdentity','withOperationTimeout','supabaseAuthErrorInfo','incomeSubmissionRpcItem','incomeFileSignature','incomeFieldValues','incomeDirtySnapshot'].forEach(name=>vm.runInContext(fn(name),c));
  c.withAbortableOperationTimeout=(pending,label,ms)=>c.withOperationTimeout(pending,label,ms);
  const start=html.indexOf('var INCOME_SUBMISSION_PENDING={}'),end=html.indexOf('\nasync function insertMembershipOrgSubmittedRecord',start);assert(start>=0&&end>start);vm.runInContext(html.slice(start,end),c);
+ ['authoritativeBillSubmissionNumbers','showConfirmedBillSubmission'].forEach(name=>vm.runInContext(fn(name),c));
  ['reloadInvoicesByIds','reloadBillsByIds','insertMembershipOrgSubmittedRecord','insertMembershipOrgSubmittedBatch','issueInvCore','issueBatchCore','submitBillCore'].forEach(name=>vm.runInContext(fn(name),c));
  for(const name of ['issueInv','issueBatch','submitBill']){const start=html.indexOf('window.'+name+'=async function(){'),end=html.indexOf('\n};',start)+3;assert(start>=0);vm.runInContext(html.slice(start,end),c);}
  return {c,state,storage,durable,server,canceled,calls,nodes,shared:{storage,durable,server,canceled,calls,lockQueues},switchIdentity(){c.S.user={id:'fictional-B',n:'Fictional B',email:'b@example.invalid',role:'employee'};c.FINANCE_DRAFT_IDENTITY_EPOCH++;c.INVS=[];c.BILLS=[];}};
@@ -65,6 +66,7 @@ function fixture(shared={}){
   const expected=caller==='issueBatch'?2:total;f.state.lost=1;await f.c[caller]();
   check(caller+': lost response reconciles committed result without replay',f.server.size===1&&f.calls.length===1&&f.state.events.join(',')==='rpc,reconcile');
   check(caller+': actual caller confirms all rows and clears durable attempt',(type==='bill'?f.c.BILLS:f.c.INVS).length===expected&&!f.c.loadIncomeSubmissionPending(type));
+  if(type==='bill')check('Bill confirmation uses the server number and opens My Applications',f.state.alerts.some(text=>text.includes(f.c.BILLS[0].no)&&text.includes('正式單號'))&&f.state.navTabs.includes('mine')&&f.c.S.apprQuery===f.c.BILLS[0].no);
   check(caller+': no regenerated attachment or cleanup on recovery',f.state.uploads===(type==='bill'?0:1)&&f.state.cleanup===0);
   f=fixture();f.state.statementTimeouts=1;await f.c[caller]();
   check(caller+': first direct 57014 is a confirmed rollback',f.calls.length===1&&f.state.reconciliations===0&&f.server.size===0&&!f.c.loadIncomeSubmissionPending(type)&&f.state.cleanup===(type==='bill'?0:1));
@@ -81,6 +83,7 @@ function fixture(shared={}){
   check(caller+': repeated failed confirmation never replays the original document',f.calls.length===1&&f.calls[0].p_idempotency_key===pendingKey&&!!f.c.loadIncomeSubmissionPending(type)&&f.state.cleanup===0);
   f.state.reconcileError=null;await f.c[caller]();
   check(caller+': later recovery reads the committed result without duplicate rows',f.server.size===1&&!f.c.loadIncomeSubmissionPending(type)&&f.calls.length===1);
+  if(type==='bill')check('Bill recovery shows its original authoritative number and opens My Applications',f.state.alerts.some(text=>text.includes(f.c.BILLS[0].no)&&text.includes('正式單號'))&&f.state.navTabs.includes('mine'));
   f=fixture();f.state.lost=1;f.state.reconcileError={code:'NETWORK',message:'Fictional offline'};await f.c[caller]();const refreshed=fixture(f.shared);await refreshed.c[caller]();
   check(caller+': page refresh recovers persisted key/files without another upload',refreshed.server.size===1&&refreshed.calls.length===1&&refreshed.state.uploads===0&&!refreshed.c.loadIncomeSubmissionPending(type));
   check(caller+': restored unchanged original form clears after confirmed recovery',caller==='issueInv'?refreshed.nodes['inv-buyer'].value==='':caller==='issueBatch'?!refreshed.c.S.bRows[0].buyer:!refreshed.c.BILL_ROWS[0].payer);
@@ -114,6 +117,22 @@ function fixture(shared={}){
   }
   for(const epoch of ['FINANCE_DRAFT_IDENTITY_EPOCH','financeAuthIdentityEpoch']){f=fixture();f.state.hooks.rpc=async()=>{f.c[epoch]+=2;};await f.c[caller]();check(caller+': A-B-A '+epoch+' discards old response',f.c.INVS.length===0&&f.c.BILLS.length===0&&!!f.c.loadIncomeSubmissionPending(type));}
   for(const gate of ['financeLogoutInProgress','financeGoogleAccountSwitchInProgress']){f=fixture();f.c[gate]=true;await f.c[caller]();check(caller+': '+gate+' blocks dispatch',f.calls.length===0);}
+ }
+ {
+  const f=fixture(),c=f.c;
+  f.nodes['bill-list']={innerHTML:''};
+  c.BILLS=[{id:'saved-bill',no:'BILL-2026-1234',createdAt:'2026-10-08T04:30:00Z',item:'居家服務費',payer:'虛構繳費人',period:'2026/10',amt:100,status:'unpaid',approvalStatus:'pending_accountant',applicantId:c.S.user.id}];
+  Object.assign(c,{visibleBillsForCurrentUser:()=>c.BILLS,billApprovalCompleted:()=>false,requestIsRejected:()=>false,billApprovalLabel:()=> '待簽核',billIsMine:b=>b.applicantId===c.S.user.id,fmt:value=>'NT$'+value,escAttr:value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'),incomeManagementSearchState:()=>({bill:''}),incomeApplicantWithdrawButtonHtml:()=>''});
+  ['billCardCreatedAt','renderBillList'].forEach(name=>vm.runInContext(fn(name),c));
+  const openStart=html.indexOf('window.openPersonalBillByNumber=function(no){'),openEnd=html.indexOf('\n};',openStart)+3;vm.runInContext(html.slice(openStart,openEnd),c);
+  c.renderBillList();
+  check('Bill card shows its number, creation date and exact My Applications search link',f.nodes['bill-list'].innerHTML.includes('BILL-2026-1234')&&f.nodes['bill-list'].innerHTML.includes('2026')&&f.nodes['bill-list'].innerHTML.includes('在我的申請查這張'));
+  c.openPersonalBillByNumber('BILL-2026-1234');
+  check('Bill card location searches the authoritative number in My Applications',c.S.apprQuery==='BILL-2026-1234'&&f.state.navTabs.at(-1)==='mine');
+ }
+ {
+  const f=fixture();
+  check('Malformed bill success response cannot claim an official number',f.c.showConfirmedBillSubmission({data:{rows:[{id:'saved-bill',no:''}]}},1,'')===false&&f.c.BILL_CONFIRMED_SUBMISSION===null&&f.state.alerts.some(text=>text.includes('正式單號未能完整核對')));
  }
  let f=fixture();f.state.lost=1;f.state.reconcileError={code:'NETWORK',message:'Fictional offline'};await f.c.issueInv();f.state.reconcileError=null;f.state.hooks.reload=async()=>f.switchIdentity();await f.c.issueInv();check('Confirmed invoice refresh discards result after identity switch without cache merge',f.c.INVS.length===0&&f.nodes['inv-buyer'].value==='Fictional buyer');
  f=fixture();f.state.lost=1;f.state.reconcileError={code:'NETWORK',message:'Fictional offline'};await f.c.submitBill();f.state.reconcileError=null;f.state.hooks.reload=async()=>{f.c.financeAuthIdentityEpoch+=2;};await f.c.submitBill();check('Confirmed bill refresh discards A-B-A response before cache merge or form reset',f.c.BILLS.length===0&&f.c.BILL_ROWS[0].payer==='Fictional payer');
