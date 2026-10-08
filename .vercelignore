@@ -32,6 +32,15 @@ scripts/*
 !scripts/finance_personal_history_postflight.sql
 !scripts/finance_personal_history_fingerprint.sql
 !scripts/finance_personal_history_canary.sql
+!scripts/finance_personal_history_permission_preflight.sql
+!scripts/finance_personal_history_permission_postflight.sql
+!scripts/finance_personal_history_permission_fingerprint.sql
+!scripts/finance_personal_history_permission_canary.sql
+!scripts/finance_approval_history_summary_permission_postflight.sql
+!scripts/finance_approval_history_permission_postflight.sql
+!scripts/finance_amount_search_permission_postflight.sql
+!scripts/finance_approval_search_permission_postflight.sql
+!scripts/finance_approval_search_permission_canary.sql
 !scripts/check_finance_personal_history.cjs
 !scripts/finance_applicant_withdraw_postflight.sql
 !scripts/check_migration_lineage_contract.js

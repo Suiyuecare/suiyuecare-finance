@@ -265,3 +265,32 @@ pass; this required proof is enforced by CI before build or database mutation.
 These checks establish synthetic behavior and release integrity. Google OAuth
 and real employee operation remain distinct production acceptance evidence.
 No missing payroll or revenue is estimated or backfilled by the migration.
+
+## 2026-10-08 personal history permission hotfix
+
+`database_personal_history_permission_20261008` accepts only
+`20261008090000`, after the immutable `20261008055528` personal-history
+migration. Both per-document history RPCs recheck the trusted current approvals-page grant
+before reading any document. The shared legacy actor receives the same guard.
+All three older grouped history RPCs lose direct EXECUTE because grouped history can
+expand a permitted bill or invoice into unrelated records sharing its batch ID.
+While Membership is entirely absent, the tenant's
+saved `role_permissions` and the established approvals-page role defaults apply.
+When Membership is complete, an explicit deny, missing allow, revoked grant,
+inactive link, or mismatched finance/auth identity denies both RPCs with 42501.
+An explicitly disabled `finance-core` module also denies both RPCs; absent
+module settings retain the established enabled default.
+
+The DB-only protected phase seals the migration SHA-256, checks the live old
+function bodies, rehearses migration and ledger changes in a rolled-back
+transaction, commits only the exact pending version with its postflight, and
+runs a read-only no-identity canary after apply. The production frontend alias
+and manifest must remain unchanged. `pnpm test:personal-history` covers
+fictional allowed, denied, revoked, role-setting, and direct-detail calls,
+including authenticated 42501 denial on the older grouped RPCs. The old
+history tab is unavailable between this DB phase and a compatible frontend
+promotion, so keep that interval short and announce it before release;
+production employee OAuth acceptance is a separate check.
+The frontend compatibility gate uses successor read-only history postflights and
+canaries that require the retired grants to stay revoked. Archived DB phases
+retain their original postflight contracts.

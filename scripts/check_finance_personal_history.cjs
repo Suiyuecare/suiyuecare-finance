@@ -11,6 +11,18 @@ const { createSummarySearchFixture, addSummarySearchDocument, fixtureIdentity: w
 const root = path.resolve(__dirname, '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const migration = read('supabase/migrations/20261008055528_finance_personal_document_history_v1.sql');
+const permissionMigration = read('supabase/migrations/20261008090000_finance_personal_history_permission_guard_v1.sql');
+const permissionPreflight = read('scripts/finance_personal_history_permission_preflight.sql').replace(/^\\set[^\n]*\n/, '');
+const permissionPostflight = read('scripts/finance_personal_history_permission_postflight.sql').replace(/^\\set[^\n]*\n/, '');
+const compatHistoryPostflight = read('scripts/finance_approval_history_summary_permission_postflight.sql').replace(/^\\set[^\n]*\n/, '');
+const compatOldestPostflight = read('scripts/finance_approval_history_permission_postflight.sql').replace(/^\\set[^\n]*\n/, '');
+const compatAmountPostflight = read('scripts/finance_amount_search_permission_postflight.sql').replace(/^\\set[^\n]*\n/, '');
+const compatSearchPostflight = read('scripts/finance_approval_search_permission_postflight.sql').replace(/^\\set[^\n]*\n/, '');
+const permissionCanary = read('scripts/finance_personal_history_permission_canary.sql');
+const compatSearchCanary = read('scripts/finance_approval_search_permission_canary.sql');
+const permissionFingerprint = read('scripts/finance_personal_history_permission_fingerprint.sql').replace(/^\\set[^\n]*\n/, '');
+const helperFixture = read('scripts/fixtures/finance_procurement_payment_helpers_20260908.sql')
+  .match(/CREATE OR REPLACE FUNCTION private\.finance_expense_optional_permission_allows\([\s\S]*?\$function\$;/)[0];
 const preflight = read('scripts/finance_personal_history_preflight.sql').replace(/^\\set[^\n]*\n/, '');
 const postflight = read('scripts/finance_personal_history_postflight.sql').replace(/^\\set[^\n]*\n/, '');
 const fingerprint = read('scripts/finance_personal_history_fingerprint.sql').replace(/^\\set[^\n]*\n/, '');
@@ -30,6 +42,15 @@ async function run() {
   const detail = async (key, env = 'test') =>
     (await db.query('select public.finance_personal_document_detail_v1($1,$2) result',
       [key, env])).rows[0].result;
+  const legacySummary = async (env = 'test') =>
+    (await db.query('select public.finance_approval_history_summary_v1($1,$2,$3,$4) result',
+      [50, 0, null, env])).rows[0].result;
+  const legacyDetail = async (key, env = 'test') =>
+    (await db.query('select public.finance_approval_history_detail_v1($1,$2) result',
+      [key, env])).rows[0].result;
+  const legacyFull = async (env = 'test') =>
+    (await db.query('select public.finance_approval_participant_history_for_current_user($1,$2,$3,$4) result',
+      [50, 0, null, env])).rows[0].result;
   const ids = result => result.items.map(row => row.record_id).sort();
   const expectDenied = async (operation, label) => {
     await assert.rejects(operation, error => error.code === '42501', label);
@@ -47,7 +68,10 @@ async function run() {
   try {
     await createSummarySearchFixture(db);
     await db.exec(`
-      alter table public.finance_users add column name text;
+      alter table public.finance_users add column name text, add column role text default 'employee';
+      create table public.system_settings(
+        tenant_id uuid not null, key text not null, value jsonb not null,
+        primary key(tenant_id,key));
       alter table public.expense_requests add column applicant_id text,
         add column applicant_email text;
       alter table public.bills add column applicant_id text,
@@ -203,6 +227,158 @@ async function run() {
     assert.equal((await summary('mine')).projection_complete, true);
     check('source trigger repairs projection before history resumes');
 
+    const grouped = (await legacyDetail('bills:SAME-BATCH')).item;
+    assert(grouped.source_rows.some(row => row.id === 'B-SIGN'));
+    assert(grouped.source_rows.some(row => row.id === 'B-SECRET'));
+    check('fictional baseline proves old grouped detail exposes a same-batch sibling');
+    const fullGroup = (await legacyFull()).items.find(row => row.history_key === 'bills:SAME-BATCH');
+    assert(fullGroup.source_rows.some(row => row.id === 'B-SECRET'));
+    check('fictional baseline proves oldest full-history RPC also expands a sibling batch');
+
+    // Install the actual trusted Finance/Membership helper. Production has no
+    // optional Membership objects today, so legacy role_permissions must still
+    // deny the page independently of the helper's all-absent fallback.
+    await db.exec(helperFixture);
+    const permissionBefore = (await db.query(permissionFingerprint)).rows[0].fingerprint;
+    await db.exec(permissionPreflight);
+    check('permission preflight requires applied personal history and trusted Membership helper');
+    await db.exec('begin; savepoint permission_migration; ' + permissionMigration +
+      `insert into supabase_migrations.schema_migrations(version,name) values
+      ('20261008090000','finance_personal_history_permission_guard_v1');` +
+      permissionPostflight + 'rollback to savepoint permission_migration; commit;');
+    assert.equal((await db.query(permissionFingerprint)).rows[0].fingerprint, permissionBefore);
+    check('permission migration and ledger roll back to an exact fingerprint');
+    await db.exec(permissionMigration);
+    await db.exec(`insert into supabase_migrations.schema_migrations(version,name) values
+      ('20261008090000','finance_personal_history_permission_guard_v1');`);
+    await db.exec(permissionPostflight);
+    await db.exec(postflight);
+    await db.exec(compatOldestPostflight);
+    await db.exec(compatAmountPostflight);
+    await db.exec(compatSearchPostflight);
+    await db.exec(compatHistoryPostflight);
+    check('new and existing postflights preserve personal RPC grants and source scope');
+
+    const legacyAcl = (await db.query(`select
+      has_function_privilege('authenticated',
+        'public.finance_approval_history_summary_v1(integer,integer,text,text)','EXECUTE') summary_user,
+      has_function_privilege('authenticated',
+        'public.finance_approval_history_detail_v1(text,text)','EXECUTE') detail_user,
+      has_function_privilege('authenticated',
+        'public.finance_approval_participant_history_for_current_user(integer,integer,text,text)','EXECUTE') full_user,
+      has_function_privilege('service_role',
+        'public.finance_approval_history_summary_v1(integer,integer,text,text)','EXECUTE') summary_service,
+      has_function_privilege('service_role',
+        'public.finance_approval_history_detail_v1(text,text)','EXECUTE') detail_service,
+      has_function_privilege('service_role',
+        'public.finance_approval_participant_history_for_current_user(integer,integer,text,text)','EXECUTE') full_service,
+      has_function_privilege('anon',
+        'public.finance_approval_history_summary_v1(integer,integer,text,text)','EXECUTE') summary_anon,
+      has_function_privilege('anon',
+        'public.finance_approval_history_detail_v1(text,text)','EXECUTE') detail_anon,
+      has_function_privilege('anon',
+        'public.finance_approval_participant_history_for_current_user(integer,integer,text,text)','EXECUTE') full_anon`)).rows[0];
+    assert(Object.values(legacyAcl).every(value => value === false));
+    await db.exec('set role authenticated');
+    await expectDenied(() => legacySummary(), 'authenticated direct legacy summary EXECUTE is revoked');
+    await expectDenied(() => legacyDetail('bills:SAME-BATCH'), 'authenticated direct legacy grouped detail EXECUTE is revoked');
+    await expectDenied(() => legacyFull(), 'authenticated direct oldest full-history EXECUTE is revoked');
+    await db.exec('reset role');
+    await db.exec('set role service_role');
+    await expectDenied(() => legacySummary(), 'service-role direct legacy summary EXECUTE is revoked');
+    await expectDenied(() => legacyDetail('bills:SAME-BATCH'), 'service-role direct legacy grouped detail EXECUTE is revoked');
+    await expectDenied(() => legacyFull(), 'service-role direct oldest full-history EXECUTE is revoked');
+    await db.exec('reset role');
+
+    const setRoles = async value => db.query(`insert into public.system_settings(tenant_id,key,value)
+      values($1,'role_permissions',$2::jsonb) on conflict(tenant_id,key)
+      do update set value=excluded.value`, [who.tenantId, JSON.stringify(value)]);
+    const setModules = async value => db.query(`insert into public.system_settings(tenant_id,key,value)
+      values($1,'product_modules',$2::jsonb) on conflict(tenant_id,key)
+      do update set value=excluded.value`, [who.tenantId, JSON.stringify(value)]);
+    assert.equal((await summary('mine')).ok, true);
+    assert.equal((await detail('bills:B-SIGN')).ok, true);
+    check('legacy default employee role permits personal history when Membership is absent');
+    await setModules([{id:'finance-core',enabled:false,status:'ready'}]);
+    await expectDenied(() => summary('mine'), 'disabled finance-core module denies summary');
+    await expectDenied(() => detail('bills:B-SIGN'), 'disabled finance-core module denies detail');
+    await setModules([{id:'finance-core',enabled:true,status:'disabled'}]);
+    await expectDenied(() => summary('mine'), 'disabled finance-core status denies summary');
+    await expectDenied(() => detail('bills:B-SIGN'), 'disabled finance-core status denies detail');
+    await setModules([{id:'finance-core',enabled:true,status:'ready'}]);
+    await setRoles({employee:{approvals:'none'}});
+    await expectDenied(() => summary('mine'), 'legacy object permission denial blocks summary');
+    await expectDenied(() => detail('bills:B-SIGN'), 'legacy object permission denial blocks direct detail');
+    await expectDenied(() => legacySummary(), 'legacy actor also rejects denied approvals summary');
+    await expectDenied(() => legacyDetail('bills:SAME-BATCH'), 'legacy actor also rejects denied grouped detail');
+    await setRoles({employee:['dashboard']});
+    await expectDenied(() => summary('mine'), 'legacy array allowlist without approvals denies summary');
+    await expectDenied(() => detail('bills:B-SIGN'), 'legacy array allowlist without approvals denies detail');
+    await setRoles({employee:{approvals:0}});
+    await expectDenied(() => summary('mine'), 'legacy numeric zero denies summary');
+    await expectDenied(() => detail('bills:B-SIGN'), 'legacy numeric zero denies detail');
+    await setRoles({employee:{approvals:0.5}});
+    await expectDenied(() => summary('mine'), 'fractional numeric permission never grants summary');
+    await expectDenied(() => detail('bills:B-SIGN'), 'fractional numeric permission never grants detail');
+    await setRoles({employee:{approvals:1}});
+    assert.equal((await summary('mine')).ok, true);
+    assert.equal((await detail('bills:B-SIGN')).ok, true);
+    check('legacy numeric view grants both RPCs');
+    await setRoles({employee:{approvals:3.5}});
+    assert.equal((await summary('mine')).ok, true);
+    assert.equal((await detail('bills:B-SIGN')).ok, true);
+    check('numeric permission above three clamps to delete and permits reads');
+    await setRoles({employee:{approvals:'view'}});
+    assert.equal((await summary('mine')).ok, true);
+    assert.equal((await detail('bills:B-SIGN')).ok, true);
+    check('legacy string view grants both RPCs');
+    await db.exec("update public.finance_users set role='external_audit' where id='FICT-USER'");
+    await expectDenied(() => summary('mine'), 'legacy external audit default excludes approvals summary');
+    await expectDenied(() => detail('bills:B-SIGN'), 'legacy external audit default excludes approvals detail');
+    await db.exec("update public.finance_users set role='employee' where id='FICT-USER'");
+
+    await db.exec(`
+      create table public.membership_users(
+        id uuid primary key,tenant_id uuid,legacy_finance_user_id text,
+        auth_user_id uuid,status text);
+      create table public.membership_permission_fixture(member_id uuid,code text,effect text);
+      insert into public.membership_users values(
+        '00000000-0000-0000-0000-000000000099',
+        '${who.tenantId}','FICT-USER','${who.authUserId}','active');
+      create function public.membership_current_user_id() returns uuid
+        language sql stable as $$select id from public.membership_users
+          where auth_user_id=auth.uid() limit 1$$;
+      create function public.membership_can(uuid,text,jsonb) returns boolean
+        language sql stable as $$select exists(select 1 from public.membership_permission_fixture
+          where member_id=$1 and code=$2 and effect='allow')$$;
+      create function public.membership_has_explicit_deny(uuid,text,jsonb) returns boolean
+        language sql stable as $$select exists(select 1 from public.membership_permission_fixture
+          where member_id=$1 and code=$2 and effect='deny')$$;
+      insert into public.membership_permission_fixture values(
+        '00000000-0000-0000-0000-000000000099','finance.page.approvals.view','allow');
+    `);
+    assert.equal((await summary('mine')).ok, true);
+    assert.equal((await detail('bills:B-SIGN')).ok, true);
+    check('complete Membership plane with bound current allow grants both RPCs');
+    await db.exec(`insert into public.membership_permission_fixture values(
+      '00000000-0000-0000-0000-000000000099','finance.page.approvals.view','deny');`);
+    await expectDenied(() => summary('mine'), 'explicit Membership deny wins over allow for summary');
+    await expectDenied(() => detail('bills:B-SIGN'), 'explicit Membership deny wins over allow for detail');
+    await expectDenied(() => legacySummary(), 'legacy actor rejects explicit Membership deny');
+    await expectDenied(() => legacyDetail('bills:SAME-BATCH'), 'legacy grouped actor rejects explicit Membership deny');
+    await db.exec("delete from public.membership_permission_fixture where effect='deny';");
+    await db.exec("delete from public.membership_permission_fixture where effect='allow';");
+    await expectDenied(() => summary('mine'), 'revoked Membership allow denies summary');
+    await expectDenied(() => detail('bills:B-SIGN'), 'revoked Membership allow denies detail');
+    await expectDenied(() => legacySummary(), 'legacy actor rejects revoked Membership grant');
+    await expectDenied(() => legacyDetail('bills:SAME-BATCH'), 'legacy grouped actor rejects revoked Membership grant');
+    await db.exec(`insert into public.membership_permission_fixture values(
+      '00000000-0000-0000-0000-000000000099','finance.page.approvals.view','allow');
+      update public.membership_users set legacy_finance_user_id='OTHER-USER';`);
+    await expectDenied(() => summary('mine'), 'unbound Membership finance identity denies summary');
+    await expectDenied(() => detail('bills:B-SIGN'), 'unbound Membership finance identity denies detail');
+    await db.exec("update public.membership_users set legacy_finance_user_id='FICT-USER';");
+
     // Read-only canary runs with no auth identity; its result is the release
     // guard's exact JSON marker and must leave the transaction closed.
     await db.exec("set fixture.uid='';");
@@ -213,6 +389,17 @@ async function run() {
       identity_scope_preserved:true
     });
     check('read-only canary rejects absent identity and reports rollback marker');
+    const permissionCanaryRows = await db.exec(permissionCanary);
+    assert.deepEqual(permissionCanaryRows.at(-1).rows[0].personal_history_permission_canary_result, {
+      canary:'readonly_personal_history_permission_v1',ok:true,rolled_back:true,
+      permission_guard_preserved:true
+    });
+    check('permission canary verifies both guarded RPCs without production identity');
+    const compatSearchRows = await db.exec(compatSearchCanary);
+    assert.deepEqual(compatSearchRows.at(-1).rows[0].approval_search_canary_result, {
+      canary:'readonly_approval_search_v1',ok:true,rolled_back:true,participant_scope_preserved:true
+    });
+    check('frontend-compatible search canary preserves semantics and checks retired RPC ACL');
 
     if (process.env.FINANCE_PERSONAL_HISTORY_PERF === '1') {
       await db.exec(`set fixture.uid='${who.authUserId}'; set fixture.email='fiction@example.invalid';`);
