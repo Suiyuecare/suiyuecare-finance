@@ -47,9 +47,12 @@ assigned safely to a requested tenant/month.
 
 Accounts beginning 4/7 contribute credit minus debit to income; 5/6/9 contribute debit minus
 credit to expenses. Like the existing Finance P&L, account-code groups with
-absolute net ≤ 0.4 are omitted. Signed reversals remain signed. Unlike the
-whole-entity P&L, this approved direct-only view excludes voided rows and
-must be reconciled as its own report.
+absolute net ≤ 0.4 are omitted. Signed reversals remain signed. These account
+classes and the 0.4 rule are draft carryovers, not an approved branch reporting
+policy; the Finance owner must explicitly approve them before activation.
+Unlike the whole-entity P&L, this proposed direct-only view excludes voided
+rows and must be reconciled for the same periods, entry by entry, before it is
+described as verified income and expenses.
 
 `ledger_entries` has no separate approval-state column. This is a booked-ledger
 summary, **not** proof that every entry passed human approval, a cash-flow
@@ -80,7 +83,8 @@ Before activation, Finance release owners must approve the new lineage entry,
 add it to the controlled release-phase catalog, and rehearse on a
 disposable **managed** PostgreSQL clone, run security advisors and explain
 plans, verify service-key/PostgREST and Deno behavior, compare direct monthly
-totals including voids/reversals to reviewed ledger entries, and approve a
+totals including voids/reversals to reviewed ledger entries for the same periods,
+approve the account-class and 0.4 semantics, and approve a
 time-limited binding. Only then may they deploy this one function with its
 custom server-to-server auth configuration and provision distinct Finance
 Edge and Daycare server-only secrets. Do not change JWT verification for other
