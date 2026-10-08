@@ -15318,7 +15318,10 @@ function oauthProviderErrorInfo(code,description){
   code=safeOAuthErrorCode(code);
   var message='Google 登入沒有完成。';
   var next='請重新按「使用 Google 帳號快速登入」，並選擇畫面指定的公司帳號。';
-  if(code==='client_timeout'){
+  if(String(description||'').includes('Google 主信箱尚未由人員管理核准換綁')){
+    message='Finance 已阻止未核准的 Google 主信箱變更。';
+    next='請確認選擇本人在人員管理登記的公司 Google 主帳號；如公司已變更主信箱，請由人員管理核對身分並核准換綁後再登入。';
+  }else if(code==='client_timeout'){
     message='啟動 Google 登入逾時，這次登入尚未完成。';
     next='請再按一次「使用 Google 帳號快速登入」；若持續逾時，請確認網路連線。';
   }else if(code==='access_denied'){
@@ -15339,11 +15342,17 @@ function oauthProviderErrorInfo(code,description){
   }else if(code==='disallowed_useragent'){
     message='目前的內建瀏覽器被 Google 阻擋，無法安全登入。';
     next='請改用 Safari 或 Chrome 開啟正式 Finance 網址後再登入。';
-  }else if(code==='temporarily_unavailable'||code==='server_error'||code==='oauth_start_failed'||code==='exchange_failed'){
+  }else if(code==='server_error'||code==='database_error'||code==='unexpected_failure'){
+    message='Finance 無法完成這次 Google 帳號驗證。';
+    next='請確認選擇本人在人員管理登記的公司 Google 主帳號；若再次失敗，請將事件編號及排查代碼交給系統管理員核對帳號綁定。';
+  }else if(code==='temporarily_unavailable'||code==='oauth_start_failed'||code==='exchange_failed'){
     message='Google 登入服務暫時無法完成這次驗證。';
     next='請稍後重新登入；若再次失敗，請把事件編號交給系統管理員。';
   }
   return{code:code,message:message,next:next,diagnostic:safeOAuthDiagnosticText(description)};
+}
+function financeOAuthErrorDisplayText(stage,eventId,info){
+  return info.message+'\n'+info.next+'\n排查代碼：'+safeOAuthErrorCode(stage)+' / '+info.code+'\n事件編號：'+eventId;
 }
 async function reportFinanceOAuthDiagnostic(payload){
   payload=payload||{};
@@ -15392,7 +15401,7 @@ async function showFinanceOAuthFailure(stage,code,description,opts){
   if(err){
     err.style.display='block';
     err.style.whiteSpace='pre-line';
-    err.textContent=info.message+'\n'+info.next+'\n事件編號：'+eventId;
+    err.textContent=financeOAuthErrorDisplayText(stage,eventId,info);
   }
   showFinanceLoginAccountGuidance({expectedEmail:opts.expectedEmail||'',actualEmail:opts.actualEmail||'',state:(opts.expectedEmail&&opts.actualEmail&&opts.expectedEmail!==opts.actualEmail)?'mismatch':'error'});
   return eventId;
