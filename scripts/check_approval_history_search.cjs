@@ -4,7 +4,7 @@
 // Only transport/render dependencies are fictional; no live identity or data.
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
 const html=fs.readFileSync(process.env.FINANCE_HISTORY_SOURCE||path.resolve(__dirname,'../index.html'),'utf8');
-const block=html.slice(html.indexOf('function approvalHistoryIdentity(){'),html.indexOf('function financeReadSourceSnapshot('));
+const block=html.slice(html.indexOf('function approvalPersonalTab('),html.indexOf('function financeReadSourceSnapshot('));
 const fn=name=>{const start=html.indexOf('function '+name+'(');assert(start>=0,name);return html.slice(start,html.indexOf('\n}',start)+2);};
 const handler=name=>{const start=html.indexOf('window.'+name+'=function(');assert(start>=0,name);return html.slice(start,html.indexOf('\n};',start)+3);};
 const flush=async()=>{for(let i=0;i<4;i++)await new Promise(resolve=>setImmediate(resolve));};
@@ -15,16 +15,16 @@ function fixture(){
  const c={window:{},Promise,Date,Number,String,Object,Array,Math,JSON,Error,AbortController,console:{warn(){},error(){}},
   setTimeout(fn,delay){const id=++next;timers.set(id,{fn,at:now+delay});return id;},clearTimeout(id){timers.delete(id);},
   S:{user:{id:'FICTION',authUserId:'AUTH'},page:'approvals',aT:'h',apprPage:1,apprQuery:'',demoLogin:false},REQS:[],BILLS:[],INVS:[],calls:[],paint:[],env:'test',tenant:'T',financeWorkspaceIdentityBlocked:false,financeAuthIdentityEpoch:1,approvalHistorySearchTimer:null,
-  APPROVAL_HISTORY_RUNTIME:{identity:'',status:'idle',items:[],total:0,allTotal:0,page:1,limit:50,query:'',error:'',updatedAt:'',promise:null,requestSeq:0}};
+  APPROVAL_HISTORY_RUNTIME:{identity:'',status:'idle',items:[],total:0,allTotal:0,page:1,limit:50,query:'',error:'',updatedAt:'',promise:null,requestSeq:0},APPROVAL_PERSONAL_COUNTS:{identity:'',mine:null,h:null}};
  Object.assign(c,{canAccessPage:()=>true,approvalFastBootstrapIdentity:()=>c.tenant+'|auth:'+c.S.user?.authUserId,currentTenantId:()=>c.tenant,activeDataEnvironment:()=>c.env,DEFAULT_TENANT_ID:'T',
-  getSb:()=>({rpc:(name,args)=>{assert.equal(name,'finance_approval_history_summary_v1');let resolve;const result=new Promise(r=>resolve=r),call={args:JSON.parse(JSON.stringify(args)),resolve,aborts:0};c.calls.push(call);return{abortSignal(signal){call.signal=signal;signal.addEventListener('abort',()=>call.aborts++);return this;},then(ok,bad){return result.then(ok,bad);}};}}),
+  hasSupabase:()=>true,getSb:()=>({rpc:(name,args)=>{assert.equal(name,'finance_personal_document_summary_v1');assert.equal(args.p_scope,'all');let resolve;const result=new Promise(r=>resolve=r),call={args:JSON.parse(JSON.stringify(args)),resolve,aborts:0};c.calls.push(call);return{abortSignal(signal){call.signal=signal;signal.addEventListener('abort',()=>call.aborts++);return this;},then(ok,bad){return result.then(ok,bad);}};}}),
   updateApprovalTodoBadge:()=>{},buildApprovals:()=>c.paint.push(c.APPROVAL_HISTORY_RUNTIME.status),remoteReadIssueText:e=>e.message,recordRemoteReadIssue:()=>{},escAttr:x=>String(x),el:()=>null,mapReq:x=>({...x}),mapBill:x=>({...x}),mapInv:x=>({...x}),mergeRemoteRowsByKey:(a,b)=>[...a,...b.filter(x=>!a.some(y=>x.id===y.id))]});
- vm.createContext(c);vm.runInContext(fn('withOperationTimeout')+'\n'+block+'\n'+handler('apprSearch')+'\n'+handler('apprPage'),c);
+ vm.createContext(c);vm.runInContext(fn('withOperationTimeout')+'\n'+block+'\n'+fn('updateApprovalSearchClear')+'\n'+handler('apprSearch')+'\n'+handler('apprPage'),c);
  c.advance=async ms=>{const end=now+ms;for(;;){const due=[...timers].filter(([,t])=>t.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;now=due[1].at;timers.delete(due[0]);due[1].fn();await flush();}now=end;await flush();};
  c.respond=async(index,options={})=>{const call=c.calls[index];assert(call,'dispatched request '+index);call.resolve(options.error?{error:options.error}:{data:payload(c,call.args,options)});await flush();};
  return c;
 }
-function payload(c,args,{id='R',total=1,all=total}={}){const offset=args.p_offset;return{ok:true,mode:'summary',identity:{finance_user_id:c.S.user.id,auth_user_id:c.S.user.authUserId,tenant_id:c.tenant,data_environment:c.env},total,all_total:all,page:{limit:50,offset,has_more:offset+50<total},items:Array.from({length:Math.min(50,Math.max(0,total-offset))},(_,n)=>({record_type:'expense_requests',kind:'req',record_id:id+(offset+n),history_key:'expense_requests:'+id+(offset+n),summary:{source_count:1,has_attachments:false,amount:1250},personally_acted:true}))};}
+function payload(c,args,{id='R',total=1,all=total}={}){const offset=args.p_offset;return{ok:true,mode:'summary',projection_complete:true,identity:{finance_user_id:c.S.user.id,auth_user_id:c.S.user.authUserId,tenant_id:c.tenant,data_environment:c.env},total,all_total:all,page:{limit:50,offset,has_more:offset+50<total},items:Array.from({length:Math.min(50,Math.max(0,total-offset))},(_,n)=>({record_type:'expense_requests',kind:'req',record_id:id+(offset+n),history_key:'expense_requests:'+id+(offset+n),source_count:1,summary:{source_count:1,has_attachments:false,amount:1250},personally_applied:false,personally_acted:true,participation_label:'本人已處理'}))};}
 async function seed(c,query=''){c.S.apprQuery=query;const p=c.loadApprovalHistoryPage({query});await flush();await c.respond(c.calls.length-1,{id:'VERIFIED',total:123});assert((await p).ok);}
 function bindRealAuthListener(c){
  c.S.user.email='fixture-history-token@suiyuecare.com';c.S.user.tenantId=c.tenant;

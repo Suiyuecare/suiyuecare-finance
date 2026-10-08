@@ -71,7 +71,8 @@ async function waitForSearchResults(){
     assert.deepEqual(await scope("Array.from(document.querySelectorAll('#appr-list tbody tr')).map(function(row){return row.dataset.apprKey;})"),['req:fixture-1']);
     assert.equal(await scope("document.querySelector('#appr-list .summary-cell').querySelector('img')===null"),true);
     await b('screenshot',path.join(output,'raw-search-'+width+'.png'));
-    await scope("window.__fixtureItems=[{kind:'inv',raw:INVS[0],rows:INVS.slice(0,2)}];S.aT='mine';S.apprQuery='';S.apprPage=1;buildApprovals();true");
+    // Personal tabs use a scoped server search; exercise this local batch filter on the actionable tab.
+    await scope("window.__fixtureItems=[{kind:'inv',raw:INVS[0],rows:INVS.slice(0,2)}];S.aT='p';S.apprQuery='';S.apprPage=1;buildApprovals();true");
     for(const query of ['後續單獨有描述','客戶乙','INV-002','A&B','550.00']){
       await b('fill','#appr-q',query);
       await waitForSearchResults();

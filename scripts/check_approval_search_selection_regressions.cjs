@@ -54,7 +54,7 @@ function fixture(){
   vm.createContext(c);
   for(const name of ['requestPurposeText','requestNoteText','fullWidthSlice','expenseRequestSummary','approvalRowSummary',
     'billGroupApprovalRows','invoiceGroupApprovalRows','financeDocumentMatchesQuery','requestSearchAmounts',
-    'approvalSearchRowText','approvalSearchText','approvalMatchesQuery','approvalApplySearchSort',
+    'approvalSearchRowText','approvalSearchText','approvalMatchesQuery','approvalPersonalTab','approvalApplySearchSort',
     'approvalItemKey','selectedApprovalItems','approvalBulkBarHtml','refreshApprovalBulkCount',
     'resetApprovalPageSelection','reconcileApprovalPageSelection','approvalPagerHtml','renderApprList'])vm.runInContext(fn(name),c);
   const timerStart=html.indexOf('var approvalLocalSearchTimer=null;'),timerEnd=html.indexOf('window.apprSearch=function(',timerStart);
