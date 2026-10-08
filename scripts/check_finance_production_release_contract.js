@@ -753,6 +753,7 @@ for(const selected of [guard.RELEASE_PHASE_DATABASE_AUDIT_SECURITY,'frontend_com
  assert.equal(evaluated.status,(line.includes('= "database_audit_security_20260922"')&&!line.includes('!= "database_audit_security_20260922"'))||(selected==='frontend_compat'&&(line.trimStart().startsWith('if test "$RELEASE_PHASE" = "frontend_compat"')||line.includes('= "database_audit_controls_20260927"')||line.includes('= "database_hr_contractor_20260928"')||line.includes('= "database_portal_session_20260928"')||line.includes('= "database_external_labor_20260928"')||line.includes('= "database_attachment_claim_20261001"')))?0:1,selected+' executes its required readonly canaries without employee claims: '+line);
 }
 assert.ok(candidateJob.indexOf('pnpm test:finance-ui-interactions')>candidateJob.indexOf('pnpm exec playwright install')&&candidateJob.indexOf('pnpm test:finance-ui-interactions')<candidateJob.indexOf('vercel@59.3.0 build --prod'));
+assert.ok(candidateJob.indexOf('pnpm test:invoice-item-bind-browser')>candidateJob.indexOf('pnpm exec playwright install')&&candidateJob.indexOf('pnpm test:invoice-item-bind-browser')<candidateJob.indexOf('vercel@59.3.0 build --prod'));
 assert.ok(JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).scripts['release:preflight'].includes('pnpm test:audit-security'));
 
 const revenuePendingAt=databaseJob.indexOf('elif test "$PHASE_STATE" = "pending" && test "$RELEASE_PHASE" = "database_revenue_repair_20260924"; then');

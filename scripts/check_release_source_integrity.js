@@ -523,7 +523,8 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'test:personnel-save': 'node scripts/check_personnel_save_reliability.cjs && node scripts/test_personnel_save_conflict_nonretry.mjs && node scripts/test_member_save_reliable_receipt.mjs',
   'test:history-performance': "node scripts/check_startup_read_coordination.cjs && node scripts/check_approval_history_loading.cjs && node scripts/check_approval_history_page_first.cjs && node scripts/test_history_performance_release_batch.mjs",
   'test:employee-reliability': "node scripts/check_employee_payment_concerns.cjs && node scripts/check_employee_progress_contacts.cjs && node scripts/check_employee_form_ux.js && node scripts/check_employee_auth_notifications.cjs && node scripts/check_expense_submission_identity.cjs && node scripts/check_expense_posting_reliability.cjs && node scripts/check_expense_revision_reliability.cjs && node scripts/check_expense_revision_export_version.cjs && node scripts/test_employee_reliability_release_batch.mjs",
-  'test:invoice-item-review': 'node scripts/check_invoice_accounting_unified_contract.cjs && node scripts/check_invoice_item_manual_binding_browser.cjs',
+  'test:invoice-item-review': 'node scripts/check_invoice_accounting_unified_contract.cjs',
+  'test:invoice-item-bind-browser': 'node scripts/check_invoice_item_manual_binding_browser.cjs',
   'test:bill-attachments': 'node scripts/check_bill_approval_attachment_flow.cjs',
   'test:amount-search': "node scripts/check_document_amount_search.cjs && node scripts/check_reporting_workspace_amount_search.cjs && node scripts/check_history_amount_search.cjs && node scripts/test_amount_search_release_batch.mjs",
   'test:audit-readiness': "node scripts/check_audit_readiness_engine.cjs && node scripts/check_finance_audit_readiness.cjs && node scripts/check_audit_workspace_runtime.cjs && node scripts/check_compliance_commit.cjs && node scripts/test_audit_readiness_release_batch.mjs",
@@ -1092,6 +1093,9 @@ const workflow = fs.existsSync(path.join(ROOT, '.github/workflows/stability-gate
 check('CI runs source and root-cause gates before build',
   workflow.indexOf('pnpm release:preflight') > -1
     && workflow.indexOf('pnpm release:preflight') < workflow.indexOf('pnpm release:build'));
+check('CI runs invoice binding browser coverage only after installing browsers',
+  workflow.indexOf('pnpm test:invoice-item-bind-browser') > workflow.indexOf('pnpm exec playwright install')
+    && workflow.indexOf('pnpm test:invoice-item-bind-browser') < workflow.indexOf('pnpm release:build'));
 check('CI explicitly runs the environment isolation contract before preflight and build',
   workflow.indexOf('pnpm release:environment-isolation') > -1
     && workflow.indexOf('pnpm release:environment-isolation') < workflow.indexOf('pnpm release:preflight')
