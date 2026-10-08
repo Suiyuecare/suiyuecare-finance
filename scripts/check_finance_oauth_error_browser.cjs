@@ -62,7 +62,7 @@ const runtime = [
 ].map(functionSource).join('\n');
 
 async function run() {
-  const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome' });
+  const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || process.env.FINANCE_BROWSER_CHANNEL || 'chrome' });
   try {
     for (const width of [390, 375]) {
       const page = await browser.newPage({ viewport: { width, height: 844 }, deviceScaleFactor: 1 });
