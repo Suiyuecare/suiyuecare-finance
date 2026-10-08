@@ -110,6 +110,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'supabase/migrations/20261005035438_procurement_specialized_action_guard_v1.sql',
   'scripts/check_org_chart_clarity_browser.cjs',
   'scripts/fixtures/org_chart_clarity.cjs',
+  'assets/styles/org-chart-view.css',
   'scripts/check_invoice_ocr_contract.cjs',
   'scripts/check_shareholder_invoice_ocr_browser.cjs',
   'scripts/check_personnel_login_reliability.cjs',

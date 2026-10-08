@@ -1,0 +1,32 @@
+/* Read-only compact graph. Geometry is shared with the SVG/PNG download. */
+#pg-orgchart .org-explorer-content{min-width:0}
+#pg-orgchart .org-graph-downloads{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:0 16px 16px;color:var(--muted);font-size:13px;line-height:1.6}
+#pg-orgchart .org-graph-downloads>div,#pg-orgchart .org-graph-toolbar,#pg-orgchart .org-graph-toolbar>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#pg-orgchart .org-graph-downloads button,#pg-orgchart .org-graph-toolbar button{font:inherit;min-height:44px;min-width:44px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel,#fff);color:var(--ink);cursor:pointer;box-shadow:none}
+#pg-orgchart .org-graph-downloads button:disabled{opacity:.6;cursor:wait}
+#pg-orgchart .org-graph-downloads button:focus-visible,#pg-orgchart .org-graph-toolbar button:focus-visible,#pg-orgchart .org-compact-card:focus-visible,#pg-orgchart .org-compact-stage:focus-visible{outline:3px solid var(--br);outline-offset:3px}
+#pg-orgchart .org-graph-guide{font-size:13px;line-height:1.6;color:var(--muted);padding:0 0 10px}
+#pg-orgchart .org-graph-toolbar{margin-bottom:10px;font-size:13px;color:var(--muted)}
+#org-graph-zoom-label{min-width:42px;text-align:center;font-variant-numeric:tabular-nums}
+#pg-orgchart .org-compact-stage{width:100%;height:580px;min-height:320px!important;max-height:65vh!important;padding:12px!important;border:1px solid var(--line);border-radius:10px;overflow:auto!important;scroll-snap-type:none!important;scrollbar-gutter:auto;overscroll-behavior:contain;background-color:var(--cream);background-image:radial-gradient(circle at 1px 1px,#e6dacb 1px,transparent 0);background-size:20px 20px}
+#pg-orgchart .org-graph-scaled{position:relative;min-width:0;overflow:hidden}
+#pg-orgchart .org-compact-canvas{position:relative;min-width:0;transform-origin:top left;isolation:isolate}
+#pg-orgchart .org-compact-connectors{position:absolute;inset:0;z-index:0;overflow:visible;pointer-events:none}
+#pg-orgchart .org-compact-connectors .org-chart-connector{stroke:#b76518;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+#pg-orgchart button.org-compact-card{position:absolute;display:block;z-index:1;min-width:0;min-height:0!important;max-width:none;margin:0;padding:12px 14px;border:1px solid #d7c7b6;border-radius:10px;background:var(--panel,#fff);color:var(--ink);text-align:left;font-family:var(--font-sans);font-weight:400;box-shadow:none;cursor:pointer;transform:none;transition:none;overflow:visible;white-space:normal}
+#pg-orgchart button.org-compact-card::before,#pg-orgchart button.org-compact-card::after{display:none!important}
+#pg-orgchart button.org-compact-card>span{display:block;margin:0;padding:0;white-space:normal;color:var(--muted);font-weight:400;letter-spacing:normal;overflow:visible;text-overflow:clip}
+#pg-orgchart button.org-compact-card>.org-compact-name{color:var(--ink);font-weight:600}
+#pg-orgchart button.org-compact-card>.org-compact-warning{color:#934707}
+#pg-orgchart button.org-compact-card.is-context{background:#fff8ec}
+#pg-orgchart button.org-compact-card.is-warning{border-color:#b45309}
+#pg-orgchart button.org-compact-card:hover,#pg-orgchart button.org-compact-card.is-selected{border-color:var(--br);box-shadow:0 0 0 1px var(--br);transform:none}
+@media(max-width:760px){
+ #pg-orgchart .org-graph-downloads{padding:0 12px 12px;font-size:13px}
+ #pg-orgchart .org-graph-downloads>div{width:100%}
+ #pg-orgchart .org-graph-downloads button{flex:1}
+ #pg-orgchart .org-compact-stage{height:480px;max-height:58vh!important}
+ #pg-orgchart .org-graph-toolbar{gap:6px}
+}
+
+#pg-orgchart .org-graph-export-status{margin:0 16px 14px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--brxxl);color:var(--ink);font-size:13px;line-height:1.6}
