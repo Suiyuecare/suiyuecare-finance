@@ -137,6 +137,8 @@ jobs:
           node scripts/check_admin_action_browser.cjs
           node scripts/check_shareholder_invoice_ocr_browser.cjs
           node scripts/check_personnel_login_browser.cjs
+          node scripts/check_finance_auth_recovery_browser.cjs
+          node scripts/check_finance_oauth_error_browser.cjs
           pnpm test:procurement-closeout-browser
           pnpm test:personnel-save-browser
           pnpm test:org-chart-browser

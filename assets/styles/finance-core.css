@@ -1370,6 +1370,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .login-account-guide-detail{font-size:11px;margin-top:3px;white-space:pre-line;overflow-wrap:anywhere}
 .login-account-guide button{width:100%;margin-top:8px;border:1px solid currentColor;background:#fff;border-radius:7px;padding:7px 9px;color:inherit;font-size:11px;font-weight:800;cursor:pointer}
 .login-account-guide button:disabled{opacity:.55;cursor:wait}
+#login-screen #login-err{line-height:1.55;overflow-wrap:anywhere}
 .oauth-webview-warning{display:none;background:#fff8ed;border:1px solid #efd7b8;border-radius:9px;padding:9px 10px;margin:0 0 12px;color:#7c3f00;font-size:11px;line-height:1.55}
 .oauth-webview-warning strong{display:block;color:#5c3800;font-size:12px;margin-bottom:3px}
 .oauth-webview-warning button{margin-top:7px;border:1px solid #dfc9b1;background:#fff;border-radius:7px;padding:5px 8px;color:#7c3f00;font-size:11px;font-weight:750;cursor:pointer}
