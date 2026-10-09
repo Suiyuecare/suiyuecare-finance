@@ -105,7 +105,6 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
-    "agent-browser": "0.27.0",
     "esbuild": "0.28.2",
     "pg": "8.20.0",
     "playwright": "1.62.1"

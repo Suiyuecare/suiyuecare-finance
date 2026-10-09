@@ -1,3 +1,2 @@
 allowBuilds:
-  agent-browser: true
   esbuild: true

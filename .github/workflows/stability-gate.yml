@@ -108,15 +108,25 @@ jobs:
         with:
           version: 11.21.0
           run_install: false
-      - name: Install locked dependencies and browsers
+      - name: Install locked dependencies and browser
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
           pnpm exec playwright install --with-deps chromium webkit
-          test "$(pnpm exec agent-browser --version)" = "agent-browser 0.27.0"
-          printf '%s  %s\n' 'c249a948cb6a60df94320e319c372a5e679466ca8ea2cc4e69bac4fcc7c270f3' 'node_modules/agent-browser/bin/agent-browser-linux-x64' | sha256sum --check
-          pnpm exec agent-browser install
-          echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
+          test -x "$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')"
+      - name: Install checksum-pinned browser verifier for actual DOM checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          verifier_dir="$RUNNER_TEMP/finance-agent-browser-bin"
+          mkdir -p "$verifier_dir"
+          curl --fail --location --silent --show-error --retry 3 \
+            'https://github.com/vercel-labs/agent-browser/releases/download/v0.27.0/agent-browser-linux-x64' \
+            --output "$verifier_dir/agent-browser"
+          printf '%s  %s\n' 'c249a948cb6a60df94320e319c372a5e679466ca8ea2cc4e69bac4fcc7c270f3' "$verifier_dir/agent-browser" | sha256sum --check
+          chmod 755 "$verifier_dir/agent-browser"
+          test "$("$verifier_dir/agent-browser" --version)" = 'agent-browser 0.27.0'
+          echo "$verifier_dir" >> "$GITHUB_PATH"
       - name: Configure private disposable PostgreSQL for browser concurrency
         env:
           FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json
