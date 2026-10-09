@@ -108,10 +108,15 @@ jobs:
         with:
           version: 11.21.0
           run_install: false
-      - name: Install locked dependencies and browser
+      - name: Install locked dependencies and browsers
         run: |
+          set -euo pipefail
           pnpm install --frozen-lockfile
           pnpm exec playwright install --with-deps chromium webkit
+          test "$(pnpm exec agent-browser --version)" = "agent-browser 0.27.0"
+          printf '%s  %s\n' 'c249a948cb6a60df94320e319c372a5e679466ca8ea2cc4e69bac4fcc7c270f3' 'node_modules/agent-browser/bin/agent-browser-linux-x64' | sha256sum --check
+          pnpm exec agent-browser install
+          echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Configure private disposable PostgreSQL for browser concurrency
         env:
           FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json
