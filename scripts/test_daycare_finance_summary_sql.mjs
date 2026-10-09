@@ -3,8 +3,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { createSummaryHandler } from '../supabase/functions/daycare-store-finance-summary/core.mjs';
 import { createFinanceRpc } from '../supabase/functions/daycare-store-finance-summary/adapter.mjs';
+
+const financeStatements = createRequire(import.meta.url)('../assets/engines/financial-statements.js');
 
 const modulePath = process.env.PGLITE_MODULE_PATH;
 if (!modulePath) throw new Error('Set PGLITE_MODULE_PATH to an installed PGlite dist/index.js; no network database is used.');
@@ -139,7 +142,7 @@ try {
     assert.equal((await summary()).income, '14.75');
     await db.exec("update public.ledger_entries set voided_at=null where credit=100.25");
   });
-  await check('Finance rowsFromMap account-group threshold is preserved, never applied per line', async () => {
+  await check('Finance statement engine account-group threshold is preserved, never applied per line', async () => {
     await db.exec(`insert into public.ledger_entries (tenant_id,data_environment,entity_id,department_code,entry_date,account_code,debit,credit) values
       ('${tenant}','production','E6','J1101','2026-11-01','4101',0,0.25),
       ('${tenant}','production','E6','J1101','2026-11-01','4101',0,0.25),
@@ -148,7 +151,17 @@ try {
       ('${tenant}','production','E6','J1101','2026-11-01','6101',0.40,0),
       ('${tenant}','production','E6','J1101','2026-11-01','6102',0,0.41)`);
     const result = await summary('2026-11');
-    assert.equal(result.income, '0.09'); assert.equal(result.expenses, '-0.41'); assert.equal(result.entry_count, 6);
+    const expected = financeStatements.profitLoss(financeStatements.normalizeRows([
+      { account_code: '4101', debit: 0, credit: 0.25 },
+      { account_code: '4101', debit: 0, credit: 0.25 },
+      { account_code: '4102', debit: 0, credit: 0.40 },
+      { account_code: '7101', debit: 0.41, credit: 0 },
+      { account_code: '6101', debit: 0.40, credit: 0 },
+      { account_code: '6102', debit: 0, credit: 0.41 },
+    ]));
+    assert.equal(result.income, expected.totalRevenue.toFixed(2));
+    assert.equal(result.expenses, expected.totalExpense.toFixed(2));
+    assert.equal(result.income, '0.49'); assert.equal(result.expenses, '-0.01'); assert.equal(result.entry_count, 6);
   });
   await check('STABLE invoker function, no definer elevation, RLS enforced on binding', async () => {
     const r = (await db.query("select provolatile,prosecdef from pg_proc where oid='public.finance_daycare_store_summary_v1(uuid,uuid,uuid,text)'::regprocedure")).rows[0];

@@ -122,18 +122,18 @@ begin
     from scoped group by account_code
   )
   select
-    coalesce(sum(case when left(account_code, 1) in ('4','7') and abs(credit_net) > 0.4 then credit_net else 0 end), 0),
-    coalesce(sum(case when left(account_code, 1) in ('5','6','9') and abs(credit_net) > 0.4 then -credit_net else 0 end), 0),
+    coalesce(sum(case when left(account_code, 1) in ('4','7') and abs(credit_net) >= 0.005 then credit_net else 0 end), 0),
+    coalesce(sum(case when left(account_code, 1) in ('5','6','9') and abs(credit_net) >= 0.005 then -credit_net else 0 end), 0),
     (select count(*) from scoped)
   into v_income, v_expenses, v_count
   from grouped;
 
   -- Same ledger account classes as Finance P&L, but direct-department and
   -- non-void only. Do not infer approval/payment status or sum invoices.
-  -- rowsFromMap excludes account groups with absolute net <= 0.4; retain that
-  -- existing P&L threshold rather than silently creating a different report.
-  -- Finance's whole-entity P&L does not filter voided_at; this approved store
-  -- contract intentionally excludes voided rows and must be reconciled alone.
+  -- The Finance statement engine's groupRows excludes account groups with
+  -- absolute net < 0.005. Apply its threshold to groups, never individual lines.
+  -- Finance's statement engine also removes voided rows. This store contract
+  -- differs by exact direct-department scope and must be reconciled alone.
   if v_count > 1000000 or abs(v_income) >= 1000000000000000 or abs(v_expenses) >= 1000000000000000 then
     return jsonb_build_object('status', 'unavailable', 'error_code', 'FINANCE_SUMMARY_LIMIT_EXCEEDED');
   end if;
