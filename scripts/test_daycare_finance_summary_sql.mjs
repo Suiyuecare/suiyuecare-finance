@@ -35,7 +35,7 @@ await db.exec(`
  create table public.ledger_entries (
  id bigint generated always as identity primary key, tenant_id uuid not null, data_environment text not null,
  entity_id text, department_code text, entry_date date not null, account_code text,
- debit numeric(14,2), credit numeric(14,2), voided_at timestamptz);
+ debit numeric(14,2), credit numeric(14,2), voided_at timestamptz, source_type text);
  alter table public.ledger_entries enable row level security;
  grant usage on schema public to anon, authenticated, service_role;
  grant select on public.ledger_entries to service_role;
@@ -142,6 +142,13 @@ try {
     assert.equal((await summary()).income, '14.75');
     await db.exec("update public.ledger_entries set voided_at=null where credit=100.25");
   });
+  await check('Finance closing entries are excluded from both totals and entry count', async () => {
+    await db.exec(`insert into public.ledger_entries (tenant_id,data_environment,entity_id,department_code,entry_date,account_code,debit,credit,source_type)
+      values ('${tenant}','production','E6','J1101','2026-09-30','4101',0,900,'period_close')`);
+    const result = await summary();
+    assert.equal(result.income, '115.00'); assert.equal(result.expenses, '2.25'); assert.equal(result.entry_count, 7);
+    await db.exec("delete from public.ledger_entries where source_type='period_close'");
+  });
   await check('Finance statement engine account-group threshold is preserved, never applied per line', async () => {
     await db.exec(`insert into public.ledger_entries (tenant_id,data_environment,entity_id,department_code,entry_date,account_code,debit,credit) values
       ('${tenant}','production','E6','J1101','2026-11-01','4101',0,0.25),
@@ -162,6 +169,16 @@ try {
     assert.equal(result.income, expected.totalRevenue.toFixed(2));
     assert.equal(result.expenses, expected.totalExpense.toFixed(2));
     assert.equal(result.income, '0.49'); assert.equal(result.expenses, '-0.01'); assert.equal(result.entry_count, 6);
+  });
+  await check('Finance-normalized account codes cancel before grouping', async () => {
+    await db.exec(`insert into public.ledger_entries (tenant_id,data_environment,entity_id,department_code,entry_date,account_code,debit,credit) values
+      ('${tenant}','production','E6','J1101','2026-12-01','4101',0,0.25),
+      ('${tenant}','production','E6','J1101','2026-12-01',' 4101 ',0.25,0),
+      ('${tenant}','production','E6','J1101','2026-12-01','7101',0,1),
+      ('${tenant}','production','E6','J1101','2026-12-01','6101',0.50,0),
+      ('${tenant}','production','E6','J1101','2026-12-01','6101 ',0,0.50)`);
+    const result = await summary('2026-12');
+    assert.equal(result.income, '1.00'); assert.equal(result.expenses, '0.00'); assert.equal(result.entry_count, 5);
   });
   await check('STABLE invoker function, no definer elevation, RLS enforced on binding', async () => {
     const r = (await db.query("select provolatile,prosecdef from pg_proc where oid='public.finance_daycare_store_summary_v1(uuid,uuid,uuid,text)'::regprocedure")).rows[0];

@@ -36,7 +36,8 @@ shared costs and other departments are excluded without guessed allocation.
 
 The SQL reads only `ledger_entries` rows for the binding's exact tenant,
 `data_environment='production'`, entity, department, and half-open month,
-with `voided_at IS NULL`. It rejects a month if the same department has
+with `voided_at IS NULL` and without period/year-end closing entries, as in
+the Finance P&L engine. It trims account codes before grouping. It rejects a month if the same department has
 non-void production rows in that tenant with another or missing entity. Both
 `entry_count` and amounts use this same direct-row scope.
 If an included month's direct rows lack an account code, debit, or credit, the
@@ -50,7 +51,7 @@ credit to expenses. Like the existing Finance statement engine, account-code
 groups with absolute net < 0.005 are omitted. Signed reversals remain signed.
 These account classes and the 0.005 rule are draft carryovers, not an approved
 branch reporting policy; the Finance owner must explicitly approve them before activation.
-The Finance statement engine also removes voided rows before calculating P&L.
+The Finance statement engine also removes voided and closing rows before calculating P&L.
 This proposed view differs in its exact direct-department scope and must be
 reconciled for the same periods, entry by entry, before it is described as
 verified income and expenses.

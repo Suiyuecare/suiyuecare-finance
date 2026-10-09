@@ -105,17 +105,19 @@ begin
   where entry.tenant_id = v_binding.tenant_id and entry.data_environment = 'production'
     and entry.department_code = v_binding.department_code
     and entry.voided_at is null
+    and coalesce(entry.source_type, '') not in ('period_close', 'closing_entry', 'year_end_close')
     and entry.entry_date >= v_start and entry.entry_date < v_start + interval '1 month';
   if v_ambiguous <> 0 or v_incomplete <> 0 then
     return jsonb_build_object('status', 'unavailable', 'error_code', 'FINANCE_SCOPE_INCOMPLETE');
   end if;
   with scoped as materialized (
-    select entry.account_code, entry.debit, entry.credit
+    select btrim(entry.account_code) as account_code, entry.debit, entry.credit
     from public.ledger_entries entry
     where entry.tenant_id = v_binding.tenant_id and entry.data_environment = 'production'
       and entry.entity_id = v_binding.entity_id
       and entry.department_code = v_binding.department_code
       and entry.voided_at is null
+      and coalesce(entry.source_type, '') not in ('period_close', 'closing_entry', 'year_end_close')
       and entry.entry_date >= v_start and entry.entry_date < v_start + interval '1 month'
   ), grouped as (
     select account_code, sum(credit - debit) as credit_net
@@ -132,8 +134,8 @@ begin
   -- non-void only. Do not infer approval/payment status or sum invoices.
   -- The Finance statement engine's groupRows excludes account groups with
   -- absolute net < 0.005. Apply its threshold to groups, never individual lines.
-  -- Finance's statement engine also removes voided rows. This store contract
-  -- differs by exact direct-department scope and must be reconciled alone.
+  -- Finance's statement engine also removes voided and closing entries and
+  -- trims account codes. This store contract differs by exact department scope.
   if v_count > 1000000 or abs(v_income) >= 1000000000000000 or abs(v_expenses) >= 1000000000000000 then
     return jsonb_build_object('status', 'unavailable', 'error_code', 'FINANCE_SUMMARY_LIMIT_EXCEEDED');
   end if;
