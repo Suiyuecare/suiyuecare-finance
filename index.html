@@ -15853,7 +15853,7 @@ function redirectFinanceLogoutToPortalLogin(){
 window.financeLogout=async function(){
   if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，現在不能登出。請勿離開目前畫面。');return;}
   return window.FinanceModuleLogout.start({
-    client:getSb,stopRealtime:stopRealtime,returnToPortal:function(){location.assign(PORTAL_MODULE_URL);},
+    client:getSb,stopRealtime:stopRealtime,returnToPortal:function(){location.assign(PORTAL_MODULE_URL);},pendingToPortal:function(){location.replace(PORTAL_MODULE_URL+'?logout=pending');},
     clearPrivate:function(){
       financeLogoutInProgress=true;++financeAuthIdentityEpoch;setFinanceWorkspaceIdentityBlocked(true);
       clearFinanceLoginState();REQS=[];VOUCHERS=[];INVS=[];BILLS=[];LEDGER=[];DRAFTS=[];
