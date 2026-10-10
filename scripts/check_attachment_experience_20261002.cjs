@@ -320,11 +320,14 @@ async function main(){
   {
     const nodes={'batch-pw':{style:{}},'batch-prog':{style:{}},'batch-pl':{textContent:''},'batch-fn':{textContent:''},'batch-dz':{classList:{add(){}}}};
     const c={S:{},BATCH_INVOICE_READ_GENERATION:0,el:id=>nodes[id]};c.window=c;vm.createContext(c);
-    vm.runInContext(between('function setBatchInvoiceUploadFile(','function invoiceOcrDataToBatchRows('),c);
-    const selected={name:'invoice.pdf'};c.setBatchInvoiceUploadFile(selected);
+    vm.runInContext(between('function batchInvoiceSourceFiles(','function invoiceOcrDataToBatchRows('),c);
+    const selected={name:'invoice.pdf'},second={name:'receipt.pdf'};
+    c.setBatchInvoiceUploadFile(selected);
+    c.setBatchInvoiceUploadFile(second);
     assert.equal(c.S.bUploadFile,selected);
+    assert.equal(c.S.bUploadFiles.length,2,'both source files remain on the same application');
     assert.equal(nodes['batch-prog'].style.width,'0%');
-    assert.match(nodes['batch-pl'].textContent,/尚未保存/);
+    assert.match(nodes['batch-pl'].textContent,/送出時才正式保存/);
     assert.doesNotMatch(nodes['batch-pl'].textContent,/已上傳/);
     console.log('PASS selecting a batch invoice does not claim it was uploaded');
   }

@@ -110,6 +110,28 @@ function setup(){
     console.log('PASS 18 + 13 invoices become two complete approval groups and two action entries');
   }
   {
+    const {c}=setup();
+    c.INVS.forEach(row=>{row.applicant='同一申請人';row.desc='相同開立原因';row.verified=true;});
+    const groups=c.uniqueInvoiceGroups(c.INVS);
+    assert.equal(groups.length,2);
+    assert.deepEqual(plain(groups.map(group=>c.invoiceGroupRows(group).length)),[18,13]);
+    const pending=c.approvalPendingCandidateItems(c.INVS.map(raw=>({kind:'inv',raw,rows:[raw]})));
+    assert.equal(pending.length,2);
+    assert.deepEqual(plain(pending.map(item=>item.approvalSummaryGroupKey)),['batch:batch-3','batch:batch-4']);
+    console.log('PASS same reason and applicant on distinct submissions never merge across batch IDs');
+  }
+  {
+    const {c}=setup();
+    const file={path:'fictional/shared-source.pdf'};
+    const legacy=[
+      {id:'legacy-1',no:'INV-OLD-1',sourceBillId:'shared-bill',contractId:'shared-contract',period:'2026-10',steps:[{files:[file]}]},
+      {id:'legacy-2',no:'INV-OLD-2',sourceBillId:'shared-bill',contractId:'shared-contract',period:'2026-10',steps:[{files:[file]}]}
+    ];
+    assert.deepEqual(plain(legacy.map(c.invoiceGroupKey)),['inv:legacy-1','inv:legacy-2']);
+    assert.equal(c.uniqueInvoiceGroups(legacy).length,2);
+    console.log('PASS legacy invoices sharing source attachment, bill, contract and period remain distinct applications');
+  }
+  {
     const {c,nodes}=setup();
     c.INVS=c.INVS.filter(row=>row.id!==group3[17]);
     const pending=c.approvalPendingCandidateItems(c.INVS.map(raw=>({kind:'inv',raw,rows:[raw]})));
