@@ -1,5 +1,13 @@
 # Finance 受保護正式發布
 
+## 2026-10-10 多張發票合併簽核
+
+本次使用 `database_invoice_batch_approval_20261010`，`migration_versions` 固定為 `20261010120000,20261010130000`。同一批發票在待簽核、開立發票及個人歷史顯示為一筆，批次明細仍保留每張發票、金額及稽核紀錄；簽核只對該批完整且同一關卡的授權發票執行一次交易。通知僅更新未來的待辦事件，不回寫已寄送通知或營運單據。
+
+在 GitHub Actions 手動啟動 `Finance Protected Production Release`，以受保護 `main` 的 40 碼 SHA 填入 `candidate_sha`，選上述 phase 與固定兩版，`confirmation` 填 `PROMOTE FINANCE PRODUCTION`。同一次受保護流程先建立封存候選，檢查正式環境與來源指紋，在回滾交易中演練兩版 migration、postflight 與唯讀 canary，再原子套用兩版及 ledger。資料庫驗證通過後提升同一份候選前台，最後核對正式網域的 deployment 與 manifest。若已完整套用，恢復執行只驗證而不重跑；只套用其中一版或來源雜湊不符時停止。
+
+以下為既有發布紀錄，不能取代本次固定 phase 與版本。
+
 發票收入入帳結果查核使用 `database_invoice_revenue_result_20261002=20261002151725`。此資料庫階段先核對前置版次、發票與帳簿結構，對唯讀 RPC、migration ledger 及權限執行交易內演練與回滾，再原子套用並跑未登入身分 canary。此階段不提升候選前台，正式網域的 deployment ID 與 manifest 位元組在套版前後必須相同；待資料庫驗證完成，再用 `frontend_compat=none` 發布使用查核 RPC 的前台。
 
 2026-10-02 的人工會計浮點尾差修正使用 `database_human_float_20261002=20261002035707`。這是獨立資料庫階段：核對既有函式、觸發器與 migration ledger，先在交易中演練及回滾，再以同一交易套用函式與 ledger，驗證新函式及虛構資料 canary。候選 deployment 必須維持未指派正式網域；`promote` job 對此階段明確跳過，資料庫作業前後的正式站 alias deployment ID 與 manifest 位元組必須相同。若要發布前台，需另行執行 `frontend_compat=none` 並重新驗收。

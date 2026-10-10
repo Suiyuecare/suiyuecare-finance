@@ -40,9 +40,28 @@ function summary(c,{table='invoices',kind='inv',key='invoices:I1',id='I1',amount
  summary:{type:'invoice',type_label:'開立發票',applicant:'虛構人',description:'日照自費',entity_id:'E',entity_name:'虛構單位',department_code:'D',department_name:'日間照顧課',amount,source_count:count,has_attachments:attachments,request_date:'2026-09-15'}}]:[]};
 }
 function detail(c,{table='invoices',kind='inv',key='invoices:I1',id='I1',ids=['I1'],applied=false}={}){
- return{ok:true,identity:identity(c),item:{history_key:key,kind,record_type:table,record_id:id,batch_id:'B',source_count:ids.length,
+ return{ok:true,identity:identity(c),item:{history_key:key,kind,record_type:table,record_id:id,batch_id:'B',source_count:ids.length,source_ids:ids.slice(),
  personally_applied:applied,personally_acted:!applied,participation_label:applied?'我申請的':'本人已處理',participant_steps:[],
- source_rows:ids.map(id=>({id,tenant_id:c.tenant,data_environment:c.env,batch_id:'B',row_version:7,files:[{name:'完整憑證.pdf',storage_path:'fictional/proof'}],form_payload:{accountingLines:[{item:'日照',net:1250,tax:0,gross:1250,manualOverride:true}]}}))}};
+ summary:{source_count:ids.length,amount:ids.length===1?1250.5:ids.length*100,has_attachments:true},
+ source_rows:ids.map(id=>({id,tenant_id:c.tenant,data_environment:c.env,batch_id:'B',row_version:7,total:ids.length===1?1250.5:100,files:[{name:'完整憑證.pdf',storage_path:'fictional/proof'}],form_payload:{accountingLines:[{item:'日照',net:1250,tax:0,gross:1250,manualOverride:true}]}}))}};
+}
+const groupedIds=[Array.from({length:18},(_,i)=>'B3-'+String(i+1).padStart(2,'0')),Array.from({length:13},(_,i)=>'B4-'+String(i+1).padStart(2,'0'))];
+function groupedSummary(c,applied){
+ const payload=summary(c,{total:2,applied});
+ payload.all_total=2;
+ payload.items=groupedIds.map((ids,index)=>({
+  history_key:'invoices:'+ids[0],kind:'inv',record_type:'invoices',record_id:ids[0],record_no:'INV-'+(index+3),batch_id:'B'+(index+3),source_count:ids.length,source_ids:ids.slice(),
+  personally_applied:applied,personally_acted:!applied,participation_label:applied?'我申請的':'本人已處理',last_participated_at:'2026-09-15T01:00:00Z',
+  summary:{type:'invoice',type_label:'開立發票',applicant:'虛構人',description:'整批日照自費',entity_id:'E',entity_name:'虛構單位',department_code:'D',department_name:'日間照顧課',amount:ids.length*100,source_count:ids.length,has_attachments:true,request_date:'2026-09-15'}
+ }));
+ return payload;
+}
+function groupedDetail(c,index,applied){
+ const ids=groupedIds[index],batchId='B'+(index+3),payload=detail(c,{key:'invoices:'+ids[0],id:ids[0],ids,applied});
+ payload.item.batch_id=batchId;
+ payload.item.source_ids=ids.slice();
+ payload.item.source_rows.forEach(row=>{row.batch_id=batchId;});
+ return payload;
 }
 async function seed(c,opts){const p=c.loadApprovalHistoryPage();await flush();await c.respond(0,summary(c,opts));assert((await p).ok);c.renderApprovalHistorySummaries(c.APPROVAL_HISTORY_RUNTIME);}
 
@@ -111,7 +130,7 @@ function realPermissionRefreshFixture(options){
  await check('an in-flight permission response cannot apply after its declared capability is removed',async()=>{
   const c=permissionRefreshFixture(),before=JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),old=c.refreshCurrentPermissionSnapshotRuntime('enabled');c.FINANCE_OPTIONAL_READ_CAPABILITIES={};await c.respondPermission(0);assert.equal(await old,false);assert.equal(JSON.stringify(c.CURRENT_PERMISSION_SNAPSHOT),before);assert.equal(c.calls.length,0);
  });
- await check('summaries preserve all authoritative cache bytes and render counts/decimal amounts',async()=>{const c=fixture();c.REQS=[{id:'R',files:['a'],formPayload:{manualOverride:true}}];c.INVS=[{id:'OLD',steps:[1],rowVersion:11}];const before=JSON.stringify([c.REQS,c.BILLS,c.INVS]);await seed(c);assert.equal(JSON.stringify([c.REQS,c.BILLS,c.INVS]),before);assert(!('raw' in c.APPROVAL_HISTORY_RUNTIME.items[0]));assert.match(c.node('appr-sub').textContent,/過往單據 737 張/);assert.match(c.node('appr-list').innerHTML,/1,250\.5/);assert.match(c.node('appr-list').innerHTML,/data-history-open/);});
+ await check('summaries preserve all authoritative cache bytes and render counts/decimal amounts',async()=>{const c=fixture();c.REQS=[{id:'R',files:['a'],formPayload:{manualOverride:true}}];c.INVS=[{id:'OLD',steps:[1],rowVersion:11}];const before=JSON.stringify([c.REQS,c.BILLS,c.INVS]);await seed(c);assert.equal(JSON.stringify([c.REQS,c.BILLS,c.INVS]),before);assert(!('raw' in c.APPROVAL_HISTORY_RUNTIME.items[0]));assert.match(c.node('appr-sub').textContent,/過往單據 737 筆/);assert.match(c.node('appr-list').innerHTML,/1,250\.5/);assert.match(c.node('appr-list').innerHTML,/data-history-open/);});
  await check('My Applications and Past Documents use separate server scopes and counts',async()=>{const c=fixture();c.S.aT='mine';const mine=c.loadApprovalHistoryPage();await flush();assert.equal(c.calls[0].name,'finance_personal_document_summary_v1');assert.equal(c.calls[0].args.p_scope,'mine');await c.respond(0,summary(c,{applied:true}));assert((await mine).ok);assert.equal(c.APPROVAL_PERSONAL_COUNTS.mine,737);const mineIdentity=c.APPROVAL_HISTORY_RUNTIME.identity;c.S.aT='h';const past=c.loadApprovalHistoryPage();await flush();assert.equal(c.calls[1].args.p_scope,'all');assert.notEqual(c.APPROVAL_HISTORY_RUNTIME.identity,mineIdentity);assert.equal(c.APPROVAL_HISTORY_RUNTIME.items.length,0);await c.respond(1,summary(c));assert((await past).ok);assert.equal(c.APPROVAL_PERSONAL_COUNTS.mine,737);assert.equal(c.APPROVAL_PERSONAL_COUNTS.h,737);});
  await check('a late My Applications response cannot bleed into Past Documents',async()=>{const c=fixture();c.S.aT='mine';const mine=c.loadApprovalHistoryPage();await flush();c.S.aT='h';const past=c.loadApprovalHistoryPage();await flush();await c.respond(0,summary(c,{applied:true}));assert((await mine).stale);assert.equal(c.APPROVAL_HISTORY_RUNTIME.items.length,0);await c.respond(1,summary(c));assert((await past).ok);assert.equal(c.APPROVAL_HISTORY_RUNTIME.items[0].historyParticipationLabel,'本人已處理');});
  await check('mine rejects non-applicant rows and all rejects assigned-only rows',async()=>{const c=fixture();c.S.aT='mine';const mine=c.loadApprovalHistoryPage();await flush();await c.respond(0,summary(c));assert(!(await mine).ok);c.S.aT='h';const past=c.loadApprovalHistoryPage();await flush();const assigned=summary(c);assigned.items[0].personally_acted=false;assigned.items[0].participation_label='曾列入流程';await c.respond(1,assigned);assert(!(await past).ok);assert.equal(c.APPROVAL_HISTORY_RUNTIME.items.length,0);});
@@ -121,6 +140,33 @@ function realPermissionRefreshFixture(options){
  await check('opening summary calls fresh detail once; no modal/actions before success',async()=>{const c=fixture();await seed(c);const p=c.window.openApprovalItem('invoices:I1'),p2=c.window.openApprovalItem('invoices:I1');await flush();assert.equal(p,p2);assert.equal(c.calls.length,2);assert.equal(c.calls[1].name,'finance_personal_document_detail_v1');assert.deepEqual(plain(c.calls[1].args),{p_history_key:'invoices:I1',p_data_environment:'test'});assert.equal(c.opened.length,0);assert.equal(c.INVS.length,0);await c.respond(1,detail(c));assert((await p).ok);assert.equal(c.opened.length,1);assert.equal(c.opened[0].rows.length,1);assert.equal(c.INVS[0].row_version,7);assert(c.INVS[0].formPayload===undefined);assert.equal(c.INVS[0].form_payload.accountingLines[0].manualOverride,true);assert.equal(c.INVS[0].files[0].name,'完整憑證.pdf');});
  await check('fresh exact group excludes an old cached sibling without deleting unrelated cache',async()=>{const c=fixture();c.INVS=[{id:'I3',batchId:'B',form_payload:{original:true}},{id:'OTHER',batchId:'OTHER'}];await seed(c);const p=c.openApprovalHistoryItem('invoices:I1');await flush();await c.respond(1,detail(c));assert((await p).ok);assert.deepEqual(plain(c.opened[0].rows.map(r=>r.id)),['I1']);assert.equal(c.INVS.length,3);assert(c.INVS.some(r=>r.id==='I3'));});
  await check('a personal detail cannot grow into sibling batch rows',async()=>{const c=fixture();await seed(c);const p=c.openApprovalHistoryItem('invoices:I1');await flush();await c.respond(1,detail(c,{ids:['I1','I2','I3']}));assert(!(await p).ok);assert.equal(c.opened.length,0);});
+ for(const scope of ['mine','h'])await check(scope+' renders 18 + 13 authorized invoice rows as two batches and opens exact detail',async()=>{
+  const c=fixture(),applied=scope==='mine';c.S.aT=scope;
+  const load=c.loadApprovalHistoryPage();await flush();await c.respond(0,groupedSummary(c,applied));assert((await load).ok);
+  assert.equal(c.APPROVAL_HISTORY_RUNTIME.items.length,2);
+  c.renderApprovalHistorySummaries(c.APPROVAL_HISTORY_RUNTIME);
+  assert.equal((c.node('appr-list').innerHTML.match(/data-history-open=/g)||[]).length,2);
+  assert.match(c.node('appr-list').innerHTML,/整批 18 張/);
+  assert.match(c.node('appr-list').innerHTML,/整批 13 張/);
+  assert.match(c.node('appr-list').innerHTML,/NT\$1,800/);
+  assert.match(c.node('appr-list').innerHTML,/NT\$1,300/);
+  for(let index=0;index<2;index++){
+   const key='invoices:'+groupedIds[index][0],open=c.openApprovalHistoryItem(key);await flush();await c.respond(index+1,groupedDetail(c,index,applied));assert((await open).ok);
+   assert.deepEqual(plain(c.opened[index].rows.map(row=>row.id)),groupedIds[index]);
+  }
+  assert.equal(c.INVS.length,31);
+ });
+ await check('grouped personal detail rejects a missing row, duplicate source ID, cross-batch sibling and changed amount',async()=>{
+  for(const bad of ['missing','duplicate','cross-batch','changed-amount']){
+   const c=fixture(),load=c.loadApprovalHistoryPage();await flush();await c.respond(0,groupedSummary(c,false));assert((await load).ok);
+   const open=c.openApprovalHistoryItem('invoices:'+groupedIds[0][0]);await flush();const payload=groupedDetail(c,0,false);
+   if(bad==='missing')payload.item.source_rows.pop();
+   if(bad==='duplicate')payload.item.source_ids[1]=payload.item.source_ids[0];
+   if(bad==='cross-batch')payload.item.source_rows[1].batch_id='OTHER';
+   if(bad==='changed-amount')payload.item.summary.amount+=1;
+   await c.respond(1,payload);assert(!(await open).ok);assert.equal(c.INVS.length,0);assert.equal(c.opened.length,0);
+  }
+ });
  for(const table of ['expense_requests','bills'])await check(table+' follows its existing detail dispatcher with full fields',async()=>{const c=fixture(),kind=table==='bills'?'bill':'req',key=table+':I1';await seed(c,{table,kind,key});const p=c.openApprovalHistoryItem(key);await flush();await c.respond(1,detail(c,{table,kind,key}));assert((await p).ok);assert.equal(c.opened[0].kind,kind);assert.equal((table==='bills'?c.BILLS:c.REQS).length,1);});
  for(const bad of ['truncated','duplicate','wrong-auth','wrong-tenant','wrong-env','wrong-key','wrong-table','missing-steps','missing-count','wrong-kind'])await check('detail rejects '+bad+' atomically with retry available',async()=>{const c=fixture();await seed(c);const before=JSON.stringify([c.REQS,c.BILLS,c.INVS]),p=c.openApprovalHistoryItem('invoices:I1');await flush();const x=detail(c);if(bad==='truncated')x.item.source_rows.pop();if(bad==='duplicate')x.item.source_rows[1]=x.item.source_rows[0];if(bad==='wrong-auth')x.identity.auth_user_id='OTHER';if(bad==='wrong-tenant')x.item.source_rows[0].tenant_id='OTHER';if(bad==='wrong-env')x.item.source_rows[0].data_environment='production';if(bad==='wrong-key')x.item.history_key='invoices:OTHER';if(bad==='wrong-table')x.item.record_type='bills';if(bad==='missing-steps')delete x.item.participant_steps;if(bad==='missing-count')delete x.item.source_count;if(bad==='wrong-kind')x.item.kind='req';await c.respond(1,x);assert(!(await p).ok);assert.equal(c.opened.length,0);assert.equal(JSON.stringify([c.REQS,c.BILLS,c.INVS]),before);assert.equal(c.APPROVAL_HISTORY_DETAIL_RUNTIME.status,'error');assert.equal(c.APPROVAL_HISTORY_DETAIL_RUNTIME.promise,null);});
  for(const change of ['auth','user','tenant','env','role','permissions','lock','epoch','query','page','tab','navigation'])await check('late detail cannot cache or open after '+change+' changes',async()=>{const c=fixture();await seed(c);const p=c.openApprovalHistoryItem('invoices:I1');await flush();const x=detail(c);if(change==='auth')c.S.user.authUserId='OTHER';if(change==='user')c.S.user.id='OTHER';if(change==='tenant')c.tenant='OTHER';if(change==='env')c.env='production';if(change==='role')c.S.user.role='employee';if(change==='permissions')c.CURRENT_PERMISSION_SNAPSHOT={reports:'none'};if(change==='lock')c.financeWorkspaceIdentityBlocked=true;if(change==='epoch')c.financeAuthIdentityEpoch++;if(change==='query')c.APPROVAL_HISTORY_RUNTIME.query='other';if(change==='page')c.APPROVAL_HISTORY_RUNTIME.page=2;if(change==='tab')c.S.aT='p';if(change==='navigation')c.S.page='dashboard';await c.respond(1,x);assert((await p).stale);assert.equal(c.INVS.length,0);assert.equal(c.opened.length,0);});
