@@ -33899,6 +33899,7 @@ window.analyzeBatchInvoiceUpload=async function(){
   var files=pending.filter(function(file){return /\.(csv|xls|xlsx)$/i.test(file.name||'')||ocrReady;});
   if(!files.length){alert('目前沒有待匯入的表格，或圖片／PDF 辨識服務暫不可用。圖片與 PDF 仍會保留為附件，請手動填寫明細；CSV／Excel 可照常匯入。');return false;}
   var generation=++BATCH_INVOICE_READ_GENERATION,identity=statementDataIdentity(),staged=[];
+  S.bUploadAnalyzingGeneration=generation;
   var pw=el('batch-pw'),pf=el('batch-prog'),pl=el('batch-pl');
   if(pw)pw.style.display='block';
   if(pf){pf.style.width='0%';pf.style.background='var(--br)';}
@@ -33942,6 +33943,8 @@ window.analyzeBatchInvoiceUpload=async function(){
     if(pl)pl.textContent='第 '+(files.indexOf(file)+1)+' 個檔案「'+(file&&file.name||'')+'」匯入失敗：'+ocrErrorMessage(err)+'；原有明細與檔案已保留，這次沒有新增任何列。';
     if(pf){pf.style.width='100%';pf.style.background='#c02020';}
     return false;
+  }finally{
+    if(S.bUploadAnalyzingGeneration===generation)S.bUploadAnalyzingGeneration=0;
   }
 };
 function parseCsv(text){
@@ -34120,6 +34123,7 @@ async function issueBatchCore(){
   if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   syncBatchRowsFromDom();
   var submissionFormUi=incomeSubmissionFormUi('batch');
+  if(S.bUploadAnalyzingGeneration&&S.bUploadAnalyzingGeneration===BATCH_INVOICE_READ_GENERATION){alert('檔案仍在匯入／辨識中，請等全部明細加入本張申請並核對後再送出。');return;}
   var incompleteRow=(S.bRows||[]).map(function(r,i){return{r:r,i:i};}).find(function(x){
     var r=x.r||{},hasContent=!!(String(r.buyer||'').trim()||String(r.taxid||'').trim()
       ||num(r.total)>0||num(r.amt)>0||num(r.tax)>0
@@ -42426,6 +42430,7 @@ function clearIncomeSubmissionFormIfUnchanged(entry){
     ids=['inv-buyer','inv-amt','inv-desc','inv-total','inv-reason','inv-note','inv-taxid','inv-ocr-file'];S.invOcrFile=null;
     var identifier=el('inv-identifier-type');if(identifier)identifier.value='統一編號';
   }else if(ui.mode==='batch'){
+    BATCH_INVOICE_READ_GENERATION++;S.bUploadAnalyzingGeneration=0;
     S.bRows=[defaultInvoiceBatchRow()];S.bUploadFile=null;S.bUploadFiles=[];S.bUploadPendingFiles=[];ids=['bfile','b-reason','b-note'];renderBatchTable();
     if(el('batch-pw'))el('batch-pw').style.display='none';if(el('batch-dz'))el('batch-dz').classList.remove('filled');
   }else if(ui.mode==='bill'){

@@ -13,7 +13,7 @@ function fixture(shared={}){
  const fields={'inv-buyer':'Fictional buyer','inv-amt':'100','inv-identifier-type':'電子發票','inv-desc':'Fictional service','inv-tax':'5','inv-ent':'FICT-E','inv-date':'2026-09-22','bill-reason':'Fictional reason','bill-dept':'FICT-D','b-ent2':'FICT-E','b-ent':'FICT-E','b-month':'2026-09'};
  const nodes=Object.fromEntries(Object.entries(fields).map(([key,value])=>[key,{value,style:{},classList:{remove(){}}}]));
  nodes['batch-pw']={style:{}};nodes['batch-dz']={classList:{remove(){}}};
- const c={S:{user,demoLogin:false,invOcrFile:null,bUploadFiles:[],bUploadPendingFiles:[],bRows:[{buyer:'Fictional buyer',total:105,amt:100,rate:5,itemType:'home_care',identifierType:'電子發票',desc:'Service'}]},INVOICE_BATCH_MAX_ITEMS:500,BILL_BATCH_MAX_ITEMS:150,USERS:[user],INVS:[],BILLS:[],BILL_ROWS:[{payer:'Fictional payer',item:'Service',amt:100,period:'2026-09'}],INCOME_SUBMISSION_RETRY_STATE:{},POSTING_IN_FLIGHT:{},BILL_CONFIRMED_SUBMISSION:null,FINANCE_DRAFT_IDENTITY_EPOCH:0,financeAuthIdentityEpoch:0,CURRENT_PERMISSION_SNAPSHOT:{},financeLogoutInProgress:false,financeGoogleAccountSwitchInProgress:false,financeWorkspaceIdentityBlocked:false,
+ const c={S:{user,demoLogin:false,invOcrFile:null,bUploadFiles:[],bUploadPendingFiles:[],bRows:[{buyer:'Fictional buyer',total:105,amt:100,rate:5,itemType:'home_care',identifierType:'電子發票',desc:'Service'}]},INVOICE_BATCH_MAX_ITEMS:500,BILL_BATCH_MAX_ITEMS:150,BATCH_INVOICE_READ_GENERATION:0,USERS:[user],INVS:[],BILLS:[],BILL_ROWS:[{payer:'Fictional payer',item:'Service',amt:100,period:'2026-09'}],INCOME_SUBMISSION_RETRY_STATE:{},POSTING_IN_FLIGHT:{},BILL_CONFIRMED_SUBMISSION:null,FINANCE_DRAFT_IDENTITY_EPOCH:0,financeAuthIdentityEpoch:0,CURRENT_PERMISSION_SNAPSHOT:{},financeLogoutInProgress:false,financeGoogleAccountSwitchInProgress:false,financeWorkspaceIdentityBlocked:false,
   currentFinanceAuthUserId:()=> 'auth-'+c.S.user.id,currentTenantId:()=> 'fictional-tenant',activeDataEnvironment:()=> 'test',hasSupabase:()=>true,
   sessionGetItem:key=>storage.get(key),sessionSetItem:(key,value)=>{if(!state.storageOk)return false;storage.set(key,value);return true;},sessionRemoveItem:key=>storage.delete(key),safeGetItem:key=>durable.get(key)||null,safeJsonSet:(key,value)=>{if(!state.durableOk)return false;durable.set(key,JSON.stringify(value));return true;},safeRemoveItem:key=>durable.delete(key),crypto:require('node:crypto').webcrypto,
   navigator:{locks:{request:(name,options,callback)=>{
@@ -159,6 +159,9 @@ function fixture(shared={}){
  f=fixture();f.c.S.bRows.push({...f.c.S.bRows[0],buyer:'',desc:'Second invoice is incomplete'});
  await f.c.issueBatch();
  check('partially filled second invoice blocks the whole application before upload and RPC',f.calls.length===0&&f.state.uploads===0&&f.server.size===0&&f.c.S.bRows.length===2&&f.state.alerts.some(message=>message.includes('第 2 列')&&message.includes('不會被略過')));
+ f=fixture();f.c.BATCH_INVOICE_READ_GENERATION=4;f.c.S.bUploadAnalyzingGeneration=4;
+ await f.c.issueBatch();
+ check('An active multi-file import cannot submit before its rows have joined the application',f.calls.length===0&&f.state.uploads===0&&f.server.size===0&&f.state.alerts.some(message=>message.includes('仍在匯入')));
  f=fixture();f.c.S.bRows=Array.from({length:151},(_,index)=>({...f.c.S.bRows[0],buyer:'Fictional buyer '+(index+1)}));f.state.lost=1;f.state.reconcileError={code:'NETWORK',message:'Fictional offline'};await f.c.issueBatch();
  const largeMarker=f.c.incomeSubmissionRecoveryMarker('invoice');
  check('151-invoice ambiguous result retains all item keys under one durable application marker',f.calls.length===1&&f.calls[0].p_items.length===151&&!!largeMarker&&largeMarker.itemKeys.length===151&&f.server.size===1);
