@@ -33785,8 +33785,9 @@ function renderInvoiceManagementList(){
     return !query||[i.no,i.id,i.buyer,i.batchId].some(function(value){return String(value||'').toLocaleLowerCase('zh-Hant').indexOf(query)>-1;});
   });
   var shown=rows.slice(0,25);
-  var pending=approvalRowRuntimeForCurrentUser().trustedTasksVerified===true?approvalPendingInvoiceSummaryItems():[];
-  var batchSummary=uniqueInvoiceGroups(shown.filter(function(i){return !!i.batchId;})).map(function(i){
+  var pending=typeof approvalRowRuntimeForCurrentUser==='function'&&approvalRowRuntimeForCurrentUser().trustedTasksVerified===true
+    &&typeof approvalPendingInvoiceSummaryItems==='function'?approvalPendingInvoiceSummaryItems():[];
+  var batchSummary=(typeof uniqueInvoiceGroups==='function'?uniqueInvoiceGroups(shown.filter(function(i){return !!i.batchId;})):[]).map(function(i){
     var groupRows=visible.filter(function(row){return row.batchId===i.batchId;}),item=pending.find(function(candidate){return candidate.approvalSourceIds.indexOf(String(i.id))>-1;});
     var count=item?item.approvalExpectedRowCount:groupRows.length;
     var total=item&&item.approvalBatchLoading?null:(item?item.rows:groupRows).reduce(function(sum,row){return sum+num(row.total);},0);

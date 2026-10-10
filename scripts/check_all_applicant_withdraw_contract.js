@@ -348,7 +348,7 @@ vm.createContext(detailContext);
 for (const [start, end] of [
   ['function showApprD(r){', '\nfunction showBillApprD('],
   ['function showBillApprD(b){', '\nfunction showInvApprD('],
-  ['function showInvApprD(i){', '\nfunction receiptStatusLabel('],
+  ['function showInvApprD(i,item){', '\nfunction receiptStatusLabel('],
   ['function showReceiptTaskD(i){', '\nwindow.closeAppr=']
 ]) {
   const from = index.indexOf(start), to = index.indexOf(end, from);
