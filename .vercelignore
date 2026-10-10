@@ -48,6 +48,13 @@ scripts/*
 !scripts/finance_bill_batch_bulk_postflight.sql
 !scripts/finance_bill_batch_bulk_fingerprint.sql
 !scripts/finance_bill_batch_bulk_canary.sql
+!scripts/check_invoice_batch_approval_notification_contract.js
+!scripts/check_invoice_batch_approval_summary.cjs
+!scripts/check_finance_personal_invoice_batch_history.cjs
+!scripts/finance_invoice_batch_approval_preflight.sql
+!scripts/finance_invoice_batch_approval_postflight.sql
+!scripts/finance_invoice_batch_approval_fingerprint.sql
+!scripts/finance_invoice_batch_approval_canary.sql
 !scripts/finance_applicant_withdraw_postflight.sql
 !scripts/check_migration_lineage_contract.js
 !scripts/check_root_cause_regressions.js
