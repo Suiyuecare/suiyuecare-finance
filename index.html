@@ -561,10 +561,10 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
           <button class="btn-s" style="font-size:11px" onclick="dlInvTemplate('csv')">&#8595; 下載填寫範本 CSV</button>
           <button class="btn-s" style="font-size:11px" onclick="dlInvTemplate('xlsx')">&#8595; 下載填寫範本 Excel</button>
-          <button class="btn-p" id="inv-batch-ai-button" style="font-size:11px;margin-left:auto" onclick="analyzeBatchInvoiceUpload()">OPENAI 分析</button>
+          <button class="btn-p" id="inv-batch-ai-button" style="font-size:11px;margin-left:auto" onclick="analyzeBatchInvoiceUpload()">匯入／分析檔案</button>
         </div>
-        <div class="upload-zone" id="batch-dz" onclick="document.getElementById('bfile').click()" ondragover="event.preventDefault();bDragOver()" ondragleave="bDragLeave()" ondrop="event.preventDefault();bDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:5px">UPLOAD</div><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:2px">上傳發票明細範本或憑據；表格檔會直接匯入，圖片 / PDF 可按 OPENAI 分析</div><div style="font-size:11px;color:#94a3b8">CSV、Excel、JPG、PNG、PDF；不需要區分單張或整批</div><input type="file" id="bfile" style="display:none" accept=".csv,.xlsx,.xls,image/*,.pdf" onchange="bFileSelect(this)"></div>
-        <div id="batch-pw" style="display:none;margin-top:7px;padding:7px 11px;background:var(--warm);border-radius:8px;border:1px solid var(--brxl)"><div style="display:flex;align-items:center;gap:7px;margin-bottom:3px"><span id="batch-fn" style="font-size:12px;font-weight:500;color:#334155"></span><span id="batch-pl" style="font-size:11px;color:var(--brtxt);margin-left:auto"></span></div><div class="prog-wrap"><div class="prog-fill" id="batch-prog" style="width:0%"></div></div></div>
+        <div class="upload-zone" id="batch-dz" onclick="document.getElementById('bfile').click()" ondragover="event.preventDefault();bDragOver()" ondragleave="bDragLeave()" ondrop="event.preventDefault();bDrop(event)"><div style="font-size:11px;font-weight:650;letter-spacing:.08em;color:var(--brtxt);margin-bottom:5px">UPLOAD</div><div style="font-size:12px;font-weight:500;color:#334155;margin-bottom:2px">同一開立原因可選多份表格或憑據；匯入的明細會累加到這一張申請</div><div style="font-size:11px;color:#94a3b8">CSV、Excel、JPG、PNG、PDF；核對所有品項後只需送出一次</div><input type="file" id="bfile" style="display:none" multiple accept=".csv,.xlsx,.xls,image/*,.pdf" onchange="bFileSelect(this)"></div>
+        <div id="batch-pw" style="display:none;margin-top:7px;padding:7px 11px;background:var(--warm);border-radius:8px;border:1px solid var(--brxl)"><div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;flex-wrap:wrap"><span id="batch-fn" style="font-size:12px;font-weight:500;color:#334155"></span><span id="batch-pl" style="font-size:11px;color:var(--brtxt);margin-left:auto"></span><button type="button" class="btn-s" style="font-size:11px;padding:3px 8px" onclick="discardPendingBatchInvoiceUploads()">取消待匯入檔案</button></div><div class="prog-wrap"><div class="prog-fill" id="batch-prog" style="width:0%"></div></div></div>
         <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:10px 0 8px">
           <button class="btn-s" onclick="addBRow()">+ 新增列</button>
           <button class="btn-s" onclick="clearBRows()" style="color:#8a1010">&#10005; 清空</button>
@@ -2999,7 +2999,7 @@ var S={user:null,page:'dashboard',prev:'dashboard',nT:'all',aT:'p',bF:'all',accS
        lazyRows:[],refundRows:[],purchaseRows:[],hrRows:[],hrPeriod:'',hrLaborPeriod:'',lazyBusy:false,lazyMode:false,
        travelPeople:[],travelRows:[],invMode:'batch',rptTab:'bs',recvEntity:'all',recvMonthFrom:'',recvMonthTo:'',
        dashPeriodMode:'month',dashMonth:'',dashMonthFrom:'',dashMonthTo:'',dashEntity:'all',dashCompanySort:'risk',dashCompanyDir:'asc',dashDeptSort:'risk',dashDeptDir:'asc',dashDeptExpanded:true,dashOrgView:'department',dashReconOpen:null,dashTrendFocus:'',dashFiltersOpen:false,dashDataVersion:0,
-       demoLogin:false,portalLogin:false,nrDraftId:'',approvalRuntimeTasks:[],bRows:[{buyer:'',identifierType:'電子發票',taxid:'',desc:'',amt:'',tax:'',total:'',rate:0.05}]};
+       demoLogin:false,portalLogin:false,nrDraftId:'',approvalRuntimeTasks:[],bRows:[{buyer:'',identifierType:'電子發票',taxid:'',desc:'',amt:'',tax:'',total:'',rate:0.05}],bUploadFiles:[],bUploadPendingFiles:[]};
 window.S=S;
 var DRAFT_LEGACY_KEY='module_finance_request_drafts_v1';
 var DRAFT_KEY_BASE='module_finance_request_drafts_v2';
@@ -3707,7 +3707,7 @@ function financeAuthRecoveryDraftSnapshot(){
     });
   }
   var hadFiles=!!(
-    S.bUploadFile||S.invOcrFile||S.nrPassbookFile||(S.nrFiles&&S.nrFiles.length)||Object.keys(S.travelFiles||{}).some(function(key){return (S.travelFiles[key]||[]).length;})||
+    S.bUploadFile||(S.bUploadFiles&&S.bUploadFiles.length)||S.invOcrFile||S.nrPassbookFile||(S.nrFiles&&S.nrFiles.length)||Object.keys(S.travelFiles||{}).some(function(key){return (S.travelFiles[key]||[]).length;})||
     (root&&root.querySelector('input[type="file"]')&&Array.from(root.querySelectorAll('input[type="file"]')).some(function(node){return !!(node.files&&node.files.length);}))
   );
   return {
@@ -14152,13 +14152,9 @@ function returnInvoiceToPrevious(i,comment,files){
 }
 function canActInvoice(i){return !(typeof approvalRecordReconcilePending==='function'&&approvalRecordReconcilePending('invoice',i))&&canActStep(i,activeStep(i));}
 function invoiceBatchFallbackKey(i){
-  if(!i)return'';
-  var firstStep=(i.steps||[])[0]||{};
-  var files=normalizeFiles(firstStep.files||[]);
-  var file=files.find(function(f){return f&&(f.url||f.name||f.path);});
-  if(file)return 'source-file:'+[file.url||file.path||'',file.name||''].join('|');
-  if(i.sourceBillId)return 'source-bill:'+i.sourceBillId;
-  if(i.contractNo&&i.servicePeriod)return 'contract-period:'+[i.contractNo,i.servicePeriod,i.applicantId||i.applicant||'',i.eid||'',i.dc||''].join('|');
+  // Legacy source files, bill IDs and contract periods are not unique request
+  // identities. Grouping by them could approve or reconcile separate requests
+  // together. The server groups only a durable batch ID; match that rule.
   return '';
 }
 function invoiceGroupKey(i){
@@ -16351,7 +16347,7 @@ function incomeDirtySnapshot(page){
     return JSON.stringify(stableSnapshotValue({
       fields:incomeFieldValues(['inv-ent','inv-date','inv-app-sel','inv-dept','inv-reason','inv-note','inv-no','inv-buyer','inv-identifier-type','inv-taxid','inv-desc','inv-amt','inv-tax','inv-total','inv-rs','b-ent','b-app-sel','b-dept','b-month','b-reason','b-note']),
       batchRows:S.bRows||[],
-      upload:S.bUploadFile?incomeFileSignature(S.bUploadFile):null,
+      uploads:(S.bUploadFiles&&S.bUploadFiles.length?S.bUploadFiles:(S.bUploadFile?[S.bUploadFile]:[])).map(incomeFileSignature),
       singleUpload:S.invOcrFile?incomeFileSignature(S.invOcrFile):null
     }));
   }
@@ -32959,7 +32955,7 @@ var INVOICE_IDENTIFIER_TYPES=['電子發票','電子發票（載具）','統一�
 function invoiceBatchOverflowMessage(count){
   count=Math.max(0,Math.floor(num(count)));
   if(count<=INVOICE_BATCH_MAX_ITEMS)return'';
-  return '這次共有 '+count+' 筆發票，超過單次上限 '+INVOICE_BATCH_MAX_ITEMS+' 筆，因此尚未上傳附件或送出資料。\n\n請把檔案拆成每批最多 '+INVOICE_BATCH_MAX_ITEMS+' 筆後再送出。';
+  return '這張申請共有 '+count+' 筆發票，超過目前一張申請可送出的 '+INVOICE_BATCH_MAX_ITEMS+' 筆上限，尚未送出。已填資料及檔案仍保留。\n\n同一開立原因請勿拆成多張申請；請聯絡系統管理員協助處理這張完整申請。';
 }
 function invoiceWriteFailureUserMessage(result,meta,actionLabel){
   meta=meta||{};
@@ -32968,7 +32964,7 @@ function invoiceWriteFailureUserMessage(result,meta,actionLabel){
   if(limitMatch){
     var limit=Number(limitMatch[1])||INVOICE_BATCH_MAX_ITEMS;
     var count=Number(meta.totalCount)||0;
-    return (count?'這次共有 '+count+' 筆發票，':'這次的發票筆數')+'超過正式系統單次上限 '+limit+' 筆，所以整批沒有建立。\n\n請把檔案拆成每批最多 '+limit+' 筆後再送出。';
+    return (count?'這張申請共有 '+count+' 筆發票，':'這張申請的發票筆數')+'超過正式系統一張申請可送出的 '+limit+' 筆上限，所以整張申請沒有建立。\n\n同一開立原因請勿拆成多張申請；資料與檔案已保留，請聯絡系統管理員協助處理。';
   }
   return friendlyErrorMessage(result&&result.error?result.error:raw,{action:actionLabel||'發票寫入'});
 }
@@ -33019,7 +33015,7 @@ window.runInvoiceBatchGroupingSelfCheck=function(){
     var deliveredOnly={id:'self_delivered_only',no:'DO1',eid:'E1',dc:'A1101',status:'unpaid',approvalStatus:'delivered',total:800,steps:[{rk:'applicant_invoice_delivery',a:'approved'}]};
     var completedReleased=invoiceNeedsReceivableFollowup(completedOnly);
     var deliveredReleased=invoiceNeedsReceivableFollowup(deliveredOnly);
-    return {ok:grouped.length===4&&batchRows.length===2&&fallbackRows.length===2&&recvGrouped.length===3&&recvGroupCounts.partial===1&&!invoiceNeedsReceivableFollowup(INVS[5])&&completedReleased&&deliveredReleased,grouped:grouped.length,batchRows:batchRows.length,fallbackRows:fallbackRows.length,recvGrouped:recvGrouped.length,partialGroups:recvGroupCounts.partial||0,pendingReleased:invoiceNeedsReceivableFollowup(INVS[5]),completedReleased:completedReleased,deliveredReleased:deliveredReleased};
+    return {ok:grouped.length===5&&batchRows.length===2&&fallbackRows.length===1&&invoiceGroupKey(INVS[2])!==invoiceGroupKey(INVS[3])&&recvGrouped.length===4&&recvGroupCounts.partial===0&&!invoiceNeedsReceivableFollowup(INVS[5])&&completedReleased&&deliveredReleased,grouped:grouped.length,batchRows:batchRows.length,fallbackRows:fallbackRows.length,recvGrouped:recvGrouped.length,partialGroups:recvGroupCounts.partial||0,pendingReleased:invoiceNeedsReceivableFollowup(INVS[5]),completedReleased:completedReleased,deliveredReleased:deliveredReleased};
   }finally{
     INVS=prev;
   }
@@ -33270,10 +33266,11 @@ function applyIncomeFormFieldCustomizations(){
   applyFormControlMeta('bill-reason','bill_request','reason','開立原因','請說明繳費單用途',true);
   applyInputFieldHint('bill-note','bill_request','note','補充收款窗口、交付方式或其他注意事項');
   var aiEnabled=productModuleEnabled('ai-import');
-  ['inv-single-ai-button','inv-batch-ai-button'].forEach(function(id){
-    var button=el(id);if(!button)return;
-    button.style.display=aiEnabled?'':'none';
-  });
+  var singleAiButton=el('inv-single-ai-button');
+  if(singleAiButton)singleAiButton.style.display=aiEnabled?'':'none';
+  // CSV/Excel import works locally even when OCR is disabled.
+  var batchImportButton=el('inv-batch-ai-button');
+  if(batchImportButton)batchImportButton.style.display='';
 }
 function applyExpenseFormFieldCustomizations(){
   applyFormControlMeta('nr-ent','expense_request','entity','支出法人','由使用者或部門預設帶入',true);
@@ -33470,6 +33467,17 @@ function readInvoiceTableFile(file){
         return;
       }
       var rawRows=/<table[\s>]/i.test(text)?tableRowsFromHtml(text):parseCsv(text);
+      // A generated Excel-compatible HTML file contains a metadata table
+      // before the actual invoice detail table. Start at the invoice header so
+      // metadata is not mistaken for a partly filled invoice row.
+      if(/<table[\s>]/i.test(text)){
+        var detailHeader=rawRows.findIndex(function(row){
+          var headings=row.map(normalizeCsvHeader);
+          return headings.some(function(value){return value==='買受人'||value==='buyer';})
+            &&headings.some(function(value){return value==='含稅金額'||value==='含稅總額'||value==='total';});
+        });
+        if(detailHeader>=0)rawRows=rawRows.slice(detailHeader);
+      }
       resolve(csvRowsToObjects(rawRows));
     };
     reader.onerror=function(){reject(new Error('讀取檔案失敗，請重新上傳。'));};
@@ -33820,22 +33828,50 @@ window.approveInv=async function(id){
   showInvApprD(i);
 };
 window.bDragOver=function(){el('batch-dz').classList.add('drag');};window.bDragLeave=function(){el('batch-dz').classList.remove('drag');};
-window.bDrop=function(e){el('batch-dz').classList.remove('drag');var files=e.dataTransfer?e.dataTransfer.files:null;if(files&&files[0])setBatchInvoiceUploadFile(files[0]);};
-window.bFileSelect=function(inp){if(inp.files&&inp.files[0])setBatchInvoiceUploadFile(inp.files[0]);inp.value='';};
+window.bDrop=function(e){el('batch-dz').classList.remove('drag');var files=e.dataTransfer?e.dataTransfer.files:null;if(files&&files.length)setBatchInvoiceUploadFiles(files);};
+window.bFileSelect=function(inp){if(inp.files&&inp.files.length)setBatchInvoiceUploadFiles(inp.files);inp.value='';};
 var BATCH_INVOICE_READ_GENERATION=0;
 function batchInvoiceReadCurrent(file,generation,identity){
   return generation===BATCH_INVOICE_READ_GENERATION&&S.bUploadFile===file&&identity===statementDataIdentity();
 }
-function setBatchInvoiceUploadFile(file){
+function batchInvoiceSourceFiles(){
+  var files=(S.bUploadFiles||[]).filter(Boolean);
+  return files.length?files:(S.bUploadFile?[S.bUploadFile]:[]);
+}
+function setBatchInvoiceUploadFiles(rawFiles){
+  var files=Array.prototype.slice.call(rawFiles||[]).filter(Boolean);
+  if(!files.length)return false;
+  var chosen=(S.bUploadFiles||[]).slice(),pending=(S.bUploadPendingFiles||[]).slice(),added=0;
+  files.forEach(function(file){
+    // Same-name/size files can have different contents. Only ignore the exact
+    // same File object repeated within one selection; never drop another file.
+    if(chosen.indexOf(file)>-1)return;
+    chosen.push(file);pending.push(file);added++;
+  });
+  if(!added){var same=el('batch-pl');if(same)same.textContent='這些檔案已選取；目前沒有新增待匯入檔案。';return false;}
   BATCH_INVOICE_READ_GENERATION++;
-  S.bUploadFile=file;
+  S.bUploadFiles=chosen;S.bUploadPendingFiles=pending;S.bUploadFile=pending[0];
   var pw=el('batch-pw'),pf=el('batch-prog'),pl=el('batch-pl'),fn=el('batch-fn');
   if(pw)pw.style.display='block';
-  if(fn)fn.textContent=file.name;
+  if(fn)fn.textContent='本張申請共 '+chosen.length+' 個檔案：'+chosen.slice(0,3).map(function(file){return file.name;}).join('、')+(chosen.length>3?' 等':'');
   if(pf){pf.style.width='0%';pf.style.background='var(--br)';}
-  if(pl)pl.textContent='已選取檔案，尚未保存到申請單；可按 OPENAI 分析，送出時才正式保存。';
+  if(pl)pl.textContent='新增 '+added+' 個檔案，待匯入／分析 '+pending.length+' 個；明細會累加至同一張申請，送出時才正式保存。';
   if(el('batch-dz'))el('batch-dz').classList.add('filled');
+  return true;
 }
+function setBatchInvoiceUploadFile(file){return setBatchInvoiceUploadFiles([file]);}
+window.discardPendingBatchInvoiceUploads=function(){
+  var pending=S.bUploadPendingFiles||[];
+  if(!pending.length)return;
+  BATCH_INVOICE_READ_GENERATION++;
+  S.bUploadFiles=(S.bUploadFiles||[]).filter(function(file){return pending.indexOf(file)<0;});
+  S.bUploadPendingFiles=[];S.bUploadFile=null;
+  var chosen=batchInvoiceSourceFiles(),fn=el('batch-fn'),pl=el('batch-pl'),pw=el('batch-pw'),zone=el('batch-dz');
+  if(fn)fn.textContent=chosen.length?'本張申請仍保留 '+chosen.length+' 個已匯入原始檔':'';
+  if(pl)pl.textContent='已取消未完成匯入的檔案；已填發票列與先前匯入的檔案保持不變。';
+  if(pw)pw.style.display=chosen.length?'block':'none';
+  if(zone&&!chosen.length)zone.classList.remove('filled');
+};
 function invoiceOcrDataToBatchRows(raw){
   var data=(raw&&raw.invoice)||raw||{};
   var items=Array.isArray(data.items)?data.items:[];
@@ -33857,34 +33893,53 @@ function invoiceOcrDataToBatchRows(raw){
   return rows;
 }
 window.analyzeBatchInvoiceUpload=async function(){
-  if(!productModuleEnabled('ai-import')){alert('AI／OCR 匯入模組目前已停用；仍可直接匯入 CSV／Excel 範本或手動填寫。');return;}
-  var file=S.bUploadFile;
-  if(!file){alert('請先選取已填寫的發票範本、圖片或 PDF');return;}
-  var generation=++BATCH_INVOICE_READ_GENERATION,identity=statementDataIdentity();
-  if(/\.(csv|xls|xlsx)$/i.test(file.name||'')){
-    return importBatchCsv(file,generation,identity);
-  }
+  var pending=Array.isArray(S.bUploadPendingFiles)?S.bUploadPendingFiles.slice():(S.bUploadFile?[S.bUploadFile]:[]);
+  if(!pending.length){var none=el('batch-pl');if(none)none.textContent='目前沒有待匯入的檔案；已匯入的明細仍在本張申請中。';return false;}
+  var ocrReady=productModuleEnabled('ai-import')&&!!OPENAI_INVOICE_OCR_ENDPOINT&&!!SUPABASE_ANON_KEY;
+  var files=pending.filter(function(file){return /\.(csv|xls|xlsx)$/i.test(file.name||'')||ocrReady;});
+  if(!files.length){alert('目前沒有待匯入的表格，或圖片／PDF 辨識服務暫不可用。圖片與 PDF 仍會保留為附件，請手動填寫明細；CSV／Excel 可照常匯入。');return false;}
+  var generation=++BATCH_INVOICE_READ_GENERATION,identity=statementDataIdentity(),staged=[];
   var pw=el('batch-pw'),pf=el('batch-prog'),pl=el('batch-pl');
   if(pw)pw.style.display='block';
   if(pf){pf.style.width='0%';pf.style.background='var(--br)';}
-  if(pl)pl.textContent='OpenAI 辨識中；附件尚未保存到申請單…';
-  if(!OPENAI_INVOICE_OCR_ENDPOINT||!SUPABASE_ANON_KEY){if(pl)pl.textContent='請先部署 Supabase Edge Function 並填入 SUPABASE_ANON_KEY。';if(pf){pf.style.width='100%';pf.style.background='#c02020';}return;}
+  if(pl)pl.textContent='正在逐份讀取 '+files.length+' 個檔案；全部完成後才會一起加入本張申請。';
+  var file=null;
   try{
-    var att=await fileToAttachment(file);
+    for(var index=0;index<files.length;index++){
+      file=files[index];S.bUploadFile=file;
+      if(pl)pl.textContent='正在讀取第 '+(index+1)+' / '+files.length+' 個檔案：'+file.name;
+      var rows;
+      if(/\.(csv|xls|xlsx)$/i.test(file.name||'')){
+        rows=await importBatchCsv(file,generation,identity,true);
+        if(rows===false)return false;
+      }else{
+        var att=await fileToAttachment(file);
+        if(!batchInvoiceReadCurrent(file,generation,identity))return false;
+        var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_ANON_KEY},body:JSON.stringify({fileName:file.name,mime:file.type,dataUrl:att.url,mode:'invoice_batch'})});
+        if(!batchInvoiceReadCurrent(file,generation,identity))return false;
+        var data=await res.json();
+        if(!batchInvoiceReadCurrent(file,generation,identity))return false;
+        if(!res.ok)throw new Error(data.error||'辨識失敗');
+        rows=invoiceOcrDataToBatchRows(data);
+      }
+      if(!rows.length)throw new Error('檔案沒有可匯入的有效發票列');
+      staged=staged.concat(rows);
+      if(pf)pf.style.width=Math.round((index+1)/files.length*90)+'%';
+    }
     if(!batchInvoiceReadCurrent(file,generation,identity))return false;
-    var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_ANON_KEY},body:JSON.stringify({fileName:file.name,mime:file.type,dataUrl:att.url,mode:'invoice_batch'})});
-    if(!batchInvoiceReadCurrent(file,generation,identity))return false;
-    var data=await res.json();
-    if(!batchInvoiceReadCurrent(file,generation,identity))return false;
-    if(!res.ok)throw new Error(data.error||'辨識失敗');
-    var rows=invoiceOcrDataToBatchRows(data);
-    S.bRows=rows.length?rows:[defaultInvoiceBatchRow()];
+    syncBatchRowsFromDom();
+    var existing=(S.bRows||[]).filter(function(row){return String(row&&row.buyer||'').trim()||num(row&&row.total)>0;});
+    S.bRows=existing.concat(staged);
     renderBatchTable();
-    if(pl)pl.textContent='OpenAI 已填入 '+rows.length+' 列，請人工覆核；附件送出後才會保存。';
+    S.bUploadPendingFiles=pending.filter(function(item){return files.indexOf(item)<0;});
+    S.bUploadFile=S.bUploadPendingFiles[0]||null;
+    var overflow=invoiceBatchOverflowMessage(S.bRows.length);
+    if(pl)pl.textContent='已累加 '+staged.length+' 列；本張申請共 '+S.bRows.length+' 列、'+batchInvoiceSourceFiles().length+' 個原始檔，請人工核對後一次送出。'+(overflow?' 已超過單張申請上限，請聯絡系統管理員，勿拆單。':'');
     if(pf){pf.style.width='100%';pf.style.background='#2a9040';}
+    return true;
   }catch(err){
-    if(!batchInvoiceReadCurrent(file,generation,identity))return false;
-    if(pl)pl.textContent='辨識失敗：'+ocrErrorMessage(err);
+    if(file&&!batchInvoiceReadCurrent(file,generation,identity))return false;
+    if(pl)pl.textContent='第 '+(files.indexOf(file)+1)+' 個檔案「'+(file&&file.name||'')+'」匯入失敗：'+ocrErrorMessage(err)+'；原有明細與檔案已保留，這次沒有新增任何列。';
     if(pf){pf.style.width='100%';pf.style.background='#c02020';}
     return false;
   }
@@ -33936,26 +33991,15 @@ function csvVal(o,keys,idx){
 async function importBatchCsv(file,generation,identity){
   if(generation==null)generation=++BATCH_INVOICE_READ_GENERATION;
   if(identity==null)identity=statementDataIdentity();
-  var pw=el('batch-pw'),pf=el('batch-prog'),pl=el('batch-pl'),fn=el('batch-fn');
-  pw.style.display='block';fn.textContent=file.name;pf.style.width='0%';pf.style.background='var(--br)';pl.textContent='正在讀取檔案，尚未保存到申請單…';
-  try{
-    var rows=await readInvoiceTableFile(file);
-    if(!batchInvoiceReadCurrent(file,generation,identity))return false;
-    S.bRows=rows.map(invoiceTableRowToData).map(function(r){var calc=invoiceAmountsFromTotal(r.total,r.rate,r.amount);return{buyer:r.buyer,identifierType:invoiceIdentifierType(r.identifierType),taxid:r.taxid,itemType:r.itemType||invoiceItemTypeFromText(r.desc),desc:r.desc,amt:calc.amount,tax:calc.tax,total:calc.total,rate:calc.rate};}).filter(function(r){return r.buyer&&num(r.total)>0;});
-    if(!S.bRows.length){pl.textContent='沒有讀到有效資料，請確認欄位：買受人、開立方式、品項說明、稅率、含稅總額';pf.style.background='#c02020';pf.style.width='100%';return;}
-    renderBatchTable();
-    var overflow=invoiceBatchOverflowMessage(S.bRows.length);
-    pl.textContent=overflow
-      ? '已匯入 '+S.bRows.length+' 筆，但單次最多 '+INVOICE_BATCH_MAX_ITEMS+' 筆；請先拆分檔案。'
-      : '已讀入 '+S.bRows.length+' 筆資料；附件送出後才會保存。';
-    pf.style.background=overflow?'#c02020':'#2a9040';
-    pf.style.width='100%';
-    el('batch-dz').classList.add('filled');
-  }catch(err){
-    if(!batchInvoiceReadCurrent(file,generation,identity))return false;
-    pl.textContent=err.message||'讀取失敗，請重新上傳 CSV 或系統範本 Excel';
-    pf.style.background='#c02020';pf.style.width='100%';
-  }
+  var rows=await readInvoiceTableFile(file);
+  if(!batchInvoiceReadCurrent(file,generation,identity))return false;
+  var imported=rows.map(invoiceTableRowToData).map(function(r,index){
+    if(!String(r.buyer||'').trim()||num(r.total)<=0)throw new Error('第 '+(index+1)+' 列缺少買受人或有效含稅總額；請修正原始檔後整份重試，這次沒有新增任何列。');
+    var calc=invoiceAmountsFromTotal(r.total,r.rate,r.amount);
+    return{buyer:r.buyer,identifierType:invoiceIdentifierType(r.identifierType),taxid:r.taxid,itemType:r.itemType||invoiceItemTypeFromText(r.desc),desc:r.desc,amt:calc.amount,tax:calc.tax,total:calc.total,rate:calc.rate};
+  });
+  if(!imported.length)throw new Error('沒有讀到有效資料，請確認欄位：買受人、開立方式、品項說明、稅率、含稅總額');
+  return imported;
 }
 function defaultInvoiceBatchRow(){return {buyer:'',identifierType:'電子發票',taxid:'',itemType:'home_care',desc:'居家照顧服務費',amt:'',tax:'',total:'',rate:0.05};}
 function syncBatchRowsFromDom(){
@@ -34055,9 +34099,9 @@ function renderBatchTable(){
 }
 window.renderBatchTable=renderBatchTable;
 window.addBRow=function(){S.bRows=S.bRows||[defaultInvoiceBatchRow()];S.bRows.push(defaultInvoiceBatchRow());renderBatchTable();};
-window.clearBRows=function(){S.bRows=[defaultInvoiceBatchRow()];renderBatchTable();el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled','drag');};
+window.clearBRows=function(){BATCH_INVOICE_READ_GENERATION++;S.bRows=[defaultInvoiceBatchRow()];S.bUploadFile=null;S.bUploadFiles=[];S.bUploadPendingFiles=[];renderBatchTable();el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled','drag');if(el('bfile'))el('bfile').value='';};
 window.removeBRow=function(i){S.bRows.splice(i,1);if(!S.bRows.length)S.bRows=[defaultInvoiceBatchRow()];renderBatchTable();};
-window.updBSum=function(){syncBatchRowsFromDom();var v=(S.bRows||[]).filter(function(r){return r.buyer&&num(r.total)>0;});var gross=v.reduce(function(s,r){return s+num(r.total);},0),net=v.reduce(function(s,r){return s+num(r.amt);},0),tax=v.reduce(function(s,r){return s+num(r.tax);},0),overflow=v.length>INVOICE_BATCH_MAX_ITEMS;var summary=el('bsum');summary.textContent='共 '+S.bRows.length+' 列，'+v.length+' 列有效｜含稅 '+fmt(gross)+'｜未稅 '+fmt(net)+'｜稅額 '+fmt(tax)+(overflow?'｜超過單次 '+INVOICE_BATCH_MAX_ITEMS+' 筆上限':'');summary.style.color=overflow?'#b42318':'';};
+window.updBSum=function(){syncBatchRowsFromDom();var v=(S.bRows||[]).filter(function(r){return r.buyer&&num(r.total)>0;});var gross=v.reduce(function(s,r){return s+num(r.total);},0),net=v.reduce(function(s,r){return s+num(r.amt);},0),tax=v.reduce(function(s,r){return s+num(r.tax);},0),overflow=v.length>INVOICE_BATCH_MAX_ITEMS;var summary=el('bsum');summary.textContent='共 '+S.bRows.length+' 列，'+v.length+' 列有效｜含稅 '+fmt(gross)+'｜未稅 '+fmt(net)+'｜稅額 '+fmt(tax)+(overflow?'｜超過一張申請 '+INVOICE_BATCH_MAX_ITEMS+' 筆上限；請勿拆送':'');summary.style.color=overflow?'#b42318':'';};
 function invoiceBatchValidationError(filled){
   var badDesc=filled.find(function(x){return invoiceItemTypeByKey(x.r.itemType).k==='other'&&!String(x.r.desc||'').trim();});
   if(badDesc)return '第 '+(badDesc.i+1)+' 列選「其他」時，請在品項說明補充實際開立內容。';
@@ -34066,7 +34110,7 @@ function invoiceBatchValidationError(filled){
   var badCarrier=filled.find(function(x){return invoiceIdentifierType(x.r.identifierType)==='電子發票（載具）'&&!/^[\/A-Z0-9.+-]{6,32}$/i.test(String(x.r.taxid||'').trim());});
   if(badCarrier)return '第 '+(badCarrier.i+1)+' 列為載具，請填有效載具號碼。';
   var big=filled.find(function(x){return num(x.r.total)>=50000;});
-  if(big&&!S.bUploadFile)return '第 '+(big.i+1)+' 列含稅金額達 50,000 元以上，請上傳合約、請款依據或對帳資料。';
+  if(big&&!batchInvoiceSourceFiles().length)return '第 '+(big.i+1)+' 列含稅金額達 50,000 元以上，請上傳合約、請款依據或對帳資料。';
   return '';
 }
 async function issueBatchCore(){
@@ -34076,9 +34120,18 @@ async function issueBatchCore(){
   if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   syncBatchRowsFromDom();
   var submissionFormUi=incomeSubmissionFormUi('batch');
+  var incompleteRow=(S.bRows||[]).map(function(r,i){return{r:r,i:i};}).find(function(x){
+    var r=x.r||{},hasContent=!!(String(r.buyer||'').trim()||String(r.taxid||'').trim()
+      ||num(r.total)>0||num(r.amt)>0||num(r.tax)>0
+      ||(String(r.desc||'').trim()&&String(r.desc).trim()!=='居家照顧服務費')
+      ||(r.itemType&&r.itemType!=='home_care'));
+    return hasContent&&(!String(r.buyer||'').trim()||num(r.total)<=0);
+  });
+  if(incompleteRow){alert('第 '+(incompleteRow.i+1)+' 列已有資料但缺少買受人或有效含稅總額。請補齊或刪除該列；同一事由的明細不會被略過。');return;}
   var filled=(S.bRows||[]).map(function(r,i){return {r:r,i:i};}).filter(function(x){return x.r.buyer&&num(x.r.total)>0;});
   var v=filled.map(function(x){return x.r;});
   if(!v.length){alert('請至少填寫一列');return;}
+  if((S.bUploadPendingFiles||[]).some(function(file){return /\.(csv|xls|xlsx)$/i.test(file.name||'');})){alert('尚有表格檔未匯入明細。請先按「匯入／分析檔案」讀入全部表格並核對；同一開立原因請只送出這一張申請。');return;}
   var overflowMessage=invoiceBatchOverflowMessage(v.length);
   if(overflowMessage){alert(overflowMessage);return;}
   var reasonMeta=invoiceReasonMeta('b');
@@ -34127,12 +34180,13 @@ async function issueBatchCore(){
     var nextStep=steps.find(function(s){return !s.a;})||null;
     return{id:'i_'+Date.now()+'_'+Math.random().toString(36).slice(2),no:no,eid:eid,en:en,dc:meta.dc,buyer:r.buyer,identifierType:invoiceIdentifierType(r.identifierType),applicant:meta.name,applicantId:appUser.id,batchId:batchId,taxId:r.taxid,itemType:invoiceItemTypeByKey(r.itemType).k,suggestedRevenueAccount:invoiceSuggestedRevenueAccount(r),amt:calc.amount,tax:calc.tax,total:calc.total,date:today,status:'unpaid',approvalStatus:nextStep?nextStep.status:'completed',approvalStep:nextStep?2:(steps.length||1),steps:steps,desc:invoiceDescriptionWithReason(invoiceEmployeeDescription(r),reasonMeta),receiptFiles:[],dataEnv:activeDataEnvironment()};
   });
-  var p1=await p1SubmissionPreflight('invoice',{label:'批次開立發票',steps:rows[0]&&rows[0].steps,hasAttachments:!!S.bUploadFile});
+  var sourceFiles=batchInvoiceSourceFiles();
+  var p1=await p1SubmissionPreflight('invoice',{label:'批次開立發票',steps:rows[0]&&rows[0].steps,hasAttachments:!!sourceFiles.length});
   if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!p1.ok)return;
   try{
     var groupRecordNo=invoiceGroupNo(rows[0])||batchId;
-    var initFiles=await invoiceInitialStepFiles(S.bUploadFile?[S.bUploadFile]:[],rows,{recordNo:groupRecordNo,title:'發票申請',app:meta.name,entity:gE(eid).full||gE(eid).s,department:meta.dc+' '+(gD(meta.dc).n||''),date:today,eid:eid,dc:meta.dc,reason:reasonMeta.reason,note:reasonMeta.note});
+    var initFiles=await invoiceInitialStepFiles(sourceFiles,rows,{recordNo:groupRecordNo,title:'發票申請',app:meta.name,entity:gE(eid).full||gE(eid).s,department:meta.dc+' '+(gD(meta.dc).n||''),date:today,eid:eid,dc:meta.dc,reason:reasonMeta.reason,note:reasonMeta.note});
     if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
     if(initFiles.length)rows.forEach(function(inv){inv.steps[0].files=normalizeFiles(initFiles);});
   }catch(uploadErr){
@@ -42352,7 +42406,8 @@ function incomeSubmissionRecoveryMarker(formType){
   var raw=safeGetItem(incomeSubmissionRecoveryMarkerKey(formType));if(!raw)return null;
   var marker;
   try{marker=JSON.parse(raw);}catch(_){throw new Error('前次送件識別碼無法讀取；為避免重複建立，請聯絡系統管理員查核正式資料。');}
-  if(!marker||marker.owner!==incomeSubmissionOwner()||marker.formType!==formType||typeof marker.operationKey!=='string'||!marker.operationKey||marker.dataEnvironment!==activeDataEnvironment()||!Array.isArray(marker.itemKeys)||!marker.itemKeys.length||marker.itemKeys.length>150||new Set(marker.itemKeys).size!==marker.itemKeys.length||marker.itemKeys.some(function(key){return typeof key!=='string'||!key;}))throw new Error('前次送件識別碼不完整；為避免重複建立，請聯絡系統管理員查核正式資料。');
+  var itemLimit=formType==='invoice'?INVOICE_BATCH_MAX_ITEMS:formType==='bill'?BILL_BATCH_MAX_ITEMS:0;
+  if(!marker||marker.owner!==incomeSubmissionOwner()||marker.formType!==formType||typeof marker.operationKey!=='string'||!marker.operationKey||marker.dataEnvironment!==activeDataEnvironment()||!Array.isArray(marker.itemKeys)||!marker.itemKeys.length||marker.itemKeys.length>itemLimit||new Set(marker.itemKeys).size!==marker.itemKeys.length||marker.itemKeys.some(function(key){return typeof key!=='string'||!key;}))throw new Error('前次送件識別碼不完整；為避免重複建立，請聯絡系統管理員查核正式資料。');
   return marker;
 }
 function incomeSubmissionMarkerFromEntry(entry){
@@ -42371,7 +42426,7 @@ function clearIncomeSubmissionFormIfUnchanged(entry){
     ids=['inv-buyer','inv-amt','inv-desc','inv-total','inv-reason','inv-note','inv-taxid','inv-ocr-file'];S.invOcrFile=null;
     var identifier=el('inv-identifier-type');if(identifier)identifier.value='統一編號';
   }else if(ui.mode==='batch'){
-    S.bRows=[defaultInvoiceBatchRow()];S.bUploadFile=null;ids=['bfile','b-reason','b-note'];renderBatchTable();
+    S.bRows=[defaultInvoiceBatchRow()];S.bUploadFile=null;S.bUploadFiles=[];S.bUploadPendingFiles=[];ids=['bfile','b-reason','b-note'];renderBatchTable();
     if(el('batch-pw'))el('batch-pw').style.display='none';if(el('batch-dz'))el('batch-dz').classList.remove('filled');
   }else if(ui.mode==='bill'){
     BILL_ROWS=[defaultBillRow()];ids=['bill-reason','bill-note'];renderBillEntryTable();
