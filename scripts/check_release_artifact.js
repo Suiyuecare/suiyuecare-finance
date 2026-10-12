@@ -108,6 +108,19 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+    'supabase/migrations/20261012112652_finance_personal_history_identity_once_v1.sql',
+    'scripts/check_finance_personal_history_identity_once_20261012.cjs',
+    'scripts/fixtures/finance_history_identity_authorities_20261012.json',
+    'scripts/finance_personal_history_identity_once_preflight.sql',
+    'scripts/finance_personal_history_identity_once_postflight.sql',
+    'scripts/finance_personal_history_identity_once_fingerprint.sql',
+    'scripts/finance_personal_history_identity_once_canary.sql',
+    'DESIGN.md',
+    'UX-CONTRACT.md',
+    'assets/engines/personnel-workspace.js',
+    'assets/styles/personnel-workspace.css',
+    'scripts/check_personnel_workspace_browser_20261012.cjs',
+    'scripts/check_history_search_continuity_browser_20261012.cjs',
     'scripts/fixtures/portal_projection_authorities_20261012.json',
     'scripts/test_portal_employee_projection_postflight.cjs',
     'scripts/check_combo_scroll_browser_20261012.cjs',
@@ -652,7 +665,8 @@ if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(browserCodeForSafe
 }
 
 const requiredReportArtifacts=["assets/styles/approval-navigation.css", "assets/engines/payment-concerns.js", "assets/styles/payment-concerns.css", "assets/engines/employee-form-ux.js", "assets/styles/employee-form-ux.css", "assets/styles/employee-auth-notifications.css","assets/engines/audit-readiness-engine.js","assets/engines/audit-workspace.js","assets/styles/audit-workspace.css","assets/engines/document-search.js","assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
-for(const item of requiredReportArtifacts){
+const requiredPersonnelArtifacts=['assets/engines/personnel-workspace.js','assets/styles/personnel-workspace.css'];
+for(const item of requiredReportArtifacts.concat(requiredPersonnelArtifacts)){
   const built=path.join(OUTPUT,item),source=path.join(ROOT,item);
   if(!fs.existsSync(built)||!fs.readFileSync(built).equals(fs.readFileSync(source)))fail('report artifact is missing or differs from its exact source: '+item);
 }

@@ -112,7 +112,22 @@ try {
   const guard = require('./finance_production_release_guard.js');
   const guardSource = fs.readFileSync(new URL('finance_production_release_guard.js', scripts), 'utf8');
   const domains = new Map([...guardSource.matchAll(/(\w+):\{marker:'[^']+',result:\{canary:'([^']+)'/g)].map(match => [match[2], match[1]]));
+  const identityOnceContract = Object.freeze({
+    filename: 'finance_personal_history_identity_once_canary.sql',
+    marker: 'personal_history_identity_once_canary_result',
+    domain: 'personal_history_identity_once',
+    result: {
+      canary: 'readonly_personal_history_identity_once_v1',
+      ok: true,
+      rolled_back: true,
+      identity_scope_preserved: true,
+      permission_guard_preserved: true,
+      live_latency_proven: false
+    }
+  });
+  assert.equal(domains.get(identityOnceContract.result.canary), identityOnceContract.domain);
   let verified = 0;
+  let identityOnceVerified = 0;
   for (const name of fs.readdirSync(scripts).filter(name => /^finance_.*canary\.sql$/.test(name))) {
     // The separate human-accounting gate does not use these release parsers.
     if (name === 'finance_production_human_accounting_canary.sql' || name === 'finance_human_accounting_float_canary.sql') continue;
@@ -120,7 +135,8 @@ try {
     const select = source.match(/(?:^|\n)(select\s+(?:'[^']+'\s+as\s+marker\s*,\s*)?(?:pg_catalog\.)?jsonb_build_object\([\s\S]*?\)\s+as\s+\w+\s*;)\s*$/i)?.[1];
     assert.ok(select, name+' final output must be explicitly verified');
     const file = join(outputDir, name+'.json');
-    fs.writeFileSync(file, JSON.stringify(await outputDb.exec(select)));
+    const actualResults = await outputDb.exec(select);
+    fs.writeFileSync(file, JSON.stringify(actualResults));
     if (name === 'finance_production_authenticated_canary.sql') guard.verifyAuthenticatedCanary(file);
     else if (name === 'finance_finalize_accounting_lines_canary.sql') guard.verifyFinalizeCanary(file);
     else if (name === 'finance_utility_tax_canary.sql') guard.verifyUtilityCanary(file);
@@ -129,9 +145,36 @@ try {
       assert.ok(domains.has(canary), name+' must have a protected report domain');
       guard.verifyReportsCanary(file, domains.get(canary));
     }
+    if (name === identityOnceContract.filename) {
+      const rows = actualResults.flatMap(result => result.rows || []);
+      assert.equal(rows.length, 1, 'identity-once final SQL must emit exactly one result row');
+      assert.deepEqual(rows[0][identityOnceContract.marker], identityOnceContract.result,
+        'actual SQL must preserve exact identity, permission, rollback and unproven-live-latency flags');
+      const negative = join(outputDir, 'identity-once-negative.json');
+      const verifyNegative = payload => {
+        fs.writeFileSync(negative, JSON.stringify(payload));
+        assert.throws(() => guard.verifyReportsCanary(negative, identityOnceContract.domain));
+      };
+      for (const flag of ['ok', 'rolled_back', 'identity_scope_preserved', 'permission_guard_preserved', 'live_latency_proven']) {
+        verifyNegative([{[identityOnceContract.marker]: {
+          ...identityOnceContract.result,
+          [flag]: !identityOnceContract.result[flag]
+        }}]);
+      }
+      verifyNegative([{[identityOnceContract.marker]: {...identityOnceContract.result, canary: 'wrong-canary'}}]);
+      verifyNegative([{wrong_marker: identityOnceContract.result}]);
+      verifyNegative([
+        {[identityOnceContract.marker]: identityOnceContract.result},
+        {[identityOnceContract.marker]: identityOnceContract.result}
+      ]);
+      identityOnceVerified++;
+      pass('identity-once actual final SQL has the exact new marker/domain and rejects five altered flags, wrong canary, wrong marker and duplicate results');
+    }
     verified++;
   }
-  assert.equal(verified, 39, 'every protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL result is covered');
-  pass('all 39 actual final SQL result shapes satisfy their protected release parsers');
+  assert.equal(identityOnceVerified, 1, 'the reviewed identity-once file must be explicitly covered exactly once');
+  assert.equal(verified - identityOnceVerified, 39, 'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
+  assert.equal(verified, 40, 'the 39 original results plus the exact reviewed identity-once result are covered');
+  pass('all 39 original final SQL results and the reviewed identity-once result satisfy their protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);

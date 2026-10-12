@@ -1,21 +1,25 @@
-# 財務工作台 UX 契約
+# Finance 本次介面一致性契約
 
-本文件只定義使用者看見的流程、狀態與回饋；簽核權限、會計科目、交易與資料可見範圍仍由後端契約決定。來源衝突時，先遵守伺服器／資料庫業務契約，再遵守本文件、共用前端元件與既有相鄰流程。量測計畫見 [順暢度改善與驗收](docs/finance-smoothness-plan-20261002.md)。
+範圍：2026-10-12 核准的人員列表／明細與歷史搜尋改善。既有後端業務、權限與單據語義優先於這份前端契約。
 
-| 能力 | 目前共用擁有者 | 規則與驗收 |
-| --- | --- | --- |
-| 簽核搜尋 | `index.html` 的簽核搜尋控制器；歷史結果以後端本人可見 RPC 為權威 | 中文組字不查、連打合併、舊結果不得覆蓋新查詢；清除立即；搜尋失敗不顯示確定 0 筆。單號、姓名、目的與原始金額語意見 [金額搜尋](docs/FINANCE_AMOUNT_SEARCH.md)。 |
-| 簽核清單與選取 | `renderApprList`／既有批次選取狀態 | 先顯示目前關卡、風險和下一動作；選取範圍明示本頁或全部，仍以後端授權核對；手機不得省略風險或可執行操作。 |
-| 手機常用導覽 | `assets/engines/mobile-ux-engine.js` 從桌面已授權導覽挑選捷徑 | 依職務排序最多四個常用頁，未授權頁面不得出現；完整授權頁面仍可由更多選單進入。職務排序不授予任何權限。 |
-| 主要／次要按鈕 | `assets/styles/finance-core.css` 的 `.btn-p`／`.btn-s`／`.btn-g` | 主要橘底白字至少 4.5:1；鍵盤焦點可見，忙碌及停用不冒充成功。色彩來源見 [DESIGN.md](DESIGN.md)。 |
-| 背景讀取及即時更新 | `loadRemoteData`、`refreshRemoteData` 與相應 scoped read | 小表變動只更新受影響資料；正式金額及送件前核對仍須完整。刷新可保留最後成功資料但要標示時間；錯誤、未完成與確定空集合須分開。 |
-| 單據頁首屏 | `performRemoteDataLoad` 與正式財務來源協調器 | 財務角色進入申請、傳票、繳費單或發票頁時，先讀並呈現該頁已驗證的單據，再接續完整分類帳與公司設定；正式財務數字未完整核對前維持核對中。單據來源失敗仍須繼續完整財務讀取，登入身分切換後不得回填舊單據。 |
-| 手機申請清單 | `assets/styles/finance-core.css` 的 `#pg-expenses .mobile-native-card-table` | 手機在清單標籤備妥後改為可逐項閱讀的卡片，保留七個欄位、長用途與金額；375／390px 不應出現 980px 橫向表格，桌面仍用欄位表格。卡片可點擊及鍵盤開啟詳情。 |
-| 畫面簡化層 | `assets/engines/workflow-simplification-engine.js` | 只掃描實際變動的表單、清單或詳情區域；通知等無關 DOM 異動不能造成全頁反覆重排；手動刷新仍能完整套用。 |
-| 附件保存與檢視 | Storage `file_attachments.storage_path`、`uploadAttachmentToSupabase`、`downloadFileMeta`／檢視器 | 選檔不等於上傳完成；私有附件須在當前登入身分下簽章並核權。晚到預覽不得跨檔案、帳號、租戶或環境顯示；失敗有重試。 |
-| 發票檔案匯入 | `setBatchInvoiceUploadFiles`、`analyzeBatchInvoiceUpload`、`importBatchCsv` | 同一開立事由可累積多個來源檔案與明細，確認後一次送出一張申請；每次匯入失敗不得清除既有明細或附件。CSV／Excel 匯入不依賴 AI 開關，尚未匯入的表格不得被靜默略過而送件。OCR 與表格異步讀取只可更新目前登入身分及有效匯入嘗試；切換身分、重試後的舊結果不得覆蓋明細或提示。不同申請即使事由文字相同，也不得僅依文字或附件合併；超過一張申請 500 筆上限時應在送件前阻擋並保留資料，不引導拆單。 |
-| 送件與草稿 | 正式交易 RPC、本人草稿 scoped read | 暫存可恢復；交易逾時只能顯示「結果待確認」，沿同一識別碼查核。不可再建一張替代單。見 [員工可靠性契約](docs/finance-employee-reliability.md) 與 [草稿契約](docs/finance-draft-readiness.md)。 |
-| 組織圖閱讀 | `index.html` 的 `orgExplorer*`；`mobile-ux-engine.js` 共用主管關係／人員簽核設定頁籤 | 預設縱向層級列表、點人查看詳情；完整關係圖保留。公司／部門篩選採明確原生 select（平台控制彈出選單），姓名搜尋於已載入人員本地執行，中文組字完成才更新。篩選保留標示為上層主管的上下文，不改寫隸屬；循環關係獨立警告，不畫成有效主管階層。讀取狀態只在本頁記憶體保存，切帳號／租戶／環境清除；不寫入網址或儲存草稿。編輯仍由 `canManageOrgChart` 與 `finance_save_org_chart_versioned_v2` 授權和版本契約控制。以人員 ID 定位編輯，保留唯讀登入信箱遮蔽；驗收見 `scripts/check_org_chart_clarity_browser.cjs`。 |
-| 報表 | 分類帳、公司設定與報表工作區 | 正式／暫編、資料截至時間與核對中必須可辨。未取得完整正式來源不顯示推估數字。見 [報表契約](docs/finance-reporting-contract.md)。 |
+## Canonical UI Map
 
-驗收時使用本地虛構角色矩陣覆蓋申請人、主管、出納、會計和執行長；正式站可用匿名與唯讀資料查核，不借用或冒用員工登入。每個改動至少檢查桌面、375／390px 手機、鍵盤、慢網、失敗、重試、切換登入身分及資料更新；本地綠燈與正式部署證據需分別記錄。
+| Capability | Canonical owner | Source of truth | Allowed variants | Verification |
+| --- | --- | --- | --- | --- |
+| 人員可見範圍 | visiblePersonnelUsers() | index.html 既有資料載入與 canAccessPage('users') | 沿用已授權目錄；不擴張後端讀取範圍 | 真 index 人資／唯讀／撤權瀏覽器檢查 |
+| 人員變更 | openEditU / toggleU / deleteUserAccount | index.html reliable RPC、member.role.manage 與原離職交接 guard | UI callback 只觸發一次；新人須新增後交接 | personnel-save 與 workspace 實際 handler 驗收 |
+| 身分及登入狀態 | Google health / presentation helpers | index.html normalizeFinanceGoogleLoginHealth | 啟用、綁定、待新帳號驗證、未知與失敗分開顯示 | 六種狀態、未綁定、唯讀與換身分瀏覽器檢查 |
+| Select / Listbox | enhanceLongSelects() 與既有 Combo handlers | index.html shouldEnhanceSelect / data-no-search | 科目等查找型欄位保持 Combo；核准的人員公司／權限篩選使用原生 select，接受 OS popup 幾何 | actual index enhancer 排除檢查、native filter 鍵盤與窄螢幕 |
+| 人員 Overlay | FinancePersonnelWorkspace native dialog | assets/engines/personnel-workspace.js | 核准的右側明細與更多操作 variant；鎖定、登出及離頁清除，不恢復舊人的 dialog | Tab / Shift+Tab / Esc / 焦點返回、identity lock 前清除 |
+| 歷史可見範圍 | 個人單據 summary / detail RPC | finance_personal_document_summary_v1 / finance_personal_document_detail_v1 | 完整後端搜尋；本人申請／實際參與、整批分組及總數保持 | 114 組身分矩陣、完整 payload 比對與後端權限負例 |
+| 搜尋排程 | 既有 history runtime 與 request generation | index.html apprSearch / loadApprovalHistoryPage | IME、防抖、Enter、取消與同請求去重；舊回應不得覆蓋 | 搜尋單元、真 composition 事件與 response race 測試 |
+| 歷史更新 | renderApprovalHistorySummaries() | 已確認回應的身分／query／page 與 runtime.status | 查詢時可保留同身分上次結果但標示並禁用明細；成功才替換 | loading / error / retry / zero / scroll continuity |
+| 身分切換與停權 | setFinanceWorkspaceIdentityBlocked() | 既有 permission epoch 與當前驗證身分 | 清除記憶體人員內容和私人 overlays；不跨身分持久保存 | late result / revoke / logout / lock-unlock 瀏覽器檢查 |
+| Scrollbar | 全站 finance-core.css | :root 與共享 overflow baseline | 表格及 drawer 僅允許必要幾何調整 | 窄版、長內容、200% zoom 與 scroll continuity |
+
+
+所有新增控制元件有可讀名稱、至少 44px 觸控區、可見焦點。窄螢幕與 200% 字體不整頁橫向溢出。不能新增 browser alert／confirm／prompt 作為新的頁面回饋；既有危險操作由原有 workflow 處理，本次不擅自放寬。
+
+驗收使用隔離的虛構身份與單據，測試允許／禁止角色、系統帳號、執行長、長姓名／信箱、空結果、錯誤／停權、切換身份、輸入競速、快速返回與捲動保留。正式帳號 Google 登入與真人實機試用不由模擬測試冒充。
+
+人員與單據搜尋含私人資訊，條件只存在本次已授權的記憶體畫面，不寫入 URL、analytics 或跨身分持久快取。

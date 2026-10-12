@@ -38,6 +38,7 @@
 <script src="assets/engines/data-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/form-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/employee-form-ux.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/personnel-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/approval-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/payroll-accrual-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/hr-bridge-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -68,6 +69,7 @@
 <link rel="stylesheet" href="assets/styles/employee-auth-notifications.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/employee-form-ux.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/approval-navigation.css?v=__FINANCE_ASSET_VERSION__">
+<link rel="stylesheet" href="assets/styles/personnel-workspace.css?v=__FINANCE_ASSET_VERSION__">
 <style>
 /* Include dialogs opened by already pending renders after an identity change. */
 body[data-finance-identity-blocked="true"] #main-wrap,
@@ -345,8 +347,9 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
         </div>
         <p id="approval-tab-description" class="approval-tab-description">輪到你簽核、補件或確認的單據。出納付款與收款請看「出納待辦」。</p>
         <div class="appr-toolbar">
-          <input type="search" id="appr-q" maxlength="120" aria-label="搜尋簽核單據與金額" placeholder="搜尋單號、部門、申請人、目的、金額…" oninput="apprSearch(this.value,event)" oncompositionstart="apprSearch(this.value,{isComposing:true})" oncompositionend="apprSearch(this.value)">
+          <input type="search" id="appr-q" maxlength="120" aria-label="搜尋簽核單據與金額" placeholder="搜尋單號、部門、申請人、目的、金額…" oninput="apprSearch(this.value,event)" onkeydown="approvalSearchKeydown(event)">
           <button type="button" id="appr-q-clear" class="btn-g" aria-label="清除單據搜尋文字" onclick="clearApprovalSearch()" hidden>清除</button>
+          <button type="button" id="appr-history-refresh" class="btn-g" onclick="loadApprovalHistoryPage({force:true})" hidden>更新紀錄</button>
           <span id="appr-list-hint" style="font-size:11px;color:#94a3b8">每頁最多 50 筆</span>
         </div>
       </div>
@@ -1032,7 +1035,6 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
       <button type="button" class="on" role="tab" aria-selected="true" data-mobile-users-tab="list" onclick="mobileUsersTab('list',this)">人員清單</button>
       <button type="button" role="tab" aria-selected="false" data-mobile-users-tab="health" onclick="mobileUsersTab('health',this)">帳號與簽核健檢</button>
     </div>
-      <div data-mobile-users-pane="list" class="mobile-users-filter"><input type="text" id="uq" aria-label="搜尋人員" placeholder="搜尋姓名、公司、部門、電子郵件…" oninput="filterUsers()" style="width:220px;flex:none"><select id="urf" aria-label="依角色篩選人員" onchange="filterUsers()" style="width:auto"><option value="">全部角色</option><option value="employee">一般員工</option><option value="section_chief">課長</option><option value="dept_manager">部門主管</option><option value="admin_director">行政主任</option><option value="general_affairs">總務</option><option value="hr">人資</option><option value="accountant">會計</option><option value="cashier">出納</option><option value="ceo">執行長</option></select></div>
     <div id="user-health" data-mobile-users-pane="health"></div>
     <div class="card" id="user-wrap" data-mobile-users-pane="list"></div>
   </div>
@@ -3362,6 +3364,8 @@ function setFinanceWorkspaceIdentityBlocked(blocked){
   if(blocked&&window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();
   if(blocked&&typeof window.closeReceiptViewer==='function')window.closeReceiptViewer();
   if(blocked&&window.FinancePaymentConcerns)FinancePaymentConcerns.suspend();
+  // Clear personnel dialogs before the shared identity lock captures overlay state.
+  if(blocked&&window.FinancePersonnelWorkspace)FinancePersonnelWorkspace.suspend();
   if(blocked&&typeof FINANCE_NOTIFICATION_STATE!=='undefined'){FINANCE_NOTIFICATION_STATE=null;if(typeof NOTIFS!=='undefined')NOTIFS=[];}
   var nodes=['main-wrap','sidebar'].map(function(id){return el(id);});
   if(typeof document!=='undefined'){
@@ -9377,6 +9381,7 @@ function openApprovalHistoryItem(key){
   if(!approvalHistoryPageAllowed())return Promise.resolve(rejectApprovalHistoryPageAccess());
   var owner=approvalHistoryReadOwnerIdentity();
   var list=approvalHistoryRuntimeForCurrentUser(),summary=list.items.find(function(item){return item.historyKey===key;});
+  if(list.status!=='ready'||list.query!==String(S.apprQuery||'').trim()||list.page!==Math.max(1,Number(S.apprPage)||1))return Promise.resolve({ok:false,stale:true});
   var identity=approvalHistoryIdentity();
   if(!summary||!identity||S.page!=='approvals'||!approvalPersonalTab(S.aT))return Promise.resolve({ok:false,stale:true});
   var previous=APPROVAL_HISTORY_DETAIL_RUNTIME;
@@ -9447,14 +9452,26 @@ function approvalHistoryStatusHtml(){
   if(!approvalHistoryIdentity())return '<div class="card" role="alert" style="margin-bottom:10px;padding:11px 13px;color:#991b1b">登入身分尚未完成核對，暫時無法查詢個人單據。</div>';
   if(runtime.accessDenied)return '<div class="card" role="alert" style="margin-bottom:10px;padding:11px 13px;color:#991b1b">'+escAttr(runtime.error||'個人單據頁面的權限已變更，目前無法讀取這些紀錄。')+'</div>';
   if(runtime.status==='loading'){
-    return '<div class="card" role="status" style="margin-bottom:10px;padding:11px 13px;color:#8b7358;font-size:11px">正在更新'+approvalPersonalTabLabel(S.aT)+'，請稍候。</div>';
+    return '<div class="card" role="status" aria-live="polite" style="margin-bottom:10px;padding:11px 13px;color:#6e6259;font-size:13px">'+(runtime.searchComposing?'輸入完成後搜尋。':'正在更新'+approvalPersonalTabLabel(S.aT)+'，可繼續輸入。')+(approvalHistoryHasPreviousView(runtime)?' 下方保留上次查詢結果；新結果完成前暫停開啟明細。':'')+'</div>';
   }
   if(runtime.status==='error'){
     return '<div class="card" role="alert" style="margin-bottom:10px;padding:11px 13px;border-color:#fecaca;background:#fff1f2;color:#991b1b;font-size:11px">'+approvalPersonalTabLabel(S.aT)+'暫時無法更新：'
       +escAttr(runtime.error||'請稍後重試')
+      +(approvalHistoryHasPreviousView(runtime)?' 下方為上次確認的結果，並非這次搜尋結果；請重試後再開啟明細。':'')
       +' <button type="button" class="btn-g" style="margin-left:8px;min-height:44px!important" onclick="loadApprovalHistoryPage({force:true})">重新載入</button></div>';
   }
   return'';
+}
+function approvalHistoryHasPreviousView(runtime){
+  var list=el('appr-list'),view=list&&list._financeHistoryView;
+  return !!(view&&view.identity===runtime.identity&&view.identity===approvalHistoryIdentity()
+    &&!runtime.accessDenied&&!runtime.clearPreviousView&&approvalHistoryPageAllowed()
+    &&typeof list.querySelector==='function'&&list.querySelector('[data-history-key]'));
+}
+function paintApprovalHistorySearchFeedback(){
+  var runtime=approvalHistoryRuntimeForCurrentUser(),summary=el('approval-manager-summary');
+  if(summary)summary.innerHTML=approvalHistoryStatusHtml();
+  renderApprovalHistorySummaries(runtime);
 }
 function approvalHistoryValidatePage(payload,page,query){
   function count(value){return typeof value==='number'&&Number.isSafeInteger(value)&&value>=0;}
@@ -9520,7 +9537,7 @@ function loadApprovalHistoryPage(options){
   cancelApprovalHistoryDetail();
   if(!runtime.timing||runtime.timing.query!==query||runtime.timing.measured||runtime.timing.dispatchedAt!=null)runtime.timing={startedAt:approvalHistoryClock(),trigger:options.trigger||'load',query:query};
   if(runtime.page!==page||runtime.query!==query)runtime.items=[];
-  runtime.identity=identity;runtime.status='loading';runtime.error='';runtime.accessDenied=false;runtime.page=page;runtime.limit=limit;runtime.query=query;runtime.requestSignature=signature;
+  runtime.identity=identity;runtime.status='loading';runtime.error='';runtime.accessDenied=false;runtime.clearPreviousView=false;runtime.searchComposing=false;runtime.page=page;runtime.limit=limit;runtime.query=query;runtime.requestSignature=signature;
   function current(){return APPROVAL_HISTORY_RUNTIME===runtime&&identity===approvalHistoryIdentity()&&runtime.requestSeq===requestSeq&&S.page==='approvals'&&S.aT===tab&&approvalHistoryPageAllowed();}
   // Install the promise before rendering. Synchronous client/paint exceptions
   // must not strand the runtime in loading before its timeout has even started.
@@ -9537,7 +9554,10 @@ function loadApprovalHistoryPage(options){
     if(!current())return{ok:false,stale:true};
     if(result&&result.error)throw result.error;
     var payload=result&&result.data;
-    if(!payload||payload.ok!==true||!approvalHistoryPayloadIdentityMatches(payload,identity))throw new Error('個人單據的登入身分不一致');
+    if(!payload||payload.ok!==true||!approvalHistoryPayloadIdentityMatches(payload,identity)){
+      runtime.clearPreviousView=true;runtime.items=[];runtime.total=0;runtime.allTotal=0;runtime.updatedAt='';
+      throw new Error('個人單據的登入身分不一致');
+    }
     runtime.timing.receivedAt=approvalHistoryClock();
     approvalHistoryValidatePage(payload,page,query);
     if(scope==='mine'&&payload.items.some(function(item){return item.personally_applied!==true;}))throw new Error('我的申請回應含有非本人單據，未顯示這批資料。');
@@ -9555,6 +9575,9 @@ function loadApprovalHistoryPage(options){
     if(!current())return{ok:false,stale:true,error:error};
     if(controller){try{controller.abort();}catch(_){} }
     runtime.status='error';runtime.error=remoteReadIssueText(error);
+    if(error&&(['42501','401','403'].indexOf(String(error.code||error.status||error.statusCode||''))>=0||error.status===401||error.status===403)){
+      runtime.items=[];runtime.total=0;runtime.allTotal=0;runtime.updatedAt='';runtime.clearPreviousView=true;
+    }
     try{if(typeof recordRemoteReadIssue==='function')recordRemoteReadIssue('個人單據紀錄',error);}catch(_){}
     paintApprovalHistoryState();
     return{ok:false,error:error};
@@ -16338,6 +16361,7 @@ async function guardedNav(id,btn){
     APPROVAL_WAIT_TIMER_ID=null;
   }
   if(window.FinanceHrBridge)window.FinanceHrBridge.dispose();
+  if(S.page==='users'&&id!=='users'&&window.FinancePersonnelWorkspace)FinancePersonnelWorkspace.suspend();
   if(id!=='detail')S.prev=S.page;S.page=id;
   document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on');});
   document.querySelectorAll('.ni').forEach(function(n){n.classList.remove('on');var d=n.querySelector('.dot');if(d)d.remove();});
@@ -28107,6 +28131,7 @@ window.laborElectronicLoadTracker=async function(reset){
 function buildApprovals(){
   setApprovalTabVisual(S.aT||'p');
   updateApprovalSearchClear();
+  var historyRefresh=el('appr-history-refresh');if(historyRefresh)historyRefresh.hidden=!approvalPersonalTab(S.aT)||S.demoLogin;
   renderConfirmedBillSubmission();
   var correctionQueue=el('accounting-correction-queue');
   if(!correctionQueue&&el('appr-list')){correctionQueue=document.createElement('div');correctionQueue.id='accounting-correction-queue';el('appr-list').before(correctionQueue);}
@@ -29087,12 +29112,12 @@ window.apprSearch=function(v,event){
     cancelApprovalHistorySearchTimer();
     var runtime=approvalHistoryRuntimeForCurrentUser(),identity=approvalHistoryIdentity();
     var query=String(S.apprQuery).trim(),composing=!!(event&&event.isComposing);
-    if(!identity){buildApprovals();return;}
+    if(!identity){paintApprovalHistorySearchFeedback();return;}
     if(!approvalHistoryPageAllowed()){rejectApprovalHistoryPageAccess();return;}
     runtime.searchComposing=composing;
     if(!composing&&runtime.query===query&&runtime.page===1
       &&(runtime.status==='ready'||runtime.status==='error'||runtime.promise)){
-      buildApprovals();return;
+      paintApprovalHistorySearchFeedback();return;
     }
     cancelApprovalHistoryDetail();
     if(!event||!event.historyRefresh)runtime.timing={startedAt:approvalHistoryClock(),trigger:'input',query:query};
@@ -29100,9 +29125,9 @@ window.apprSearch=function(v,event){
     // query must not paint results under the new input, even if abort is ignored.
     cancelApprovalHistoryRequest(runtime);
     if(runtime.query!==query||runtime.page!==1){runtime.items=[];runtime.total=0;}
-    runtime.page=1;runtime.query=query;runtime.status='loading';runtime.error='';
+    runtime.page=1;runtime.query=query;runtime.status='loading';runtime.error='';runtime.clearPreviousView=false;
     var requestSeq=runtime.requestSeq;
-    if(composing){buildApprovals();return;}
+    if(composing){paintApprovalHistorySearchFeedback();return;}
     var timer=setTimeout(function(){
       if(approvalHistorySearchTimer!==timer)return;
       approvalHistorySearchTimer=null;
@@ -29113,7 +29138,7 @@ window.apprSearch=function(v,event){
     approvalHistorySearchTimer=timer;
     // Pending state and timer exist before render, so a cold page cannot start
     // its unrelated empty-query bootstrap on every input event.
-    buildApprovals();
+    paintApprovalHistorySearchFeedback();
     return;
   }
   cancelApprovalLocalSearchTimer();
@@ -29132,6 +29157,21 @@ window.apprSearch=function(v,event){
   },200);
   approvalLocalSearchTimer=timer;
 };
+window.approvalSearchKeydown=function(event){
+  if(!event||event.key!=='Enter'||event.isComposing||event.keyCode===229)return;
+  if(!approvalPersonalTab(S.aT)||S.demoLogin)return;
+  if(approvalHistoryRuntimeForCurrentUser().searchComposing)return;
+  event.preventDefault();
+  loadApprovalHistoryPage({page:1,query:S.apprQuery||'',trigger:'enter'}).catch(function(error){console.warn('approval history explicit search failed',error);});
+};
+// Composition events require real listeners across supported browsers; HTML
+// oncomposition* attributes do not reliably install event handlers.
+document.addEventListener('compositionstart',function(event){
+  if(event.target&&event.target.id==='appr-q')window.apprSearch(event.target.value,{isComposing:true});
+});
+document.addEventListener('compositionend',function(event){
+  if(event.target&&event.target.id==='appr-q')window.apprSearch(event.target.value,{isComposing:false});
+});
 window.apprSort=function(field){
   if(approvalPersonalTab(S.aT))return;
   var restoreFocus=document.activeElement&&document.activeElement.getAttribute('data-approval-sort')===field;
@@ -29227,6 +29267,21 @@ function renderApprovalHistorySummaries(runtime){
   list.setAttribute('data-history-status',runtime.status);
   list.setAttribute('data-history-total',ready?String(runtime.total):'');
   list.setAttribute('data-history-all-total',known?String(runtime.allTotal):'');
+  // Keep the last verified table in this same authenticated view while the new
+  // server search is pending. It is explicitly previous data, never actionable
+  // or mapped as the requested query. Identity/permission changes remove it.
+  if(!ready&&approvalHistoryHasPreviousView(runtime)){
+    list.setAttribute('data-history-previous-results','true');
+    list.querySelectorAll('button').forEach(function(button){button.disabled=true;});
+    syncApprovalWaitTimer();return;
+  }
+  list.setAttribute('data-history-previous-results','false');
+  var view=list._financeHistoryView;
+  if(ready&&approvalHistoryHasPreviousView(runtime)&&view.items===runtime.items&&view.page===runtime.page&&view.query===runtime.query){
+    runtime.items.forEach(function(item){S.apprItemMap[item.historyKey]=item;});
+    syncApprovalWaitTimer();return;
+  }
+  list._financeHistoryView=null;
   if(!runtime.items.length){
     list.innerHTML='<div class="card" role="status" style="text-align:center;padding:30px">'+(runtime.status==='error'
       ?runtime.accessDenied?escAttr(runtime.error||'簽核頁面的權限已變更，目前無法讀取這些紀錄。'):'紀錄暫時無法更新，不能當成 0 筆。<br><button type="button" class="btn-g" style="min-height:44px!important;margin-top:10px" onclick="loadApprovalHistoryPage({force:true})">重新載入</button>'
@@ -29255,6 +29310,7 @@ function renderApprovalHistorySummaries(runtime){
   }).join('');
   var page=Math.max(1,runtime.page),pages=Math.max(1,Math.ceil(runtime.total/50));
   list.innerHTML='<div class="card"><div class="finance-detail-scroll approval-history-summary-scroll" style="width:100%;contain:inline-size" tabindex="0" role="region" aria-label="'+label+'摘要表，可左右捲動"><table class="approval-table finance-list-table compact finance-detail-table approval-history-summary-table" style="min-width:1120px!important;table-layout:fixed!important">'+approvalTableHeaderHtml().replace('>選取<','>明細<').replace('>簽核日期<','>最後參與時間<')+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(runtime.total,page,pages)+'</div>';
+  if(ready)list._financeHistoryView={identity:runtime.identity,items:runtime.items,page:runtime.page,query:runtime.query};
   if(typeof window.refreshFinancialTableScrollHints==='function')window.refreshFinancialTableScrollHints(list);
   syncApprovalWaitTimer();
 }
@@ -40458,6 +40514,8 @@ function personnelHealthDetailHtml(issues){
 }
 function renderUsersHealth(){
   var box=el('user-health');if(!box)return;
+  var previousDetails=box.querySelector?box.querySelector('[data-personnel-health-details]'):null;
+  var expanded=!!(previousDetails&&previousDetails.open);
   var h=hrPersonnelIssues();
   var runtimeRows=financeUserRuntimeReadinessRows();
   var approvalIssues=runtimeRows.map(function(row){
@@ -40474,8 +40532,8 @@ function renderUsersHealth(){
   var items=[
     {
       label:'啟用人員',count:h.active.length,ok:h.active.length>0,
-      result:'目前可登入並參與表單與簽核的人員數。',
-      clearText:'啟用人員可依各自權限使用系統。',
+      result:'帳號啟用的人員數；能否登入仍須核對 Google 綁定狀態。',
+      clearText:'啟用帳號仍須完成 Google 驗證並取得所需權限。',
       action:'請先新增或啟用至少一位人員。',
       buttonLabel:'新增人員',buttonAction:'openAddUser()'
     },
@@ -40563,11 +40621,13 @@ function renderUsersHealth(){
     action:'確認實際使用者後，只保留一個正確啟用帳號；其餘帳號請修正登入信箱或停用。'
   });
   var problemCategoryCount=items.filter(function(item){return !item.ok;}).length;
-  box.innerHTML='<section class="card personnel-health-panel"><div class="personnel-health-head"><div class="personnel-health-heading">'
+  var healthTab=document.querySelector('[data-mobile-users-tab="health"]');
+  if(healthTab){healthTab.textContent='帳號與簽核健檢'+(problemCategoryCount?'（'+problemCategoryCount+' 類待處理）':'');healthTab.setAttribute('aria-label','帳號與簽核健檢：'+(problemCategoryCount?problemCategoryCount+' 類需要處理':'全部正常'));}
+  box.innerHTML='<details class="fpw-health-disclosure" data-personnel-health-details'+(expanded?' open':'')+'><summary class="fpw-health-summary"><strong>帳號與簽核健檢</strong><span class="personnel-health-summary-chip '+(problemCategoryCount?'warn':'')+'">'+(problemCategoryCount?problemCategoryCount+' 類需要處理':'全部正常')+'</span><span class="fpw-health-summary-hint">查看健檢詳情</span></summary><section class="card personnel-health-panel"><div class="personnel-health-head"><div class="personnel-health-heading">'
     +'<div class="personnel-health-title-row"><div class="personnel-health-title">帳號與簽核資料健康檢查</div><span class="personnel-health-summary-chip '+(problemCategoryCount?'warn':'')+'">'+(problemCategoryCount?problemCategoryCount+' 類需要處理':'全部正常')+'</span></div>'
     +'<div class="personnel-health-subtitle">新增或更新人員後，系統會檢查公司登入身分、會計系統帳號、主要權限、所屬部門、直屬主管及簽核資料是否一致。</div></div>'
     +(canManageUsers()?'<button type="button" class="btn-g" onclick="runAllUserRuntimeAssurance({alert:true})">重新同步全部帳號與簽核資料</button>':'')
-    +'</div><div class="personnel-health-grid">'+items.map(personnelHealthItemHtml).join('')+'</div>'+personnelHealthDetailHtml(issues)+'</section>';
+    +'</div><div class="personnel-health-grid">'+items.map(personnelHealthItemHtml).join('')+'</div>'+personnelHealthDetailHtml(issues)+'</section></details>';
 }
 function recordUserManagementWriteFailure(actionLabel,user,result){
   var detail=(actionLabel||'人員管理寫入')+'失敗：'+settingsWriteErrorMessage(result);
@@ -40879,37 +40939,37 @@ window.submitUserOffboarding=async function(){
   }
 };
 function renderUsers(){
-  var q=el('uq')?el('uq').value.toLowerCase():'';var rf=(el('urf')||{}).value||'';
   var personnelUsers=visiblePersonnelUsers();
-  var data=personnelUsers.filter(function(u){
-    var d=gD(u.dc),ent=gE(u.eid||entityOfDept(u.dc)||'E1');
-    var hay=[u.n,u.email,u.contactEmail,u.jobTitle,u.extension,u.rL,RL[u.role],u.dc,d.n,ent.s,ent.full].join(' ').toLowerCase();
-    return(!q||hay.indexOf(q)>-1)&&(!rf||u.role===rf);
-  });
-  var RC={employee:'b-gray',section_chief:'b-blue',dept_manager:'b-purp',admin_director:'b-wait',general_affairs:'b-teal',hr:'b-blue',accountant:'b-ok',cashier:'b-wait',ceo:'b-wait',external_audit:'b-gray',board:'b-purp',shareholder:'b-blue'};
   var namedUsers=personnelUsers.filter(function(u){return u.orgStatus!=='system_account';});
-  el('user-sub').textContent='共 '+namedUsers.length+' 位具名人員，'+personnelUsers.filter(function(u){return u.active;}).length+' 個啟用帳號｜登入身分已綁定 '+personnelUsers.filter(orgGoogleLoginReady).length+' 個';
+  el('user-sub').textContent='共 '+namedUsers.length+' 位人員 · '+(personnelUsers.length-namedUsers.length)+' 個系統帳號';
   var canEdit=canManageUsers();
-  var aw=el('user-add-wrap');if(aw)aw.innerHTML=canEdit?'<div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end"><button class="btn-g" onclick="runAllUserRuntimeAssurance({alert:true})">檢查並修復全部帳號</button><button class="btn-g" onclick="financeAdminAction(&quot;permissions&quot;)">同步簽核權限</button><button class="btn-g" onclick="refreshAllGoogleLoginHealth({alert:true})">檢查 Google 登入狀態</button><button class="btn-p" onclick="openAddUser()">+ 新增人員</button></div>':'';
   var notice=el('user-readonly-notice');if(notice)notice.style.display=canEdit?'none':'block';
   renderUsersHealth();
   renderOrgAdminRuntimeStatus();
-  el('user-wrap').innerHTML='<div class="personnel-table-intro"><div><strong>人員、登入與組織資料</strong><span>公司登入信箱用於身分識別；職稱、分機與組織聯絡信箱只影響人員管理及主管圖呈現。</span></div><span class="ppt-source-chip">簡報人員已匯入</span></div><div class="personnel-table-scroll" style="overflow-x:auto"><table class="finance-list-table user-list-table personnel-list-table mobile-card-table"><thead><tr><th>人員 / 職稱</th><th>公司 / 部門</th><th>系統權限</th><th>公司登入信箱</th><th>組織聯絡 / 分機</th><th>登入綁定</th><th>狀態</th><th>操作</th></tr></thead><tbody>'
-    +(data.map(function(u){
-      var d=gD(u.dc)||{},ent=gE(u.eid||entityOfDept(u.dc)||'E1')||{};
-      var isSystem=u.orgStatus==='system_account';
-      var isActive=u.active!==false;
-      var sourcePpt=/pptx/i.test(u.orgSource||'');
-      return'<tr class="'+(isSystem?'is-system-account ':'')+'" style="opacity:'+(isActive?1:.5)+'"><td data-label="人員 / 職稱"><div class="personnel-name-line"><span class="personnel-avatar">'+escAttr(u.init||String(u.n||'?').slice(0,1))+'</span><div><strong>'+escAttr(u.n||'未命名')+'</strong><div class="personnel-job-title">'+escAttr(u.jobTitle||u.rL||RL[u.role]||'未填職稱')+'</div><div class="personnel-inline-badges">'+(sourcePpt?'<span class="ppt-mini-badge">簡報</span>':'')+(isSystem?'<span class="system-mini-badge">系統帳號</span>':'')+'</div></div></div></td>'
-        +'<td data-label="公司 / 部門"><div class="personnel-company">'+escAttr(ent.full||ent.s||'未指定')+'</div><div class="personnel-department"><span class="dt">'+escAttr(u.dc||'未填')+'</span>'+escAttr(d.n||'未指定')+'</div></td>'
-        +'<td data-label="系統權限"><span class="badge '+(RC[u.role]||'b-gray')+'">'+escAttr(u.rL||RL[u.role]||u.role)+'</span><div class="personnel-scope-note">'+escAttr((portalRoleForUser(u)||{}).defaultScope||'self')+' 範圍</div></td>'
-        +'<td data-label="公司登入信箱"><div class="personnel-email">'+escAttr(u.email||'')+'</div><div class="personnel-login-note">登入識別，不跟隨聯絡信箱改變</div></td>'
-        +'<td data-label="組織聯絡 / 分機"><div class="personnel-email">'+escAttr(u.contactEmail||u.email||'')+'</div>'+(u.extension?'<div class="personnel-extension">分機 '+escAttr(u.extension)+'</div>':'<div class="personnel-extension muted">未設定分機</div>')+'</td>'
-        +'<td data-label="登入綁定">'+(isCompanyGoogleLoginEmail(u.email)?financeGoogleLoginStatusHtml(u):'<span class="badge b-rej">非公司 Google 登入帳號</span><div class="personnel-login-note">請改成本人實際使用的公司 Google 主帳號。</div>')+'</td>'
-        +'<td data-label="狀態"><span class="badge '+(isActive?'b-ok':'b-gray')+'">'+(isActive?'啟用':'停用')+'</span></td>'
-        +'<td data-label="操作">'+(canEdit?'<div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn-g" onclick="openEditU(\''+u.id+'\')">編輯</button><button class="btn-g" onclick="checkGoogleLoginStatusForUser(\''+u.id+'\',{alert:true})">檢查登入</button><button class="btn-g '+(isActive?'user-offboarding-trigger':'')+'" onclick="toggleU(\''+u.id+'\')">'+(isActive?'離職交接':'啟用')+'</button><button class="btn-s" style="color:#8a1010" onclick="deleteUserAccount(\''+u.id+'\')">刪除</button></div>':'<span style="font-size:10px;color:#c0a880">唯讀</span>')+'</td></tr>';
-    }).join('')||'<tr><td colspan="8" style="padding:28px;text-align:center;color:#94a3b8;font-size:12px">找不到使用者</td></tr>')
-    +'</tbody></table></div>';
+  if(window.FinancePersonnelWorkspace){
+    FinancePersonnelWorkspace.render({
+      host:'user-wrap',toolHost:'user-add-wrap',getUsers:visiblePersonnelUsers,
+      canManage:canManageUsers,getIdentity:financeGoogleLoginHealthIdentity,
+      isBlocked:function(){return financeWorkspaceIdentityBlocked;},
+      department:gD,entity:function(u){return gE(u.eid||entityOfDept(u.dc)||'E1');},
+      roleLabel:function(u){return u.rL||RL[u.role]||u.role;},
+      scope:function(u){return (portalRoleForUser(u)||{}).defaultScope;},
+      health:financeGoogleLoginHealthForUser,presentation:financeGoogleLoginStatusPresentation,
+      validLoginEmail:isCompanyGoogleLoginEmail,
+      supervisor:function(u){var manager=orgSupervisorUser(orgRowForUser(u.id))||directSupervisorUser(u);return manager?manager.n:(u.role==='ceo'?'最高主管':'未指定');},
+      onEdit:openEditU,onCheckLogin:function(id){return checkGoogleLoginStatusForUser(id,{alert:true});},
+      onToggle:function(id){return toggleU(id);},onDelete:deleteUserAccount,onAdd:openAddUser,
+      tools:[
+        {id:'assurance',label:'檢查並修復全部帳號',run:function(){return runAllUserRuntimeAssurance({alert:true});}},
+        {id:'permissions',label:'同步簽核權限',run:function(){return financeAdminAction('permissions');}},
+        {id:'google',label:'檢查 Google 登入狀態',run:function(){return refreshAllGoogleLoginHealth({alert:true});}}
+      ]
+    });
+  }else{
+    // A failed asset load must not fall back to stale or partial personnel data.
+    var aw=el('user-add-wrap');if(aw)aw.replaceChildren();
+    el('user-wrap').textContent='人員列表元件未能載入，請重新整理後再試。';
+  }
 }
 window.toggleU=async function(id){
   if(!canManageUsers()){alert('此功能僅開放給執行長、行政部門主任與人資');return;}
