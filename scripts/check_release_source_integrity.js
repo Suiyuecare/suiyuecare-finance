@@ -59,6 +59,48 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'scripts/check_department_workspace_browser.cjs',
+  'scripts/fixtures/department_workspace.cjs',
+  'scripts/test_hr_private_bridge_concurrency.mjs',
+
+  'scripts/test_asset_amortization.cjs',
+  'scripts/check_month_asset_workspace_browser.cjs',
+  'scripts/test_cloud_submission_engine.cjs',
+  'scripts/test_cloud_submission_native.cjs',
+  'scripts/test_cloud_draft_workspace.cjs',
+  'scripts/check_finance_restore_rehearsal.mjs',
+  'scripts/finance_cloud_submission_postflight.sql',
+  'scripts/finance_monthly_delivery_postflight.sql',
+  'scripts/fixtures/finance_cloud_submission_step_validator_20261011.json',
+  'scripts/fixtures/finance_completion_baseline_metadata_20261011.json',
+  'docs/asset-amortization-acceptance-20261011.md',
+  'docs/cloud-submission-acceptance-20261011.md',
+  'assets/engines/month-close-workspace.js',
+  'assets/engines/asset-amortization-workspace.js',
+  'assets/engines/monthly-delivery-workspace.js',
+  'assets/engines/cloud-submission-workspace.js',
+  'assets/engines/cloud-draft-workspace.js',
+  'assets/engines/operations-workspace.js',
+  'assets/styles/finance-completion.css',
+  'scripts/test_month_close_workspace.cjs',
+  'scripts/test_operations_observability.cjs',
+  'scripts/check_cloud_submission_v1.cjs',
+  'scripts/check_monthly_delivery.cjs',
+  'scripts/check_monthly_delivery_browser.cjs',
+  'scripts/finance_restore_rehearsal.mjs',
+  'scripts/check_finance_completion_browser.cjs',
+  'scripts/run_finance_completion_acceptance.mjs',
+  'scripts/fixtures/finance_cloud_submission_live_sources_20261011.json',
+  'scripts/finance_completion_preflight.sql',
+  'scripts/finance_completion_postflight.sql',
+  'scripts/finance_completion_fingerprint.sql',
+  'scripts/finance_completion_canary.sql',
+  'scripts/test_finance_completion_release_batch.cjs',
+  'docs/finance-completion-20261011.md',
+  'docs/month-close-workspace-acceptance-20261011.md',
+  'docs/finance-monthly-delivery-20261011.md',
+  'docs/finance-restore-rehearsal-20261011.md',
+
   'scripts/fixtures/portal_projection_authorities_20261012.json',
   'scripts/test_portal_employee_projection_postflight.cjs',
   'scripts/check_combo_scroll_browser_20261012.cjs',
@@ -614,7 +656,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   "test:finance-ui-interactions": "node scripts/check_finance_ui_interaction_browser.cjs",
   'test:hr-bridge-release': 'node scripts/test_hr_bridge_release_batch.mjs',
   'test:hr-bridge-browser': 'HR_BRIDGE_BROWSER=1 node scripts/test_hr_private_bridge.mjs',
-  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:invoice-item-review && pnpm test:invoice-item-bind-sql && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor && pnpm test:submission-cashier-preflight && pnpm test:attachment-claim-migration && pnpm test:human-accounting-float && pnpm test:invoice-revenue-result && pnpm test:formal-resumable-upload && pnpm test:personnel-save && pnpm test:procurement-closeout && pnpm test:purchase-final-amount && pnpm test:all-applicant-withdraw && pnpm test:personal-history && pnpm test:bill-batch-bulk && pnpm test:invoice-batch-approval && pnpm test:portal-projection-postflight",
+  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:invoice-item-review && pnpm test:invoice-item-bind-sql && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor && pnpm test:submission-cashier-preflight && pnpm test:attachment-claim-migration && pnpm test:human-accounting-float && pnpm test:invoice-revenue-result && pnpm test:formal-resumable-upload && pnpm test:personnel-save && pnpm test:procurement-closeout && pnpm test:purchase-final-amount && pnpm test:all-applicant-withdraw && pnpm test:personal-history && pnpm test:bill-batch-bulk && pnpm test:invoice-batch-approval && pnpm test:finance-completion && pnpm test:portal-projection-postflight",
   'release:verify-artifact': 'node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js',
   'release:build': 'pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact'
 });
@@ -1141,23 +1183,24 @@ check('Vercel source includes the release gate contract',
 const workflow = fs.existsSync(path.join(ROOT, '.github/workflows/stability-gate.yml'))
   ? fs.readFileSync(path.join(ROOT, '.github/workflows/stability-gate.yml'), 'utf8')
   : '';
-check('CI runs source and root-cause gates before build',
-  workflow.indexOf('pnpm release:preflight') > -1
-    && workflow.indexOf('pnpm release:preflight') < workflow.indexOf('pnpm release:build'));
+check('CI runs full preflight before artifact build through release:build',
+  workflow.includes('run: pnpm release:build')
+    && pkg.scripts['release:build'].startsWith('pnpm release:preflight && node scripts/build_www.js'));
 const interactionGate = workflow.slice(workflow.indexOf('  interaction-gate:'));
 check('CI runs invoice binding browser coverage after installing browsers in the interaction gate',
   interactionGate.indexOf('pnpm test:invoice-item-bind-browser') > interactionGate.indexOf('pnpm exec playwright install')
     && interactionGate.indexOf('pnpm exec playwright install') >= 0);
-check('CI explicitly runs the environment isolation contract before preflight and build',
-  workflow.indexOf('pnpm release:environment-isolation') > -1
-    && workflow.indexOf('pnpm release:environment-isolation') < workflow.indexOf('pnpm release:preflight')
-    && workflow.indexOf('pnpm release:preflight') < workflow.indexOf('pnpm release:build'));
+check('CI enforces environment isolation before all build operations',
+  workflow.includes('run: pnpm release:build')
+    && pkg.scripts['release:preflight'].indexOf('pnpm release:environment-isolation') > -1
+    && pkg.scripts['release:build'].indexOf('pnpm release:preflight') < pkg.scripts['release:build'].indexOf('node scripts/build_www.js'));
 check('CI candidate is an explicit offline preview build',
   /FINANCE_BUILD_TARGET:\s*preview/.test(workflow));
 check('CI does not claim an unsupported clean-slate database replay',
   !/(?:supabase\s+(?:start|stop)|supabase\s+db\s+reset)/i.test(workflow));
 check('CI verifies and uploads the exact generated artifact',
-  workflow.includes('pnpm release:verify-artifact')
+  workflow.includes('run: pnpm release:build')
+    && pkg.scripts['release:build'].endsWith('pnpm release:verify-artifact')
     && workflow.includes('actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02'));
 check('release workflow contains no deployment command or production secret',
   !/(?:vercel\s+(?:deploy|promote|--prod)|supabase\s+(?:link|db\s+push)|VERCEL_TOKEN|SUPABASE_SERVICE_ROLE|SUPABASE_DB_PASSWORD|secrets\.)/i.test(workflow));

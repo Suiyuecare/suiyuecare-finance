@@ -1,0 +1,24 @@
+.finance-operations{color:var(--ink,#2f2a26);font-family:var(--font-sans);line-height:1.5}
+.finance-operations details{margin:12px 0;padding:12px;border:1px solid var(--line,#f1cfa8);border-radius:12px;background:var(--surface,#fff)}
+.finance-operations summary{cursor:pointer;font-weight:700;min-height:36px;overflow-wrap:anywhere}
+.fo-summaries{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}
+.fo-summary{padding:14px;background:var(--paper,#fff9f2);border:1px solid var(--line,#f1cfa8);border-radius:12px;min-width:0}
+.fo-summary span,.fo-summary strong{display:block;overflow-wrap:anywhere}.fo-summary strong{font-size:22px;font-variant-numeric:tabular-nums}
+.fo-table-scroll{max-width:100%;overflow:auto}.fo-table-scroll table{min-width:620px}.fo-table-scroll th{position:sticky;top:0}.fo-table-scroll td{overflow-wrap:anywhere;vertical-align:top}.fo-table-scroll small{display:block;color:var(--muted,#6e6259)}
+.fo-table-scroll code{display:block;max-width:220px;overflow-wrap:anywhere;font-size:11px}.fo-empty,.fo-note{padding:12px;color:var(--muted,#6e6259)}.fo-error{padding:12px;color:var(--danger,#8a1010);background:#fff1f2;border-radius:10px}
+.fo-alerts{display:grid;gap:10px}.fo-alerts article{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px;border:1px solid var(--line,#f1cfa8);border-radius:10px}.fo-alerts span{flex:1;min-width:160px;overflow-wrap:anywhere}
+.finance-operations button{min-height:44px}.finance-operations button:focus-visible{outline:3px solid var(--br,#ea880c);outline-offset:3px}
+@media(max-width:600px){.fo-summaries{grid-template-columns:1fr}.finance-operations details{padding:10px}.fo-table-scroll table{font-size:14px}}
+@media(prefers-reduced-motion:reduce){.finance-operations *{transition:none!important}}
+.finance-cloud-drafts{padding:16px;margin-bottom:16px;min-width:0}
+.cloud-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.cloud-head h3{margin:0 0 6px;font-size:17px;color:var(--txt,#2f2a26)}
+.cloud-head p{margin:0;color:var(--muted,#6e6259);font-size:13px;line-height:1.6}
+.cloud-actions{display:flex;gap:8px;flex-wrap:wrap}
+.cloud-status{font-size:13px;line-height:1.6;overflow-wrap:anywhere;min-height:1.6em}
+.cloud-table-scroll{overflow-x:auto;max-width:100%;overscroll-behavior-x:contain}
+.cloud-table-scroll table{width:100%;min-width:580px;text-align:left;border-collapse:collapse}
+.cloud-table-scroll td,.cloud-table-scroll th{padding:10px;border-bottom:1px solid var(--line,#f1cfa8)}
+.cloud-table-scroll small{display:block;overflow-wrap:anywhere;color:var(--muted,#6e6259)}
+.finance-cloud-drafts button{min-height:44px!important}
+.finance-cloud-drafts button:focus-visible{outline:2px solid var(--primary,#b45309);outline-offset:3px}

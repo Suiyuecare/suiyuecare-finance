@@ -108,6 +108,49 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+  'scripts/test_asset_amortization.cjs',
+  'scripts/check_department_workspace_browser.cjs',
+  'scripts/fixtures/department_workspace.cjs',
+  'scripts/test_hr_private_bridge_concurrency.mjs',
+  'scripts/check_mobile_role_navigation_browser_20261002.cjs',
+
+  'scripts/check_month_asset_workspace_browser.cjs',
+  'scripts/test_cloud_submission_engine.cjs',
+  'scripts/test_cloud_submission_native.cjs',
+  'scripts/test_cloud_draft_workspace.cjs',
+  'scripts/check_finance_restore_rehearsal.mjs',
+  'scripts/finance_cloud_submission_postflight.sql',
+  'scripts/finance_monthly_delivery_postflight.sql',
+  'scripts/fixtures/finance_cloud_submission_step_validator_20261011.json',
+  'scripts/fixtures/finance_completion_baseline_metadata_20261011.json',
+  'docs/asset-amortization-acceptance-20261011.md',
+  'docs/cloud-submission-acceptance-20261011.md',
+  'assets/engines/month-close-workspace.js',
+  'assets/engines/asset-amortization-workspace.js',
+  'assets/engines/monthly-delivery-workspace.js',
+  'assets/engines/cloud-submission-workspace.js',
+  'assets/engines/cloud-draft-workspace.js',
+  'assets/engines/operations-workspace.js',
+  'assets/styles/finance-completion.css',
+  'scripts/test_month_close_workspace.cjs',
+  'scripts/test_operations_observability.cjs',
+  'scripts/check_cloud_submission_v1.cjs',
+  'scripts/check_monthly_delivery.cjs',
+  'scripts/check_monthly_delivery_browser.cjs',
+  'scripts/finance_restore_rehearsal.mjs',
+  'scripts/check_finance_completion_browser.cjs',
+  'scripts/run_finance_completion_acceptance.mjs',
+  'scripts/fixtures/finance_cloud_submission_live_sources_20261011.json',
+  'scripts/finance_completion_preflight.sql',
+  'scripts/finance_completion_postflight.sql',
+  'scripts/finance_completion_fingerprint.sql',
+  'scripts/finance_completion_canary.sql',
+  'scripts/test_finance_completion_release_batch.cjs',
+  'docs/finance-completion-20261011.md',
+  'docs/month-close-workspace-acceptance-20261011.md',
+  'docs/finance-monthly-delivery-20261011.md',
+  'docs/finance-restore-rehearsal-20261011.md',
+
     'scripts/fixtures/portal_projection_authorities_20261012.json',
     'scripts/test_portal_employee_projection_postflight.cjs',
     'scripts/check_combo_scroll_browser_20261012.cjs',
@@ -651,7 +694,7 @@ if (/sb_secret_|service[_-]?role[^\n]{0,80}(?:eyJ|sb_)/i.test(browserCodeForSafe
   fail('artifact contains a forbidden Supabase elevated key');
 }
 
-const requiredReportArtifacts=["assets/styles/approval-navigation.css", "assets/engines/payment-concerns.js", "assets/styles/payment-concerns.css", "assets/engines/employee-form-ux.js", "assets/styles/employee-form-ux.css", "assets/styles/employee-auth-notifications.css","assets/engines/audit-readiness-engine.js","assets/engines/audit-workspace.js","assets/styles/audit-workspace.css","assets/engines/document-search.js","assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
+const requiredReportArtifacts=["assets/engines/month-close-workspace.js","assets/engines/asset-amortization-workspace.js","assets/engines/monthly-delivery-workspace.js","assets/engines/cloud-submission-workspace.js","assets/engines/cloud-draft-workspace.js","assets/engines/operations-workspace.js","assets/styles/finance-completion.css","assets/styles/approval-navigation.css", "assets/engines/payment-concerns.js", "assets/styles/payment-concerns.css", "assets/engines/employee-form-ux.js", "assets/styles/employee-form-ux.css", "assets/styles/employee-auth-notifications.css","assets/engines/audit-readiness-engine.js","assets/engines/audit-workspace.js","assets/styles/audit-workspace.css","assets/engines/document-search.js","assets/engines/receivables-engine.js","assets/engines/financial-statements.js", "assets/engines/management-report-engine.js", "assets/engines/reporting-workspace.js", "assets/engines/tax-report-engine.js", "assets/styles/reporting-workspace.css", "docs/reference/taiwan-vat-401-403-404-official-20230831.pdf"];
 for(const item of requiredReportArtifacts){
   const built=path.join(OUTPUT,item),source=path.join(ROOT,item);
   if(!fs.existsSync(built)||!fs.readFileSync(built).equals(fs.readFileSync(source)))fail('report artifact is missing or differs from its exact source: '+item);

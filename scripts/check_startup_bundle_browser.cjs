@@ -5,14 +5,26 @@ const path = require('node:path');
 const http = require('node:http');
 const zlib = require('node:zlib');
 const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 const { chromium } = require('playwright');
 const { createStartupBundle, createAppBundle, pinnedSupabaseSdk, SDK } = require('./finance_startup_bundle');
 const { applyBuildEnvironment } = require('./finance_build_environment');
-const root = path.resolve(__dirname, '../www');
-const sdk = pinnedSupabaseSdk(path.resolve(__dirname, '..'));
+const sourceRoot = path.resolve(__dirname, '..');
+const sdk = pinnedSupabaseSdk(sourceRoot);
 const out = path.resolve(process.env.FINANCE_STARTUP_EVIDENCE_DIR || '/tmp/finance-startup-bundle-browser');
 const measure = process.argv.includes('--measure');
 fs.mkdirSync(out, { recursive: true });
+// The release candidate remains a sealed preview/production artifact. Build a
+// separate offline fixture using the unchanged build script so demo smoke never
+// depends on its preceding release target or overwrites the reviewed artifact.
+const fixtureRoot = fs.mkdtempSync(path.join(out, 'offline-build-'));
+fs.mkdirSync(path.join(fixtureRoot, 'scripts'));
+for (const name of ['build_www.js', 'finance_startup_bundle.js', 'finance_build_environment.js']) fs.copyFileSync(path.join(sourceRoot, 'scripts', name), path.join(fixtureRoot, 'scripts', name));
+for (const name of ['index.html', 'external-remuneration.html', 'privacy.html']) fs.copyFileSync(path.join(sourceRoot, name), path.join(fixtureRoot, name));
+for (const name of ['assets', 'docs']) fs.cpSync(path.join(sourceRoot, name), path.join(fixtureRoot, name), { recursive: true });
+fs.symlinkSync(path.join(sourceRoot, 'node_modules'), path.join(fixtureRoot, 'node_modules'), 'dir');
+execFileSync(process.execPath, [path.join(fixtureRoot, 'scripts/build_www.js')], { cwd: fixtureRoot, env: { ...process.env, FINANCE_BUILD_TARGET: 'local', VERCEL_ENV: '', FINANCE_SUPABASE_URL: '', FINANCE_SUPABASE_ANON_KEY: '' }, stdio: 'pipe' });
+const root = path.join(fixtureRoot, 'www');
 let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 assert.match(html, /assets\/finance-startup-[a-f0-9]{16}\.js/);
 assert(html.includes('<script src="' + sdk.file + '"></script>'));
@@ -22,9 +34,9 @@ const appTags = [...html.matchAll(/<script src="(assets\/finance-app-[a-f0-9]{16
 assert.equal(appTags.length, 1, 'Built HTML must load one content-addressed app');
 const appFile = appTags[0][1];
 const appSource = fs.readFileSync(path.join(root, appFile), 'utf8');
-const sourceHtml = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
+const sourceHtml = fs.readFileSync(path.join(fixtureRoot, 'index.html'), 'utf8');
 const configuredHtml = applyBuildEnvironment(sourceHtml, { target: 'local', runtimeMode: 'offline-demo', supabaseUrl: '', supabaseAnonKey: '' });
-const expectedApp = createAppBundle(createStartupBundle(configuredHtml, path.resolve(__dirname, '..')).html);
+const expectedApp = createAppBundle(createStartupBundle(configuredHtml, fixtureRoot).html);
 assert.equal(appSource, expectedApp.code, 'Built app must be the deterministic minification of local source');
 assert(expectedApp.sourceCode.includes('var FINANCE_BUILD_TARGET="local";'), 'Browser fixture requires an offline local build');
 assert.equal(crypto.createHash('sha256').update(appSource).digest('hex').slice(0, 16), appFile.match(/finance-app-([a-f0-9]{16})\.js/)[1]);
@@ -34,7 +46,7 @@ assert(html.includes('<link rel="preload" as="script" href="' + appFile + '">'))
 const appQaAnchor = 'bootAuthGate();\n\n})();';
 assert(expectedApp.sourceCode.includes(appQaAnchor));
 const instrumentedHtml = configuredHtml.replace(appQaAnchor, 'window.__startupQA={run:function(code){return eval(code)}};\n' + appQaAnchor);
-const appFixture = createAppBundle(createStartupBundle(instrumentedHtml, path.resolve(__dirname, '..')).html).code;
+const appFixture = createAppBundle(createStartupBundle(instrumentedHtml, fixtureRoot).html).code;
 let serveExactApp = false;
 const server = http.createServer((req, res) => {
   const file = path.resolve(root, '.' + new URL(req.url, 'http://local').pathname);

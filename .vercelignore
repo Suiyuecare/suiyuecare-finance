@@ -508,6 +508,48 @@ supabase/.temp
 !scripts/sql
 !scripts/sql/procurement_specialized_action_postflight.sql
 
+# Finance completion and isolated acceptance sources
+!assets/engines/month-close-workspace.js
+!assets/engines/asset-amortization-workspace.js
+!assets/engines/monthly-delivery-workspace.js
+!assets/engines/cloud-submission-workspace.js
+!assets/engines/cloud-draft-workspace.js
+!assets/engines/operations-workspace.js
+!assets/styles/finance-completion.css
+!scripts/test_month_close_workspace.cjs
+!scripts/test_operations_observability.cjs
+!scripts/check_cloud_submission_v1.cjs
+!scripts/check_monthly_delivery.cjs
+!scripts/check_monthly_delivery_browser.cjs
+!scripts/finance_restore_rehearsal.mjs
+!scripts/check_finance_completion_browser.cjs
+!scripts/run_finance_completion_acceptance.mjs
+!scripts/fixtures/finance_cloud_submission_live_sources_20261011.json
+!scripts/finance_completion_preflight.sql
+!scripts/finance_completion_postflight.sql
+!scripts/finance_completion_fingerprint.sql
+!scripts/finance_completion_canary.sql
+!scripts/test_finance_completion_release_batch.cjs
+!docs/finance-completion-20261011.md
+!docs/month-close-workspace-acceptance-20261011.md
+!docs/finance-monthly-delivery-20261011.md
+!docs/finance-restore-rehearsal-20261011.md
+!scripts/test_asset_amortization.cjs
+!scripts/check_month_asset_workspace_browser.cjs
+!scripts/test_cloud_submission_engine.cjs
+!scripts/test_cloud_submission_native.cjs
+!scripts/test_cloud_draft_workspace.cjs
+!scripts/check_finance_restore_rehearsal.mjs
+!scripts/finance_cloud_submission_postflight.sql
+!scripts/finance_monthly_delivery_postflight.sql
+!scripts/fixtures/finance_cloud_submission_step_validator_20261011.json
+!scripts/fixtures/finance_completion_baseline_metadata_20261011.json
+!docs/asset-amortization-acceptance-20261011.md
+!docs/cloud-submission-acceptance-20261011.md
+
+!scripts/check_department_workspace_browser.cjs
+!scripts/fixtures/department_workspace.cjs
+!scripts/test_hr_private_bridge_concurrency.mjs
 # Searchable-select popup interaction regression
 !scripts/check_combo_scroll_browser_20261012.cjs
 

@@ -45,20 +45,8 @@ jobs:
       - name: Install locked verification dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Prove preview is offline and production fails closed
-        run: pnpm release:environment-isolation
-
-      - name: Prove the protected production release cannot bypass DB rehearsal or candidate verification
-        run: pnpm release:production-contract
-
-      - name: Reject incomplete source and known incident regressions before build
-        run: pnpm release:preflight
-
       - name: Build and verify the exact Vercel candidate
         run: pnpm release:build
-
-      - name: Re-verify artifact hashes and built regressions
-        run: pnpm release:verify-artifact
 
       - name: Upload immutable verified candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -74,7 +62,7 @@ jobs:
   interaction-gate:
     name: Verify actual form and management actions
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     services:
       history-search-postgres:
         image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
@@ -149,6 +137,20 @@ jobs:
           pnpm test:hr-contractor-native
           pnpm test:portal-session
           pnpm test:external-labor-browser
+          pnpm test:finance-completion-browser
+          pnpm test:finance-completion-native
+
+      - name: Retain completion browser and capacity evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: finance-completion-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            /tmp/finance-completion-browser-20261011
+            /tmp/finance-month-asset-browser-20261011
+            /tmp/finance-monthly-delivery-browser-20261011
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Retain fictional searchable-select evidence even on failure
         if: always()

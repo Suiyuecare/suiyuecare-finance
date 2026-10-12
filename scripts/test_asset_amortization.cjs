@@ -1,0 +1,84 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{randomUUID}=require('node:crypto');
+const {PGlite}=require('@electric-sql/pglite');
+const {createAuditReadinessFixture}=require('./fixtures/finance_audit_readiness_fixture.cjs');
+const root=path.resolve(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+async function main(){
+ const db=new PGlite(),f=await createAuditReadinessFixture(db,{install:true});
+ await db.exec(`
+ alter table public.ledger_entries add column description text,add column account_name text,add column reference_no text,add column posting_key text,add column source_type text,add column source_no text,add column voucher_no text;
+ create unique index idx_ledger_entries_posting_key on public.ledger_entries(posting_key);
+ create table public.vouchers(id text primary key,no text unique,request_id text,entity_id text,entity_name text,voucher_date date,description text,entries jsonb,total numeric,creator text,posted boolean,posted_at timestamptz,posting_locked_at timestamptz,data_environment text,tenant_id uuid,voided_at timestamptz,adjustment_type text,adjusts_voucher_no text);
+ create table public.voucher_serials(tenant_id uuid,data_environment text,kind text,year integer,last_no integer,updated_at timestamptz,primary key(data_environment,kind,year));
+ create table public.period_closes(id text primary key,tenant_id uuid,entity_id text,data_environment text,period text,status text,note text);
+ create schema finance_hr_private;
+ create table finance_hr_private.finance_hr_obligations(obligation_id uuid primary key,tenant_id uuid,source_employer_id uuid);
+ create table finance_hr_private.finance_hr_postings(obligation_id uuid,tenant_id uuid,entity_id text);
+ create table private.finance_payroll_accruals_v1(id uuid primary key,obligation_id uuid,tenant_id uuid,entity_id text,period text,status text);
+ create function finance_hr_private.finance_hr_reader(uuid,uuid,text) returns boolean language sql stable as $$select true$$;
+ create function finance_hr_private.finance_hr_accounting_scope(uuid,text,text) returns boolean language sql stable as $$select $3='test'$$;
+ create table public.bank_statement_imports(id text primary key,tenant_id uuid,entity_id text,data_environment text,statement_period text);
+ create table public.bank_transactions(id text primary key,tenant_id uuid,entity_id text,data_environment text,transaction_date date,amount numeric,match_status text);
+ create table public.bank_reconciliation_matches(id text primary key,tenant_id uuid,data_environment text,bank_transaction_id text,matched_amount numeric);
+ create table public.finance_document_archives_v1(id uuid primary key,tenant_id uuid,entity_id text,period text,manifest jsonb,created_at timestamptz default now());
+ create table private.finance_archive_verifications_v1(id uuid primary key,archive_id uuid,verified_at timestamptz);
+ alter table public.vouchers add column created_at timestamptz default now();
+ grant usage on schema public,auth to authenticated;
+ grant select,insert,update,delete on public.vouchers,public.ledger_entries to authenticated;
+ `);
+ function fn(source,name){const start=source.indexOf('create or replace function '+name),end=source.indexOf('end $$;',start);assert(start>=0&&end>start,name);return source.slice(start,end+7);}
+ const controls=read('supabase/migrations/20260927152432_finance_audit_controls_v1.sql');
+ await db.exec(fn(controls,'private.finance_assert_period_open')+fn(controls,'private.finance_ledger_period_guard_v1'));
+ await db.exec('create trigger ledger_guard before insert or update or delete on public.ledger_entries for each row execute function private.finance_ledger_period_guard_v1()');
+ const baseline=JSON.parse(read('scripts/fixtures/finance_hr_voucher_baseline_20260922.json'));
+ for(const name of ['private.finance_next_voucher_no_for_tenant','public.prevent_posted_voucher_mutation','public.prevent_posted_ledger_mutation'])await db.exec(baseline.find(x=>x.name===name).definition);
+ await db.exec(`create trigger voucher_immutable before update or delete on public.vouchers for each row execute function public.prevent_posted_voucher_mutation();create trigger ledger_immutable before update or delete on public.ledger_entries for each row execute function public.prevent_posted_ledger_mutation();`);
+ await db.exec(read('supabase/migrations/20261011133831_finance_completion_core_v1.sql'));
+ await db.exec(read('supabase/migrations/20261011135523_finance_asset_amortization_v1.sql'));
+ await db.query("update public.system_settings set value=value||$1::jsonb where tenant_id=$2 and key='accounts'",[JSON.stringify([{c:'1411',n:'設備',on:true},{c:'1419',n:'累計折舊',on:true},{c:'1151',n:'預付費用',on:true},{c:'6224',n:'折舊費用',on:true},{c:'6225',n:'攤銷費用',on:true}]),f.tenant]);
+ await db.query("insert into public.finance_department_units values($1,'77777777-7777-7777-7777-777777777777','D1',true,true);",[f.tenant]);
+ await db.query("insert into public.finance_department_entity_scopes values($1,'77777777-7777-7777-7777-777777777777','A',true)",[f.tenant]);
+ const source=randomUUID(),prepaidSource=randomUUID(),otherSource=randomUUID();
+ for(const [id,t,ac,amount,posting]of[[source,f.tenant,'1411',200,'asset-original'],[prepaidSource,f.tenant,'1151',100.01,'prepaid-original'],[otherSource,f.other,'1411',200,'other-original']])await db.query("insert into public.ledger_entries(id,tenant_id,entity_id,data_environment,department_code,entry_date,debit,credit,account_code,account_name,posting_key,description) values($1,$2,'A','test','D1','2026-08-01',$3,0,$4,'Fictional original',$5,'Fixture asset')",[id,t,amount,ac,posting]);
+ async function rpc(name,args){return(await db.query('select public.'+name+'('+Object.keys(args).map((k,i)=>k+'=>$'+(i+1)).join(',')+') x',Object.values(args))).rows[0].x;}
+ async function denied(run,code){await assert.rejects(run,e=>code?e.code===code:true);}
+ const scope={p_entity_id:'A',p_period:'2026-08',p_data_environment:'test'};
+ const data={kind:'fixed_asset',name:'Fictional equipment',sourceLedgerId:source,costCents:20000,residualCents:1000,months:3,startMonth:'2026-08',departmentCode:'D1',expenseAccount:'6224',offsetAccount:'1419',note:'synthetic'};
+ const id=randomUUID(),save={p_id:id,p_entity_id:'A',p_data:data,p_expected_revision:0,p_operation_id:randomUUID(),p_reason:'Fixture original verified',p_data_environment:'test'};
+ await f.as('employee');await denied(()=>rpc('finance_asset_workspace_v1',scope),'42501');await f.as('accountant',f.other);await denied(()=>rpc('finance_asset_save_v1',save),'42501');
+ await f.as();await db.query("select set_config('fixture.denied_entity','A',false)");await denied(()=>rpc('finance_asset_save_v1',save),'42501');await db.query("select set_config('fixture.denied_entity','',false),set_config('fixture.denied_department','D1',false)");await denied(()=>rpc('finance_asset_save_v1',save),'42501');await db.query("select set_config('fixture.denied_department','',false)");
+ for(const patch of [{sourceLedgerId:otherSource},{costCents:20001},{costCents:0},{residualCents:20000},{months:0},{months:601},{months:1.5},{expenseAccount:'1112'},{offsetAccount:'unknown'},{offsetAccount:'1411'},{startMonth:'2026-07'},{departmentCode:'D2'},{kind:'prepaid',residualCents:1000},{costCents:1.2},{costCents:null}])await denied(()=>rpc('finance_asset_save_v1',{...save,p_data:{...data,...patch},p_operation_id:randomUUID()}));
+ assert.equal((await rpc('finance_asset_save_v1',save)).revision,1);assert.equal((await rpc('finance_asset_save_v1',save)).replayed,true);
+ await denied(()=>rpc('finance_asset_save_v1',{...save,p_reason:'different'}),'23514');await denied(()=>rpc('finance_asset_save_v1',{...save,p_operation_id:randomUUID()}),'40001');
+ const workspace=()=>rpc('finance_asset_workspace_v1',scope);let w=await workspace();assert.deepEqual(w.items[0].schedule.map(x=>x.amountCents),[6333,6333,6334]);assert.equal(w.items[0].schedule.at(-1).remainingCents,1000);
+ assert.equal((await rpc('finance_month_workspace_v1',scope)).assets.pendingCount,1);
+ const sources=await rpc('finance_asset_sources_v1',{p_entity_id:'A',p_query:'Fixture',p_offset:0,p_limit:1,p_data_environment:'test'});assert.equal(sources.total,2);assert.equal(sources.items.length,1);
+ await denied(()=>rpc('finance_asset_save_v1',{...save,p_id:randomUUID(),p_operation_id:randomUUID()}),'23514');
+ const prep={p_asset_id:id,p_period:'2026-08',p_expected_asset_revision:1,p_expected_plan_version:0,p_operation_id:randomUUID(),p_reason:'Fixture plan'};
+ let p=await rpc('finance_asset_prepare_plan_v1',prep);assert.equal(p.amountCents,6333);assert.equal((await rpc('finance_asset_prepare_plan_v1',prep)).replayed,true);
+ let review={p_plan_id:p.id,p_expected_version:1,p_reason:'Independent verified',p_return:false};await denied(()=>rpc('finance_asset_review_plan_v1',review),'42501');
+ // Another person's plan cannot launder the original cost preparer's self-review.
+ await f.as('admin_director');p=await rpc('finance_asset_prepare_plan_v1',{...prep,p_expected_plan_version:1,p_operation_id:randomUUID()});review.p_expected_version=2;await f.as();await denied(()=>rpc('finance_asset_review_plan_v1',review),'42501');
+ await f.as('ceo');
+ await f.admin("insert into public.period_closes values('closed',$1,'A','test','2026-08','closed','fixture')",[f.tenant]);await f.as('ceo');await denied(()=>rpc('finance_asset_review_plan_v1',review),'23514');
+ await f.admin("delete from public.period_closes;create function public.fail_asset_test() returns trigger language plpgsql as $$begin if new.source_type='asset_amortization' then raise exception 'FICTIONAL_LEDGER_FAILURE';end if;return new;end$$;create trigger zz_fail_asset_test before insert on public.ledger_entries for each row execute function public.fail_asset_test()");await f.as('ceo');await denied(()=>rpc('finance_asset_review_plan_v1',review));
+ await f.admin('select 1');assert.equal((await db.query('select count(*)::int n from public.vouchers')).rows[0].n,0);assert.equal((await db.query('select count(*)::int n from public.voucher_serials')).rows[0].n,0);assert.equal((await db.query('select status from private.finance_asset_plans_v1')).rows[0].status,'submitted');await db.exec('drop trigger zz_fail_asset_test on public.ledger_entries');await f.as('ceo');
+ const posted=await rpc('finance_asset_review_plan_v1',review);assert.equal(posted.status,'posted');assert.equal((await rpc('finance_asset_review_plan_v1',review)).replayed,true);
+ assert.equal((await rpc('finance_month_workspace_v1',scope)).assets.status,'posted_records');
+ let rows=(await db.query("select * from public.ledger_entries where source_type='asset_amortization' order by debit desc")).rows;assert.equal(rows.length,2);assert.equal(Number(rows[0].debit),63.33);assert.equal(Number(rows[1].credit),63.33);assert.equal(rows[0].entry_date.toISOString().slice(0,10),'2026-08-31');
+ await denied(()=>db.query("insert into public.ledger_entries(voucher_no,source_type,tenant_id) values($1,'asset_amortization',$2)",[posted.voucherId,f.tenant]),'42501');await denied(()=>db.query('update public.vouchers set total=0 where id=$1',[posted.voucherId]));await denied(()=>db.query('delete from public.ledger_entries where source_type=$1',['asset_amortization']));
+ await f.as();await denied(()=>rpc('finance_asset_save_v1',{...save,p_expected_revision:1,p_operation_id:randomUUID()}),'23514');await denied(()=>rpc('finance_asset_prepare_plan_v1',{...prep,p_expected_plan_version:3,p_operation_id:randomUUID()}),'23514');
+ const oct=await rpc('finance_asset_prepare_plan_v1',{...prep,p_period:'2026-10',p_operation_id:randomUUID()});await f.as('ceo');await denied(()=>rpc('finance_asset_review_plan_v1',{p_plan_id:oct.id,p_expected_version:1,p_reason:'no gaps',p_return:false}),'23514');
+ await f.as();const sep=await rpc('finance_asset_prepare_plan_v1',{...prep,p_period:'2026-09',p_operation_id:randomUUID()});await f.as('ceo');await rpc('finance_asset_review_plan_v1',{p_plan_id:sep.id,p_expected_version:1,p_reason:'September',p_return:false});await rpc('finance_asset_review_plan_v1',{p_plan_id:oct.id,p_expected_version:1,p_reason:'October',p_return:false});assert.equal((await workspace()).items[0].postedCents,19000);
+ const prepaid={...data,kind:'prepaid',sourceLedgerId:prepaidSource,name:'Fictional prepaid',costCents:10001,residualCents:0,expenseAccount:'6225',offsetAccount:'1151'},prepaidId=randomUUID();await f.as();await rpc('finance_asset_save_v1',{...save,p_id:prepaidId,p_data:prepaid,p_operation_id:randomUUID()});w=await workspace();assert.deepEqual(w.items.find(x=>x.id===prepaidId).schedule.map(x=>x.amountCents),[3333,3333,3335]);
+ const pp=await rpc('finance_asset_prepare_plan_v1',{...prep,p_asset_id:prepaidId,p_operation_id:randomUUID()});
+ await f.admin("update public.system_settings set value=(select jsonb_agg(case when x->>'c'='6225' then x||'{\"n\":\"Renamed prepaid expense\"}'::jsonb else x end) from jsonb_array_elements(value) x) where key='accounts' and tenant_id=$1",[f.tenant]);await f.as('ceo');await denied(()=>rpc('finance_asset_review_plan_v1',{p_plan_id:pp.id,p_expected_version:1,p_reason:'stale chart',p_return:false}),'40001');
+ await rpc('finance_asset_review_plan_v1',{p_plan_id:pp.id,p_expected_version:1,p_reason:'Return stale account',p_return:true});
+ await f.as('employee');await denied(workspace,'42501');await denied(()=>db.query('select * from private.finance_asset_register_v1'),'42501');
+ await f.admin('select 1');await db.exec('set role anon');await denied(workspace,'42501');await db.close();
+ const api=require('../assets/engines/asset-amortization-workspace.js');assert.equal(api.toCents('0.29'),29);assert.equal(api.toCents('100.01'),10001);assert.throws(()=>api.toCents('1.001'));assert.throws(()=>api.toCents('1e3'));assert.throws(()=>api.toCents('-1'));
+ assert(!api.renderWorkspace({period:'<img>',items:[],canWrite:true}).includes('<img>'));
+ console.log('PASS asset amortization SQL and JS: real source/cost caps/authority/CAS/replay/exact cent schedule, independent review, actual atomic voucher+ledger, rollback, period lock, no double booking, no skipped months, chart staleness, immutable posted entries, searchable pagination.');
+}
+main().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,0 +1,37 @@
+{
+  "source": "Read-only pg_catalog on finance production 2026-10-11; definitions and ACL only, no business data",
+  "items": [
+    {
+      "signature": "finance_period_close_health(text,text,text)",
+      "source_md5": "0f629fa0888b2b4afbc2e8154e270b24",
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_period_close_health(p_entity_id text DEFAULT NULL::text, p_period text DEFAULT NULL::text, p_data_environment text DEFAULT 'production'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_env text := coalesce(nullif(p_data_environment, ''), 'production');\n  v_period text := nullif(p_period, '');\n  expected_count int := 0;\n  record_count int := 0;\n  missing_record_count int := 0;\n  closed_count int := 0;\n  open_count int := 0;\nbegin\n  with expected_months as (\n    select distinct\n      coalesce(nullif(le.data_environment, ''), 'production') as data_environment,\n      coalesce(nullif(le.entity_id, ''), 'UNKNOWN') as entity_id,\n      to_char(le.entry_date, 'YYYY-MM') as period_month\n    from public.ledger_entries le\n    where le.entry_date is not null\n\n    union\n\n    select distinct\n      coalesce(nullif(v.data_environment, ''), 'production'),\n      coalesce(nullif(v.entity_id, ''), 'UNKNOWN'),\n      to_char(coalesce(v.voucher_date, v.created_at::date), 'YYYY-MM')\n    from public.vouchers v\n    where coalesce(v.voucher_date, v.created_at::date) is not null\n  ),\n  scoped_expected as (\n    select *\n    from expected_months\n    where data_environment = v_env\n      and (p_entity_id is null or entity_id = p_entity_id)\n      and (v_period is null or period_month = v_period)\n  ),\n  scoped_records as (\n    select *\n    from public.accounting_period_close_records r\n    where r.data_environment = v_env\n      and (p_entity_id is null or r.entity_id = p_entity_id)\n      and (v_period is null or r.period_month = v_period)\n  )\n  select\n    (select count(*)::int from scoped_expected),\n    (select count(*)::int from scoped_records),\n    (\n      select count(*)::int\n      from scoped_expected e\n      where not exists (\n        select 1\n        from scoped_records r\n        where r.entity_id = e.entity_id\n          and r.period_month = e.period_month\n      )\n    ),\n    (select count(*)::int from scoped_records where status = 'closed'),\n    (select count(*)::int from scoped_records where status <> 'closed')\n  into expected_count, record_count, missing_record_count, closed_count, open_count;\n\n  return jsonb_build_object(\n    'ok', missing_record_count = 0,\n    'status', case\n      when missing_record_count > 0 then 'missing_period_records'\n      when open_count > 0 then 'records_exist_pending_close'\n      else 'closed'\n    end,\n    'data_environment', v_env,\n    'entity_id', p_entity_id,\n    'period', v_period,\n    'expected_period_count', expected_count,\n    'period_record_count', record_count,\n    'missing_record_count', missing_record_count,\n    'closed_count', closed_count,\n    'open_pending_close_count', open_count\n  );\nend;\n$function$\n",
+      "proconfig": [
+        "search_path=public, pg_temp"
+      ],
+      "proacl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "owner_name": "postgres"
+    },
+    {
+      "signature": "finance_bill_withdraw_applicant_v1(text[],text,text,jsonb,text)",
+      "source_md5": "90aaf7714388f688354cc39a446dce07",
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_bill_withdraw_applicant_v1(p_bill_ids text[], p_idempotency_key text, p_comment text, p_expected_steps jsonb, p_data_environment text DEFAULT 'production'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\n SET lock_timeout TO '5s'\nAS $function$\nbegin\n  return private.finance_income_withdraw_applicant_v1(\n    'bill', p_bill_ids, p_idempotency_key, p_comment,\n    p_expected_steps, p_data_environment\n  );\nend;\n$function$\n",
+      "proconfig": [
+        "search_path=\"\"",
+        "lock_timeout=5s"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}",
+      "owner_name": "postgres"
+    },
+    {
+      "signature": "finance_invoice_withdraw_applicant_v1(text[],text,text,jsonb,text)",
+      "source_md5": "34df8634df4f9210553440daa0cca084",
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_invoice_withdraw_applicant_v1(p_invoice_ids text[], p_idempotency_key text, p_comment text, p_expected_steps jsonb, p_data_environment text DEFAULT 'production'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\n SET lock_timeout TO '5s'\nAS $function$\nbegin\n  return private.finance_income_withdraw_applicant_v1(\n    'invoice', p_invoice_ids, p_idempotency_key, p_comment,\n    p_expected_steps, p_data_environment\n  );\nend;\n$function$\n",
+      "proconfig": [
+        "search_path=\"\"",
+        "lock_timeout=5s"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}",
+      "owner_name": "postgres"
+    }
+  ]
+}

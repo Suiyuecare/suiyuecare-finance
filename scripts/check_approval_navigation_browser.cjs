@@ -12,14 +12,26 @@ const b=async(...a)=>(await run('agent-browser',['--session',session,...a],{maxB
 async function scope(code){let v=JSON.parse(await b('eval','--base64',Buffer.from('(async()=>JSON.stringify(await window.__approvalNav.run('+JSON.stringify(code)+')))()').toString('base64')));return typeof v==='string'?JSON.parse(v):v;}
 (async()=>{
  fs.mkdirSync(out,{recursive:true});await new Promise(r=>server.listen(0,'127.0.0.1',r));await b('open','http://127.0.0.1:'+server.address().port);
- await scope(`(function(){
+ await scope(`(async function(){
  USERS=[{id:'reviewer',n:'匿名主管',email:'reviewer@example.invalid',authUserId:'fixture-auth',role:'ceo',rL:'執行長',eid:'E1',dc:'D1',active:true}];
  ENTS=[{id:'E1',s:'示範公司',full:'示範公司',active:true}];DEPTS=[{c:'D1',n:'行政部門',eid:'E1',lv:3,active:true}];
  REQS=[];INVS=[];BILLS=[];NOTIFS=[];VOUCHERS=[];ORG_CHART=[];quickLogin('ceo');
- window.__navRow=mapReq({id:'navigation-history',no:'UX-HISTORY-001',applicant_id:'reviewer',applicant:'匿名主管',entity_id:'E1',department_code:'D1',type:'payment_request',amount:1250,description:'交通費報支',data_environment:activeDataEnvironment(),tenant_id:currentTenantId(),status:'completed',step:2,ver:1,request_date:'2026-09-12',steps:[{rk:'applicant_submit',uid:'reviewer',a:'approved',at:'2026-09-12T00:00:00Z'},{rk:'ceo',uid:'reviewer',r:'執行長',a:'approved',n:'匿名主管',at:'2026-09-12T01:00:00Z'}]});
+ window.__navRow=mapReq({id:'navigation-history',no:'UX-HISTORY-001',applicant_id:'fictional-applicant',applicant:'匿名申請人',entity_id:'E1',department_code:'D1',type:'payment_request',amount:1250,description:'交通費報支',data_environment:activeDataEnvironment(),tenant_id:currentTenantId(),status:'completed',step:2,ver:1,request_date:'2026-09-12',steps:[{rk:'applicant_submit',uid:'fictional-applicant',a:'approved',at:'2026-09-12T00:00:00Z'},{rk:'ceo',uid:'reviewer',byId:'reviewer',r:'執行長',a:'approved',n:'匿名主管',at:'2026-09-12T01:00:00Z'}]});
  REQS=[window.__navRow];S.aT='h';S.apprQuery='';S.apprPage=1;
  var h=approvalHistoryRuntimeForCurrentUser();h.status='ready';h.identity=typeof approvalHistoryIdentity==='function'?approvalHistoryIdentity():approvalFastBootstrapIdentity();h.total=1;h.allTotal=1;h.page=1;h.query='';h.updatedAt='2026-09-12T02:00:00Z';h.items=[{kind:'req',recordNo:window.__navRow.no,summary:{amount:1250,type_label:'付款申請',department_name:'行政部門',department_code:'D1',applicant:'匿名主管',description:'交通費報支',entity_name:'示範公司',request_date:'2026-09-12',source_count:1,has_attachments:false},raw:window.__navRow,historyTrusted:true,historyKey:'req:navigation-history',historyPersonallyActed:true,historyParticipationLabel:'本人已處理',historyLastParticipatedAt:'2026-09-12T01:00:00Z',historyParticipantSteps:window.__navRow.steps}];
- nav('approvals',null);S.aT='h';setApprovalTabVisual('h');buildApprovals();window.__navOriginal=JSON.stringify(REQS);return true;
+ nav('approvals',null);S.aT='h';setApprovalTabVisual('h');
+ if(!${baseline}){
+  // Personal history now uses the verified server projection. Demo worklists
+  // intentionally do not fabricate history from current assigned steps.
+  S.demoLogin=false;S.user.authUserId='10000000-0000-4000-8000-000000000001';
+  getSb=function(){return {rpc:function(name,args){if(name!=='finance_personal_document_summary_v1')throw Error('Unexpected navigation RPC '+name);
+   var visible=args.p_scope==='all'&&S.user.id==='reviewer';
+   var items=visible?[{history_key:'expense_requests:navigation-history',record_type:'expense_requests',kind:'req',record_id:'navigation-history',record_no:'UX-HISTORY-001',source_count:1,source_ids:['navigation-history'],personally_applied:false,personally_acted:true,participation_label:'本人已處理',last_participated_at:'2026-09-12T01:00:00Z',summary:{amount:1250,type_label:'付款申請',department_name:'行政部門',department_code:'D1',applicant:'匿名申請人',description:'交通費報支',entity_name:'示範公司',request_date:'2026-09-12',status:'completed',source_count:1,has_attachments:false}}]:[];
+   return Promise.resolve({data:{ok:true,mode:'summary',projection_complete:true,identity:{tenant_id:currentTenantId(),finance_user_id:S.user.id,auth_user_id:S.user.authUserId,data_environment:activeDataEnvironment()},total:items.length,all_total:items.length,page:{limit:50,offset:args.p_offset,has_more:false},items:items}});
+  }};};
+  await loadApprovalHistoryPage({force:true});
+ }
+ buildApprovals();window.__navOriginal=JSON.stringify(REQS);return true;
  })()`);
  const evidence=[];
  for(const width of [1440,390]){

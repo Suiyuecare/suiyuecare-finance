@@ -39,7 +39,7 @@ async function scoped(code){
    INVS=[mapInv({id:'ui-invoice-fixture',no:'UI-INV-001',entity_id:S.user.eid,department_code:S.user.dc,buyer:'匿名買受人',amount:1000,tax:50,total:1050,status:'pending_receipt_review',approval_status:'completed',row_version:1,steps:[],receipt_files:[],data_environment:'test',tenant_id:currentTenantId()})];
    window.__fixtureRpc=[];window.__fixtureUpdates=[];
    window.__fixtureRead={ok:true,reviewers:[{id:'reviewer-anonymous',name:'匿名獨立覆核主管'}],rows:[{id:'correction-fixture',requestId:'ui-expense-fixture',requestNo:'UI-EXP-001',status:'pending_review',originalAmount:1050,proposedAmount:1100,proposerId:S.user.id,reviewerId:'reviewer-anonymous',cashierId:'cashier-anonymous',reason:'匿名驗收金額更正',version:1,canReview:false,canSettle:false,canCancel:true,patch:{accounting_lines:[{description:'匿名明細',netAmount:1050,taxAmount:50,grossAmount:1100,debitAccount:'6200',creditAccount:'1112'}]},history:[]}]};
-   getSb=function(){return {rpc:async function(name,args){window.__fixtureRpc.push({name:name,args:args});if(name==='finance_expense_correction_read_v1')return {data:window.__fixtureRead};if(name==='finance_invoice_receipt_action_v1')return {data:{ok:true,count:1}};return {data:[]};}};};
+   getSb=function(){return {rpc:async function(name,args){window.__fixtureRpc.push({name:name,args:args});if(name==='finance_expense_correction_read_v1')return {data:window.__fixtureRead};if(name==='finance_invoice_receipt_action_v2')return {data:{ok:true,count:1}};return {data:[]};}};};
    dbUpdate=async function(table,id,patch){window.__fixtureUpdates.push({table:table,id:id,patch:patch});return {ok:true};};
    openDetail('ui-expense-fixture');
  })()`);
@@ -61,7 +61,7 @@ async function scoped(code){
  await browser('screenshot','/tmp/finance-approval-receipt-390.png');
  await scoped("closeAppr();");
  const receipt=await scoped(`(async()=>{S.demoLogin=false;hasSupabase=function(){return true;};ensureSupabaseWriteReady=async function(){return {ok:true};};reloadInvoicesByIds=async function(){return true;};refreshApprovalAfterCommittedAction=async function(){return true;};var before=JSON.stringify(INVS);var result=await financeReceiptAction([INVS[0]],'approve','匿名測試',[],{'ui-invoice-fixture':1});return {committed:result.committed,rpc:window.__fixtureRpc.at(-1).name,sameRows:before===JSON.stringify(INVS)};})()`);
- assert.deepEqual(receipt,{committed:true,rpc:'finance_invoice_receipt_action_v1',sameRows:true});
+ assert.deepEqual(receipt,{committed:true,rpc:'finance_invoice_receipt_action_v2',sameRows:true});
  // Native modal is suspended on identity lock so it cannot cover reauthentication.
  await scoped("(async()=>{await openExpenseAccountingCorrections('ui-expense-fixture');document.querySelector('dialog [data-reason]').value='保留本機更正理由';})()");
  const suspended=await scoped(`(function(){var d=document.querySelector('dialog[data-finance-approval-dialog]');setFinanceWorkspaceIdentityBlocked(true);return {open:d.open,text:d.querySelector('[data-reason]').value,blocked:FinanceApprovalRuntime.isIdentityBlocked()};})()`);
@@ -87,7 +87,7 @@ async function scoped(code){
  const posted=await scoped(`(function(){var card=document.querySelector('[data-accounting-request="posted-ui-fixture"]');return {ready:postedAccountingView(REQS.find(function(r){return r.id==='posted-ui-fixture';})).status,corrected:!!card&&card.textContent.includes('6207')&&card.textContent.includes('修繕費'),oldVisible:el('detail-body').textContent.includes('舊申請科目'),sourceUntouched:JSON.stringify(REQS.find(function(r){return r.id==='posted-ui-fixture';}).formPayload)===window.__postedSourceBefore,overflow:document.documentElement.scrollWidth>innerWidth,twoStage:!!card&&card.textContent.includes('補足另貸 1112')};})()`);
  assert.deepEqual(posted,{ready:'ready',corrected:true,oldVisible:false,sourceUntouched:true,overflow:false,twoStage:true});
  await browser('eval',"document.querySelector('[data-accounting-request=\"posted-ui-fixture\"]').scrollIntoView({block:'center'})");
- assert.deepEqual(await scoped("(function(){var c=document.querySelector('[data-accounting-request=\"posted-ui-fixture\"]');return {mobile:getComputedStyle(c.querySelector('.posted-accounting-mobile-lines')).display!=='none',desktop:getComputedStyle(c.querySelector('.posted-accounting-desktop-table')).display!=='none'};})()"),{mobile:true,desktop:false});
+ assert.deepEqual(await scoped("(function(){var c=document.querySelector('[data-accounting-request=\"posted-ui-fixture\"]'),region=c.querySelector('.accounting-lines-scroll'),table=region&&region.querySelector('table');return {scrollRegion:!!region&&region.getAttribute('role')==='region'&&region.tabIndex===0,tableVisible:!!table&&getComputedStyle(table).display!=='none',readOnly:c.querySelectorAll('input,select,textarea').length===0,withinViewport:c.getBoundingClientRect().right<=innerWidth+1};})()"),{scrollRegion:true,tableVisible:true,readOnly:true,withinViewport:true});
  await browser('screenshot','/tmp/finance-posted-accounting-390.png');
  await browser('set','viewport','1440','1000');
  await browser('eval',"document.querySelector('[data-accounting-request=\"posted-ui-fixture\"]').scrollIntoView({block:'center'})");
