@@ -1785,9 +1785,24 @@ for (const marker of [
   'private.approval_notification_assignment_state',
   'pg_get_functiondef', 'has_function_privilege', '20260828015718',
   'repair_admin_ntpc_portal_employee_link_20260828',
-  'admin.ntpc@suiyuecare.com', 'u_1785138353548',
+  'u_1785138353548',
+  'FINANCE_PORTAL_IDENTITY_CURRENT_V1_BEGIN', 'FINANCE_PORTAL_IDENTITY_CURRENT_V1_END',
+  'FINANCE_PORTAL_LATEST_AUTHORITY_V2', 'GOOGLE_WORKSPACE_PRIMARY_EMAIL_RENAME_V1',
+  'private.finance_member_admin_events_v1', 'identity_finance.member_revision',
+  'private.finance_membership_org_versions_v1', 'private.finance_user_offboarding_operations',
+  'order by a.created_at desc,a.id desc limit 1',
+  'Portal current personnel revision lacks matching authorized source',
+  'Portal current Auth/company/employee linkage is inconsistent',
+  'Portal offboarded identity retained an active access projection',
+  'Portal pending first login prematurely retained an authenticated identity',
+  'Portal pending target obtained premature access or is inconsistent',
+  "(current_timestamp at time zone 'Asia/Taipei')::date",
   'the six audited Portal roles did not converge to one Finance entry each'
 ]) assert.ok(dbPostflight.includes(marker), `DB postflight missing ${marker}`);
+const currentPortalGuard = dbPostflight.split('-- FINANCE_PORTAL_IDENTITY_CURRENT_V1_BEGIN')[1]
+  .split('-- FINANCE_PORTAL_IDENTITY_CURRENT_V1_END')[0];
+assert.doesNotMatch(currentPortalGuard, /admin\.ntpc@suiyuecare\.com|d114b583-824e-42c9-9d4e-5ab3cf17ac65|73c0ce88-c0f7-4276-ba0e-938cea9d53ce|6c101aa3-b91d-4590-ae7a-5df070af2793/,
+  'current Portal postflight must follow authorized personnel revisions, not freeze former email/company/employee values');
 for (const marker of ['pg_get_functiondef', 'proacl', 'finance_expense_assert_authoritative_route_v2', 'finance_expense_assert_authoritative_route_v3', 'finance_expense_assert_dept_manager_autoskip_v3', 'finance_expense_assert_applicant_revision_future_route_v3', 'finance_expense_resubmit_applicant_revision', 'claim_approval_notification_delivery_events', 'approval_notification_assignment_state', 'finance_portal_roles', 'relrowsecurity', 'relforcerowsecurity']) {
   assert.ok(dbFingerprint.includes(marker), `DB fingerprint missing ${marker}`);
 }
