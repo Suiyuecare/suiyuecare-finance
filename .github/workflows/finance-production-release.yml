@@ -310,7 +310,7 @@ jobs:
         run: |
           set -euo pipefail
           BUNDLE="$RUNNER_TEMP/finance-verified-candidate"
-          mkdir -p "$BUNDLE/release-tools/scripts" "$BUNDLE/release-tools/supabase/migrations" "$BUNDLE/release-tools/supabase/functions/finance-labor-external"
+          mkdir -p "$BUNDLE/release-tools/scripts" "$BUNDLE/release-tools/scripts/fixtures" "$BUNDLE/release-tools/supabase/migrations" "$BUNDLE/release-tools/supabase/functions/finance-labor-external"
           cp "$RUNNER_TEMP/candidate-deployment-url.txt" "$BUNDLE/deployment-url.txt"
           cp "$RUNNER_TEMP/candidate-deployment.json" "$BUNDLE/candidate-deployment.json"
           cp "$RUNNER_TEMP/candidate-release-manifest.json" "$BUNDLE/candidate-release-manifest.json"

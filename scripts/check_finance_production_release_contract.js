@@ -987,6 +987,64 @@ for(const name of [...guard.HISTORY_PERFORMANCE_POSTFLIGHT_FILES,'finance_approv
 // Execute the real shell conditions as a latest-phase contract: none of the
 // inherited post-apply or promotion checks may be silently skipped.
 const {spawnSync}=require('node:child_process');
+// Execute the actual packaging commands in a fresh workspace. Candidate download
+// inputs are fictional; scripts, migrations, functions and vendor bytes are real.
+// This contract also runs before build, so only the generated manifest may use
+// a fixture when no local build exists. Never create directories on behalf of cp.
+const packagingTemp=fs.mkdtempSync(path.join(os.tmpdir(),'finance-release-packaging-'));
+try {
+ const sealName='      - name: Seal exact candidate, DB contracts and migration catalog as immutable artifact';
+ const sealAt=candidateJob.indexOf(sealName),sealEnd=candidateJob.indexOf('\n      - name:',sealAt+sealName.length);
+ assert.ok(sealAt>=0&&sealEnd>sealAt,'actual candidate sealing step must exist');
+ const seal=candidateJob.slice(sealAt,sealEnd);
+ const commands=seal.split(/\r?\n/).map(line=>line.trim()).filter(line=>/^(mkdir -p|cp) /.test(line));
+ assert.ok(commands.some(line=>line.startsWith('mkdir -p '))&&commands.filter(line=>line.startsWith('cp ')).length>=100,
+  'packaging rehearsal must include the complete actual mkdir/cp command set');
+ const staging=path.join(packagingTemp,'workspace'),runnerTemp=path.join(packagingTemp,'runner');
+ fs.mkdirSync(staging);fs.mkdirSync(runnerTemp);
+ for(const directory of ['scripts','supabase','assets'])fs.symlinkSync(path.join(root,directory),path.join(staging,directory),'dir');
+ fs.mkdirSync(path.join(staging,'www'));
+ const realManifest=path.join(root,'www/release-manifest.json');
+ fs.writeFileSync(path.join(staging,'www/release-manifest.json'),fs.existsSync(realManifest)?fs.readFileSync(realManifest):JSON.stringify({scope:'fictional generated artifact for packaging contract only'}));
+ for(const name of ['candidate-deployment-url.txt','candidate-deployment.json','candidate-release-manifest.json','candidate-index.html','candidate-app.js'])
+  fs.writeFileSync(path.join(runnerTemp,name),'fictional candidate download: '+name+'\n');
+ const bundle=path.join(packagingTemp,'bundle');
+ const runPackaging=(lines,target)=>spawnSync('bash',['-c','set -euo pipefail\n'+lines.join('\n')],{
+  cwd:staging,env:{PATH:process.env.PATH,RUNNER_TEMP:runnerTemp,BUNDLE:target},encoding:'utf8',timeout:30000
+ });
+ const packaged=runPackaging(commands,bundle);
+ assert.ifError(packaged.error);assert.equal(packaged.status,0,'actual candidate packaging must succeed on a fresh filesystem: '+packaged.stderr);
+ for(const directory of ['scripts','scripts/fixtures','supabase/migrations','supabase/functions/finance-labor-external','assets/vendor'])
+  assert.ok(fs.statSync(path.join(bundle,'release-tools',directory)).isDirectory(),'candidate packaging creates required parent '+directory);
+ const resolveToken=token=>token.replace(/^"|"$/g,'').replace(/\$RUNNER_TEMP/g,runnerTemp).replace(/\$BUNDLE/g,bundle);
+ const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+ let copied=0;
+ for(const command of commands.filter(line=>line.startsWith('cp '))){
+  const tokens=command.match(/"[^"]*"|\S+/g).slice(1).map(resolveToken),destination=tokens.pop();
+  for(const token of tokens){
+   const absolute=path.resolve(staging,token);
+   const sources=token.includes('*')?fs.readdirSync(path.dirname(absolute)).filter(name=>name.endsWith('.sql')).map(name=>path.join(path.dirname(absolute),name)):[absolute];
+   if(token.includes('*'))assert.equal(token,'supabase/migrations/*.sql','new packaging glob requires explicit source expansion verification');
+   assert.ok(sources.length>0,'copy source glob must not be empty');
+   for(const source of sources){
+    const target=destination.endsWith('/')?path.join(destination,path.basename(source)):destination;
+    assert.ok(fs.statSync(target).isFile(),'sealed copy is a regular file: '+target);
+    assert.equal(hash(target),hash(source),'sealed copy keeps exact source bytes: '+source);copied++;
+   }
+  }
+ }
+ for(const job of [databaseJob,promoteJob])for(const match of job.matchAll(/(?:\$TOOLS\/scripts\/|--file scripts\/)([A-Za-z0-9_.-]+)/g))
+  assert.ok(fs.statSync(path.join(bundle,'release-tools/scripts',match[1])).isFile(),'later DB/promotion read exists in sealed tools: '+match[1]);
+ const fixtureDirectory='"$BUNDLE/release-tools/scripts/fixtures"';
+ const withoutFixtures=commands.map(line=>line.startsWith('mkdir -p ')?line.replace(fixtureDirectory,''):line);
+ assert.notDeepEqual(withoutFixtures,commands,'missing-fixtures mutation must remove the real mkdir argument');
+ const brokenBundle=path.join(packagingTemp,'without-fixtures');
+ const broken=runPackaging(withoutFixtures,brokenBundle);
+ assert.ifError(broken.error);assert.notEqual(broken.status,0,'omitting fixtures mkdir must fail actual cp before sealing');
+ assert.match(broken.stderr,/scripts\/fixtures/,'negative case fails specifically at the missing fixture destination');
+ assert.ok(!fs.existsSync(path.join(brokenBundle,'release-tools/scripts/fixtures')),'failed packaging must not manufacture a fixtures file or directory');
+ console.log('PASS actual candidate packaging copies '+copied+' exact source files and rejects missing fixtures parent');
+} finally {fs.rmSync(packagingTemp,{recursive:true,force:true});}
 for(const job of [databaseJob,promoteJob])for(const line of job.split('\n').filter(l=>l.trimStart().startsWith('if test "$RELEASE_PHASE"')&&l.includes('frontend_compat')&&!l.includes('database_read_latency_20260913')&&!l.includes('database_ar_mapping_20260913')&&!l.includes('database_audit_remediation_20260914')&&!l.includes('database_approval_search_20260914')&&!l.includes('database_history_summary_20260915')&&!l.includes('database_invoice_read_scope_20260915')&&!l.includes('database_ar_read_scope_20260922')&&!l.includes('database_audit_security_20260922')&&!l.includes('database_operational_stability_20260924')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "frontend_compat"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_audit_controls_20260927"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_hr_contractor_20260928"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_portal_session_20260928"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_external_labor_20260928"')&&!l.trimStart().startsWith('if test "$RELEASE_PHASE" = "database_attachment_claim_20261001"'))){
  const condition=line.trim().replace(/; then$/,'');
  const evaluated=spawnSync('sh',['-c',condition+'; then exit 0; else exit 1; fi'],{env:{...process.env,RELEASE_PHASE:guard.RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE},encoding:'utf8'});
