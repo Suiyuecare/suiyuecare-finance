@@ -151,6 +151,8 @@ function releaseSourceFiles() {
   'docs/finance-monthly-delivery-20261011.md',
   'docs/finance-restore-rehearsal-20261011.md',
 
+    'scripts/fixtures/portal_projection_authorities_20261012.json',
+    'scripts/test_portal_employee_projection_postflight.cjs',
     'scripts/check_combo_scroll_browser_20261012.cjs',
     'scripts/check_all_applicant_withdraw_contract.js',
     'scripts/check_applicant_withdraw_pglite.mjs',
