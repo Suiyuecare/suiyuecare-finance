@@ -106,7 +106,8 @@
     "test:finance-completion": "node scripts/test_month_close_workspace.cjs && node scripts/test_asset_amortization.cjs && node scripts/check_cloud_submission_v1.cjs && node scripts/test_cloud_submission_engine.cjs && node scripts/test_cloud_draft_workspace.cjs && node scripts/test_operations_observability.cjs && node scripts/check_monthly_delivery.cjs && node scripts/check_finance_restore_rehearsal.mjs && node scripts/test_finance_completion_release_batch.cjs",
     "test:finance-completion-browser": "node scripts/check_finance_completion_browser.cjs && node scripts/check_month_asset_workspace_browser.cjs && node scripts/check_monthly_delivery_browser.cjs",
     "test:finance-completion-native": "node scripts/test_cloud_submission_native.cjs",
-    "test:finance-completion-all": "node scripts/run_finance_completion_acceptance.mjs"
+    "test:finance-completion-all": "node scripts/run_finance_completion_acceptance.mjs",
+    "test:select-scroll-browser": "node scripts/check_combo_scroll_browser_20261012.cjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

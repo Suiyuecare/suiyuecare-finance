@@ -77,6 +77,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .combo-select::after{content:'⌄';position:absolute;right:12px;top:50%;transform:translateY(-52%);color:#9a7a56;font-size:16px;line-height:1;pointer-events:none}
 .combo-menu{position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:150;background:#fff;border:1px solid #dfc9b1;border-radius:12px;box-shadow:0 18px 38px rgba(80,52,20,.16);max-height:240px;overflow:auto;padding:5px;display:none}
 .combo-select.open .combo-menu{display:block}
+.combo-menu[popover]{position:fixed;inset:auto;margin:0;box-sizing:border-box;overscroll-behavior:contain;touch-action:pan-y pinch-zoom;-webkit-overflow-scrolling:touch}
+.combo-menu[popover]:not(:popover-open){display:none}
+.combo-menu[popover]:popover-open{display:block}
+.combo-menu::backdrop{background:transparent;pointer-events:none}
+.combo-select.combo-inflow .combo-menu{position:static;margin-top:5px;width:100%;box-sizing:border-box;overscroll-behavior:contain;touch-action:pan-y pinch-zoom;-webkit-overflow-scrolling:touch}
+.combo-select.combo-inflow::after{top:var(--combo-input-center,21px)}
 .combo-option{padding:8px 10px;border-radius:8px;font-size:12px;color:#334155;line-height:1.35;cursor:pointer;overflow-wrap:anywhere}
 .combo-option:hover,.combo-option.active{background:#fff3de;color:#7c3f00}
 .combo-option.selected{font-weight:800;color:#1a4080;background:#eaf3ff}

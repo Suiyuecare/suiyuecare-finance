@@ -550,3 +550,5 @@ supabase/.temp
 !scripts/check_department_workspace_browser.cjs
 !scripts/fixtures/department_workspace.cjs
 !scripts/test_hr_private_bridge_concurrency.mjs
+# Searchable-select popup interaction regression
+!scripts/check_combo_scroll_browser_20261012.cjs
