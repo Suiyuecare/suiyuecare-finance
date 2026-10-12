@@ -54,6 +54,13 @@
 <script src="assets/engines/audit-readiness-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/audit-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
 <link rel="stylesheet" href="assets/styles/audit-workspace.css?v=__FINANCE_ASSET_VERSION__">
+<script src="assets/engines/month-close-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/asset-amortization-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/monthly-delivery-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/cloud-submission-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/cloud-draft-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/operations-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
+<link rel="stylesheet" href="assets/styles/finance-completion.css?v=__FINANCE_ASSET_VERSION__">
 <script src="assets/engines/organization-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/accounting-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/accounting-corrections.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -3302,6 +3309,7 @@ function setFinanceWorkspaceIdentityBlocked(blocked){
   financeWorkspaceIdentityBlocked=!!blocked;
   if(blocked&&typeof retireFinanceBootstrapReadQueue==='function')retireFinanceBootstrapReadQueue('');
   if(blocked&&typeof clearSystemHealthRuntime==='function')clearSystemHealthRuntime();
+  if(blocked&&typeof invalidateFinanceCompletionRuntime==='function')invalidateFinanceCompletionRuntime();
   if(blocked&&window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();
   if(blocked&&typeof window.closeReceiptViewer==='function')window.closeReceiptViewer();
   if(blocked&&window.FinancePaymentConcerns)FinancePaymentConcerns.suspend();
@@ -3339,6 +3347,7 @@ function setFinanceWorkspaceIdentityBlocked(blocked){
     }
   });
   if(wasBlocked&&!blocked&&typeof refreshPostedAccountingViews==='function')Promise.resolve().then(refreshPostedAccountingViews);
+  if(wasBlocked&&!blocked&&typeof refreshFinanceCompletionVisibleUi==='function')Promise.resolve().then(refreshFinanceCompletionVisibleUi);
 }
 function captureFinanceWorkspaceRecoveryBeforeLock(){
   if(financeWorkspaceIdentityBlocked)return;
@@ -3386,6 +3395,7 @@ function bindSupabaseAuthState(client){
         }
         hideFinanceAuthRecovery();
         setTopSyncStatus(syncStatusText());
+        if(typeof refreshFinanceCompletionVisibleUi==='function')refreshFinanceCompletionVisibleUi();
         // A same-person token refresh advances the read epoch too. Resume the
         // visible history from the new identity immediately, not from its late
         // response. Keep any active IME/debounce quiet interval intact.
@@ -3903,6 +3913,7 @@ function showFinanceAuthRecovery(result,actionLabel){
     modal.setAttribute('role','alertdialog');
     modal.addEventListener('cancel',function(event){event.preventDefault();hideFinanceAuthRecovery();});
     modal.addEventListener('keydown',function(event){
+      if(event.key==='Escape'){event.preventDefault();hideFinanceAuthRecovery();return;}
       if(event.key!=='Tab')return;
       var stops=Array.from(modal.querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')).filter(function(node){return node.getClientRects().length;});
       var first=stops[0],last=stops[stops.length-1],active=document.activeElement;
@@ -4222,8 +4233,10 @@ function tenantColumnsEnabled(){
 }
 function tenantStoragePathEnabled(){return tenantColumnsEnabled();}
 function setDataEnvironment(env){
+  var previousEnvironment=activeDataEnvironment();
   FINANCE_DATA_ENV=env===DATA_ENV_TEST&&canUseTestEnvironment()?DATA_ENV_TEST:DATA_ENV_PRODUCTION;
   if(allowLocalPersistence())safeJsonSet(DATA_ENV_KEY,FINANCE_DATA_ENV);
+  if(previousEnvironment!==activeDataEnvironment()&&typeof invalidateFinanceCompletionRuntime==='function')invalidateFinanceCompletionRuntime();
 }
 function dataEnvLabel(env){return (env||activeDataEnvironment())===DATA_ENV_TEST?'測試資料':'正式資料';}
 function publicRuntimeLabel(){
@@ -11267,9 +11280,11 @@ function customizationSettingHealthRecords(){
   rows.push({group:'客製化設定',label:'導入設定檔套用策略',table:'customer_profiles',status:strategy.ok?(strategy.skipped?'warn':'ok'):'fail',detail:strategy.ok?(strategy.skipped?('略過：'+strategy.reason):('exclusive 會停用 '+strategy.probeModuleId+'；merge 會保留該模組')):(strategy.error||'套用策略自檢失敗')});
   var dataflow=window.runCustomizationDataflowSelfCheck?window.runCustomizationDataflowSelfCheck():{ok:false};
   rows.push({group:'客製化設定',label:'設定版本 / 備份 / tenant 資料流',table:'system_settings',status:dataflow.ok?'ok':'fail',detail:dataflow.ok?'五組設定可進 current settings / version snapshot；tenant 周邊紀錄可補 tenant_id':'客製化設定資料流自檢失敗'});
-  var roundTrip=window.runCustomizationRoundTripSelfCheck?window.runCustomizationRoundTripSelfCheck():{ok:false,rows:[]};
+  var roundTrip;
+  try{roundTrip=window.runCustomizationRoundTripSelfCheck?window.runCustomizationRoundTripSelfCheck():{ok:false,rows:[]};}
+  catch(roundTripError){roundTrip={ok:false,rows:[],error:roundTripError.message||'備份權限或設定自檢尚未確認',skipped:/完整帳務資料的授權尚未取得/.test(roundTripError.message||'')};}
   var broken=(roundTrip.rows||[]).filter(function(r){return !r.ok;});
-  rows.push({group:'客製化設定',label:'前端 / 版本 / 備份 / DB payload 串接',table:'system_settings',status:roundTrip.ok?'ok':'fail',detail:roundTrip.ok?'五組客製化設定都可進目前設定、版本快照、備份包與 system_settings upsert payload':'串接缺口：'+broken.map(function(r){return r.key;}).join('、')});
+  rows.push({group:'客製化設定',label:'前端 / 版本 / 備份 / DB payload 串接',table:'system_settings',status:roundTrip.ok?'ok':roundTrip.skipped?'warn':'fail',detail:roundTrip.ok?'五組客製化設定都可進目前設定、版本快照、備份包與 system_settings upsert payload':roundTrip.error||('串接缺口：'+broken.map(function(r){return r.key;}).join('、'))});
   var engineCatalog=Array.isArray(WORKFLOW_ENGINE_CATALOG)?WORKFLOW_ENGINE_CATALOG:[];
   var engineHealth=Array.isArray(WORKFLOW_ENGINE_HEALTH)?WORKFLOW_ENGINE_HEALTH:[];
   var engineWarn=engineHealth.some(function(r){return r&&r.status&&r.status!=='ok';});
@@ -15867,6 +15882,7 @@ window.returnToPortalModules=function(){
   location.href=url.toString();
 };
 function clearFinanceLoginState(){
+  if(typeof invalidateFinanceCompletionRuntime==='function')invalidateFinanceCompletionRuntime();
   clearDocumentArchiveRetryForCurrentIdentity();
   if(window.FinanceHrBridge)window.FinanceHrBridge.dispose();
   clearApprovalFastBootstrapState();
@@ -32950,7 +32966,7 @@ window.approveAnnualReview=async function(){
 };
 
 // ══ 開立發票 ══
-var INVOICE_BATCH_MAX_ITEMS=500;
+var INVOICE_BATCH_MAX_ITEMS=2000;
 var INVOICE_IDENTIFIER_TYPES=['電子發票','電子發票（載具）','統一編號','領據'];
 function invoiceBatchOverflowMessage(count){
   count=Math.max(0,Math.floor(num(count)));
@@ -33640,12 +33656,14 @@ function invoiceExcelAttachment(rows,meta){
 }
 async function invoiceInitialStepFiles(rawFiles,rows,ctx){
   ctx=ctx||{};
+  var cloudUploadOwner=typeof incomeSubmissionOwner==='function'?incomeSubmissionOwner():'';
   var source=[];
   for(var i=0;i<(rawFiles||[]).length;i++){
     if(!rawFiles[i])continue;
     // Preserve a large original as a Blob. Encoding it as a data URL before
     // TUS would allocate another full-size copy and stall the invoice form.
-    var att=await fileToAttachment(rawFiles[i],{directLarge:true});
+    var sourceFile=typeof financeCloudKnownSourceFile==='function'?financeCloudKnownSourceFile(rawFiles[i]):rawFiles[i];
+    var att=await fileToAttachment(sourceFile,{directLarge:true});
     att.kind='invoice_source';
     source.push(att);
   }
@@ -33676,6 +33694,7 @@ async function invoiceInitialStepFiles(rawFiles,rows,ctx){
     setActionFeedback('loading','正在保存發票附件','第 '+index+' / '+count+' 個附件 · '+Math.min(100,Math.round(sent/Math.max(1,total)*100))+'% · 網路中斷會自動重試。');
   };
   var uploaded=await uploadAttachmentsToSupabase(files,{recordType:'invoices',recordNo:ctx.recordNo||'invoice',kind:'invoice_initial',date:ctx.date||todayIso(),entityId:ctx.eid,departmentCode:ctx.dc,onProgress:onProgress});
+  if(typeof financeCloudRegisterUploadedSources==='function')financeCloudRegisterUploadedSources(rawFiles,source,files,uploaded,cloudUploadOwner);
   if(typeof setActionFeedback==='function')setActionFeedback('loading','正在建立發票申請','附件已保存，正在建立正式單據與簽核流程。');
   return uploaded;
 }
@@ -34102,7 +34121,7 @@ function renderBatchTable(){
 }
 window.renderBatchTable=renderBatchTable;
 window.addBRow=function(){S.bRows=S.bRows||[defaultInvoiceBatchRow()];S.bRows.push(defaultInvoiceBatchRow());renderBatchTable();};
-window.clearBRows=function(){BATCH_INVOICE_READ_GENERATION++;S.bRows=[defaultInvoiceBatchRow()];S.bUploadFile=null;S.bUploadFiles=[];S.bUploadPendingFiles=[];renderBatchTable();el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled','drag');if(el('bfile'))el('bfile').value='';};
+window.clearBRows=function(){if(typeof financeCloudRestoredAttachments!=='undefined')delete financeCloudRestoredAttachments.invoice;BATCH_INVOICE_READ_GENERATION++;S.bRows=[defaultInvoiceBatchRow()];S.bUploadFile=null;S.bUploadFiles=[];S.bUploadPendingFiles=[];renderBatchTable();el('batch-pw').style.display='none';el('batch-dz').classList.remove('filled','drag');if(el('bfile'))el('bfile').value='';};
 window.removeBRow=function(i){S.bRows.splice(i,1);if(!S.bRows.length)S.bRows=[defaultInvoiceBatchRow()];renderBatchTable();};
 window.updBSum=function(){syncBatchRowsFromDom();var v=(S.bRows||[]).filter(function(r){return r.buyer&&num(r.total)>0;});var gross=v.reduce(function(s,r){return s+num(r.total);},0),net=v.reduce(function(s,r){return s+num(r.amt);},0),tax=v.reduce(function(s,r){return s+num(r.tax);},0),overflow=v.length>INVOICE_BATCH_MAX_ITEMS;var summary=el('bsum');summary.textContent='共 '+S.bRows.length+' 列，'+v.length+' 列有效｜含稅 '+fmt(gross)+'｜未稅 '+fmt(net)+'｜稅額 '+fmt(tax)+(overflow?'｜超過一張申請 '+INVOICE_BATCH_MAX_ITEMS+' 筆上限；請勿拆送':'');summary.style.color=overflow?'#b42318':'';};
 function invoiceBatchValidationError(filled){
@@ -34275,7 +34294,7 @@ window.buildBills=function buildBills(){
   syncDeptOptionsForEntity('b-ent2','bill-dept',currentUserDeptForEntity(currentUserEntityId()));
   applyIncomeFormFieldCustomizations();renderBillEntryTable();renderBillFlow();renderBillList();setTimeout(function(){markIncomeDocClean('bills');},0);
 };
-var BILL_BATCH_MAX_ITEMS=150;
+var BILL_BATCH_MAX_ITEMS=2000;
 var BILL_ROWS=[];
 var BB_ROWS=[];
 function billBatchOverflowMessage(count,phase){
@@ -42505,6 +42524,31 @@ async function runIncomeSubmissionAttempt(entry,identity){
   try{
     if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
     if(entry.response&&incomeSubmissionPayloadMatches(entry.response,entry))return {available:true,ok:true,data:entry.response,attempt:entry};
+    if(entry.cloudDraftId&&financeCloudSubmissionClient){
+      try{
+        var cloud=entry.cloudSnapshot;
+        if(!cloud){
+          if(!entry.cloudPayload){entry.cloudPayload={title:entry.records[0].reason||entry.records[0].desc||'申請單',items:cloneSettingValue(entry.args.p_items),ui:financeCaptureIncomeUi(entry.formType)};entry.cloudFiles=financeCloudFileReferences(entry.records);if(!saveIncomeSubmissionPending(entry))throw new Error('原筆完整內容未能保存，尚未送件。');}
+          cloud=await financeCloudSubmissionClient.save({id:entry.cloudDraftId,revision:entry.cloudRevision||0,kind:entry.formType,environment:entry.args.p_data_environment,payload:entry.cloudPayload,files:entry.cloudFiles||[]});
+          if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分查看雲端草稿。',true);
+          if(cloud.operationKey!==entry.args.p_idempotency_key)throw new Error('雲端保存識別碼不一致，尚未另建單據。');
+          entry.cloudSnapshot=cloud;entry.unknown=true;saveIncomeSubmissionPending(entry);
+        }
+        cloud=await financeCloudSubmissionClient.stageAndCommit(cloud);
+        if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
+        if(!incomeSubmissionPayloadMatches(cloud.result,entry))return incomeSubmissionUnknown('雲端原筆結果尚未完整確認，請讀取雲端記錄。');
+        entry.response=cloneSettingValue(cloud.result);saveIncomeSubmissionPending(entry);
+        if(window.FinanceCloudDraftWorkspace)window.FinanceCloudDraftWorkspace.committed(entry.formType,entry.cloudDraftId);
+        if(typeof financeCloudRestoredAttachments!=='undefined')delete financeCloudRestoredAttachments[entry.formType];
+        return {available:true,ok:true,data:entry.response,attempt:entry};
+      }catch(cloudError){
+        // Staging failures never fall through to the ordinary submit RPC.
+        // The same server UUID remains available after tab/device changes.
+        if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分查看雲端記錄。',true);
+        entry.unknown=true;saveIncomeSubmissionPending(entry);
+        return incomeSubmissionUnknown((cloudError&&cloudError.message||'雲端結果待確認')+'；原內容仍保留，請讀取雲端記錄確認原筆結果。');
+      }
+    }
     var hadUnknown=entry.unknown===true;
     entry.unknown=true;
     if(!saveIncomeSubmissionPending(entry))return incomeSubmissionUnknown('瀏覽器無法保存原送單識別碼；尚未送出新交易，請保留表單並確認瀏覽器儲存空間。');
@@ -42553,6 +42597,18 @@ async function recoverPendingIncomeSubmission(formType){
   if(!entry&&!marker)return false;
   var result;
   if(entry)result=await runIncomeSubmissionAttempt(entry,identity);
+  else if(typeof financeCloudSubmissionClient!=='undefined'&&financeCloudSubmissionClient&&/^cloud_(invoice|bill)_[a-f0-9-]{36}(?:_\d+)?$/.test(marker.operationKey)){
+    // The ordinary absence reconciliation would seal a staging operation as
+    // rolled back. Cloud drafts must be resolved through their own state.
+    try{
+      var draftId=marker.operationKey.slice(('cloud_'+formType+'_').length).slice(0,36);
+      var cloud=await financeCloudSubmissionClient.read(draftId,marker.dataEnvironment);
+      if(cloud.operationKey!==marker.operationKey)throw new Error('雲端原稿版本已變更，請從雲端記錄核對最新版本。');
+      if(cloud.state==='staging'||cloud.state==='ready')cloud=await financeCloudSubmissionClient.stageAndCommit(cloud);
+      if(cloud.state==='committed'){await financeShowCloudResult(formType,cloud);return true;}
+      alert('原稿尚未建立正式單據；內容保留於雲端，請按「讀取雲端記錄」，再還原原稿繼續辦理。');return true;
+    }catch(error){alert(error.message||'原稿結果待確認，請讀取雲端記錄。');return true;}
+  }
   else{
     // The original tab is gone, so the frozen payload cannot be replayed.
     // The database must seal an absent operation key before a new submission
@@ -42591,6 +42647,7 @@ async function recoverPendingIncomeSubmission(formType){
 window.recoverPendingIncomeSubmission=recoverPendingIncomeSubmission;
 function renderIncomeSubmissionRecovery(formType){
   var root=el(formType==='invoice'?'pg-invoices':'pg-bills');if(!root||!root.insertBefore)return;
+  financePaintCloudDrafts(formType);
   var id='income-submission-recovery-'+formType,box=el(id),entry=null,marker=null,readError=null;
   try{entry=loadIncomeSubmissionPending(formType);if(!entry)marker=incomeSubmissionRecoveryMarker(formType);}catch(error){readError=error;}
   if(!entry&&!marker&&!readError){if(box)box.remove();return;}
@@ -42619,9 +42676,12 @@ async function submitIncomeDocumentTransaction(formType,records){
       var existing=loadIncomeSubmissionPending(formType);
       if(existing)return incomeSubmissionUnknown('先前送單結果尚未完成核對，請先按「確認原送單結果」。目前變更的內容尚未另行送出。');
       if(incomeSubmissionRecoveryMarker(formType))return incomeSubmissionUnknown('前次送件的原分頁已關閉；請先按「確認原送單結果」查核正式資料。目前不會建立新單。');
-      var operationKey=formType+'_submit_'+crypto.randomUUID();
+      var priorCloud=typeof financeCloudSubmissionClient!=='undefined'&&financeCloudSubmissionClient&&window.FinanceCloudDraftWorkspace?window.FinanceCloudDraftWorkspace.active(formType):null;
+      var cloudId=typeof financeCloudSubmissionClient!=='undefined'&&financeCloudSubmissionClient?(priorCloud?priorCloud.id:crypto.randomUUID()):null;
+      var operationKey=cloudId?(priorCloud?priorCloud.operationKey:'cloud_'+formType+'_'+cloudId):formType+'_submit_'+crypto.randomUUID();
       records.forEach(function(record,index){record.submissionIdempotencyKey=operationKey;record.submissionClientItemKey=formType+'_item_'+index+'_'+crypto.randomUUID();});
-      entry={owner:incomeSubmissionOwner(),formType:formType,rpcName:formType==='invoice'?'finance_submit_invoice_batch':'finance_submit_bill_batch',records:cloneSettingValue(records),formUi:cloneSettingValue(records[0].submissionFormUi||null),unknown:false,createdAt:new Date().toISOString(),args:{p_idempotency_key:operationKey,p_items:records.map(function(record,index){return incomeSubmissionRpcItem(formType,record,index);}),p_data_environment:activeDataEnvironment()}};
+      entry={owner:incomeSubmissionOwner(),formType:formType,rpcName:formType==='invoice'?'finance_submit_invoice_batch':'finance_submit_bill_batch',cloudDraftId:cloudId,cloudRevision:priorCloud?priorCloud.revision:0,records:cloneSettingValue(records),formUi:cloneSettingValue(records[0].submissionFormUi||null),unknown:false,createdAt:new Date().toISOString(),args:{p_idempotency_key:operationKey,p_items:records.map(function(record,index){return incomeSubmissionRpcItem(formType,record,index);}),p_data_environment:activeDataEnvironment()}};
+      if(cloudId){entry.cloudPayload={title:entry.records[0].reason||entry.records[0].desc||'申請單',items:cloneSettingValue(entry.args.p_items),ui:financeCaptureIncomeUi(formType)};entry.cloudFiles=financeCloudFileReferences(entry.records);}
       if(!saveIncomeSubmissionPending(entry))return {available:true,ok:false,error:new Error('無法安全保存本次送單識別碼，尚未送出任何交易；請保留表單並確認瀏覽器儲存空間。')};
       return {available:true,ok:true};
     });
@@ -44521,7 +44581,7 @@ function createFinanceApprovalRuntime(){
     sessionGetItem:function(){return sessionGetItem.apply(null,arguments);},
     sessionSetItem:function(){return sessionSetItem.apply(null,arguments);},
     withOperationTimeout:function(){return withOperationTimeout.apply(null,arguments);},
-    permissionIdentity:function(){return JSON.stringify(CURRENT_PERMISSION_SNAPSHOT);},
+    permissionIdentity:financeCompletionPermissionIdentity,
     currentTenantId:function(){return currentTenantId.apply(null,arguments);},
     activeDataEnvironment:function(){return activeDataEnvironment.apply(null,arguments);},
     hasSupabase:function(){return hasSupabase.apply(null,arguments);},
@@ -44554,7 +44614,7 @@ function createFinanceReportingRuntime(){
   return Object.freeze({
     state:function(){return S;},user:function(){return S.user;},role:function(){return currentRoleKey();},
     tenant:function(){return currentTenantId();},environment:function(){return activeDataEnvironment();},today:function(){return todayIso();},
-    identityBlocked:function(){return financeWorkspaceIdentityBlocked;},permissionIdentity:function(){return JSON.stringify(CURRENT_PERMISSION_SNAPSHOT)+'|accounting-denied:'+FINANCE_ACCOUNTING_DENIED_IDENTITY;},
+    identityBlocked:function(){return financeWorkspaceIdentityBlocked;},permissionIdentity:function(){return financeCompletionPermissionIdentity()+'|accounting-denied:'+FINANCE_ACCOUNTING_DENIED_IDENTITY;},
     postingDepartments:function(eid){return deptSelectRowsForPreferred('',eid==='all'?null:eid);},
     entities:function(){return ENTS;},departments:function(){return DEPTS;},users:function(){return USERS;},accounts:function(){return ACCTS;},
     ledger:function(){return LEDGER;},invoices:function(){return INVS;},requests:function(){return REQS;},
@@ -44569,6 +44629,15 @@ function createFinanceReportingRuntime(){
     exportSheets:function(eid,period,opts){return statementExportSheets(eid,period,opts);},
     modelFromLedger:function(rows,period,profiles){var mappings={};Object.keys(profiles||{}).forEach(function(eid){mappings[eid]=profiles[eid].accountMappings||{};});return window.FinanceFinancialStatements.buildModel({ledger:rows,entityId:'all',period:period,accountMappingsByEntity:mappings,completeness:statementDataCompleteness()});},
     rpc:function(name,args){if(!hasSupabase()||!S.user||financeWorkspaceIdentityBlocked)return Promise.reject(new Error('請以有效本人帳號登入後讀取正式資料。'));return getSb().rpc(name,args);},
+    canMonthly:function(){return !!financeCompletionIdentity()&&['accountant','ceo','admin_director'].indexOf(currentRoleKey())>=0&&canAccessPage('reports');},
+    canMonthlyDelivery:function(){return !!financeCompletionIdentity()&&currentRoleKey()==='accountant'&&canAccessPage('reports')&&laborElectronicTrackerAllowed();},
+    monthlyDeliveryView:function(){return window.FinanceMonthlyDeliveryWorkspace?window.FinanceMonthlyDeliveryWorkspace.view():'';},
+    mountMonthly:function(container,scope){
+      if(financeMonthMount){financeMonthMount.dispose();financeMonthMount=null;}
+      if(container&&financeAssetMount){financeAssetMount.dispose();financeAssetMount=null;}
+      if(container&&window.FinanceMonthCloseWorkspace){financeMonthMount=window.FinanceMonthCloseWorkspace.mount(container,{entityId:scope.eid,period:scope.period});financeMonthMount.ready.catch(function(){});}
+    },
+    mountAssets:function(container,scope){if(container&&financeMonthMount){financeMonthMount.dispose();financeMonthMount=null;}if(financeAssetMount){financeAssetMount.dispose();financeAssetMount=null;}if(container&&window.FinanceAssetAmortizationWorkspace){financeAssetMount=window.FinanceAssetAmortizationWorkspace.mount(container,{entityId:scope.eid,period:scope.period});financeAssetMount.ready.catch(function(){});}},
     reload:async function(){if(hasSupabase())await loadRemoteData();},
     refreshViews:function(){buildRecv();buildDash();buildReports();buildApprovals();},
     refreshDashboard:function(){buildDash();},
@@ -44590,6 +44659,173 @@ function createFinanceReportingRuntime(){
     }
   });
 }
+var financeMonthMount=null,financeAssetMount=null,financeCloudSubmissionClient=null,financeCompletionLastIdentity='',financeCompletionLastScope='',financeCloudDraftFocus={},financeCloudRestoredAttachments={},financeCloudLocalFileReceipts=new WeakMap();
+function invalidateFinanceCompletionRuntime(){
+  financeCompletionLastIdentity='';financeCompletionLastScope='';financeCloudDraftFocus={};financeCloudRestoredAttachments={};financeCloudLocalFileReceipts=new WeakMap();
+  S.bUploadFiles=(S.bUploadFiles||[]).filter(function(f){return !f.__financeCloudRestored;});S.bUploadPendingFiles=(S.bUploadPendingFiles||[]).filter(function(f){return !f.__financeCloudRestored;});if(S.bUploadFile&&S.bUploadFile.__financeCloudRestored)S.bUploadFile=null;if(S.invOcrFile&&S.invOcrFile.__financeCloudRestored)S.invOcrFile=null;
+  if(financeMonthMount){financeMonthMount.dispose();financeMonthMount=null;}
+  if(financeAssetMount){financeAssetMount.dispose();financeAssetMount=null;}
+  ['FinanceMonthCloseWorkspace','FinanceAssetAmortizationWorkspace','FinanceMonthlyDeliveryWorkspace','FinanceCloudDraftWorkspace','FinanceOperationsWorkspace'].forEach(function(name){var workspace=window[name];if(workspace&&typeof workspace.invalidate==='function')workspace.invalidate();else if(workspace&&typeof workspace.clear==='function')workspace.clear();});
+  document.querySelectorAll('#finance-month-close-slot,#finance-asset-amortization-slot,[data-monthly-delivery-status],[data-finance-operations-slot]').forEach(function(node){node.replaceChildren();});
+  ['finance-cloud-draft-invoice','finance-cloud-draft-bill'].forEach(function(id){var node=el(id);if(node)node.remove();});
+}
+function refreshFinanceCompletionVisibleUi(){
+  if(!financeCompletionIdentity())return;
+  if(S.page==='invoices'||S.page==='bills'){renderIncomeSubmissionRecovery(S.page==='invoices'?'invoice':'bill');return;}
+  if(S.page==='reports'&&window.FinanceReportingWorkspace){var tab=window.FinanceReportingWorkspace.state.tab;if(tab==='monthly'&&!financeMonthMount||tab==='assets'&&!financeAssetMount)window.buildReports();return;}
+  if(S.page==='health'||S.page==='users'){var page=el('pg-'+S.page),workspace=window.FinanceOperationsWorkspace,html=workspace&&workspace.view();if(!page||!html)return;var slot=page.querySelector('[data-finance-operations-slot]');if(!slot){slot=document.createElement('div');slot.dataset.financeOperationsSlot=S.page;(S.page==='health'?el('health-body')||page:page).appendChild(slot);}slot.innerHTML=html;}
+}
+function financeCompletionPermissionIdentity(){var snapshot=Object.assign({},CURRENT_PERMISSION_SNAPSHOT);delete snapshot.error;return JSON.stringify(snapshot);}
+function financeCompletionIdentity(){
+  if(!S.user||S.user.active===false||S.demoLogin||!hasSupabase()||financeWorkspaceIdentityBlocked||financeLogoutInProgress||financeGoogleAccountSwitchInProgress||!currentFinanceAuthUserId()){if(financeCompletionLastScope)invalidateFinanceCompletionRuntime();return '';}
+  var scope=JSON.stringify([currentFinanceAuthUserId(),S.user.id,currentTenantId(),activeDataEnvironment(),currentRoleKey(),ROLE_PERMISSIONS,financeCompletionPermissionIdentity()]),next=JSON.stringify([scope,financeAuthIdentityEpoch]);
+  if(financeCompletionLastScope&&financeCompletionLastScope!==scope)invalidateFinanceCompletionRuntime();
+  financeCompletionLastScope=scope;financeCompletionLastIdentity=next;return next;
+}
+function financeCompletionRpc(name,args){
+  var identity=financeCompletionIdentity();if(!identity)return Promise.reject(new Error('請以本人正式帳號登入後操作。'));
+  return withOperationTimeout(getSb().rpc(name,args),'確認功能回應',name==='finance_cloud_submission_commit_v1'?90000:30000).then(function(result){if(identity!==financeCompletionIdentity())throw new Error('登入身分已變更，未套用原帳號回應。');return result;});
+}
+function financeCaptureIncomeUi(kind){
+  var value=JSON.parse(incomeDirtySnapshot(kind==='bill'?'bills':'invoices'));
+  // File objects and browser URLs cannot survive a tab or device change.
+  function clean(v){if(Array.isArray(v))return v.map(clean);if(v&&typeof v==='object'){var out={};Object.keys(v).forEach(function(k){if(/^(file|files|attachment|attachments|dataUrl|url|blob|rawFile)$/i.test(k))return;out[k]=clean(v[k]);});return out;}if(typeof v==='string'&&/^(blob:|data:)/.test(v))return '';return v;}
+  if(kind==='invoice')value.savedSources=financeCloudInvoiceSourceAttachments({dataEnvironment:activeDataEnvironment(),payload:{items:[],ui:{savedSources:batchInvoiceSourceFiles().concat(S.invOcrFile?[S.invOcrFile]:[]).map(financeCloudKnownSourceFile)}}},financeCloudIncomeFiles(kind).files);
+  return clean(value);
+}
+function financeCloudKnownSourceFile(file){var saved=file&&typeof file==='object'&&typeof financeCloudLocalFileReceipts!=='undefined'&&financeCloudLocalFileReceipts.get(file);return saved&&saved.owner===incomeSubmissionOwner()?cloneSettingValue(saved.file):file;}
+function financeCloudRegisterUploadedSources(rawFiles,source,prepared,uploaded,owner){
+  if(owner!==incomeSubmissionOwner()||!financeCompletionIdentity())return;
+  (rawFiles||[]).forEach(function(file,i){if(typeof Blob==='undefined'||!(file instanceof Blob))return;var saved=uploaded[prepared.indexOf(source[i])];if(!saved)return;var path=saved.path||saved.storagePath||saved.storage_path,bucket=saved.bucket||saved.bucket_id||SUPABASE_ATTACHMENT_BUCKET;if(!path||bucket!==SUPABASE_ATTACHMENT_BUCKET)return;
+    financeCloudLocalFileReceipts.set(file,{owner:owner,file:{name:saved.n||saved.name||file.name,n:saved.n||saved.name||file.name,type:saved.mime||saved.type||file.type,mime:saved.mime||saved.type||file.type,size:num(saved.size||file.size),bucket:bucket,path:path,storagePath:path,kind:'invoice_source',dataEnv:activeDataEnvironment()}});
+  });
+}
+function financeCloudVerifiedAttachmentReferences(kind,draft){
+  if(!draft||draft.documentType!==kind||draft.dataEnvironment!==activeDataEnvironment()||!Array.isArray(draft.files))throw new Error('原稿附件清單尚未由雲端核對，未還原檔案。');
+  return draft.files.map(function(f){if(!f||f.bucket!==SUPABASE_ATTACHMENT_BUCKET||!f.path||f.url||f.dataUrl)throw new Error('原稿附件路徑尚未核對，未還原檔案。');return {bucket:f.bucket,path:f.path,name:f.name||''};});
+}
+function financeCloudRestoredAttachmentReferences(kind){var value=financeCloudRestoredAttachments[kind];return value&&value.owner===incomeSubmissionOwner()?cloneSettingValue(value.files):[];}
+function financeCloudInvoiceSourceAttachments(draft,files){
+  var verified=new Set(files.map(function(f){return f.bucket+'|'+f.path;})),sources=new Map();
+  function collect(file){
+    if(!file||file.kind!=='invoice_source')return;var path=file.path||file.storagePath||file.storage_path||'',bucket=file.bucket||file.bucket_id||'';
+    if(!verified.has(bucket+'|'+path))throw new Error('原始憑據與雲端附件核對清單不同，未還原檔案。');
+    // Do not restore signed URLs, browser URLs, bytes or old generated bundles.
+    sources.set(bucket+'|'+path,{name:file.n||file.name||'原始憑據',n:file.n||file.name||'原始憑據',type:file.mime||file.type||'',mime:file.mime||file.type||'',size:num(file.size),bucket:bucket,path:path,storagePath:path,kind:'invoice_source',dataEnv:draft.dataEnvironment,__financeCloudRestored:true});
+  }
+  (draft.payload&&draft.payload.ui&&draft.payload.ui.savedSources||[]).forEach(collect);
+  (draft.payload&&draft.payload.items||[]).forEach(function(item){(item.steps||[]).forEach(function(step){(step.files||[]).forEach(collect);});});return Array.from(sources.values());
+}
+function financeCloudIncomeFiles(kind){
+  var sources=kind==='invoice'?batchInvoiceSourceFiles().concat(S.invOcrFile?[S.invOcrFile]:[]).map(financeCloudKnownSourceFile):[],references=financeCloudRestoredAttachmentReferences(kind).concat(financeCloudFileReferences([{files:sources}])),unique=new Map();
+  references.forEach(function(file){unique.set(file.bucket+'|'+file.path,file);});
+  var unsaved=sources.filter(function(file){return !file||!attachmentStoragePath(file)||(file.bucket||file.bucket_id)!==SUPABASE_ATTACHMENT_BUCKET;}).length;
+  return {files:Array.from(unique.values()),unsavedFiles:unsaved};
+}
+function financeCloudRestoreIncomeFields(kind,ui){
+  var fields=ui.fields,allowed=Object.keys(JSON.parse(incomeDirtySnapshot(kind==='bill'?'bills':'invoices')).fields),pairs=kind==='invoice'?[['inv-ent','inv-dept'],['b-ent','b-dept']]:[['b-ent2','bill-dept']];
+  pairs.forEach(function(pair){var entity=el(pair[0]),saved=fields[pair[0]];if(entity&&saved&&!Array.from(entity.options).some(function(option){return option.value===String(saved)&&!option.disabled;}))throw new Error('原稿法人目前不在可填單範圍，未還原表單；雲端原稿仍保留。');});
+  pairs.forEach(function(pair){var entity=el(pair[0]);if(entity&&Object.prototype.hasOwnProperty.call(fields,pair[0]))entity.value=String(fields[pair[0]]==null?'':fields[pair[0]]);syncDeptOptionsForEntity(pair[0],pair[1],fields[pair[1]]);});
+  allowed.forEach(function(id){var node=el(id);if(!node||!Object.prototype.hasOwnProperty.call(fields,id)||!/^(input|textarea|select)$/i.test(node.tagName)||node.type==='file')return;node.value=String(fields[id]==null?'':fields[id]);if(node.tagName==='SELECT')refreshSearchableSelect(node);});
+}
+function financeCloudFileReferences(records){
+  var paths=new Map();
+  function walk(v){if(!v||typeof v!=='object')return;if(Array.isArray(v)){v.forEach(walk);return;}var path=v.storage_path||v.storagePath||v.path,bucket=v.bucket_id||v.bucket||v.bucketId;if(path&&bucket===SUPABASE_ATTACHMENT_BUCKET)paths.set(path,{bucket:bucket,path:path,name:v.name||v.n||v.file_name||''});Object.keys(v).forEach(function(k){if(v[k]&&typeof v[k]==='object')walk(v[k]);});}
+  (records||[]).forEach(walk);return Array.from(paths.values());
+}
+function financePaintCloudDrafts(kind){
+  if(!window.FinanceCloudDraftWorkspace)return;var page=el(kind==='invoice'?'pg-invoices':'pg-bills');if(!page)return;
+  var id='finance-cloud-draft-'+kind,node=el(id);if(!financeCompletionIdentity()||!canAccessPage(kind==='invoice'?'invoices':'bills')){delete financeCloudDraftFocus[kind];if(node)node.remove();return;}
+  var focused=document.activeElement,inside=node&&focused&&node.contains(focused),button=inside&&focused.closest('[data-cloud-action]');
+  if(button)financeCloudDraftFocus[kind]={action:button.dataset.cloudAction,id:button.dataset.cloudId||''};else if(!inside)delete financeCloudDraftFocus[kind];
+  if(!node){node=document.createElement('div');node.id=id;page.insertBefore(node,page.firstChild);}node.innerHTML=window.FinanceCloudDraftWorkspace.view(kind);
+  var focus=inside&&financeCloudDraftFocus[kind];if(focus){var replacement=Array.from(node.querySelectorAll('[data-cloud-action]')).find(function(b){return b.dataset.cloudAction===focus.action&&(b.dataset.cloudId||'')===focus.id&&!b.disabled;});if(!replacement){replacement=node.querySelector('[role=status]');if(replacement)replacement.tabIndex=-1;}if(replacement)replacement.focus({preventScroll:true});}
+}
+async function financeShowCloudResult(kind,data){
+  var token=financeCompletionIdentity(),result=data.result;
+  if(!result||result.ok!==true||!Array.isArray(result.rows)||result.rows.length!==result.count)throw new Error('正式結果尚未完整確認。');
+  var ids=result.rows.map(function(r){return r.id;});delete financeCloudRestoredAttachments[kind];
+  var pending=loadIncomeSubmissionPending(kind),marker=incomeSubmissionRecoveryMarker(kind);
+  if(pending&&pending.args.p_idempotency_key===data.operationKey)clearIncomeSubmissionPending(pending);
+  else if(marker&&marker.operationKey===data.operationKey)clearIncomeSubmissionRecoveryMarker(kind,data.operationKey);
+  var displayPending=false;
+  try{await withOperationTimeout(kind==='invoice'?reloadInvoicesByIds(ids):reloadBillsByIds(ids),'顯示原筆正式結果',12000);}catch(_){displayPending=true;}
+  if(token!==financeCompletionIdentity())throw new Error('登入身分已變更，未顯示原單。');
+  if(!displayPending){if(kind==='invoice'){renderInvTable();renderBatchInvTable();}else renderBillList();buildApprovals();}
+  return {ok:true,displayPending:displayPending};
+}
+function financeMonthlySheets(snapshot){
+  var engine=window.FinanceFinancialStatements,rows=snapshot&&snapshot.rows,evidence=snapshot&&snapshot.cashEvidence;
+  if(!engine||!rows||!Array.isArray(rows.ledger)||!evidence||!Array.isArray(evidence.events)||!evidence.overrides||typeof evidence.overrides!=='object'||Array.isArray(evidence.overrides))throw new Error('月交現金來源尚未完整核對，未產生報表。請重新讀取正式快照。');
+  // The server returns current/comparison cash movements and ledger-linked
+  // cross-company classifications without exposing the other company request.
+  // Never rebuild these from a partial source list or mutable form settings.
+  var profile=rows.profile&&rows.profile.profile||{},previous=engine.previousPeriod(snapshot.period);
+  var model=engine.buildModel({ledger:rows.ledger,entityId:snapshot.entityId,period:snapshot.period,comparisonPeriod:previous,accountMappings:profile.accountMappings||{},checks:profile.periodChecks&&profile.periodChecks[snapshot.period]||{},previousChecks:profile.periodChecks&&profile.periodChecks[previous]||{},completeness:{complete:true,status:'verified_server_snapshot',rowCount:rows.ledger.length},cashEvents:evidence.events,cashFlowOverrides:evidence.overrides});
+  return {sheets:engine.exportSheets(model),missing:model.warnings.map(function(w){return w.message;})};
+}
+async function financeMonthlyLaborExport(entity,period){
+  var tokenIdentity=financeCompletionIdentity(),session=await withOperationTimeout(getSb().auth.getSession(),'確認勞報下載身分',12000),sessionToken=session&&session.data&&session.data.session&&session.data.session.access_token;
+  if(session.error||!sessionToken||!tokenIdentity||tokenIdentity!==financeCompletionIdentity()||activeDataEnvironment()!=='production')throw new Error('勞報下載身分或資料環境未確認。');
+  var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},60000);
+  try{var response=await fetch(SUPABASE_URL.replace(/\/$/,'')+'/functions/v1/finance-labor-external/export/month',{method:'POST',headers:{Authorization:'Bearer '+sessionToken,apikey:SUPABASE_ANON_KEY,'Content-Type':'application/json'},body:JSON.stringify({entityId:entity,paidMonth:period}),signal:controller.signal,cache:'no-store'});
+    if(!response.ok||response.headers.get('content-type')!=='application/zip')throw new Error('電子勞報原件未完整取得。');var blob=await response.blob();if(tokenIdentity!==financeCompletionIdentity())throw new Error('登入身分已變更，未使用勞報資料。');return blob;
+  }finally{clearTimeout(timer);}
+}
+function installFinanceCompletion(){
+  var identity=financeCompletionIdentity,rpc=financeCompletionRpc,environment=activeDataEnvironment;
+  var previousApplyPermissionSnapshot=applyRemotePermissionSnapshotResult;
+  applyRemotePermissionSnapshotResult=function(){var before=identity(),result=previousApplyPermissionSnapshot.apply(this,arguments);if(before!==identity()){invalidateFinanceCompletionRuntime();refreshFinanceCompletionVisibleUi();}return result;};
+  if(window.FinanceMonthCloseWorkspace)window.FinanceMonthCloseWorkspace.installRuntime({rpc:rpc,user:function(){return S.user;},tenant:currentTenantId,environment:environment,permissionIdentity:financeCompletionPermissionIdentity,identityBlocked:function(){return !identity();}});
+  if(window.FinanceAssetAmortizationWorkspace)window.FinanceAssetAmortizationWorkspace.installRuntime({rpc:rpc,user:function(){return S.user;},tenant:currentTenantId,environment:environment,permissionIdentity:financeCompletionPermissionIdentity,identityBlocked:function(){return !identity();},accounts:function(){return ACCTS;}});
+  if(window.FinanceMonthlyDeliveryWorkspace)window.FinanceMonthlyDeliveryWorkspace.install({identity:identity,environment:environment,rpc:rpc,scope:function(){return {entityId:(el('rpt-ent')||{}).value||'all',period:(el('rpt-month')||{}).value||todayMonth()};},reportSheets:financeMonthlySheets,ensurePdf:function(){return ensureFinanceDocumentLibrary('pdf');},laborExport:financeMonthlyLaborExport,downloadAttachment:async function(meta){var token=identity();if(!token)throw new Error('請先登入。');var result=await withOperationTimeout(getSb().storage.from(meta.bucket_id||SUPABASE_ATTACHMENT_BUCKET).download(meta.storage_path),'讀取月交原始附件',60000);if(token!==identity())throw new Error('登入身分已變更。');if(result.error||!result.data)throw result.error||new Error('原附件未取得。');return result.data;},saveDownload:function(blob,name){if(!identity())throw new Error('請先登入。');var url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.style.display='none';document.body.appendChild(a);a.click();setTimeout(function(){a.remove();URL.revokeObjectURL(url);},1000);}});
+  if(window.FinanceCloudSubmission){financeCloudSubmissionClient=window.FinanceCloudSubmission.create({identity:identity,rpc:rpc,onProgress:function(p){if(window.FinanceCloudDraftWorkspace)window.FinanceCloudDraftWorkspace.progress(p);}});}
+  if(window.FinanceCloudDraftWorkspace&&financeCloudSubmissionClient){
+    function beforeRestore(kind,ui,draft){
+      if(!identity()||!canAccessPage(kind==='bill'?'bills':'invoices')||!ui||!ui.fields||!draft||draft.documentType!==kind||draft.dataEnvironment!==environment())throw new Error('草稿內容或登入身分尚未完整取得。');
+      var page=kind==='bill'?'bills':'invoices';
+      function canonical(v){if(Array.isArray(v))return '['+v.map(canonical).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(function(k){return JSON.stringify(k)+':'+canonical(v[k]);}).join(',')+'}';return JSON.stringify(v);}
+      if(hasUnsavedIncomeDocChanges(page)&&(financeCloudIncomeFiles(kind).unsavedFiles>0||canonical(financeCaptureIncomeUi(kind))!==canonical(ui)))throw new Error('目前表單有未保存變更，請先保存目前草稿，再還原其他版本。');
+    }
+    function retireReopenedSubmission(kind,previous,draft){
+      if(!identity()||!previous||!draft||draft.state!=='draft'||draft.id!==previous.id||draft.revision!==previous.revision+1||draft.operationKey!=='cloud_'+kind+'_'+draft.id+'_'+draft.revision||draft.documentType!==kind||draft.dataEnvironment!==environment())throw new Error('草稿修正版本尚未核對，保留原筆送件識別。');
+      financeCloudRestoredAttachments[kind]={owner:incomeSubmissionOwner(),id:draft.id,files:financeCloudVerifiedAttachmentReferences(kind,draft)};
+      var pending=loadIncomeSubmissionPending(kind),marker=incomeSubmissionRecoveryMarker(kind);
+      if(pending&&pending.cloudDraftId===previous.id&&pending.args.p_idempotency_key===previous.operationKey)clearIncomeSubmissionPending(pending);
+      else if(marker&&marker.operationKey===previous.operationKey)clearIncomeSubmissionRecoveryMarker(kind,previous.operationKey);
+    }
+    window.FinanceCloudDraftWorkspace.install({identity:identity,ownerKey:function(){return identity()?incomeSubmissionOwner():'';},environment:environment,client:financeCloudSubmissionClient,beforeRestore:beforeRestore,reopened:retireReopenedSubmission,saved:function(kind){if(!financeCloudIncomeFiles(kind).unsavedFiles)markIncomeDocClean(kind==='bill'?'bills':'invoices');},paint:function(){financePaintCloudDrafts('invoice');financePaintCloudDrafts('bill');},capture:function(kind){if(!identity()||!canAccessPage(kind==='bill'?'bills':'invoices'))throw new Error('目前無法使用此表單，請重新確認登入與權限。');var ui=financeCaptureIncomeUi(kind),attachments=financeCloudIncomeFiles(kind);return {payload:{title:ui.fields&&ui.fields[kind==='bill'?'bill-reason':'b-reason']||ui.fields&&ui.fields['inv-reason']||'未填事由',items:[],ui:ui},files:attachments.files,unsavedFiles:attachments.unsavedFiles};},restore:function(kind,ui,draft){
+      beforeRestore(kind,ui,draft);if(draft.state!=='draft')throw new Error('這筆目前不是可還原草稿。');var page=kind==='bill'?'bills':'invoices';
+      var files=financeCloudVerifiedAttachmentReferences(kind,draft),sources=kind==='invoice'?financeCloudInvoiceSourceAttachments(draft,files):[];
+      financeCloudRestoreIncomeFields(kind,ui);
+      if(kind==='invoice'){
+        BATCH_INVOICE_READ_GENERATION++;S.bUploadAnalyzingGeneration=0;S.bUploadPendingFiles=[];S.bRows=cloneSettingValue(ui.batchRows||[defaultInvoiceBatchRow()]);
+        S.invOcrFile=ui.singleUpload&&sources.length?sources[0]:null;S.bUploadFile=null;S.bUploadFiles=ui.uploads&&ui.uploads.length?sources:[];
+        ['bfile','inv-ocr-file'].forEach(function(id){var node=el(id);if(node)node.value='';});
+        var pw=el('batch-pw'),fn=el('batch-fn'),pl=el('batch-pl'),zone=el('batch-dz');
+        if(pw)pw.style.display=S.bUploadFiles.length?'block':'none';if(zone)zone.classList.toggle('filled',!!S.bUploadFiles.length);
+        if(fn)fn.textContent=S.bUploadFiles.length?'已核對 '+S.bUploadFiles.length+' 份雲端原始憑據：'+S.bUploadFiles.map(function(f){return f.name;}).join('、'):'';
+        if(pl)pl.textContent=S.bUploadFiles.length?'原始憑據已保留；送出時會依這次內容重新產生明細表及憑據彙整。':'本機選檔未保存於原稿；如需附件，請重新選取。';
+        renderBatchTable();calcInvTax();updInvPrev();renderInvoiceFlow('inv');renderInvoiceFlow('b');
+      }else{BILL_ROWS=cloneSettingValue(ui.billRows||[defaultBillRow()]);renderBillEntryTable();renderBillFlow();}
+      financeCloudRestoredAttachments[kind]={owner:incomeSubmissionOwner(),id:draft.id,files:files};markIncomeDocClean(page);
+    },resume:async function(kind,draft){var result=await financeCloudSubmissionClient.stageAndCommit(draft);return financeShowCloudResult(kind,result);},showResult:financeShowCloudResult});
+    window.saveInvDraft=async function(){var data=await window.FinanceCloudDraftWorkspace.save('invoice');if(!data||!identity())return false;return !financeCloudIncomeFiles('invoice').unsavedFiles&&!hasUnsavedIncomeDocChanges('invoices');};
+  }
+  if(window.FinanceOperationsWorkspace){
+    function canObserve(){return !!identity()&&['ceo','admin_director'].indexOf(currentRoleKey())>=0&&canManageSettings();}
+    function canPeople(){return !!identity()&&canManageUsers();}
+    window.FinanceOperationsWorkspace.install({identity:identity,environment:environment,rpc:rpc,canView:function(){return canObserve()||canPeople();},canObserve:canObserve,canPeople:canPeople,canManage:function(action){var role=currentRoleKey();if(action==='ack')return canObserve()&&['edit','delete'].indexOf(permissionLevelOf(role,'settings'))>=0;if(action==='retry'){var cfg=(ROLE_PERMISSIONS||{})[role],level=cfg==null||(cfg&&typeof cfg==='object'&&!Array.isArray(cfg)&&!permissionConfigHasKey(cfg,'users'))?'edit':permissionLevelOf(role,'users');return canPeople()&&['edit','delete'].indexOf(level)>=0;}return false;},paint:function(html){document.querySelectorAll('[data-finance-operations-slot]').forEach(function(n){n.innerHTML=html;});}});
+    var oldHealth=buildSystemHealth;buildSystemHealth=function(){var result=oldHealth.apply(this,arguments),body=el('health-body');if(body&&canObserve()){var slot=document.createElement('div');slot.dataset.financeOperationsSlot='health';slot.innerHTML=window.FinanceOperationsWorkspace.view();body.appendChild(slot);}return result;};
+    var oldUsers=window.buildUsers;if(typeof oldUsers==='function')window.buildUsers=function(){var result=oldUsers.apply(this,arguments),page=el('pg-users');if(page&&canPeople()){var slot=page.querySelector('[data-finance-operations-slot]');if(!slot){slot=document.createElement('div');slot.dataset.financeOperationsSlot='users';page.appendChild(slot);}slot.innerHTML=window.FinanceOperationsWorkspace.view();}return result;};
+    function timed(metric,original){return function(){var self=this,args=arguments,name=metric==='read'?(/search|搜尋/i.test(String(args[1]||''))?'search':'list'):metric;return window.FinanceOperationsWorkspace.measure(name,function(){return original.apply(self,args);});};}
+    financeBootstrapRead=timed('read',financeBootstrapRead);
+    uploadAttachmentToSupabase=timed('upload',uploadAttachmentToSupabase);
+    downloadFileMeta=timed('download',downloadFileMeta);
+    submitIncomeDocumentTransaction=timed('submission',submitIncomeDocumentTransaction);
+  }
+}
+installFinanceCompletion();
 if(window.FinanceReportingWorkspace){
   var financeReportingRuntime=createFinanceReportingRuntime();
   window.FinanceReportingWorkspace.install(financeReportingRuntime);

@@ -105,11 +105,11 @@ async function verifyPrimaryActionContrast() {
   fs.mkdirSync(out, { recursive: true });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   await browser('open', 'http://127.0.0.1:' + server.address().port);
-  await scope(`(function(){
+  await scope(`(async function(){
     USERS=[{id:'reviewer',n:'示範主管',email:'reviewer@example.invalid',authUserId:'fictional-auth',role:'ceo',rL:'執行長',eid:'E1',dc:'D1',active:true}];
     ENTS=[{id:'E1',s:'示範公司',full:'示範公司',active:true}];DEPTS=[{c:'D1',n:'示範部門',eid:'E1',lv:3,active:true}];
-    REQS=[];INVS=[];BILLS=[];DRAFTS=[];NOTIFS=[];VOUCHERS=[];ORG_CHART=[];quickLogin('ceo');
-    S.aT='p';S.apprQuery='';S.apprPage=1;nav('approvals',null);setApprovalTabVisual('p');buildApprovals();
+    REQS=[];INVS=[];BILLS=[];DRAFTS=[];NOTIFS=[];VOUCHERS=[];ORG_CHART=[];S.demoLogin=true;setDataEnvironment(DATA_ENV_TEST);await doEnter(USERS[0]);
+    S.aT='p';S.apprQuery='';S.apprPage=1;await nav('approvals',el('nav-approvals'));setApprovalTabVisual('p');buildApprovals();
     window.__colorsOriginal=JSON.stringify({REQS:REQS,INVS:INVS,BILLS:BILLS,DRAFTS:DRAFTS});return true;
   })()`);
   if (!baseline) await verifyPrimaryActionContrast();

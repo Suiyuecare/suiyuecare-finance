@@ -1,7 +1,7 @@
 // Local built-in host renderers; synthetic identity, read denial and stale rows only.
 import fs from 'node:fs';import path from 'node:path';import http from 'node:http';import assert from 'node:assert/strict';import crypto from 'node:crypto';import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),require=createRequire(import.meta.url),{applyBuildEnvironment}=require('./finance_build_environment.js');
-const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'/Users/seniorlifepr/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs');
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
 const out=process.env.HR_PRIVACY_EVIDENCE_DIR||'/tmp/finance-hr-read-privacy-browser';fs.mkdirSync(out,{recursive:true});
 const source=fs.readFileSync(path.join(root,'index.html'),'utf8'),anchor='bootAuthGate();\n\n})();';assert(source.includes(anchor));
 const html=applyBuildEnvironment(source,{target:'local',supabaseUrl:'',supabaseAnonKey:''}).replace(anchor,'window.__privacyQA={run:async function(code){return await eval(code)}};\n})();').replace(/<script\b[^>]*src=["']https?:[^>]*><\/script>/gi,'');

@@ -20,7 +20,7 @@ const fixture=`USERS=[{id:'fixture-employee',n:'林星河',email:'fixture.employ
 REQS=[mapReq({id:'fixture-own',no:'UX-OWN-001',entity_id:'E1',department_code:'T1101',applicant:'林星河舊名',applicant_id:'fixture-employee',applicant_email:'fixture.employee@example.invalid',type:'expense_reimbursement',type_label:'費用報銷',amount:1250,status:'pending_ceo',step:2,ver:1,request_date:'2026-09-12',description:'本人更名前送出的測試申請',steps:[],files:[],data_environment:'test',tenant_id:currentTenantId()}),mapReq({id:'fixture-other-request',no:'UX-OTHER-002',entity_id:'E1',department_code:'T1101',applicant:'林星河',applicant_id:'fixture-other',applicant_email:'fixture.other@example.invalid',type:'expense_reimbursement',type_label:'費用報銷',amount:777,status:'pending_ceo',step:2,ver:1,request_date:'2026-09-12',description:'同名另一人的測試申請，不得顯示在本人工作台',steps:[],files:[],data_environment:'test',tenant_id:currentTenantId()})];buildDash();`;
 (async()=>{
   fs.mkdirSync(out,{recursive:true});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));evidence.url='http://127.0.0.1:'+server.address().port;
-  await b('open',evidence.url);await scoped(`(function(){${fixture}return true;})()`);await b('wait','150');
+  await b('open',evidence.url);await scoped(`(async function(){${fixture.replace("quickLogin('employee');", "S.demoLogin=true;setDataEnvironment(DATA_ENV_TEST);await doEnter(USERS[0]);")}return true;})()`);await b('wait','150');
   for(const width of [1440,390]){
     await b('set','viewport',String(width),width===390?'844':'1000');
     const home=await scoped(`({text:el('dash-tbl').innerText,guide:el('dash-employee-guide').innerText,overflow:document.documentElement.scrollWidth>innerWidth+1})`);
