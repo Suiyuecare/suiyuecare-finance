@@ -108,6 +108,7 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+    'scripts/check_combo_scroll_browser_20261012.cjs',
     'scripts/check_all_applicant_withdraw_contract.js',
     'scripts/check_applicant_withdraw_pglite.mjs',
     'scripts/finance_applicant_withdraw_postflight.sql',
