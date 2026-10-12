@@ -510,3 +510,6 @@ supabase/.temp
 
 # Searchable-select popup interaction regression
 !scripts/check_combo_scroll_browser_20261012.cjs
+
+# Current authorized employee projection postflight regressions
+!scripts/test_portal_employee_projection_postflight.cjs

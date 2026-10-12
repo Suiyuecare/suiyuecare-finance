@@ -23,39 +23,200 @@ begin
   if v_phase = '20260826155840' and exists (select 1 from supabase_migrations.schema_migrations where version='20260827052447') then raise exception 'v2 authority phase unexpectedly installed v3'; end if;
   if v_phase in ('20260827052447','none') and not exists (select 1 from supabase_migrations.schema_migrations where version='20260827052447') then raise exception 'v3 authority baseline is absent from ledger'; end if;
   if v_phase in ('20260827052447','none') then
-    if not exists (
-      select 1
-      from supabase_migrations.schema_migrations
-      where version='20260828015718'
-        and name='repair_admin_ntpc_portal_employee_link_20260828'
-    ) then raise exception 'reviewed admin.ntpc Portal employee-link repair is absent from ledger'; end if;
-    if not exists (
-      select 1
-      from auth.users auth_user
-      join public.users portal_user
-        on portal_user.auth_user_id=auth_user.id
-      join public.employees employee_row
-        on employee_row.id=portal_user.employee_id
-      where auth_user.id='c50e9e4f-0b63-44e9-b445-9dd5fe7d9f2e'::uuid
-        and pg_catalog.lower(auth_user.email)='admin.ntpc@suiyuecare.com'
-        and portal_user.id='b1f0c6bd-3e22-45c0-b6f4-81d7ebd3d369'::uuid
-        and portal_user.company_id='d114b583-824e-42c9-9d4e-5ab3cf17ac65'::uuid
-        and portal_user.status='active'
-        and portal_user.deleted_at is null
-        and employee_row.id='73c0ce88-c0f7-4276-ba0e-938cea9d53ce'::uuid
-        and employee_row.employee_no='u_1785138353548'
-        and employee_row.company_id=portal_user.company_id
-        and employee_row.employment_status='active'
-        and employee_row.deleted_at is null
-    ) then raise exception 'admin.ntpc Portal identity did not retain the reviewed active employee projection'; end if;
-    if not exists (
-      select 1
-      from public.employees
-      where id='6c101aa3-b91d-4590-ae7a-5df070af2793'::uuid
-        and pg_catalog.lower(email)='admin.ntpc@suiyuecare.com'
-        and employment_status='terminated'
-        and deleted_at is not null
-    ) then raise exception 'admin.ntpc retired duplicate employee fingerprint drifted'; end if;
+    -- FINANCE_PORTAL_IDENTITY_CURRENT_V1_BEGIN
+    declare
+      identity_tenant constant uuid := '00000000-0000-0000-0000-000000000001'::uuid;
+      identity_finance_id constant text := 'u_1785138353548';
+      identity_date constant date := (current_timestamp at time zone 'Asia/Taipei')::date;
+      identity_finance public.finance_users%rowtype;
+      identity_company public.companies%rowtype;
+      identity_portal public.users%rowtype;
+      identity_employee public.employees%rowtype;
+      identity_department uuid;
+      identity_count integer;
+    begin
+      -- Keep evidence of the reviewed historical repair, without freezing a
+      -- person's former name, company, employee UUID or retired projection.
+      if not exists (
+        select 1 from supabase_migrations.schema_migrations
+        where version='20260828015718'
+          and name='repair_admin_ntpc_portal_employee_link_20260828'
+      ) then raise exception 'reviewed admin.ntpc Portal employee-link repair is absent from ledger';end if;
+
+      select f.* into identity_finance from public.finance_users f
+      where f.tenant_id=identity_tenant and f.id=identity_finance_id;
+      if not found or identity_finance.active is null
+        or identity_finance.member_revision is null
+        or nullif(pg_catalog.btrim(identity_finance.email),'') is null
+        or pg_catalog.lower(pg_catalog.btrim(identity_finance.email)) !~ '^[^@[:space:]]+@suiyuecare[.]com$' then
+        raise exception 'Portal current Finance identity is unavailable';
+      end if;
+      -- The private event is emitted by the authorized atomic member
+      -- API. Google binding has its own verified identity/revision contract;
+      -- later primary-email changes must not rewrite personnel audit history.
+      if exists(select 1 from pg_catalog.pg_class c
+        cross join lateral pg_catalog.aclexplode(coalesce(c.relacl,pg_catalog.acldefault('r',c.relowner))) a
+        where c.oid='private.finance_member_admin_events_v1'::regclass and a.grantee<>c.relowner
+          and a.privilege_type in('INSERT','UPDATE','DELETE','TRUNCATE','TRIGGER')) then
+        raise exception 'Portal personnel authority audit permits unauthorized mutation';
+      end if;
+      if not exists (
+        select 1 from private.finance_member_admin_events_v1 a
+        where a.tenant_id=identity_tenant and a.finance_user_id=identity_finance_id
+          and a.action in('create','update','activate')
+          and nullif(pg_catalog.btrim(a.actor_finance_user_id),'') is not null
+          and a.actor_auth_user_id is not null
+          and a.after_state->>'member_revision'=identity_finance.member_revision::text
+          and a.after_state->>'name'=identity_finance.name
+          and a.after_state->>'role'=identity_finance.role
+          and a.after_state->>'entity_id'=identity_finance.entity_id
+          and a.after_state->>'department_code'=identity_finance.department_code
+          and a.after_state->>'active'=case when identity_finance.active then 'true' else 'false' end
+      ) then raise exception 'Portal current personnel revision lacks matching authorized source';end if;
+      if (select count(*) from public.finance_users f where f.tenant_id=identity_tenant
+          and f.active and (f.id=identity_finance_id
+            or pg_catalog.lower(pg_catalog.btrim(f.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))
+            or (identity_finance.auth_user_id is not null and f.auth_user_id=identity_finance.auth_user_id)))
+         <> (case when identity_finance.active then 1 else 0 end) then
+        raise exception 'Portal current Finance identity is duplicated';
+      end if;
+
+      select count(*) into identity_count from public.users u
+      left join public.employees e on e.id=u.employee_id
+      where u.status='active' and u.deleted_at is null
+        and ((identity_finance.auth_user_id is not null and u.auth_user_id=identity_finance.auth_user_id)
+          or pg_catalog.lower(pg_catalog.btrim(u.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))
+          or e.employee_no=identity_finance_id or e.metadata->>'finance_user_id'=identity_finance_id);
+
+      if not identity_finance.active then
+        -- Offboarding is a valid authorized state, never a reason to reactivate
+        -- an old Portal/employee row merely to deploy an unrelated UI fix.
+        if identity_finance.org_status is distinct from 'inactive' or identity_count<>0
+          or exists(select 1 from public.employees e join public.companies c on c.id=e.company_id
+            where c.code=identity_finance.entity_id and e.employment_status='active' and e.deleted_at is null
+              and (e.employee_no=identity_finance_id or e.metadata->>'finance_user_id'=identity_finance_id))
+          or exists(select 1 from public.employee_department_roles r where r.tenant_id=identity_tenant
+            and r.finance_user_id=identity_finance_id and r.active and r.is_primary)
+          or exists(select 1 from public.tenant_members m where m.tenant_id=identity_tenant
+            and m.finance_user_id=identity_finance_id and m.active)
+          or exists(select 1 from public.finance_identity_links l where l.tenant_id=identity_tenant
+            and l.finance_user_id=identity_finance_id and l.active) then
+          raise exception 'Portal offboarded identity retained an active access projection';
+        end if;
+      else
+        if identity_finance.org_status is distinct from 'active' then
+          raise exception 'Portal active Finance employment state is inconsistent';
+        end if;
+        select c.* into identity_company from public.companies c
+        where c.code=identity_finance.entity_id and c.status='active' and c.deleted_at is null;
+        if not found or (select count(*) from public.companies c where c.code=identity_finance.entity_id
+            and c.status='active' and c.deleted_at is null)<>1 then
+          raise exception 'Portal canonical current company is unavailable or duplicated';
+        end if;
+        if (select count(*) from public.employee_department_roles r where r.tenant_id=identity_tenant
+            and r.finance_user_id=identity_finance_id and r.active and r.is_primary
+            and (r.effective_from is null or r.effective_from<=identity_date)
+            and (r.effective_to is null or r.effective_to>=identity_date))<>1 then
+          raise exception 'Portal canonical primary department authority is missing or duplicated';
+        end if;
+        select d.id into identity_department from public.employee_department_roles r
+        join public.departments d on d.id=r.department_id
+        where r.tenant_id=identity_tenant and r.finance_user_id=identity_finance_id
+          and r.active and r.is_primary and r.department_code=identity_finance.department_code
+          and r.role_key=identity_finance.role
+          and (r.effective_from is null or r.effective_from<=identity_date)
+          and (r.effective_to is null or r.effective_to>=identity_date)
+          and d.company_id=identity_company.id and d.code=identity_finance.department_code
+          and d.status='active' and d.deleted_at is null;
+        if not found then raise exception 'Portal company/department disagrees with current Finance authority';end if;
+
+        select count(*) into identity_count from public.employees e
+        where e.company_id=identity_company.id and e.employment_status='active' and e.deleted_at is null
+          and (e.employee_no=identity_finance_id or e.metadata->>'finance_user_id'=identity_finance_id);
+        if identity_count>1 then raise exception 'Portal canonical current-company employee is duplicated';end if;
+        select e.* into identity_employee from public.employees e
+        where e.company_id=identity_company.id and e.employment_status='active' and e.deleted_at is null
+          and e.employee_no=identity_finance_id and e.metadata->>'finance_user_id'=identity_finance_id
+          and e.primary_department_id=identity_department
+          and e.full_name=identity_finance.name
+          and pg_catalog.lower(pg_catalog.btrim(e.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email));
+
+        if identity_finance.google_link_status='pending_first_login' then
+          if identity_finance.auth_user_id is not null or identity_finance.google_login_verified_at is not null
+            or not exists(select 1 from private.finance_member_admin_events_v1 a where a.tenant_id=identity_tenant
+              and a.finance_user_id=identity_finance_id
+              and a.after_state->>'member_revision'=identity_finance.member_revision::text
+              and a.after_state->>'google_link_status'='pending_first_login')
+            or exists(select 1 from public.users u left join public.employees e on e.id=u.employee_id
+              where u.status='active' and u.deleted_at is null and u.auth_user_id is not null
+                and (pg_catalog.lower(pg_catalog.btrim(u.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))
+                  or e.employee_no=identity_finance_id or e.metadata->>'finance_user_id'=identity_finance_id))
+            or exists(select 1 from public.tenant_members m where m.tenant_id=identity_tenant
+              and m.finance_user_id=identity_finance_id and m.active)
+            or exists(select 1 from public.finance_identity_links l where l.tenant_id=identity_tenant
+              and l.finance_user_id=identity_finance_id and l.active) then
+            raise exception 'Portal pending first login prematurely retained an authenticated identity';
+          end if;
+          -- A pending unbound person may have no Portal projection yet. A
+          -- projection already present must remain unique, coherent and unbound.
+          if identity_count=1 and identity_employee.id is null then
+            raise exception 'Portal pending current-company employee projection is inconsistent';
+          end if;
+          select count(*) into identity_count from public.users u left join public.employees e on e.id=u.employee_id
+          where u.status='active' and u.deleted_at is null and
+            (pg_catalog.lower(pg_catalog.btrim(u.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))
+              or e.employee_no=identity_finance_id or e.metadata->>'finance_user_id'=identity_finance_id);
+          if identity_count>1 then raise exception 'Portal pending first-login projection is duplicated';end if;
+          if identity_count=1 and not exists(select 1 from public.users u where u.status='active' and u.deleted_at is null
+            and u.auth_user_id is null and u.company_id=identity_company.id and u.employee_id=identity_employee.id
+            and pg_catalog.lower(pg_catalog.btrim(u.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))) then
+            raise exception 'Portal pending first-login projection has foreign company or employee';
+          end if;
+        else
+          if identity_finance.google_link_status is null or identity_finance.google_link_status not in('bound','pending_rebind')
+            or identity_finance.auth_user_id is null or identity_finance.google_login_verified_at is null
+            or identity_employee.id is null then
+            raise exception 'Portal current canonical employee or verified binding is unavailable';
+          end if;
+          if not exists(select 1 from auth.users a where a.id=identity_finance.auth_user_id
+            and a.email_confirmed_at is not null
+            and pg_catalog.lower(pg_catalog.btrim(a.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))
+            and exists(select 1 from auth.identities i where i.user_id=a.id and i.provider='google'
+              and i.identity_data->>'email_verified'='true'
+              and pg_catalog.lower(pg_catalog.btrim(i.identity_data->>'email'))=pg_catalog.lower(pg_catalog.btrim(a.email)))) then
+            raise exception 'Portal canonical Auth is not the current verified Google identity';
+          end if;
+          select count(*) into identity_count from public.users u left join public.employees e on e.id=u.employee_id
+          where u.status='active' and u.deleted_at is null and
+            (u.auth_user_id=identity_finance.auth_user_id
+              or pg_catalog.lower(pg_catalog.btrim(u.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))
+              or e.employee_no=identity_finance_id or e.metadata->>'finance_user_id'=identity_finance_id);
+          if identity_count<>1 then raise exception 'Portal canonical active identity is missing or duplicated';end if;
+          select u.* into identity_portal from public.users u where u.auth_user_id=identity_finance.auth_user_id
+            and u.status='active' and u.deleted_at is null;
+          if not found or identity_portal.company_id is distinct from identity_company.id
+            or identity_portal.employee_id is distinct from identity_employee.id
+            or pg_catalog.lower(pg_catalog.btrim(identity_portal.email)) is distinct from pg_catalog.lower(pg_catalog.btrim(identity_finance.email)) then
+            raise exception 'Portal current Auth/company/employee linkage is inconsistent';
+          end if;
+          if identity_finance.google_link_status='bound' and identity_finance.pending_login_email is not null then
+            raise exception 'Portal bound identity retained an inconsistent pending target';
+          end if;
+          if identity_finance.google_link_status='pending_rebind' and
+            (nullif(pg_catalog.btrim(identity_finance.pending_login_email),'') is null
+              or pg_catalog.lower(pg_catalog.btrim(identity_finance.pending_login_email)) !~ '^[^@[:space:]]+@suiyuecare[.]com$'
+              or pg_catalog.lower(pg_catalog.btrim(identity_finance.pending_login_email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))
+              or exists(select 1 from public.finance_users f where f.tenant_id=identity_tenant and f.id<>identity_finance_id and f.active
+                and (pg_catalog.lower(pg_catalog.btrim(f.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.pending_login_email))
+                  or pg_catalog.lower(pg_catalog.btrim(f.pending_login_email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.pending_login_email))))
+              or exists(select 1 from public.users u where u.status='active' and u.deleted_at is null
+                and pg_catalog.lower(pg_catalog.btrim(u.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.pending_login_email)))) then
+            raise exception 'Portal pending target obtained premature access or is inconsistent';
+          end if;
+        end if;
+      end if;
+    end;
+    -- FINANCE_PORTAL_IDENTITY_CURRENT_V1_END
   end if;
 
   if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='notifications' and column_name='data_environment' and data_type='text' and is_nullable='NO' and column_default='''production''::text')
