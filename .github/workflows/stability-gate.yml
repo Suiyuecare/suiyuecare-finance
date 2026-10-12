@@ -124,6 +124,17 @@ jobs:
           if (path.dirname(path.resolve(file)) !== path.resolve(process.env.RUNNER_TEMP)) throw new Error('Browser fixture config must remain outside the source checkout');
           fs.writeFileSync(file, JSON.stringify({host:'127.0.0.1',port:5432,user:'postgres',password:process.env.FINANCE_FIXTURE_PG_PASSWORD,database:'postgres'}), {mode:0o600,flag:'wx'});
           NODE
+          node <<'NODE'
+          const fs = require('node:fs');
+          const {Client} = require('pg');
+          const configuration = JSON.parse(fs.readFileSync(process.env.FINANCE_NATIVE_PG_CONFIG,'utf8'));
+          if (configuration.host !== '127.0.0.1' || configuration.port !== 5432) throw new Error('Fixture role setup is restricted to the workflow-owned PostgreSQL service');
+          (async()=>{const client=new Client(configuration);await client.connect();try {
+            for (const role of ['anon','authenticated','service_role']) {
+              if (!(await client.query('select 1 from pg_roles where rolname=$1',[role])).rowCount) await client.query('create role '+role);
+            }
+          } finally {await client.end();}})().catch(error=>{console.error(error.message);process.exitCode=1;});
+          NODE
       - name: Verify real DOM actions with isolated fictional data
         env:
           FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json
@@ -136,6 +147,9 @@ jobs:
           node scripts/check_finance_oauth_error_browser.cjs
           pnpm test:procurement-closeout-browser
           pnpm test:personnel-save-browser
+          pnpm test:personnel-workspace-browser
+          pnpm test:history-search-browser
+          FINANCE_HISTORY_NATIVE_REQUIRED=1 pnpm test:personal-history-identity-once
           pnpm test:org-chart-browser
           node scripts/check_human_accounting_browser_20261002.cjs
           FINANCE_BROWSER_CHANNEL=chromium node scripts/check_invoice_table_layout_browser.cjs --review-only
@@ -149,6 +163,17 @@ jobs:
           pnpm test:hr-contractor-native
           pnpm test:portal-session
           pnpm test:external-labor-browser
+
+      - name: Retain fictional personnel and history continuity evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: finance-personnel-history-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            /tmp/finance-personnel-workspace-20261012
+            /tmp/finance-history-continuity-20261012
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Retain fictional searchable-select evidence even on failure
         if: always()

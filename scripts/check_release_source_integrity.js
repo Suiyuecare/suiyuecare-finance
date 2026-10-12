@@ -59,6 +59,19 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'supabase/migrations/20261012112652_finance_personal_history_identity_once_v1.sql',
+  'scripts/check_finance_personal_history_identity_once_20261012.cjs',
+  'scripts/fixtures/finance_history_identity_authorities_20261012.json',
+  'scripts/finance_personal_history_identity_once_preflight.sql',
+  'scripts/finance_personal_history_identity_once_postflight.sql',
+  'scripts/finance_personal_history_identity_once_fingerprint.sql',
+  'scripts/finance_personal_history_identity_once_canary.sql',
+  'DESIGN.md',
+  'UX-CONTRACT.md',
+  'assets/engines/personnel-workspace.js',
+  'assets/styles/personnel-workspace.css',
+  'scripts/check_personnel_workspace_browser_20261012.cjs',
+  'scripts/check_history_search_continuity_browser_20261012.cjs',
   'scripts/fixtures/portal_projection_authorities_20261012.json',
   'scripts/test_portal_employee_projection_postflight.cjs',
   'scripts/check_combo_scroll_browser_20261012.cjs',
@@ -549,6 +562,9 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
 ]);
 
 const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
+  'test:personal-history-identity-once': 'node scripts/check_finance_personal_history_identity_once_20261012.cjs',
+  'test:personnel-workspace-browser': 'node scripts/check_personnel_workspace_browser_20261012.cjs',
+  'test:history-search-browser': 'node scripts/check_history_search_continuity_browser_20261012.cjs',
   'test:all-applicant-withdraw': 'node scripts/check_all_applicant_withdraw_contract.js && node scripts/check_applicant_withdraw_pglite.mjs',
   'test:procurement-closeout': 'node scripts/check_procurement_closeout_recovery.cjs && node scripts/check_procurement_payment_handler.js && node scripts/check_procurement_specialized_action_guard.js',
   'test:purchase-final-amount': 'node scripts/check_purchase_final_amount_contract.js',
@@ -614,7 +630,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   "test:finance-ui-interactions": "node scripts/check_finance_ui_interaction_browser.cjs",
   'test:hr-bridge-release': 'node scripts/test_hr_bridge_release_batch.mjs',
   'test:hr-bridge-browser': 'HR_BRIDGE_BROWSER=1 node scripts/test_hr_private_bridge.mjs',
-  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:invoice-item-review && pnpm test:invoice-item-bind-sql && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor && pnpm test:submission-cashier-preflight && pnpm test:attachment-claim-migration && pnpm test:human-accounting-float && pnpm test:invoice-revenue-result && pnpm test:formal-resumable-upload && pnpm test:personnel-save && pnpm test:procurement-closeout && pnpm test:purchase-final-amount && pnpm test:all-applicant-withdraw && pnpm test:personal-history && pnpm test:bill-batch-bulk && pnpm test:invoice-batch-approval && pnpm test:portal-projection-postflight",
+  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:invoice-item-review && pnpm test:invoice-item-bind-sql && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor && pnpm test:submission-cashier-preflight && pnpm test:attachment-claim-migration && pnpm test:human-accounting-float && pnpm test:invoice-revenue-result && pnpm test:formal-resumable-upload && pnpm test:personnel-save && pnpm test:procurement-closeout && pnpm test:purchase-final-amount && pnpm test:all-applicant-withdraw && pnpm test:personal-history && pnpm test:bill-batch-bulk && pnpm test:invoice-batch-approval && pnpm test:portal-projection-postflight && pnpm test:personal-history-identity-once",
   'release:verify-artifact': 'node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js',
   'release:build': 'pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact'
 });
@@ -1148,6 +1164,17 @@ const interactionGate = workflow.slice(workflow.indexOf('  interaction-gate:'));
 check('CI runs invoice binding browser coverage after installing browsers in the interaction gate',
   interactionGate.indexOf('pnpm test:invoice-item-bind-browser') > interactionGate.indexOf('pnpm exec playwright install')
     && interactionGate.indexOf('pnpm exec playwright install') >= 0);
+for (const command of ['pnpm test:personnel-workspace-browser', 'pnpm test:history-search-browser']) {
+  check(`CI requires focused desktop/mobile browser coverage: ${command}`,
+    interactionGate.indexOf(command) > interactionGate.indexOf('pnpm exec playwright install')
+      && interactionGate.indexOf('pnpm exec playwright install') >= 0);
+}
+check('required preflight preserves the updated history search controller tests',
+  pkg && pkg.scripts && pkg.scripts['release:preflight'].includes('pnpm test:approval-search-20260914')
+    && pkg.scripts['test:approval-search-20260914'].includes('node scripts/check_approval_history_search.cjs'));
+check('CI requires native complete-history identity parity on its disposable PostgreSQL service',
+  interactionGate.includes('FINANCE_HISTORY_NATIVE_REQUIRED=1 pnpm test:personal-history-identity-once')
+    && interactionGate.includes('FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json'));
 check('CI explicitly runs the environment isolation contract before preflight and build',
   workflow.indexOf('pnpm release:environment-isolation') > -1
     && workflow.indexOf('pnpm release:environment-isolation') < workflow.indexOf('pnpm release:preflight')

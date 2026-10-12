@@ -1,94 +1,77 @@
 ---
 version: alpha
-name: "歲悅財務工作台"
-description: "以暖色紙面與清楚的會計狀態，支援長照團隊每天快速而可信地完成財務工作。"
+name: "歲悅 Finance"
+description: "供內部員工辦理申請、簽核與帳務的繁體中文工作介面"
 colors:
-  primary: "#b45309"
-  accent: "#ea880c"
-  paper: "#fff9f2"
+  primary: "#ea880c"
+  primaryText: "#5c3800"
+  background: "#fdf8f2"
   surface: "#ffffff"
-  ink: "#2f2a26"
-  muted: "#6e6259"
-  line: "#f1cfa8"
-  success: "#1a5010"
+  warm: "#f8f0e4"
+  success: "#2a6010"
+  warning: "#7a4500"
   danger: "#8a1010"
 typography:
   sans:
-    fontFamily: '"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif'
-  numeric:
-    fontFamily: '"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif'
-omitted:
-  - section: spacing
-    reason: "既有表單、清單與報表的間距尚未統一為可生成的全域 token。"
-  - section: rounded
-    reason: "既有卡片與控制項有多個已發布尺寸；此批先維護共用元件，不臆造全域圓角尺度。"
+    fontFamily: '"PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif'
+  mono:
+    fontFamily: '"PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif'
+rounded:
+  DEFAULT: "12px"
+  control: "10px"
+  badge: "6px"
+spacing:
+  controlTarget: "44px"
 components:
-  primary-button:
-    backgroundColor: "{colors.primary}"
-    textColor: "#ffffff"
-  brand-mark:
-    backgroundColor: "{colors.accent}"
-  page:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-  muted-text:
-    textColor: "{colors.muted}"
-  card:
-    backgroundColor: "{colors.surface}"
-  divider:
-    backgroundColor: "{colors.line}"
-  input:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-  success-label:
-    textColor: "{colors.success}"
-  danger-label:
-    textColor: "{colors.danger}"
+  personnelList: {}
+  personnelDetail: {}
+  historyList: {}
 ---
 
-# 歲悅財務工作台設計系統
+# 歲悅 Finance 設計依據
 
 ## Overview
 
-這是需要快速判讀、補件、簽核和查帳的內部工作產品。目標是讓下一個動作像熟悉的手機工具一樣明確、反應即時；畫面仍保有歲悅既有的暖色紙面與橘色識別，不模仿其他品牌外觀。使用者包含申請人、主管、出納、會計和執行長，主要語言為繁體中文，常在桌機處理密集明細，也會用手機查看待辦或送件。
+2026-10-12 使用者核准人員管理「精簡列表＋右側明細」示意。這份文件記錄已核准的介面方向與現有 token 來源，不重新定義未改動的財務流程。
 
-介面的記憶點是溫暖、可信的財務工作區；簽核結果、金額、附件與錯誤回復必須比裝飾更醒目。避免滿頁等寬卡片、僅靠顏色表達狀態、橘色小字配亮橘底，或以動畫掩蓋真正的等待。正式業務及權限以 [README.md](README.md)、[員工可靠性契約](docs/finance-employee-reliability.md) 和各模組伺服器契約為準。
+主要讀者是人資、主管與會計；常見任務是找人、核對登入帳號、調整同一人的資料、查找本人申請或曾參與的單據。介面採繁體中文，日期遵循既有臺灣業務時區。
 
-現有 `assets/styles/finance-core.css` 的 `:root` 與共用選擇器是**執行時 token 的唯一來源**；本文件鏡射已接受的語意角色與精確色值，不產生第二份 CSS。改動共用 token 時，同一提交須更新 CSS、本文件和相關畫面驗收。局部品牌橘 `accent` 不自動等於白字按鈕底色。
+Runtime token owner 是 `assets/styles/finance-core.css` 的 `:root`。本文件鏡映這些值；新的人員樣式透過 `var(--br)`、`var(--font-sans)` 等延伸，不能另建全站配色。
 
 ## Colors
 
-`primary` 是白字主要按鈕與選取頁籤使用的深橘；`accent` 用於識別、圖示與低密度裝飾。紙面 `paper` 和白色 `surface` 以邊線分層，文字以 `ink`／`muted` 維持可讀。成功、警示與危險狀態除顏色外必須有文字或圖示。小字和控制項文字對比至少 4.5:1；有焦點的控制項要有可見外框。
-
-正式金額、暫編金額、核對中與來源失敗使用不同文字狀態；未知值不能以綠色、0 元或已完成造假。圖表亦提供數值與來源文字。
+主操作保留亮橘色；白底列表配細邊線，避免大量深色框與同列重複大色塊。綠色表示已完成或啟用，黃色表示等待與需核對，紅色表示危險操作或失敗。每一種狀態都有文字，不能只靠顏色。
 
 ## Typography
 
-繁體中文以既有 `--font-sans` 字族顯示，數字採等寬數字特性以利表格對齊；不以 9px 微字承載重要流程資訊。表單標籤、狀態及操作名稱應短而完整；長單號與姓名保留可查閱全文的方式，不以僅靠 hover 的省略號隱藏。
+沿用現有 `--font-sans`。姓名及重點使用適度字重，次要文字仍須清楚可讀。登入信箱、部門代碼在寬版保持完整；窄版優先換成卡片，再按語義換行。數字沿用 tabular-nums，不另換不支援中文的字體。
 
 ## Layout
 
-桌面以左側導覽、頁面標題及可掃讀表格為主；手機先呈現目的、金額、目前關卡與下一動作，附屬明細再展開。資料表可以在**表格容器內**橫向捲動，不能讓整頁溢出。窄螢幕的主要觸控目標至少 44px。載入前後保留標題、篩選與操作的穩定位置，避免結果出現時版面跳動。
+人員列表五欄：人員／職稱、公司／部門、系統權限、帳號狀態、操作。登入信箱附在人員格；完整法人、組織聯絡信箱、分機與來源放在明細。聯絡與登入信箱不同時，列表保留差異提示。
+
+搜尋、公司與權限篩選只提供一套；條件變更從第一頁重新顯示。每頁最多 20 個帳號，具名人員和系統帳號分開計數。手機使用卡片，不能把整張桌機表格縮小塞入畫面。
+
+歷史搜尋保留輸入、頁碼和捲動位置。正在更新的舊結果必須清楚標示並禁止開啟舊明細；收到符合目前查詢與身分的完整回應後才替換結果。
 
 ## Elevation & Depth
 
-以白色表面、暖色邊線和少量陰影分出層次；陰影不表示已送出或已保存。對話框、錯誤與關鍵決策以清楚邊界和焦點順序呈現。報表數字與憑證不加裝飾性陰影，以維持查帳密度。
+一般列表靠留白與邊线分組。右側明細與更多操作屬原生 dialog top layer，陰影只服務於遮罩層級；不能依靠任意 z-index 穿過卡片。
 
 ## Shapes
 
-沿用既有圓角按鈕與卡片；同一類控制項保持一致的高度和外框。附件、傳票與風險標籤的形狀是輔助分類，必須附帶可讀文字。
+控制元件保持既有圓角語言；操作觸控區至少 44px。部門代碼為小型標籤，整個代碼不得拆行。
 
 ## Components
 
-主要動作使用深橘底白字，次要動作使用白底深色字；危險動作另以清楚動詞及確認範圍區分。hover、`:focus-visible`、按下、停用、處理中與錯誤狀態應保持相同幾何尺寸，避免按鈕位移。搜尋在中文組字時不執行查詢，清除立即；上傳區分已選檔、保存中、已確認保存與待確認結果。載入中先顯示最後確認的資料和更新標示；失敗保留既有安全資料與重試入口。
+新元件 owner：`assets/engines/personnel-workspace.js` 與 `assets/styles/personnel-workspace.css`。它們透過 callback 接入原有人員編輯、登入檢查、啟用、交接及刪除。登入驗證與權限的來源仍為現有後端與頁面 guard。
 
-導覽與清單優先顯示使用者當下可做的事。圖示不是唯一標籤；狀態徽章保留文字。介面動畫只用於說明狀態轉換，遵守減少動態效果偏好，不以無限旋轉代替長工作的可恢復說明。金額、日期、法人、部門與資料截至時間採一致的繁體中文格式。
+每列主操作只有編輯與更多。管理工具集中收合但入口可見；重要異常摘要仍可見。危險操作與主要安全操作分開；不以縮減畫面為理由刪掉業務能力。
 
 ## Do's and Don'ts
 
-- **Do:** 先展示已確認且有權檢視的內容，讓背景更新不阻擋輸入。
-- **Do:** 讓「已選取、正在保存、已保存、結果待確認」各有真實而可恢復的文案。
-- **Don't:** 因為網路逾時就顯示 0 筆、完成或送件失敗。
-- **Don't:** 讓暖橘色裝飾搶走流程、金額、證據和下一動作的視覺優先權。
-
-共用可搜尋選單須在簽核視窗與發票分組內完整呈現，依可視空間向上或向下展開；方向鍵只捲動選項清單。未支援浮層的瀏覽器使用原地展開。Esc 優先關閉選單，再交由對話框處理。此行為不變更科目或業務權限。
+- 啟用狀態和 Google 綁定狀態分開；啟用不代表已驗證能登入。
+- 職稱與系統權限分開，不能用名稱推定權限。
+- 新人接替職務須新增人員後交接，保留原人員識別碼及過往簽核歷史。
+- 不新增持久的私人搜尋結果快取；登入或權限變更立即清除舊身分畫面。
+- 不把搜尋錯誤當成 0 筆、不把未取得的附件當作已保存。

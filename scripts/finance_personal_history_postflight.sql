@@ -5,7 +5,11 @@ do $postflight$
 declare
   v_signature text;
   v_proc pg_catalog.pg_proc%rowtype;
+  v_identity_once boolean;
+  v_batch_history boolean;
 begin
+  v_identity_once:=exists(select 1 from supabase_migrations.schema_migrations where version='20261012112652' and name='finance_personal_history_identity_once_v1');
+  v_batch_history:=exists(select 1 from supabase_migrations.schema_migrations where version='20261010130000' and name='finance_personal_invoice_batch_history_v1');
   if not exists (select 1 from supabase_migrations.schema_migrations
       where version = '20261008055528'
         and name = 'finance_personal_document_history_v1') then
@@ -34,12 +38,16 @@ begin
     end if;
     if v_signature like 'private.%'
        and (v_proc.prosrc not like '%raw_step ->> ''autoSkip''%'
-         or v_proc.prosrc not like '%finance_identity_matches_current_v1%'
+         or pg_catalog.md5(v_proc.prosrc) is distinct from (case when v_identity_once then '1db71550a2ec13ece520e25abb211e09' else '4a41edefa622a9c252315c0f6be673c0' end)
          or v_proc.prosrc not like '%coalesce(source.applied, false) or coalesce(matched.acted, false)%'
          or v_proc.prosrc not like '%s.record_id = p_record_id%') then
       raise exception 'Personal history owner/signature predicate drifted';
     end if;
-    if v_signature like '%detail_v1%'
+    if v_signature like '%detail_v1%' and v_batch_history
+       and pg_catalog.md5(v_proc.prosrc) is distinct from '34989c18188536e079e63ff81370c2cf' then
+      raise exception 'Personal history complete batch detail source drifted';
+    end if;
+    if v_signature like '%detail_v1%' and not v_batch_history
        and (v_proc.prosrc not like '%s.raw_step ->> ''autoSkip''%'
          or v_proc.prosrc not like '%r.id = v_record_id%'
          or v_proc.prosrc not like '%b.id = v_record_id%'
@@ -47,7 +55,11 @@ begin
          or v_proc.prosrc not like '%finance_personal_document_authorized_v1%') then
       raise exception 'Personal history detail key/scope predicate drifted';
     end if;
-    if v_signature like '%summary_v1%'
+    if v_signature like '%summary_v1%' and v_batch_history
+       and pg_catalog.md5(v_proc.prosrc) is distinct from 'f68644d4f30ee10fd4b2bd76da4a2b83' then
+      raise exception 'Personal history complete batch summary source drifted';
+    end if;
+    if v_signature like '%summary_v1%' and not v_batch_history
        and (v_proc.prosrc not like '%v_scope = ''all'' or a.personally_applied%'
          or v_proc.prosrc not like '%p.tenant_id = v_user.tenant_id%'
          or v_proc.prosrc not like '%p.source_id = a.record_id%'
