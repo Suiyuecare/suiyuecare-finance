@@ -28,12 +28,16 @@ function notifications(data={},extra={}){
 }
 async function rejects(name,fn,code){let e;try{await fn();}catch(error){e=error;}check(name,e&&(!code||e.code===code));}
 (async()=>{
- const bridgeCtx={window:{},S:{user:{id:'actor'}},REQS:[],INVS:[],BILLS:[],NOTIFS:[],financeWorkspaceIdentityBlocked:false,currentTenantId:()=> 'tenant'};
+ const bridgeCtx={window:{},S:{user:{id:'actor'}},REQS:[],INVS:[],BILLS:[],NOTIFS:[],financeWorkspaceIdentityBlocked:false,financeLogoutInProgress:false,financeGoogleAccountSwitchInProgress:false,FINANCE_DRAFT_IDENTITY_EPOCH:2,financeAuthIdentityEpoch:3,CURRENT_PERMISSION_SNAPSHOT:{revision:1},currentTenantId:()=> 'tenant'};
  const bridgeStart=index.indexOf('function createFinanceApprovalRuntime(){'),bridgeEnd=index.indexOf('window.FinanceApprovalRuntime=createFinanceApprovalRuntime();',bridgeStart);
- assert(bridgeStart>=0&&bridgeEnd>bridgeStart);vm.runInNewContext(index.slice(bridgeStart,bridgeEnd),bridgeCtx);
+ const permissionStart=index.indexOf('function financeCompletionPermissionIdentity(){'),permissionEnd=index.indexOf('\nfunction financeCompletionIdentity(){',permissionStart);
+ assert(bridgeStart>=0&&bridgeEnd>bridgeStart&&permissionStart>=0&&permissionEnd>permissionStart);vm.runInNewContext(index.slice(permissionStart,permissionEnd)+'\n'+index.slice(bridgeStart,bridgeEnd),bridgeCtx);
  const bridge=bridgeCtx.createFinanceApprovalRuntime();bridgeCtx.INVS=[{id:'fresh'}];check('Actual closure facade getter follows a reassigned source list',bridge.INVS[0].id==='fresh');
  bridge.REQS=[{id:'engine-readback'}];check('Actual closure facade setter updates the source list',bridgeCtx.REQS[0].id==='engine-readback');
  check('Actual facade calls closure functions without blanket window exports',bridge.currentTenantId()==='tenant'&&bridgeCtx.window.currentTenantId===undefined);
+ const permission=bridge.permissionIdentity();bridgeCtx.CURRENT_PERMISSION_SNAPSHOT.error='fictional refresh error';check('Actual facade permission identity ignores transient read errors',bridge.permissionIdentity()===permission);bridgeCtx.CURRENT_PERMISSION_SNAPSHOT.revision=2;check('Actual facade permission identity follows authoritative revision changes',bridge.permissionIdentity()!==permission);
+ check('Actual facade identity combines draft and auth epochs',bridge.identityEpoch()==='2|3');bridgeCtx.financeAuthIdentityEpoch++;check('Actual facade invalidates the same owner after reauthentication',bridge.identityEpoch()==='2|4');
+ check('Actual facade starts unlocked',!bridge.isIdentityBlocked());bridgeCtx.financeLogoutInProgress=true;check('Actual facade blocks during logout',bridge.isIdentityBlocked());bridgeCtx.financeLogoutInProgress=false;bridgeCtx.financeGoogleAccountSwitchInProgress=true;check('Actual facade blocks during account switch',bridge.isIdentityBlocked());bridgeCtx.financeGoogleAccountSwitchInProgress=false;bridgeCtx.financeWorkspaceIdentityBlocked=true;check('Actual facade respects workspace lock',bridge.isIdentityBlocked());
  let fixture=receipt();check('Receipt engine fixture has only the explicit facade, no accidental global dependencies',!Object.hasOwn(fixture.ctx,'getSb')&&!Object.hasOwn(fixture.ctx,'S'));
  let before=JSON.stringify(fixture.rows),result=await fixture.ctx.financeReceiptAction(fixture.rows,'approve','note',[],{one:2});
  check('One RPC receives reviewed version and scope',fixture.calls.length===1&&fixture.calls[0].p_expected_versions.one===2&&fixture.calls[0].p_data_environment==='test');
