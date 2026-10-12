@@ -5617,10 +5617,10 @@ function attachmentDownloadIdentity(){
 async function downloadFileMeta(f,ctx){
   f=normalizeFileMeta(f);
   var downloadContext=Object.assign({},findAttachmentOwner(f),ctx||{});
-  if(!f||(!f.url&&!f.path&&!f.storagePath)){alert('這個附件只有檔名，沒有保存到原始檔案。請申請人重新上傳一次，後續簽核人就能下載。');return;}
-  if(!canDownloadAttachment(f,ctx)){alert('請先使用公司 Google 帳號登入，再重新下載附件。若已登入仍無法下載，請重新整理頁面後再試一次。');return;}
+  if(!f||(!f.url&&!f.path&&!f.storagePath)){alert('這個附件只有檔名，沒有保存到原始檔案。請申請人重新上傳一次，後續簽核人就能下載。');return false;}
+  if(!canDownloadAttachment(f,ctx)){alert('請先使用公司 Google 帳號登入，再重新下載附件。若已登入仍無法下載，請重新整理頁面後再試一次。');return false;}
   var identity=attachmentDownloadIdentity();
-  if(!identity)return;
+  if(!identity)return false;
   function current(){return identity===attachmentDownloadIdentity()&&canDownloadAttachment(f,downloadContext);}
   var auditFile=f;
   var downloadMeta=f;
@@ -5634,7 +5634,7 @@ async function downloadFileMeta(f,ctx){
         typeLabel:ctx.record.tL||ctx.record.typeLabel||ctx.record.type_label||'申請單',
         app:ctx.record.app||ctx.record.applicant||''
       });
-      if(!current()){if(rebuiltBundle&&/^blob:/i.test(rebuiltBundle.url||''))URL.revokeObjectURL(rebuiltBundle.url);return;}
+      if(!current()){if(rebuiltBundle&&/^blob:/i.test(rebuiltBundle.url||''))URL.revokeObjectURL(rebuiltBundle.url);return false;}
       if(!rebuiltBundle)throw new Error('PDF 合併元件未能產生總檔');
       downloadMeta=rebuiltBundle;
       href=rebuiltBundle.url||'';
@@ -5645,16 +5645,16 @@ async function downloadFileMeta(f,ctx){
         pageCount:rebuiltBundle.pageCount||0
       });
     }catch(bundleErr){
-      if(!current())return;
+      if(!current())return false;
       console.error('receipt bundle rebuild failed',bundleErr);
       recordAttachmentAccess(auditFile,'download_failed',{source:'receiptBundleRebuild',ownerType:(ctx&&ctx.type)||'',reason:rawErrorText(bundleErr)});
       alert('PDF 總檔重新合併失敗：'+friendlyErrorMessage(bundleErr,{area:'attachment-download',action:'合併 PDF'})+'\n\n原始附件仍完整保留，請稍後重新整理再試。');
-      return;
+      return false;
     }
   }
   var downloadName=attachmentDownloadFileName(downloadMeta,downloadContext,auditFile);
   try{if(!href)href=await signAttachmentUrl(f,60,downloadName);}catch(err){
-    if(!current())return;
+    if(!current())return false;
     console.error(err);
     recordAttachmentAccess(auditFile,'download_failed',{source:'downloadFileMeta',ownerType:(ctx&&ctx.type)||'',reason:rawErrorText(err)});
     // path 型附件只能使用當次正式簽章；簽章失敗時不可退回舊 URL，
@@ -5663,13 +5663,13 @@ async function downloadFileMeta(f,ctx){
     markAttachmentDownloadFailure(f,failureKind,ctx&&ctx.button);
     if(attachmentStoragePath(f)){
       alert(attachmentDownloadFailureMessage(failureKind));
-      return;
+      return false;
     }
     href=f.url||'';
-    if(!href){alert(attachmentDownloadFailureMessage(failureKind));return;}
+    if(!href){alert(attachmentDownloadFailureMessage(failureKind));return false;}
   }
-  if(!current())return;
-  if(!href){alert('附件紀錄不完整，沒有可下載的位置。請申請人重新上傳附件，或請管理員確認附件保存紀錄。');return;}
+  if(!current())return false;
+  if(!href){alert('附件紀錄不完整，沒有可下載的位置。請申請人重新上傳附件，或請管理員確認附件保存紀錄。');return false;}
   recordAttachmentAccess(auditFile,'download_clicked',{source:'downloadFileMeta',ownerType:(ctx&&ctx.type)||'',rebuiltBundle:downloadMeta!==auditFile});
   var revokeUrl='';
   if(/^data:/i.test(href)){
@@ -5689,6 +5689,9 @@ async function downloadFileMeta(f,ctx){
   a.style.display='none';
   document.body.appendChild(a);a.click();
   setTimeout(function(){document.body.removeChild(a);if(revokeUrl)URL.revokeObjectURL(revokeUrl);},800);
+  // This confirms the authorized download was dispatched, not that the browser
+  // finished saving its bytes. Existing caller alerts and audit events remain.
+  return true;
 }
 window.downloadStepAttachment=function(idx,button){
   return downloadFileMeta(STEP_DOWNLOADS[idx],{button:button||null});
@@ -9317,6 +9320,10 @@ function approvalHistoryMarkPaint(runtime){
     if(typeof performance!=='undefined'&&typeof performance.measure==='function'){
       try{performance.measure('finance.approvalHistory.inputToPaint',{start:timing.startedAt,end:timing.paintedAt,detail:detail});}catch(_){}
     }
+    var observer=window.FinanceOperationsWorkspace;
+    if(timing.trigger==='input'&&!timing.operationObserved&&observer&&typeof observer.record==='function'){
+      timing.operationObserved=true;observer.record('search',detail.inputToPaintMs,'ok',timing.operationIdentity);
+    }
   });});
 }
 var APPROVAL_HISTORY_DETAIL_RUNTIME={seq:0,identity:'',key:'',status:'idle',promise:null,controller:null};
@@ -9531,7 +9538,7 @@ function loadApprovalHistoryPage(options){
   var controller=typeof AbortController!=='undefined'?new AbortController():null;
   runtime.requestSeq=requestSeq;runtime.controller=controller;
   cancelApprovalHistoryDetail();
-  if(!runtime.timing||runtime.timing.query!==query||runtime.timing.measured||runtime.timing.dispatchedAt!=null)runtime.timing={startedAt:approvalHistoryClock(),trigger:options.trigger||'load',query:query};
+  if(!runtime.timing||runtime.timing.query!==query||runtime.timing.measured||runtime.timing.dispatchedAt!=null)runtime.timing={startedAt:approvalHistoryClock(),trigger:options.trigger||'load',query:query,operationIdentity:typeof financeCompletionIdentity==='function'?financeCompletionIdentity():''};
   if(runtime.page!==page||runtime.query!==query)runtime.items=[];
   runtime.identity=identity;runtime.status='loading';runtime.error='';runtime.accessDenied=false;runtime.page=page;runtime.limit=limit;runtime.query=query;runtime.requestSignature=signature;
   function current(){return APPROVAL_HISTORY_RUNTIME===runtime&&identity===approvalHistoryIdentity()&&runtime.requestSeq===requestSeq&&S.page==='approvals'&&S.aT===tab&&approvalHistoryPageAllowed();}
@@ -9568,6 +9575,10 @@ function loadApprovalHistoryPage(options){
     if(!current())return{ok:false,stale:true,error:error};
     if(controller){try{controller.abort();}catch(_){} }
     runtime.status='error';runtime.error=remoteReadIssueText(error);
+    var timing=runtime.timing,observer=window.FinanceOperationsWorkspace;
+    if(timing&&timing.trigger==='input'&&!timing.operationObserved&&observer&&typeof observer.record==='function'){
+      timing.operationObserved=true;observer.record('search',approvalHistoryClock()-timing.startedAt,typeof observer.errorOutcome==='function'?observer.errorOutcome(error):'error',timing.operationIdentity);
+    }
     try{if(typeof recordRemoteReadIssue==='function')recordRemoteReadIssue('個人單據紀錄',error);}catch(_){}
     paintApprovalHistoryState();
     return{ok:false,error:error};
@@ -29111,7 +29122,7 @@ window.apprSearch=function(v,event){
       buildApprovals();return;
     }
     cancelApprovalHistoryDetail();
-    if(!event||!event.historyRefresh)runtime.timing={startedAt:approvalHistoryClock(),trigger:'input',query:query};
+    if(!event||!event.historyRefresh)runtime.timing={startedAt:approvalHistoryClock(),trigger:'input',query:query,operationIdentity:typeof financeCompletionIdentity==='function'?financeCompletionIdentity():''};
     // Invalidate as soon as the user edits. During the quiet interval an older
     // query must not paint results under the new input, even if abort is ignored.
     cancelApprovalHistoryRequest(runtime);
@@ -44842,7 +44853,13 @@ function installFinanceCompletion(){
       if(!identity()||!canAccessPage(kind==='bill'?'bills':'invoices')||!ui||!ui.fields||!draft||draft.documentType!==kind||draft.dataEnvironment!==environment())throw new Error('草稿內容或登入身分尚未完整取得。');
       var page=kind==='bill'?'bills':'invoices';
       function canonical(v){if(Array.isArray(v))return '['+v.map(canonical).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(function(k){return JSON.stringify(k)+':'+canonical(v[k]);}).join(',')+'}';return JSON.stringify(v);}
-      if(hasUnsavedIncomeDocChanges(page)&&(financeCloudIncomeFiles(kind).unsavedFiles>0||canonical(financeCaptureIncomeUi(kind))!==canonical(ui)))throw new Error('目前表單有未保存變更，請先保存目前草稿，再還原其他版本。');
+      if(hasUnsavedIncomeDocChanges(page)&&(financeCloudIncomeFiles(kind).unsavedFiles>0||canonical(financeCaptureIncomeUi(kind))!==canonical(ui))){var error=new Error('目前表單有未保存變更，請先保存目前草稿，再還原其他版本。');error.code='DIRTY_FORM';throw error;}
+    }
+    function beforeReopen(kind,ui,draft){
+      if(!identity()||!canAccessPage(kind==='bill'?'bills':'invoices')||!ui||!ui.fields||!draft||draft.documentType!==kind||draft.dataEnvironment!==environment())throw new Error('草稿內容或登入身分尚未完整取得。');
+      var active=window.FinanceCloudDraftWorkspace.active(kind),pending=loadIncomeSubmissionPending(kind),marker=incomeSubmissionRecoveryMarker(kind);
+      var same=active&&active.id===draft.id||pending&&pending.args&&pending.cloudDraftId===draft.id&&pending.args.p_idempotency_key===draft.operationKey||marker&&marker.operationKey===draft.operationKey;
+      if(hasUnsavedIncomeDocChanges(kind==='bill'?'bills':'invoices')&&!same){var error=new Error('目前修改屬於另一份表單，請先保存目前草稿，再開啟這筆送件。');error.code='DIRTY_FORM';throw error;}
     }
     function retireReopenedSubmission(kind,previous,draft){
       if(!identity()||!previous||!draft||draft.state!=='draft'||draft.id!==previous.id||draft.revision!==previous.revision+1||draft.operationKey!=='cloud_'+kind+'_'+draft.id+'_'+draft.revision||draft.documentType!==kind||draft.dataEnvironment!==environment())throw new Error('草稿修正版本尚未核對，保留原筆送件識別。');
@@ -44851,7 +44868,7 @@ function installFinanceCompletion(){
       if(pending&&pending.cloudDraftId===previous.id&&pending.args.p_idempotency_key===previous.operationKey)clearIncomeSubmissionPending(pending);
       else if(marker&&marker.operationKey===previous.operationKey)clearIncomeSubmissionRecoveryMarker(kind,previous.operationKey);
     }
-    window.FinanceCloudDraftWorkspace.install({identity:identity,ownerKey:function(){return identity()?incomeSubmissionOwner():'';},environment:environment,client:financeCloudSubmissionClient,beforeRestore:beforeRestore,reopened:retireReopenedSubmission,saved:function(kind){if(!financeCloudIncomeFiles(kind).unsavedFiles)markIncomeDocClean(kind==='bill'?'bills':'invoices');},paint:function(){financePaintCloudDrafts('invoice');financePaintCloudDrafts('bill');},capture:function(kind){if(!identity()||!canAccessPage(kind==='bill'?'bills':'invoices'))throw new Error('目前無法使用此表單，請重新確認登入與權限。');var ui=financeCaptureIncomeUi(kind),attachments=financeCloudIncomeFiles(kind);return {payload:{title:ui.fields&&ui.fields[kind==='bill'?'bill-reason':'b-reason']||ui.fields&&ui.fields['inv-reason']||'未填事由',items:[],ui:ui},files:attachments.files,unsavedFiles:attachments.unsavedFiles};},restore:function(kind,ui,draft){
+    window.FinanceCloudDraftWorkspace.install({identity:identity,ownerKey:function(){return identity()?incomeSubmissionOwner():'';},environment:environment,client:financeCloudSubmissionClient,beforeRestore:beforeRestore,beforeReopen:beforeReopen,reopened:retireReopenedSubmission,saved:function(kind){if(!financeCloudIncomeFiles(kind).unsavedFiles)markIncomeDocClean(kind==='bill'?'bills':'invoices');},paint:function(){financePaintCloudDrafts('invoice');financePaintCloudDrafts('bill');},capture:function(kind){if(!identity()||!canAccessPage(kind==='bill'?'bills':'invoices'))throw new Error('目前無法使用此表單，請重新確認登入與權限。');var ui=financeCaptureIncomeUi(kind),attachments=financeCloudIncomeFiles(kind);return {payload:{title:ui.fields&&ui.fields[kind==='bill'?'bill-reason':'b-reason']||ui.fields&&ui.fields['inv-reason']||'未填事由',items:[],ui:ui},files:attachments.files,unsavedFiles:attachments.unsavedFiles};},restore:function(kind,ui,draft){
       beforeRestore(kind,ui,draft);if(draft.state!=='draft')throw new Error('這筆目前不是可還原草稿。');var page=kind==='bill'?'bills':'invoices';
       var files=financeCloudVerifiedAttachmentReferences(kind,draft),sources=kind==='invoice'?financeCloudInvoiceSourceAttachments(draft,files):[];
       financeCloudRestoreIncomeFields(kind,ui);

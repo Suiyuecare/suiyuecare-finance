@@ -32,6 +32,50 @@ async function rejects(fn,code){await assert.rejects(fn,e=>e.code===code);}
  await db.close();
  // Repeat with precise identity/data assertions; business return value stays intact.
  await check('observer preserves results, drops switched identities and retains failed sends',async()=>{let identity='one',now=100000,clock=0,calls=[],fail=true;const ob=engine.create({identity:()=>identity,environment:()=> 'test',now:()=>now,clock:()=>clock,rpc:async(n,args)=>{calls.push(args);if(fail)throw Error('offline');return {data:{ok:true,inserted:args.p_samples.length}};}});const result={email:'private@example.invalid'};assert.equal(await ob.measure('search',async()=>{clock=42;return result;}),result);assert.ok(!JSON.stringify(ob.pending()).includes('private'));await assert.rejects(()=>ob.flush(),/offline/);assert.equal(ob.pending().length,1);fail=false;await ob.flush();assert.equal(ob.pending().length,0);await assert.rejects(()=>ob.measure('submission',async()=>{clock=80;const e=Error('original');e.code='CLIENT_TIMEOUT';throw e;}),/original/);assert.equal(ob.pending()[0].outcome,'timeout');identity='two';assert.equal(ob.pending().length,0);await ob.measure('list',async()=>{identity='three';return 7;});assert.equal(ob.pending().length,0);ob.invalidate();});
+ await check('UI timing record requires the captured identity and persists only minimal fields',async()=>{
+  let identity='actor-private|auth-epoch1',calls=[];
+  const ob=engine.create({identity:()=>identity,environment:()=> 'test',rpc:async(name,args)=>{calls.push({name,args});return {data:{ok:true,inserted:args.p_samples.length}};}});
+  try{
+   assert.equal(ob.record('search',123.6,'ok'),false);
+   assert.equal(ob.record('search',123.6,'ok','other-actor'),false);
+   for(const args of [[{metric:'search',query:'private query'},120,'ok',identity],['unknown',120,'ok',identity],['search','120','ok',identity],['search',NaN,'ok',identity],['search',Infinity,'ok',identity],['search',-1,'ok',identity],['search',120,{query:'private query'},identity],['search',120,'unknown',identity]])assert.equal(ob.record(...args),false);
+   assert.equal(ob.pending().length,0);
+   assert.equal(ob.record('search',123.6,'ok',identity,{query:'private query',filePath:'private/path',email:'private@example.invalid'}),true);
+   const row=ob.pending()[0];assert.deepEqual(Object.keys(row).sort(),['durationMs','eventId','measuredAt','metric','outcome']);assert.equal(row.durationMs,124);assert.equal(row.metric,'search');assert.equal(row.outcome,'ok');
+   assert(!JSON.stringify(row).includes('private'));
+   const captured=identity;identity='actor-private|auth-epoch3';assert.equal(ob.record('search',130,'ok',captured),false);assert.equal(ob.pending().length,0);
+   assert.equal(ob.record('search',150,'timeout',identity),true);await ob.flush();assert.equal(calls.length,1);assert.equal(calls[0].name,'finance_operation_samples_save_v1');assert.equal(calls[0].args.p_samples[0].outcome,'timeout');assert(!JSON.stringify(calls).includes('private'));
+  }finally{ob.invalidate();}
+ });
+ await check('measure preserves explicit business failure values and typed timeout outcomes',async()=>{
+  let clock=0;const ob=engine.create({identity:()=> 'typed-observer',environment:()=> 'test',clock:()=>clock,rpc:async()=>({data:{ok:true}})});
+  try{
+   const failed=[false,{ok:false},{error:{code:'CLIENT_TIMEOUT',message:'private query exceeded deadline'}}];
+   for(const value of failed)assert.equal(await ob.measure('download',async()=>{clock+=10;return value;}),value);
+   assert.deepEqual(ob.pending().map(row=>row.outcome),['error','error','timeout']);assert(!JSON.stringify(ob.pending()).includes('private query'));
+   const failures=[
+    [{code:'CLIENT_TIMEOUT'},'timeout'],[{code:'FINANCE_READ_TIMEOUT'},'timeout'],[{code:'FINANCE_RESULT_UNKNOWN',message:'Incomplete response'},'error'],[{code:'FINANCE_RESULT_UNKNOWN',message:'Read timed out'},'timeout'],[{code:'FINANCE_RESULT_UNKNOWN',timedOut:true,message:'Incomplete response'},'timeout'],[{code:'FINANCE_RESULT_UNKNOWN',cause:{code:'CLIENT_TIMEOUT'},message:'Incomplete response'},'timeout'],[{code:'PGRST003'},'timeout'],[{name:'TimeoutError'},'timeout'],[{status:504},'timeout'],
+    [{code:'57014',message:'canceling statement due to statement timeout'},'timeout'],[{code:'57014',message:'canceling statement due to user request'},'aborted'],[{name:'AbortError'},'aborted'],[{code:'CLIENT_CANCELLED'},'aborted'],
+    [{code:'CLOUD_RESULT_UNKNOWN',resultUnknown:true,message:'雲端回應逾時；原草稿已保留。'},'timeout'],[{code:'CLOUD_RESULT_UNKNOWN',message:'雲端回執不完整。'},'error'],[{code:'FINANCE_MUTATION_RESULT_UNKNOWN',cause:{code:'CLIENT_TIMEOUT'}},'timeout'],[{code:'42501',message:'Denied'},'error']
+   ];
+   for(const [fields,outcome] of failures){const original=Object.assign(new Error(fields.message||'original private error'),fields);await assert.rejects(()=>ob.measure('search',async()=>{clock+=10;throw original;}),error=>error===original);assert.equal(ob.pending().at(-1).outcome,outcome);assert.equal(engine.errorOutcome(original),outcome);}
+  }finally{ob.invalidate();}
+ });
+ await check('missing telemetry crypto or clock cannot alter the original business result',async()=>{
+  const vm=require('node:vm'),context={module:{exports:{}},crypto:{},setTimeout,clearTimeout};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../assets/engines/operations-workspace.js'),'utf8'),context);const isolated=context.module.exports;
+  for(const clock of [()=>10,()=>{throw Error('clock unavailable');}]){
+   const ob=isolated.create({identity:()=> 'actor',environment:()=> 'test',clock,rpc:async()=>({data:{ok:true}})});
+   try{assert.equal(ob.record('search',10,'ok','actor'),false);const success={ok:true};assert.equal(await ob.measure('download',async()=>success),success);const original=Error('original business failure');await assert.rejects(()=>ob.measure('download',async()=>{throw original;}),error=>error===original);assert.equal(ob.pending().length,0);}finally{ob.invalidate();}
+  }
+ });
+ await check('workspace facade records actual completed UI timings under the captured owner only',async()=>{
+  let identity='facade-actor|epoch1',calls=[];
+  try{
+   engine.install({identity:()=>identity,environment:()=> 'test',rpc:async(name,args)=>{calls.push({name,args});return {data:{ok:true,inserted:args.p_samples.length}};}});
+   assert.equal(engine.record('search',90,'ok'),false);assert.equal(engine.record('search',90,'ok',identity),true);await engine.flush();assert.equal(calls.length,1);assert.equal(calls[0].args.p_samples[0].durationMs,90);
+   const old=identity;identity='facade-actor|epoch2';assert.equal(engine.record('search',99,'ok',old),false);await engine.flush();assert.equal(calls.length,1);
+  }finally{engine.invalidate();}
+ });
  await check('settings and people mutation permissions stay independent in UI and forged clicks',async()=>{
   const originalDocument=globalThis.document;let listener,allowed={ack:false,retry:false},calls=[];
   globalThis.document={addEventListener:(name,handler)=>{assert.equal(name,'click');listener=handler;}};

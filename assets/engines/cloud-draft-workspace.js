@@ -63,19 +63,26 @@
     // The old operation is already cancelled on the server. Retire its receipt
     // before restoring so newly typed fields cannot trap a confirmed reopen.
     active[kind]=data;updateRow(data);if(pending[kind]&&pending[kind].id===data.id)removePending(kind);
-    await restore(kind,data,token);return data;
+    try{await restore(kind,data,token);}catch(e){
+      assert(token);
+      if(e.code!=='DIRTY_FORM')throw e;
+      notice='原送件已回到第 '+data.revision+' 版草稿。已保留目前修改與本機選檔，請保存後再送出。';
+    }
+    return data;
   }
   async function reopenWork(id,kind,token,p){
     var previous=await runtime.client.read(id,runtime.environment());assert(token);if(previous.documentType!==kind)throw fail('草稿類型與目前表單不同。','DRAFT_KIND');
     if(previous.state==='committed'){var shown=await runtime.showResult(kind,previous);assert(token);clearCommitted(kind,id);notice=shown&&shown.displayPending?'原筆已正式送出，無法回到草稿；列表暫未更新，請稍後重新整理。':'原筆已正式送出，無法回到草稿，已查回原筆結果。';return previous;}
-    if(typeof runtime.beforeRestore!=='function')throw fail('草稿修正檢查尚未就緒，請重新整理。','RESTORE_GUARD');
+    if(typeof runtime.beforeReopen!=='function')throw fail('草稿修正檢查尚未就緒，請重新整理。','RESTORE_GUARD');
     if(p){if(!await matches(previous,p))throw fail('雲端內容已改變，請先重新讀取。','PT409');assert(token);
       if(previous.state==='draft'&&previous.revision===p.revision+1&&previous.operationKey==='cloud_'+kind+'_'+id+'_'+previous.revision){
         return await acceptReopened(kind,{id:id,revision:p.revision,operationKey:p.operationKey},previous,token);
       }
       if(previous.revision!==p.revision||previous.operationKey!==p.operationKey)throw fail('草稿版本已改變，請先重新讀取。','PT409');
     }
-    await runtime.beforeRestore(kind,previous.payload&&previous.payload.ui,previous);assert(token);
+    // Reopening retires the same server operation; it does not authorize
+    // overwriting a dirty local form. Restore performs that separate check.
+    await runtime.beforeReopen(kind,previous.payload&&previous.payload.ui,previous);assert(token);
     if(['staging','ready'].indexOf(previous.state)<0)throw fail('這筆目前不能回到草稿；請確認原筆結果。','DRAFT_STATE');
     if(!p){p={action:'reopen',id:id,revision:previous.revision,kind:kind,environment:previous.dataEnvironment,operationKey:previous.operationKey,fingerprint:await fingerprint(kind,previous.dataEnvironment,previous.payload,previous.files)};assert(token);pending[kind]=p;persist();}
     var data=await runtime.client.reopen(previous);assert(token);
