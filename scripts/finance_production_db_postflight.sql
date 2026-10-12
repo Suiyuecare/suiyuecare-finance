@@ -32,6 +32,10 @@ begin
       identity_company public.companies%rowtype;
       identity_portal public.users%rowtype;
       identity_employee public.employees%rowtype;
+      identity_admin private.finance_member_admin_events_v1%rowtype;
+      identity_org private.finance_membership_org_versions_v1%rowtype;
+      identity_offboard private.finance_user_offboarding_operations%rowtype;
+      identity_source_active boolean;
       identity_department uuid;
       identity_count integer;
     begin
@@ -51,28 +55,83 @@ begin
         or pg_catalog.lower(pg_catalog.btrim(identity_finance.email)) !~ '^[^@[:space:]]+@suiyuecare[.]com$' then
         raise exception 'Portal current Finance identity is unavailable';
       end if;
-      -- The private event is emitted by the authorized atomic member
-      -- API. Google binding has its own verified identity/revision contract;
-      -- later primary-email changes must not rewrite personnel audit history.
+      -- FINANCE_PORTAL_LATEST_AUTHORITY_V2: row revisions also advance on
+      -- authorized Google and projection metadata writes. Read the latest
+      -- personnel event, never an arbitrary matching historical event. Published
+      -- organization versions and completed offboarding have separate audits.
       if exists(select 1 from pg_catalog.pg_class c
         cross join lateral pg_catalog.aclexplode(coalesce(c.relacl,pg_catalog.acldefault('r',c.relowner))) a
-        where c.oid='private.finance_member_admin_events_v1'::regclass and a.grantee<>c.relowner
+        where c.oid in('private.finance_member_admin_events_v1'::regclass,
+          'private.finance_membership_org_versions_v1'::regclass,
+          'private.finance_user_offboarding_operations'::regclass) and a.grantee<>c.relowner
           and a.privilege_type in('INSERT','UPDATE','DELETE','TRUNCATE','TRIGGER')) then
         raise exception 'Portal personnel authority audit permits unauthorized mutation';
       end if;
-      if not exists (
-        select 1 from private.finance_member_admin_events_v1 a
-        where a.tenant_id=identity_tenant and a.finance_user_id=identity_finance_id
-          and a.action in('create','update','activate')
-          and nullif(pg_catalog.btrim(a.actor_finance_user_id),'') is not null
-          and a.actor_auth_user_id is not null
-          and a.after_state->>'member_revision'=identity_finance.member_revision::text
-          and a.after_state->>'name'=identity_finance.name
-          and a.after_state->>'role'=identity_finance.role
-          and a.after_state->>'entity_id'=identity_finance.entity_id
-          and a.after_state->>'department_code'=identity_finance.department_code
-          and a.after_state->>'active'=case when identity_finance.active then 'true' else 'false' end
-      ) then raise exception 'Portal current personnel revision lacks matching authorized source';end if;
+      if exists(select 1 from pg_catalog.pg_class c
+        join pg_catalog.pg_attribute column_row on column_row.attrelid=c.oid
+        cross join lateral pg_catalog.aclexplode(column_row.attacl) a
+        where c.oid in('private.finance_member_admin_events_v1'::regclass,
+          'private.finance_membership_org_versions_v1'::regclass,
+          'private.finance_user_offboarding_operations'::regclass)
+          and a.grantee<>c.relowner and a.privilege_type in('INSERT','UPDATE')) then
+        raise exception 'Portal personnel authority audit permits unauthorized column mutation';
+      end if;
+      select a.* into identity_admin from private.finance_member_admin_events_v1 a
+      where a.tenant_id=identity_tenant and a.finance_user_id=identity_finance_id
+      order by a.created_at desc,a.id desc limit 1;
+      if not found or identity_admin.action not in('create','update','activate')
+        or nullif(pg_catalog.btrim(identity_admin.actor_finance_user_id),'') is null
+        or identity_admin.actor_auth_user_id is null
+        or coalesce(identity_admin.after_state->>'member_revision','') !~ '^[1-9][0-9]*$'
+        or (identity_admin.after_state->>'member_revision')::numeric>identity_finance.member_revision
+        or identity_admin.after_state->>'name' is distinct from identity_finance.name
+        or identity_admin.after_state->>'role' is distinct from identity_finance.role
+        or identity_admin.after_state->>'entity_id' is distinct from identity_finance.entity_id
+        or coalesce(identity_admin.after_state->>'active','') not in('true','false') then
+        raise exception 'Portal current personnel revision lacks matching authorized source';
+      end if;
+      identity_source_active := (identity_admin.after_state->>'active')::boolean;
+      select o.* into identity_offboard from private.finance_user_offboarding_operations o
+      where o.tenant_id=identity_tenant and o.departing_finance_user_id=identity_finance_id
+      order by o.created_at desc,o.id desc limit 1;
+      if identity_source_active is distinct from identity_finance.active then
+        if identity_finance.active or identity_offboard.id is null
+          or identity_offboard.created_at<=identity_admin.created_at
+          or nullif(pg_catalog.btrim(identity_offboard.actor_finance_user_id),'') is null
+          or nullif(pg_catalog.btrim(identity_offboard.preview_revision),'') is null
+          or length(pg_catalog.btrim(identity_offboard.reason))<3
+          or identity_offboard.result->>'ok' is distinct from 'true'
+          or identity_offboard.result->>'deactivated' is distinct from 'true'
+          or identity_offboard.result->>'operation_id' is distinct from identity_offboard.id then
+          raise exception 'Portal current personnel revision lacks matching authorized source';
+        end if;
+      end if;
+      select o.* into identity_org from private.finance_membership_org_versions_v1 o
+      where o.tenant_id=identity_tenant and o.status='published'
+      order by o.version_no desc,o.id desc limit 1;
+      if identity_finance.active and (identity_org.id is null
+        or (select count(*) from private.finance_membership_org_versions_v1 o
+          where o.tenant_id=identity_tenant and o.status='published')<>1
+        or identity_org.published_at is null or identity_org.effective_at>current_timestamp
+        or identity_org.validation_summary->>'ok' is distinct from 'true'
+        or nullif(pg_catalog.btrim(coalesce(identity_org.approved_by_finance_user_id,
+          identity_org.created_by_finance_user_id)),'') is null) then
+        raise exception 'Portal canonical published organization authority is unavailable';
+      end if;
+      if identity_finance.department_code is distinct from identity_admin.after_state->>'department_code'
+        and (identity_org.id is null or identity_org.published_at<=identity_admin.created_at) then
+        raise exception 'Portal current department lacks matching authorized source';
+      end if;
+      if identity_finance.active and identity_org.published_at>=identity_admin.created_at then
+        if (select count(*) from pg_catalog.jsonb_array_elements(identity_org.snapshot->'assignments') a
+          join pg_catalog.jsonb_array_elements(identity_org.snapshot->'units') u on u->>'id'=a->>'org_unit_id'
+          where a->>'finance_user_id'=identity_finance_id and a->>'assignment_kind'='primary'
+            and coalesce((a->>'active')::boolean,true) and coalesce((u->>'active')::boolean,true)
+            and u->>'code'=identity_finance.department_code
+            and coalesce(a->>'role_key',identity_finance.role)=identity_finance.role)<>1 then
+          raise exception 'Portal current department disagrees with latest published organization authority';
+        end if;
+      end if;
       if (select count(*) from public.finance_users f where f.tenant_id=identity_tenant
           and f.active and (f.id=identity_finance_id
             or pg_catalog.lower(pg_catalog.btrim(f.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))
@@ -143,10 +202,7 @@ begin
 
         if identity_finance.google_link_status='pending_first_login' then
           if identity_finance.auth_user_id is not null or identity_finance.google_login_verified_at is not null
-            or not exists(select 1 from private.finance_member_admin_events_v1 a where a.tenant_id=identity_tenant
-              and a.finance_user_id=identity_finance_id
-              and a.after_state->>'member_revision'=identity_finance.member_revision::text
-              and a.after_state->>'google_link_status'='pending_first_login')
+            or identity_admin.after_state->>'google_link_status' is distinct from 'pending_first_login'
             or exists(select 1 from public.users u left join public.employees e on e.id=u.employee_id
               where u.status='active' and u.deleted_at is null and u.auth_user_id is not null
                 and (pg_catalog.lower(pg_catalog.btrim(u.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))
@@ -178,12 +234,17 @@ begin
             or identity_employee.id is null then
             raise exception 'Portal current canonical employee or verified binding is unavailable';
           end if;
+          -- GOOGLE_WORKSPACE_PRIMARY_EMAIL_RENAME_V1: verified Google provider
+          -- email is authoritative; auth.users.email may retain the old address.
           if not exists(select 1 from auth.users a where a.id=identity_finance.auth_user_id
-            and a.email_confirmed_at is not null
-            and pg_catalog.lower(pg_catalog.btrim(a.email))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))
+            and a.deleted_at is null
             and exists(select 1 from auth.identities i where i.user_id=a.id and i.provider='google'
-              and i.identity_data->>'email_verified'='true'
-              and pg_catalog.lower(pg_catalog.btrim(i.identity_data->>'email'))=pg_catalog.lower(pg_catalog.btrim(a.email)))) then
+              and pg_catalog.lower(coalesce(i.identity_data->>'email_verified','false')) in('true','1')
+              and pg_catalog.lower(pg_catalog.btrim(i.identity_data->>'email'))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email))))
+            or (select count(distinct i.user_id) from auth.identities i join auth.users a on a.id=i.user_id
+              where i.provider='google' and a.deleted_at is null
+                and pg_catalog.lower(coalesce(i.identity_data->>'email_verified','false')) in('true','1')
+                and pg_catalog.lower(pg_catalog.btrim(i.identity_data->>'email'))=pg_catalog.lower(pg_catalog.btrim(identity_finance.email)))<>1 then
             raise exception 'Portal canonical Auth is not the current verified Google identity';
           end if;
           select count(*) into identity_count from public.users u left join public.employees e on e.id=u.employee_id

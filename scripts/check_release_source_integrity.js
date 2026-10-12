@@ -59,6 +59,7 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'scripts/fixtures/portal_projection_authorities_20261012.json',
   'scripts/test_portal_employee_projection_postflight.cjs',
   'scripts/check_combo_scroll_browser_20261012.cjs',
   'scripts/check_all_applicant_withdraw_contract.js',
