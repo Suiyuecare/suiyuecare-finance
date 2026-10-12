@@ -108,11 +108,54 @@ try {
 // complete canary, including its role, rollback and business assertions.
 const outputDb = new PGlite();
 const outputDir = fs.mkdtempSync(join(tmpdir(), 'finance-canary-output-contracts-'));
+const expectedOutputFiles = [
+  'finance_amount_search_canary.sql',
+  'finance_approval_history_canary.sql',
+  'finance_approval_history_summary_canary.sql',
+  'finance_approval_search_canary.sql',
+  'finance_approval_search_permission_canary.sql',
+  'finance_ar_mapping_canary.sql',
+  'finance_ar_reconciliation_canary.sql',
+  'finance_ar_verified_accounting_scope_canary.sql',
+  'finance_attachment_claim_canary.sql',
+  'finance_audit_controls_20260927_canary.sql',
+  'finance_audit_readiness_canary.sql',
+  'finance_audit_security_canary.sql',
+  'finance_bill_batch_bulk_canary.sql',
+  'finance_canonical_receivables_canary.sql',
+  'finance_completion_canary.sql',
+  'finance_dashboard_scope_canary.sql',
+  'finance_demo_password_retirement_canary.sql',
+  'finance_employee_reliability_canary.sql',
+  'finance_external_labor_canary.sql',
+  'finance_finalize_accounting_lines_canary.sql',
+  'finance_google_projection_canary.sql',
+  'finance_hr_contractor_canary.sql',
+  'finance_income_reconcile_canary.sql',
+  'finance_invoice_batch_approval_canary.sql',
+  'finance_invoice_item_bind_canary.sql',
+  'finance_invoice_revenue_result_canary.sql',
+  'finance_invoice_select_initplan_canary.sql',
+  'finance_operational_stability_canary.sql',
+  'finance_personal_history_canary.sql',
+  'finance_personal_history_permission_canary.sql',
+  'finance_personnel_reliable_save_live_canary.sql',
+  'finance_personnel_save_live_canary.sql',
+  'finance_portal_session_canary.sql',
+  'finance_production_authenticated_canary.sql',
+  'finance_purchase_final_amount_canary.sql',
+  'finance_reporting_profiles_canary.sql',
+  'finance_revenue_repair_canary.sql',
+  'finance_statement_source_canary.sql',
+  'finance_tax_source_integrity_canary.sql',
+  'finance_utility_tax_canary.sql'
+];
 try {
   const guard = require('./finance_production_release_guard.js');
   const guardSource = fs.readFileSync(new URL('finance_production_release_guard.js', scripts), 'utf8');
   const domains = new Map([...guardSource.matchAll(/(\w+):\{marker:'[^']+',result:\{canary:'([^']+)'/g)].map(match => [match[2], match[1]]));
   let verified = 0;
+  const verifiedFiles = [], verifiedDomains = new Map();
   for (const name of fs.readdirSync(scripts).filter(name => /^finance_.*canary\.sql$/.test(name))) {
     // The separate human-accounting gate does not use these release parsers.
     if (name === 'finance_production_human_accounting_canary.sql' || name === 'finance_human_accounting_float_canary.sql') continue;
@@ -127,11 +170,16 @@ try {
     else {
       const canary = select.match(/'canary'\s*,\s*'([^']+)'/)?.[1];
       assert.ok(domains.has(canary), name+' must have a protected report domain');
-      guard.verifyReportsCanary(file, domains.get(canary));
+      const domain = domains.get(canary);
+      guard.verifyReportsCanary(file, domain);
+      verifiedDomains.set(name, domain);
     }
     verified++;
+    verifiedFiles.push(name);
   }
-  assert.equal(verified, 39, 'every protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL result is covered');
-  pass('all 39 actual final SQL result shapes satisfy their protected release parsers');
+  assert.deepEqual(verifiedFiles.sort(), expectedOutputFiles, 'every expected protected SQL result must be verified exactly once');
+  assert.equal(verified, 40, 'all protected authenticated/report/finalize/utility/permission/batch/completion final SQL results are covered');
+  assert.equal(verifiedDomains.get('finance_completion_canary.sql'), 'finance_completion', 'completion output must pass its own protected release domain');
+  pass('all 40 actual final SQL result shapes satisfy their protected release parsers, including finance_completion');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);
