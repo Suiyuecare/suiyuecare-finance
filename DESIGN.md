@@ -28,6 +28,9 @@ components:
     textColor: "#ffffff"
   brand-mark:
     backgroundColor: "{colors.accent}"
+  sidebar-active:
+    backgroundColor: "{colors.accent}"
+    textColor: "#ffffff"
   page:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
@@ -54,17 +57,21 @@ components:
 
 介面的記憶點是溫暖、可信的財務工作區；簽核結果、金額、附件與錯誤回復必須比裝飾更醒目。避免滿頁等寬卡片、僅靠顏色表達狀態、橘色小字配亮橘底，或以動畫掩蓋真正的等待。正式業務及權限以 [README.md](README.md)、[員工可靠性契約](docs/finance-employee-reliability.md) 和各模組伺服器契約為準。
 
-現有 `assets/styles/finance-core.css` 的 `:root` 與共用選擇器是**執行時 token 的唯一來源**；本文件鏡射已接受的語意角色與精確色值，不產生第二份 CSS。改動共用 token 時，同一提交須更新 CSS、本文件和相關畫面驗收。局部品牌橘 `accent` 不自動等於白字按鈕底色。
+現有 `assets/styles/finance-core.css` 的 `:root` 與共用選擇器是**執行時 token 的唯一來源**；本文件鏡射已接受的語意角色與精確色值，不產生第二份 CSS。改動共用 token 時，同一提交須更新 CSS、本文件和相關畫面驗收。局部品牌橘 `accent` 不自動等於白字按鈕底色；側邊導覽選取狀態是使用者明確指定的例外，詳見 Colors。
 
 ## Colors
 
-`primary` 是白字主要按鈕與選取頁籤使用的深橘；`accent` 用於識別、圖示與低密度裝飾。紙面 `paper` 和白色 `surface` 以邊線分層，文字以 `ink`／`muted` 維持可讀。成功、警示與危險狀態除顏色外必須有文字或圖示。小字和控制項文字對比至少 4.5:1；有焦點的控制項要有可見外框。
+`primary` 是白字主要按鈕與選取頁籤使用的深橘；`accent` 用於識別、圖示與低密度裝飾。紙面 `paper` 和白色 `surface` 以邊線分層，文字以 `ink`／`muted` 維持可讀。成功、警示與危險狀態除顏色外必須有文字或圖示。小字和控制項文字對比預設至少 4.5:1；有焦點的控制項要有可見外框。
+
+2026-10-03 使用者明確要求側邊導覽恢復原本亮橘底白字：`components.sidebar-active` → `--admin-nav-active` → `--admin-orange`（`#ea880c`），僅由共用 `.ni` 導覽選取／hover 樣式消費。這一指定組合的白字對比約 2.62:1，是使用者品牌偏好的局部例外，不宣稱符合 AA 文字對比；其他主要按鈕維持 `primary` 深橘，導覽仍保留完整文字、形狀與鍵盤焦點。
 
 正式金額、暫編金額、核對中與來源失敗使用不同文字狀態；未知值不能以綠色、0 元或已完成造假。圖表亦提供數值與來源文字。
 
 ## Typography
 
 繁體中文以既有 `--font-sans` 字族顯示，數字採等寬數字特性以利表格對齊；不以 9px 微字承載重要流程資訊。表單標籤、狀態及操作名稱應短而完整；長單號與姓名保留可查閱全文的方式，不以僅靠 hover 的省略號隱藏。
+
+組織圖閱讀列表沿用儀表板的文字層次：姓名 15px／700，職稱及部門 13px／400，零額外字距、1.4 倍行高；原生按鈕明確沿用 `text-rendering: optimizeLegibility`，避免按鈕重設與一般段落的繪字差異。列高 64px 起，保留 44px 展開／選取觸控目標，完整細框與左側階層連線，不以透明左邊框製造缺角。
 
 ## Layout
 
