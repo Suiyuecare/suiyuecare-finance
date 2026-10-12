@@ -139,6 +139,7 @@ jobs:
           pnpm test:org-chart-browser
           node scripts/check_human_accounting_browser_20261002.cjs
           FINANCE_BROWSER_CHANNEL=chromium node scripts/check_invoice_table_layout_browser.cjs --review-only
+          pnpm test:select-scroll-browser
           FINANCE_BROWSER_CHANNEL=chromium pnpm test:invoice-item-bind-browser
           pnpm test:history-summary-browser
           pnpm test:finance-ui-interactions
@@ -148,6 +149,15 @@ jobs:
           pnpm test:hr-contractor-native
           pnpm test:portal-session
           pnpm test:external-labor-browser
+
+      - name: Retain fictional searchable-select evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: finance-select-scroll-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/finance-select-scroll-20261012
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Retain fictional organization chart evidence
         if: always()

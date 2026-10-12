@@ -507,3 +507,6 @@ supabase/.temp
 !scripts/check_procurement_specialized_action_guard.js
 !scripts/sql
 !scripts/sql/procurement_specialized_action_postflight.sql
+
+# Searchable-select popup interaction regression
+!scripts/check_combo_scroll_browser_20261012.cjs

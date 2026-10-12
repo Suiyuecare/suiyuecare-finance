@@ -2593,6 +2593,49 @@ function syncComboActive(sel){
   var input=sel._combo.querySelector('.combo-input'),active=sel._combo.querySelector('.combo-option.active');
   if(input){if(active)input.setAttribute('aria-activedescendant',active.id);else input.removeAttribute('aria-activedescendant');}
 }
+// Keep searchable menus above clipped cards and approval scrollports.
+// The manual top-layer popup retains the original options and change handler.
+var FLOATING_COMBO_SELECT=null,FLOATING_COMBO_FRAME=null;
+function positionComboMenu(sel){
+  if(!sel||!sel._combo||!sel._combo.classList.contains('open'))return false;
+  var input=sel._combo.querySelector('.combo-input'),menu=sel._combo.querySelector('.combo-menu');
+  if(!input||!menu||!input.isConnected||sel.disabled||!input.getClientRects().length||getComputedStyle(input).visibility!=='visible'){closeCombo(sel);return false;}
+  if(!menu.hasAttribute('popover')){var center=(input.getBoundingClientRect().height/2)+'px';if(sel._combo.style.getPropertyValue('--combo-input-center')!==center)sel._combo.style.setProperty('--combo-input-center',center);return true;}
+  var r=input.getBoundingClientRect(),vp=window.visualViewport;
+  var left=vp?vp.offsetLeft:0,top=vp?vp.offsetTop:0;
+  var width=vp?vp.width:document.documentElement.clientWidth,height=vp?vp.height:window.innerHeight;
+  var visible={left:r.left,right:r.right,top:r.top,bottom:r.bottom};
+  for(var parent=input.parentElement;parent&&parent!==document.body;parent=parent.parentElement){
+    if(parent.inert){closeCombo(sel);syncComboValue(sel);return false;}
+    var style=getComputedStyle(parent),pr=parent.getBoundingClientRect();
+    if(/auto|scroll|hidden|clip/.test(style.overflowY)){visible.top=Math.max(visible.top,pr.top+parent.clientTop);visible.bottom=Math.min(visible.bottom,pr.top+parent.clientTop+parent.clientHeight);}
+    if(/auto|scroll|hidden|clip/.test(style.overflowX)){visible.left=Math.max(visible.left,pr.left+parent.clientLeft);visible.right=Math.min(visible.right,pr.left+parent.clientLeft+parent.clientWidth);}
+  }
+  if(visible.bottom<=Math.max(top,visible.top)||visible.top>=top+height||visible.right<=Math.max(left,visible.left)||visible.left>=left+width){closeCombo(sel);syncComboValue(sel);return false;}
+  var margin=8,gap=5,menuWidth=Math.min(r.width,Math.max(1,width-margin*2));
+  function set(name,value){if(menu.style[name]!==value)menu.style[name]=value;}
+  set('width',menuWidth+'px');
+  var below=Math.max(0,top+height-margin-r.bottom-gap),above=Math.max(0,r.top-top-margin-gap);
+  var desired=Math.min(240,menu.scrollHeight+2),up=below<Math.min(desired,160)&&above>below;
+  var limit=Math.min(240,up?above:below);
+  if(limit<20){closeCombo(sel);syncComboValue(sel);return false;}
+  set('maxHeight',limit+'px');
+  var actual=Math.min(desired,limit);
+  set('left',Math.max(left+margin,Math.min(r.left,left+width-margin-menuWidth))+'px');
+  set('top',(up?r.top-gap-actual:r.bottom+gap)+'px');
+  menu.dataset.placement=up?'above':'below';
+  return true;
+}
+function trackComboMenu(sel){
+  if(FLOATING_COMBO_FRAME)cancelAnimationFrame(FLOATING_COMBO_FRAME);
+  FLOATING_COMBO_SELECT=sel;
+  function tick(){
+    FLOATING_COMBO_FRAME=null;
+    if(FLOATING_COMBO_SELECT!==sel||!positionComboMenu(sel))return;
+    FLOATING_COMBO_FRAME=requestAnimationFrame(tick);
+  }
+  tick();
+}
 function openCombo(sel,q){
   if(!sel||!sel._combo)return;
   closeAllCombos(sel._combo);
@@ -2600,10 +2643,21 @@ function openCombo(sel,q){
   renderComboMenu(sel,q);
   sel._combo.classList.add('open');
   sel._combo.querySelector('.combo-input').setAttribute('aria-expanded','true');
+  var menu=sel._combo.querySelector('.combo-menu');
+  if(typeof menu.showPopover==='function'&&typeof menu.hidePopover==='function'){
+    menu.setAttribute('popover','manual');
+    try{if(!menu.matches(':popover-open'))menu.showPopover();}
+    catch(_){menu.removeAttribute('popover');sel._combo.classList.add('combo-inflow');}
+  }else sel._combo.classList.add('combo-inflow');
+  trackComboMenu(sel);
 }
 function closeCombo(sel){
   if(sel&&sel._combo){
-    sel._combo.classList.remove('open');
+    if(FLOATING_COMBO_SELECT===sel){if(FLOATING_COMBO_FRAME)cancelAnimationFrame(FLOATING_COMBO_FRAME);FLOATING_COMBO_FRAME=null;FLOATING_COMBO_SELECT=null;}
+    var menu=sel._combo.querySelector('.combo-menu');
+    if(menu&&menu.hasAttribute('popover')){try{if(menu.matches(':popover-open'))menu.hidePopover();}catch(_){}menu.removeAttribute('popover');}
+    sel._combo.classList.remove('open','combo-inflow');
+    if(menu){['top','left','width','maxHeight'].forEach(function(name){menu.style[name]='';});delete menu.dataset.placement;}
     var input=sel._combo.querySelector('.combo-input');
     input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');
   }
@@ -2634,7 +2688,10 @@ function moveComboActive(sel,dir){
   idx=(idx+dir+opts.length)%opts.length;
   opts[idx].classList.add('active');
   syncComboActive(sel);
-  opts[idx].scrollIntoView({block:'nearest'});
+  // Scroll only this menu; scrollIntoView also jumps its approval ancestors.
+  var menu=sel._combo.querySelector('.combo-menu'),optionRect=opts[idx].getBoundingClientRect(),menuRect=menu.getBoundingClientRect();
+  if(optionRect.top<menuRect.top+5)menu.scrollTop-=menuRect.top+5-optionRect.top;
+  else if(optionRect.bottom>menuRect.bottom-5)menu.scrollTop+=optionRect.bottom-menuRect.bottom+5;
 }
 function enhanceLongSelects(root){
   root=root||document;
@@ -2684,9 +2741,9 @@ function enhanceLongSelects(root){
         return;
       }
       if(e.key==='Tab')commitComboInput(sel);
-      if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeCombo(sel);syncComboValue(sel);}
+      if(e.key==='Escape'&&box.classList.contains('open')){e.preventDefault();e.stopPropagation();closeCombo(sel);syncComboValue(sel);}
     });
-    inp.addEventListener('blur',function(){setTimeout(function(){if(!box.classList.contains('open'))return;if(!commitComboInput(sel))syncComboValue(sel);closeCombo(sel);},120);});
+    inp.addEventListener('blur',function(){setTimeout(function(){if(document.activeElement===inp||!box.classList.contains('open'))return;if(!commitComboInput(sel))syncComboValue(sel);closeCombo(sel);},120);});
     menu.addEventListener('mousedown',function(e){e.preventDefault();});
     menu.addEventListener('click',function(e){
       var opt=e.target.closest&&e.target.closest('.combo-option');
@@ -30977,7 +31034,7 @@ window.closeAppr=function(){
   receiptReviewSnapshotState().modal=null;
   approvalClearModalExpectedSteps();
   var m=el('m-appr');
-  if(m){m.style.display='none';m.setAttribute('aria-hidden','true');}
+  if(m){m.querySelectorAll('.combo-select.open').forEach(function(box){var sel=el(box.dataset.forSelect);closeCombo(sel);syncComboValue(sel);});m.style.display='none';m.setAttribute('aria-hidden','true');}
   approvalModalSetBackgroundInert(false);
   var target=APPROVAL_MODAL_RETURN_FOCUS;
   APPROVAL_MODAL_RETURN_FOCUS=null;

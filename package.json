@@ -102,7 +102,8 @@
     "test:personal-history": "node scripts/check_finance_personal_history.cjs",
     "test:bill-batch-bulk": "node scripts/check_bill_batch_bulk_insert_20261008.cjs",
     "test:invoice-batch-approval": "node scripts/check_invoice_batch_approval_notification_contract.js && node scripts/check_invoice_batch_approval_summary.cjs && node scripts/check_finance_personal_invoice_batch_history.cjs",
-    "test:procurement-closeout-browser": "node scripts/check_procurement_closeout_browser.cjs"
+    "test:procurement-closeout-browser": "node scripts/check_procurement_closeout_browser.cjs",
+    "test:select-scroll-browser": "node scripts/check_combo_scroll_browser_20261012.cjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
