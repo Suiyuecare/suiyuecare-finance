@@ -1,5 +1,13 @@
 # Finance 受保護正式發布
 
+## 2026-10-13 繳費單個人清單整批檢視
+
+本次唯一新版本為 `20261013091000_finance_personal_bill_batch_history_v1.sql`，phase 固定 `database_personal_bill_batch_history_20261013`、`migration_versions=20261013091000`。只修改個人單據唯讀摘要／明細，不更新營運單、原單號、簽核快照或權限。依正式批次及同公司／狀態／流程分組，缺強申請人識別的舊單逐張保留，發票既有分組不變。
+
+仍由本文件規定的唯一 `Finance Protected Production Release` 人工流程執行。候選經本機及 CI 的虛構資料驗收、獨立審查與 `finance-production` 核准後，在正式受保護 workflow 內先核對 exact ledger 與來源 MD5／SHA，演練唯讀 RPC、canonical ledger、postflight、無身分拒絕 canary 並回滾比對完整指紋，再在單一交易提交同一 SQL、完整 statements 及 `20261013091000` ledger。任何檢查失敗均回滾，不以 MCP 自產的另一個 timestamp、手動補寫 ledger 或跳過環境核准代替。
+
+正式套版後以及提升同一封存候選前，重跑新版 postflight／canary；最後核對正式 manifest 的 exact SHA。已 applied 的恢復只做唯讀檢查，不重套。後續 `frontend_compat=none` 的當前候選也必須具備此版。離線瀏覽器與隔離 PostgreSQL 成功不冒充真員工 SSO 驗收，也不代表已正式發布。
+
 ## 2026-10-10 多張發票合併簽核
 
 本次使用 `database_invoice_batch_approval_20261010`，`migration_versions` 固定為 `20261010120000,20261010130000`。同一批發票在待簽核、開立發票及個人歷史顯示為一筆，批次明細仍保留每張發票、金額及稽核紀錄；簽核只對該批完整且同一關卡的授權發票執行一次交易。通知僅更新未來的待辦事件，不回寫已寄送通知或營運單據。

@@ -9409,7 +9409,7 @@ function approvalHistoryItemsFromPayload(payload){
   // Summary rows are a separate read model, never partial source documents.
   return payload.items.map(function(entry){return {
     historySummary:true,historyKey:entry.history_key,recordType:entry.record_type,recordId:entry.record_id,
-    recordNo:entry.record_no||'',batchId:entry.batch_id||'',kind:entry.kind,
+    recordNo:entry.record_no||'',batchId:entry.batch_id||'',historyBatchScopeKey:entry.batch_scope_key||'',kind:entry.kind,
     historySourceCount:entry.source_count,historySourceIds:Array.isArray(entry.source_ids)?entry.source_ids.map(String):[String(entry.record_id)],
     historyPersonallyApplied:entry.personally_applied===true,
     historyPersonallyActed:entry.personally_acted===true,
@@ -9475,10 +9475,22 @@ function approvalHistoryDetailFeedback(key,message,busy){
     node.disabled=!!(active&&busy);node.setAttribute('aria-busy',String(!!(active&&busy)));
   });
 }
+function approvalHistoryBillScope(row){
+  row=row||{};
+  return JSON.stringify([String(row.tenant_id||''),String(row.data_environment||''),String(row.batch_id||'').trim(),
+    String(row.entity_id||''),String(row.department_code||''),String(row.applicant_id||'').trim(),
+    String(row.applicant_email||'').trim().toLowerCase(),String(row.status||''),String(row.approval_status||''),
+    row.approval_step==null?0:Number(row.approval_step),row.steps||[]]);
+}
+function approvalHistoryIsBatch(entry){
+  return !!(entry&&entry.batch_id&&entry.source_count>1
+    &&(entry.record_type==='invoices'&&entry.kind==='inv'
+      ||entry.record_type==='bills'&&entry.kind==='bill'&&/^bill-batch:[0-9a-f]{32}$/.test(entry.batch_scope_key||'')));
+}
 function approvalHistoryValidateDetail(payload,key){
   var entry=payload&&payload.item,rows=entry&&entry.source_rows,table=entry&&entry.record_type;
   var sourceIds=entry&&Array.isArray(entry.source_ids)?entry.source_ids.map(function(id){return String(id||'').trim();}):[String(entry&&entry.record_id||'')];
-  var uniqueIds=Array.from(new Set(sourceIds.filter(Boolean))),batch=!!(entry&&table==='invoices'&&entry.kind==='inv'&&entry.batch_id&&entry.source_count>1);
+  var uniqueIds=Array.from(new Set(sourceIds.filter(Boolean))),batch=approvalHistoryIsBatch(entry);
   if(!entry||entry.history_key!==key||['expense_requests','bills','invoices'].indexOf(table)<0
     ||(table==='expense_requests'?entry.kind!=='req':table==='bills'?entry.kind!=='bill':['inv','recv'].indexOf(entry.kind)<0)
     ||!Number.isSafeInteger(entry.source_count)||entry.source_count<1||(!batch&&entry.source_count!==1)
@@ -9494,8 +9506,10 @@ function approvalHistoryValidateDetail(payload,key){
   var ids=new Set();
   rows.forEach(function(row){
     if(!row||!row.id||ids.has(String(row.id))||sourceIds.indexOf(String(row.id))<0
-      ||(batch&&String(row.batch_id||'')!==String(entry.batch_id))
+      ||(batch&&(table==='bills'?String(row.batch_id||'').trim()!==String(entry.batch_id).trim():String(row.batch_id||'')!==String(entry.batch_id)))
       ||String(row.tenant_id)!==String(currentTenantId()||DEFAULT_TENANT_ID)||row.data_environment!==activeDataEnvironment())throw new Error('單據來源範圍不一致，未套用明細。');
+    if(batch&&table==='bills'&&!String(row.applicant_id||'').trim()&&!String(row.applicant_email||'').trim())throw new Error('舊繳費單缺少申請人識別資料，請逐張查看明細。');
+    if(batch&&table==='bills'&&approvalHistoryBillScope(row)!==approvalHistoryBillScope(rows[0]))throw new Error('繳費單公司、狀態或簽核流程已變更，請重新搜尋。');
     ids.add(String(row.id));
   });
   if(ids.size!==sourceIds.length)throw new Error('完整批次尚未讀齊，未開啟部分明細；請重試。');
@@ -9535,6 +9549,7 @@ function openApprovalHistoryItem(key){
     var detailIds=Array.isArray(entry.source_ids)?entry.source_ids.map(String):[String(entry.record_id)];
     if(entry.record_type!==summary.recordType||String(entry.record_id)!==String(summary.recordId)
       ||String(entry.batch_id||'')!==String(summary.batchId||'')
+      ||String(entry.batch_scope_key||'')!==String(summary.historyBatchScopeKey||'')
       ||entry.source_count!==summary.historySourceCount
       ||detailIds.length!==summary.historySourceIds.length
       ||detailIds.slice().sort().some(function(id,index){return id!==summary.historySourceIds.slice().sort()[index];})
@@ -9609,7 +9624,7 @@ function approvalHistoryValidatePage(payload,page,query){
   items.forEach(function(entry){
     var table=entry&&entry.record_type,key=entry&&entry.history_key,summary=entry&&entry.summary;
     var sourceIds=entry&&Array.isArray(entry.source_ids)?entry.source_ids.map(function(id){return String(id||'').trim();}):[String(entry&&entry.record_id||'')];
-    var uniqueIds=Array.from(new Set(sourceIds.filter(Boolean))),batch=!!(entry&&table==='invoices'&&entry.kind==='inv'&&entry.batch_id&&entry.source_count>1);
+    var uniqueIds=Array.from(new Set(sourceIds.filter(Boolean))),batch=approvalHistoryIsBatch(entry);
     if(['expense_requests','bills','invoices'].indexOf(table)<0||typeof key!=='string'||key!==table+':'+entry.record_id||keys.has(key)||!entry.record_id
       ||!Number.isSafeInteger(entry.source_count)||entry.source_count<1||(!batch&&entry.source_count!==1)
       ||sourceIds.length!==entry.source_count||uniqueIds.length!==entry.source_count||uniqueIds.indexOf(String(entry.record_id))<0
@@ -29424,7 +29439,7 @@ function renderApprovalHistorySummaries(runtime){
     runtime.status==='error'?'搜尋尚未完成，請重新載入':'正在查詢'+label+'…';
   var sub=el('appr-sub');if(sub)sub.textContent=counts;
   var badge=el(S.aT==='mine'?'my-appr-cnt':'history-appr-cnt');if(badge)badge.textContent=known?String(runtime.allTotal):'—';
-  var hint=el('appr-list-hint');if(hint)hint.textContent=counts+' · 每頁最多 50 張；點「查看明細」讀取完整單據';
+  var hint=el('appr-list-hint');if(hint)hint.textContent=counts+' · 每頁最多 50 筆；點「查看明細」讀取完整單據';
   list.setAttribute('aria-busy',String(runtime.status==='loading'));
   list.setAttribute('data-history-status',runtime.status);
   list.setAttribute('data-history-total',ready?String(runtime.total):'');
@@ -29454,8 +29469,8 @@ function renderApprovalHistorySummaries(runtime){
     var s=item.summary,key=item.historyKey;
     S.apprItemMap[key]=item;
     var amount=s.amount===null?'待確認':'NT$'+s.amount.toLocaleString('zh-TW',{maximumFractionDigits:20});
-    var batch=item.kind==='inv'&&item.historySourceCount>1;
-    var type=batch?'整批開立發票':(s.type_label||(item.kind==='req'?'申請單':item.kind==='bill'?'申請繳費單':item.kind==='recv'?'收款情形':'開立發票'));
+    var batch=(item.kind==='inv'||item.kind==='bill')&&item.historySourceCount>1;
+    var type=batch?(item.kind==='bill'?'整批申請繳費單':'整批開立發票'):(s.type_label||(item.kind==='req'?'申請單':item.kind==='bill'?'申請繳費單':item.kind==='recv'?'收款情形':'開立發票'));
     var recordNo=item.recordNo||(batch&&item.batchId?'整批 '+item.batchId:'—');
     var participationClass=item.historyPersonallyApplied?'b-blue':item.historyPersonallyActed?'b-ok':'b-gray';
     var state=String(s.approval_status||s.status||'').toLowerCase();

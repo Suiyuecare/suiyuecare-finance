@@ -59,6 +59,13 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'supabase/migrations/20261013091000_finance_personal_bill_batch_history_v1.sql',
+  'scripts/check_finance_personal_bill_batch_history.cjs',
+  'scripts/check_personal_bill_batch_browser_20261013.cjs',
+  'scripts/finance_personal_bill_batch_history_preflight.sql',
+  'scripts/finance_personal_bill_batch_history_postflight.sql',
+  'scripts/finance_personal_bill_batch_history_fingerprint.sql',
+  'scripts/finance_personal_bill_batch_history_canary.sql',
   'supabase/migrations/20261012112652_finance_personal_history_identity_once_v1.sql',
   'scripts/check_finance_personal_history_identity_once_20261012.cjs',
   'scripts/fixtures/finance_history_identity_authorities_20261012.json',
