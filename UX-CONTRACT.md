@@ -33,3 +33,11 @@
 驗收：`check_notification_paged_read_20261013.cjs`、既有 `check_employee_auth_notifications.cjs` 與 actual DOM browser 驗收；包含超過 1,000／2,500 筆、游標、篩選、未讀 exact count、錯誤保留、清空、已讀更新、跨帳號及撤權。
 
 通知快取與通知跳單的身分邊界包含正式權限快照；同一帳號變更範圍後不得重用快取或套用舊回應。Realtime 只更新未讀通知與目前開啟的通知頁，並讓其他通知分頁重新查核；新增／填寫表單不因通知事件重建。
+
+## 繳費單待簽核整批呈現（2026-10-13）
+
+繳費單待簽核群組使用 `finance_approval_inbox_summary_for_current_user` 回傳的 `group_key`、`source_ids` 與 `row_count`，與發票共用既有完整來源及任務權限門檻。`approvalPendingBillSummaryItems()` 是列表 owner；缺件、重複來源與尚未核對的資料保留一個不可操作的「整批載入中」項目，不能以快取的部分張數代替整批。`billGroupRows()` 尊重歷史明細的 exact source IDs，接著取目前後端摘要的完整成員；簽核、退回與抽單仍須原交易式 RPC／版本與權限檢查。
+
+通知跳入繳費單或發票先經既有 fast bootstrap 補載，開啟同一 canonical 待辦。已處理或不再指派本人的通知沿用個人歷史查詢及 detail RPC，重新授權全部批次來源；不能只查一列後用它冒充整批。尚未取得完整明細時保留單號搜尋條件與通知未讀狀態。身份、權限快照或群組成員變動立即使舊開啟流程失效。
+
+驗收：`check_bill_pending_canonical_20261013.cjs` 覆蓋實際列表、群組權限門檻、交易式 approve／return／reject、通知路由、過往明細轉接及途中權限變更；沿用發票批次、抽單及附件流程回歸。

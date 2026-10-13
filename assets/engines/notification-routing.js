@@ -31,7 +31,13 @@
       if(identity()!==expected)throw new Error('登入身分已變更，請重新開啟通知。');
       results=results.filter(Boolean);
       if(results.length!==1)throw new Error(results.length?'通知的來源資料不明確，請從簽核或收款清單查找原單。':'找不到此通知的原單，或您目前沒有讀取權限；通知仍保留未讀。');
-      var match=results[0],rows=entries(match.type)||[];
+      var match=results[0];
+      if(match.type!=='expense_requests'&&typeof runtime().openIncomeNotification==='function'){
+        var opened=await runtime().openIncomeNotification(match.type,match.row,n);
+        if(identity()!==expected||!opened)return false;
+        await runtime().markNotifRead(id);return true;
+      }
+      var rows=entries(match.type)||[];
       setEntries(match.type,rows.filter(function(row){return row.id!==match.row.id;}).concat([match.row]));
       if(typeof runtime().approvalRowsMarkVerified==='function')runtime().approvalRowsMarkVerified(match.type,[match.row]);
       if(match.type==='invoices'){

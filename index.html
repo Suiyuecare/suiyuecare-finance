@@ -14536,6 +14536,8 @@ function billGroupKey(b){
 function billGroupRows(b){
   if(!b)return [];
   var exact=approvalHistoryExactGroupRows('bill',b);if(exact!==null)return exact;
+  var canonical=typeof approvalBillCanonicalRows==='function'?approvalBillCanonicalRows(b):null;
+  if(canonical!==null)return canonical;
   var key=billGroupKey(b);
   if(key.indexOf('bill:')===0)return [b];
   var rows=BILLS.filter(function(x){return billGroupKey(x)===key;});
@@ -28452,7 +28454,7 @@ window.apprTab=function(t,btn){
 function approvalItemKey(item){
   if(!item||!item.raw)return'';
   if(item.historyTrusted&&item.historyKey)return String(item.historyKey);
-  if(item.kind==='inv'&&item.approvalSummaryGroupKey)return'inv-summary:'+item.approvalSummaryGroupKey;
+  if((item.kind==='inv'||item.kind==='bill')&&item.approvalSummaryGroupKey)return item.kind+'-summary:'+item.approvalSummaryGroupKey;
   if(item.kind==='req')return'req:'+item.raw.id;
   if(item.kind==='bill')return'bill:'+billGroupKey(item.raw);
   return item.kind+':'+invoiceGroupKey(item.raw);
@@ -28710,6 +28712,114 @@ function approvalPendingInvoiceSummaryItems(){
       approvalSummary:summary};
   });
 }
+function approvalPendingBillSummaryItems(){
+  var summaries=approvalTrustedSummaryItems().filter(function(summary){
+    return String(summary&&summary.source_table||'')==='bills'&&!approvalSummaryItemIsReceipt(summary);
+  });
+  var rowById=Object.create(null),rowCounts=Object.create(null),owners=Object.create(null),groupCounts=Object.create(null),seen=Object.create(null);
+  BILLS.forEach(function(row){if(row&&row.id){var id=String(row.id);rowById[id]=row;rowCounts[id]=(rowCounts[id]||0)+1;}});
+  summaries.forEach(function(summary){
+    var key=approvalFastSummaryItemKey(summary);
+    groupCounts[key]=(groupCounts[key]||0)+1;
+    (Array.isArray(summary.source_ids)?summary.source_ids:[]).forEach(function(id){
+      id=String(id||'').trim();if(id)owners[id]=(owners[id]||0)+1;
+    });
+  });
+  return summaries.filter(function(summary){
+    var key=approvalFastSummaryItemKey(summary);
+    if(seen[key])return false;
+    seen[key]=true;return true;
+  }).map(function(summary){
+    var key=approvalFastSummaryItemKey(summary),rawIds=Array.isArray(summary.source_ids)?summary.source_ids.map(function(id){return String(id||'').trim();}):[];
+    var ids=uniqueRemoteStrings(rawIds),expected=Number(summary.row_count),rows=ids.map(function(id){return rowById[id];});
+    var row=rows.find(Boolean)||null,complete=!!String(summary.group_key||'').trim()
+      &&groupCounts[key]===1&&Number.isInteger(expected)&&expected>0&&rawIds.length===expected&&ids.length===expected
+      &&ids.every(function(id){return owners[id]===1&&rowCounts[id]===1;})
+      &&rows.every(function(value){return !!value&&approvalRowIsLocallyVerified('bills',value);});
+    var representative=String(summary.representative_source_id||'');
+    if(complete&&representative&&ids.indexOf(representative)<0)complete=false;
+    var displayRow=complete?(rowById[representative]||rows[0]):{
+      id:'summary:'+key,no:summary.source_no||'整批繳費單',batchId:String(summary.group_key||'').indexOf('batch:')===0?String(summary.group_key).slice(6):'',
+      applicant:summary.applicant||'',dc:summary.department_code||'',date:summary.request_date||'',steps:[]
+    };
+    return{kind:'bill',raw:displayRow,rows:complete?rows:[],approvalSummaryGroupKey:key,
+      approvalSourceIds:ids,approvalExpectedRowCount:expected,approvalBatchLoading:!complete,
+      approvalSummary:summary};
+  });
+}
+
+var APPROVAL_BILL_MODAL_GROUP=null;
+function approvalIncomeGroupOwnerIdentity(){
+  return approvalFastBootstrapIdentity()+'|'+activeDataEnvironment()+'|'+JSON.stringify(typeof CURRENT_PERMISSION_SNAPSHOT==='undefined'?null:CURRENT_PERMISSION_SNAPSHOT);
+}
+function approvalBillCanonicalRows(b){
+  if(!b)return null;
+  var pin=APPROVAL_BILL_MODAL_GROUP;
+  var pinned=!!(pin&&pin.sourceIds.indexOf(String(b.id))>=0);
+  if(pinned&&pin.identity!==approvalIncomeGroupOwnerIdentity())return [];
+  var items=approvalPendingBillSummaryItems(),matches=items.filter(function(item){return item.approvalSourceIds.indexOf(String(b.id))>=0;});
+  if(!matches.length)return pinned?[]:null;
+  if(matches.length!==1||matches[0].approvalBatchLoading)return [];
+  var item=matches[0];
+  if(pinned&&(pin.key!==item.approvalSummaryGroupKey||pin.sourceIds.length!==item.approvalSourceIds.length
+    ||pin.sourceIds.some(function(id,index){return id!==item.approvalSourceIds[index];})))return [];
+  return item.rows;
+}
+function openApprovalBillSummaryItem(item){
+  var canonical=approvalItemActionAvailability(item);
+  if(!canonical.ok){setTopSyncStatus(canonical.message);return false;}
+  APPROVAL_BILL_MODAL_GROUP={key:item.approvalSummaryGroupKey,sourceIds:item.approvalSourceIds.slice(),identity:approvalIncomeGroupOwnerIdentity()};
+  showBillApprD(canonical.rows.find(canActBill)||canonical.rows[0]);
+  return true;
+}
+
+async function openFinanceIncomeNotification(table,row,notification){
+  var expected=approvalIncomeGroupOwnerIdentity(),id=String(row&&row.id||'');
+  function current(){return expected===approvalIncomeGroupOwnerIdentity()&&!financeWorkspaceIdentityBlocked;}
+  if(!id||['bills','invoices'].indexOf(table)<0||!current())return false;
+  if(!S.demoLogin)await loadApprovalFastBootstrap('notification_income_batch',{force:true});
+  if(!current())return false;
+  var receipt=table==='invoices'&&notification&&notification.type==='receipt';
+  var items=table==='bills'?approvalPendingBillSummaryItems():approvalPendingInvoiceSummaryItems();
+  var item=!receipt&&items.find(function(candidate){return candidate.approvalSourceIds.indexOf(id)>=0;});
+  if(item){
+    var authority=approvalItemActionAvailability(item);
+    if(!authority.ok){setTopSyncStatus(authority.message);return false;}
+    cancelApprovalHistoryDetail(true);
+    if(table==='bills')return openApprovalBillSummaryItem(item);
+    showInvApprD(authority.rows.find(canActInvoice)||authority.rows[0],item);return true;
+  }
+  if(receipt){
+    var source=INVS.find(function(value){return String(value.id)===id;});
+    var receiptRows=source?invoiceGroupRows(source):[];
+    var receiptAuthority=approvalRecordsActionAvailability('invoices',receiptRows,{kind:'recv'});
+    if(receiptAuthority.ok){
+      cancelApprovalHistoryDetail(true);showReceiptTaskD(source);return true;
+    }
+  }
+  // Closed or no-longer-assigned notifications use the existing participant
+  // history path. It authorizes every member and pins its exact source IDs;
+  // the single-row notification lookup must never impersonate a full batch.
+  if(!approvalHistoryPageAllowed()){
+    setTopSyncStatus('請從有權限的單據清單查找 '+String(row.no||id)+'；尚未開啟不完整批次。');return false;
+  }
+  cancelApprovalHistoryDetail(true);
+  S.apprQuery=String(row.no||id).trim();S.apprSelected={};approvalClearBulkExpectedSteps();
+  var mine=String(row.applicantId||'')===String(S.user&&S.user.id||'');
+  await openApprovalTab(mine?'mine':'h');
+  if(!current())return false;
+  var history=approvalHistoryRuntimeForCurrentUser();
+  var summary=history.status==='ready'&&history.items.find(function(entry){
+    return entry.recordType===table&&(entry.historySourceIds||[]).indexOf(id)>=0;
+  });
+  if(summary){
+    var opened=await openApprovalHistoryItem(summary.historyKey);
+    return current()&&!!(opened&&opened.ok);
+  }
+  setTopSyncStatus('已定位搜尋 '+String(row.no||id)+'，請在「'+(mine?'我的申請':'過往單據')+'」重試查詢；通知保留未讀。');
+  return false;
+}
+
 function approvalPendingCandidateItems(items){
   var summaryIds={};
   approvalTrustedSummaryItems().forEach(function(summary){
@@ -28717,7 +28827,7 @@ function approvalPendingCandidateItems(items){
   });
   var canonicalSummary=approvalRowRuntimeForCurrentUser().trustedTasksVerified===true;
   var candidates=(items||approvalAllItems()).filter(function(item){
-    if(canonicalSummary&&item.kind==='inv')return false;
+    if(canonicalSummary&&(item.kind==='inv'||item.kind==='bill'))return false;
     if(approvalItemRejected(item))return false;
     if(canonicalSummary){
       var table=approvalItemSourceTable(item),rows=item.kind==='req'?[item.raw]:(item.kind==='bill'?billGroupApprovalRows(item):invoiceGroupApprovalRows(item));
@@ -28728,7 +28838,7 @@ function approvalPendingCandidateItems(items){
     if(item.kind==='inv')return invoiceGroupApprovalRows(item).some(function(row){return financeRuntimeAccess('act_approval_step','invoices',row,{step:activeStep(row)}).ok;});
     return invoiceGroupApprovalRows(item).some(receiptTaskCandidate);
   });
-  return canonicalSummary?candidates.concat(approvalPendingInvoiceSummaryItems()):candidates;
+  return canonicalSummary?candidates.concat(approvalPendingInvoiceSummaryItems()).concat(approvalPendingBillSummaryItems()):candidates;
 }
 function approvalItemIsCashierTask(item){
   if(!item||item.kind!=='req'||!item.raw)return false;
@@ -28798,7 +28908,7 @@ function reconcileApprovalPageSelection(items){
 }
 function approvalItemSourceRows(item){
   if(!item||!item.raw)return[];
-  if(item.kind==='inv'&&item.approvalSummaryGroupKey)return item.rows||[];
+  if((item.kind==='inv'||item.kind==='bill')&&item.approvalSummaryGroupKey)return item.rows||[];
   if(item.kind==='inv')return invoiceGroupRows(item.raw);
   if(item.kind==='bill')return billGroupRows(item.raw);
   return item.kind==='req'?[item.raw]:[];
@@ -28806,12 +28916,12 @@ function approvalItemSourceRows(item){
 function approvalRowFormNo(item){
   if(item.kind==='draft')return'暫存';
   if(item.kind==='req')return item.raw.no||'—';
-  if(item.kind==='bill')return billGroupNo(item.raw)||item.raw.no||item.raw.id||'—';
-  if(item.kind==='inv'&&item.approvalSummaryGroupKey){
+  if((item.kind==='inv'||item.kind==='bill')&&item.approvalSummaryGroupKey){
     var summary=item.approvalSummary||{};
     if(item.approvalExpectedRowCount>1&&String(summary.group_key||'').indexOf('batch:')===0)return '整批 '+String(summary.group_key).slice(6);
     return String(summary.source_no||summary.group_key||item.raw.no||'整批發票');
   }
+  if(item.kind==='bill')return billGroupNo(item.raw)||item.raw.no||item.raw.id||'—';
   return invoiceGroupNo(item.raw)||item.raw.no||'—';
 }
 function approvalRowNo(item){
@@ -28837,19 +28947,20 @@ function approvalRowType(item){
   var r=item.raw;
   if(item.kind==='draft')return {label:requestTypeLabel(r.type),cls:TCSS[r.type]||'b-gray'};
   if(item.kind==='req')return {label:r.tL||requestTypeLabel(r.type),cls:TCSS[r.type]||'b-gray'};
-  if(item.kind==='bill')return {label:billGroupCount(r)>1?'整批申請繳費單':'申請繳費單',cls:'b-blue'};
+  if(item.kind==='bill')return {label:(item.approvalSummaryGroupKey?item.approvalExpectedRowCount:billGroupCount(r))>1?'整批申請繳費單':'申請繳費單',cls:'b-blue'};
   if(item.kind==='recv')return {label:'收款情形',cls:'b-wait'};
   return {label:((item.approvalSummaryGroupKey?item.approvalExpectedRowCount:invoiceGroupCount(r))>1?'整批開立發票':'開立發票'),cls:'b-teal'};
 }
 function approvalRowAmount(item){
   if(item.kind==='draft')return num(item.raw.amount||0);
   if(item.kind==='req')return requestReviewAmount(item.raw);
+  if((item.kind==='inv'||item.kind==='bill')&&item.approvalSummaryGroupKey)return item.approvalBatchLoading?num((item.approvalSummary||{}).amount):item.rows.reduce(function(sum,row){return sum+num(item.kind==='bill'?(row.amt||row.amount):row.total);},0);
   if(item.kind==='bill')return billGroupTotal(item.raw);
-  if(item.kind==='inv'&&item.approvalSummaryGroupKey)return item.approvalBatchLoading?num((item.approvalSummary||{}).amount):item.rows.reduce(function(sum,row){return sum+num(row.total);},0);
   return invoiceGroupTotal(item.raw);
 }
 function approvalRowStatus(item){
   var r=item.raw;
+  if(item.approvalBatchLoading)return {label:'整批載入中',cls:'b-wait'};
   if(item.kind==='draft')return {label:'暫存',cls:'b-gray'};
   if(item.kind==='req')return {label:requestIsRejected(r)?'被駁回':(SL[r.status]||r.status||'—'),cls:requestIsRejected(r)?'b-rej':(SCSS[r.status]||'b-gray')};
   if(item.kind==='bill'){
@@ -28863,7 +28974,8 @@ function approvalRowStatus(item){
 }
 function approvalRowSummary(item){
   var r=item.raw;
-  if(item.kind==='inv'&&item.approvalBatchLoading)return escAttr('整批 '+item.approvalExpectedRowCount+' 張 · 整批載入中');
+  if((item.kind==='inv'||item.kind==='bill')&&item.approvalBatchLoading)return escAttr('整批 '+item.approvalExpectedRowCount+' 張 · 整批載入中');
+  if(item.kind==='bill'&&item.approvalSummaryGroupKey&&item.approvalExpectedRowCount>1)return escAttr('整批 '+item.approvalExpectedRowCount+' 張 · 每張繳費人與項目請展開明細核對');
   if(item.kind==='inv'&&item.approvalSummaryGroupKey&&item.approvalExpectedRowCount>1){
     return escAttr('整批 '+item.approvalExpectedRowCount+' 張 · 每張買受人與品項請展開明細核對');
   }
@@ -29048,16 +29160,16 @@ function approvalItemActionRows(item){
 function approvalItemActionAvailability(item){
   var table=approvalItemSourceTable(item),rows=[];
   if(!table||!item)return{ok:true,pending:false,message:''};
-  if(item.kind==='inv'&&item.approvalSummaryGroupKey){
-    var current=approvalPendingInvoiceSummaryItems().find(function(candidate){
+  if((item.kind==='inv'||item.kind==='bill')&&item.approvalSummaryGroupKey){
+    var current=(item.kind==='bill'?approvalPendingBillSummaryItems():approvalPendingInvoiceSummaryItems()).find(function(candidate){
       return candidate.approvalSummaryGroupKey===item.approvalSummaryGroupKey;
     });
     if(!current||current.approvalBatchLoading||item.approvalBatchLoading
       ||current.approvalSourceIds.length!==item.approvalSourceIds.length
       ||current.approvalSourceIds.some(function(id,index){return id!==item.approvalSourceIds[index];})){
-      return{ok:false,pending:true,message:'這一整批發票正在載入完整內容'};
+      return{ok:false,pending:true,message:'這一整批'+(item.kind==='bill'?'繳費單':'發票')+'正在載入完整內容'};
     }
-    return approvalRecordsActionAvailability('invoices',current.rows,{kind:'inv'});
+    return approvalRecordsActionAvailability(table,current.rows,{kind:item.kind});
   }
   if(item.kind==='req')rows=[item.raw];
   else if(item.kind==='bill')rows=billGroupApprovalRows(item);
@@ -29075,7 +29187,7 @@ function approvalItemReadAvailability(item){
   // actor-scoped RPC, so a separate all-company bootstrap is not required to
   // open them. This is read permission only; action gates remain unchanged.
   if(item.historyTrusted)return{ok:true,pending:false,message:''};
-  if(item.kind==='inv'&&item.approvalBatchLoading)return{ok:false,pending:true,message:'這一整批發票正在載入完整內容'};
+  if((item.kind==='inv'||item.kind==='bill')&&item.approvalBatchLoading)return{ok:false,pending:true,message:'這一整批單據正在載入完整內容'};
   if(S.aT==='p'||S.aT==='cashier')return approvalItemActionAvailability(item);
   if(approvalSourceTableComplete(table)||approvalRowIsLocallyVerified(table,item.raw))return{ok:true,pending:false,message:''};
   return{ok:false,pending:true,message:'這筆單據內容仍在載入'};
@@ -29385,7 +29497,7 @@ function openApprovalFullItem(item,key){
   document.querySelectorAll('[data-appr-key]').forEach(function(x){if(x.getAttribute('data-appr-key')===key)x.classList.add('selected');});
   var invoiceRow=item.kind==='inv'?invoiceGroupActionRow(item.raw,canActInvoice):item.raw;
   var receiptRow=item.kind==='recv'?invoiceGroupActionRow(item.raw,canActReceipt):item.raw;
-  item.kind==='req'?showApprD(item.raw):(item.kind==='recv'?showReceiptTaskD(receiptRow):(item.kind==='bill'?showBillApprD(item.raw):showInvApprD(invoiceRow,item)));
+  item.kind==='req'?showApprD(item.raw):(item.kind==='recv'?showReceiptTaskD(receiptRow):(item.kind==='bill'?(item.approvalSummaryGroupKey?openApprovalBillSummaryItem(item):showBillApprD(item.raw)):showInvApprD(invoiceRow,item)));
 }
 function employeeApplicationStage(item){
   if(!item||!item.raw)return {label:'待確認流程',cls:'b-gray'};
@@ -29533,11 +29645,11 @@ function renderApprList(data){
   var pageData=isHistory?filtered:filtered.slice((page-1)*50,page*50);
   reconcileApprovalPageSelection(pageData);
   var rows=pageData.map(function(item){
-    if(item.kind==='inv'&&item.approvalBatchLoading){
+    if((item.kind==='inv'||item.kind==='bill')&&item.approvalBatchLoading){
       var loadingKey=approvalItemKey(item);
       S.apprItemMap[loadingKey]=item;
       return '<tr data-appr-key="'+escAttr(loadingKey)+'" class="approval-row-unavailable" aria-disabled="true" aria-busy="true" style="opacity:.68">'
-        +'<td class="appr-col-select">—</td><td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">'+escAttr(approvalRowFormNo(item))+'</span><span class="approval-form-badges"><span class="badge b-teal">整批開立發票</span><span class="badge b-blue">整批 '+escAttr(item.approvalExpectedRowCount||'—')+' 張</span><span class="badge b-gray">整批載入中</span></span></div></td>'
+        +'<td class="appr-col-select">—</td><td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">'+escAttr(approvalRowFormNo(item))+'</span><span class="approval-form-badges"><span class="badge b-teal">'+(item.kind==='bill'?'整批申請繳費單':'整批開立發票')+'</span><span class="badge b-blue">整批 '+escAttr(item.approvalExpectedRowCount||'—')+' 張</span><span class="badge b-gray">整批載入中</span></span></div></td>'
         +'<td class="appr-col-dept">—</td><td class="appr-col-applicant">—</td><td class="appr-col-purpose">整批載入中，完成核對後才能查看與簽核</td><td class="appr-col-amount">—</td><td class="appr-col-applyDate">—</td><td class="appr-col-payDate">—</td>'
         +(approvalWaitColumnVisible()?'<td class="appr-col-waitTime">—</td>':'')+'</tr>';
     }
@@ -29563,8 +29675,8 @@ function renderApprList(data){
         ?(canWithdrawRequest(r)?'<button class="btn-s" style="font-size:10px;padding:3px 7px;color:#8a1010;border-color:#f0b0b0" onclick="event.stopPropagation();withdrawRequest(\''+r.id+'\')">抽單</button>':(laborElectronicMarker(r)&&requestIsMine(r)&&isReqOpen(r)?'<span style="font-size:10px;color:#6e6259">開啟原單確認講師邀請狀態後可抽單</span>':''))
         :((kind==='bill'||kind==='inv')?incomeApplicantWithdrawButtonHtml(kind==='bill'?'bill':'invoice',r,false):''))
       :'';
-    var invoiceCount=kind==='inv'&&item.approvalSummaryGroupKey?item.approvalExpectedRowCount:invoiceGroupCount(r);
-    var batchBadge=kind==='bill'&&billGroupCount(r)>1?'<span class="badge b-blue" style="font-size:9px;margin-left:4px">整批 '+billGroupCount(r)+' 張</span>':((kind!=='req'&&invoiceCount>1)?'<span class="badge b-blue" style="font-size:9px;margin-left:4px">整批 '+invoiceCount+' 張</span>':'');
+    var invoiceCount=item.approvalSummaryGroupKey?item.approvalExpectedRowCount:(kind==='bill'?billGroupCount(r):invoiceGroupCount(r));
+    var batchBadge=(kind!=='req'&&invoiceCount>1)?'<span class="badge b-blue" style="font-size:9px;margin-left:4px">整批 '+invoiceCount+' 張</span>':'';
     if(kind==='recv'){
       var receiptCounts=invoiceGroupReceiptCounts(r);
       batchBadge+='<span class="badge '+(receiptCounts.unpaid?'b-wait':'b-ok')+'" style="font-size:9px;margin-left:4px">未收 '+receiptCounts.unpaid+' / '+receiptCounts.total+' 張</span>';
@@ -30551,7 +30663,7 @@ function approvalClearModalExpectedSteps(){approvalFrozenExpectedState().modal=n
 function approvalFreezeBulkExpectedSteps(key,item){
   var state=approvalFrozenExpectedState(),kind=item&&item.kind;
   if(kind!=='bill'&&kind!=='inv'&&kind!=='recv'){delete state.bulk[key];return true;}
-  var rows=kind==='bill'?billGroupRows(item.raw):approvalItemActionRows(item);
+  var rows=kind==='bill'&&item.approvalSummaryGroupKey?item.rows:(kind==='bill'?billGroupRows(item.raw):approvalItemActionRows(item));
   if(!rows.length){delete state.bulk[key];return false;}
   var snapshot=approvalFreezeExpectedSteps(kind==='inv'?'invoice':(kind==='recv'?'receipt':'bill'),rows);
   if(!snapshot){delete state.bulk[key];return false;}
@@ -31269,6 +31381,7 @@ function showReceiptTaskD(i){
 window.closeAppr=function(){
   cancelApprovalHistoryDetail(true);
   APPROVAL_INVOICE_MODAL_GROUP=null;
+  APPROVAL_BILL_MODAL_GROUP=null;
   receiptReviewSnapshotState().modal=null;
   approvalClearModalExpectedSteps();
   var m=el('m-appr');
@@ -44973,6 +45086,7 @@ function createFinanceApprovalRuntime(){
     mapBill:function(){return mapBill.apply(null,arguments);},
     mapReq:function(){return mapReq.apply(null,arguments);},
     approvalRowsMarkVerified:function(){return approvalRowsMarkVerified.apply(null,arguments);},
+    openIncomeNotification:function(){return openFinanceIncomeNotification.apply(null,arguments);},
     showReceiptTaskD:function(){return showReceiptTaskD.apply(null,arguments);},
     showInvApprD:function(){return showInvApprD.apply(null,arguments);},
     showBillApprD:function(){return showBillApprD.apply(null,arguments);},

@@ -29,7 +29,7 @@ function setup(){
   const nodes={};
   const c={
     console,Date,Promise,Array,Object,String,Number,Math,Set,Map,JSON,Error,
-    S:{aT:'p',demoLogin:false,apprSelected:{}},INVS:makeRows(),summaries:makeSummary(),window:{},APPROVAL_INVOICE_MODAL_GROUP:null,
+    BILLS:[],S:{aT:'p',demoLogin:false,apprSelected:{}},INVS:makeRows(),summaries:makeSummary(),window:{},APPROVAL_INVOICE_MODAL_GROUP:null,
     el:id=>nodes[id]||(nodes[id]={innerHTML:'',value:''}),
     approvalTrustedSummaryItems:()=>c.summaries,approvalSummaryItemIsReceipt:()=>false,
     approvalFastSummaryItemKey:item=>String(item.group_key||''),
@@ -69,7 +69,7 @@ function setup(){
     'var APPROVAL_INVOICE_MODAL_GROUP=null;',
     source('approvalInvoiceModalRows'),source('invoiceGroupRows'),source('invoiceBatchActionRows'),
     source('uniqueInvoiceGroups'),source('approvalItemKey'),source('approvalPendingInvoiceSummaryItems'),
-    source('approvalPendingCandidateItems'),source('approvalItemActionAvailability'),
+    source('approvalPendingBillSummaryItems'),source('approvalPendingCandidateItems'),source('approvalItemActionAvailability'),
     source('approvalRowFormNo'),source('approvalRowType'),source('approvalRowAmount'),source('approvalRowSummary'),
     source('renderApprList'),source('renderInvTable'),source('renderInvoiceManagementList'),source('renderBatchInvTable'),
     source('approveInv',true)
