@@ -4476,9 +4476,11 @@ function fileToAttachment(file,opts){
       dataEnv:file.dataEnv||file.data_environment||activeDataEnvironment()
     });
   }
-  // Native Blobs avoid a 4/3-size base64 copy and the later decode pass.
-  // OCR and other callers retain the original data URL behavior.
-  if(opts&&opts.directLarge&&typeof Blob!=='undefined'&&file instanceof Blob&&file.size>=ATTACHMENT_RESUMABLE_THRESHOLD_BYTES){
+  // Submission uploads can retain any native File/Blob. Office attachments
+  // must not depend on a FileReader/base64 copy or a duplicate HTML bundle.
+  // OCR and other callers retain the original data URL behavior; the existing
+  // large-file-only option remains compatible with its other callers.
+  if(opts&&(opts.directUpload||(opts.directLarge&&file.size>=ATTACHMENT_RESUMABLE_THRESHOLD_BYTES))&&typeof Blob!=='undefined'&&file instanceof Blob){
     return Promise.resolve({n:file.name||'附件',t:fileExt(file.name||''),mime:file.type||'',size:file.size||0,url:'',uploadedAt:new Date().toISOString(),kind:file.kind||file.category||'',dataEnv:activeDataEnvironment(),uploadBlob:file});
   }
   return new Promise(function(resolve,reject){
@@ -25726,9 +25728,9 @@ window.submitNR=async function(){
   var attachments=[];
   var passbookAttachments=[];
   try{
-    attachments=await Promise.all(S.nrFiles.map(function(file){return fileToAttachment(file,{directLarge:true});}));
+    attachments=await Promise.all(S.nrFiles.map(function(file){return fileToAttachment(file,{directUpload:true});}));
     if(S.nrPassbookFile){
-      var passbookAtt=await fileToAttachment(S.nrPassbookFile,{directLarge:true});
+      var passbookAtt=await fileToAttachment(S.nrPassbookFile,{directUpload:true});
       passbookAtt.kind='passbook';
       passbookAtt.n='存摺封面_'+(passbookAtt.n||S.nrPassbookFile.name||'附件');
       passbookAttachments=[passbookAtt];
