@@ -31320,11 +31320,12 @@ function showBillApprD(b){
   var idArg=financeInlineJsString(b.id);
   b=billGroupLeader(b);
   var groupRows=billGroupRows(b),groupCount=groupRows.length,groupTotal=billGroupTotal(b);
+  var groupApprovalLabels=Array.from(new Set(groupRows.map(billApprovalLabel))),mixedGroupProgress=groupApprovalLabels.length>1;
   var historyBatchReadOnly=approvalHistoryBatchReadOnly('bill',b);
   var billVersionReady=!!approvalFreezeModalExpectedSteps('bill',groupRows);
   var canAct=groupRows.some(canActBill)&&billVersionReady&&!historyBatchReadOnly,e=gE(b.eid),d=gD(b.dc);
   var rejectInfo=requestRejectReason(b);
-  var rejectBanner=requestIsRejected(b)?'<div class="ux-reject-card" style="margin:10px 12px 0"><div class="ux-reject-title">這張繳費單已被駁回</div><div>駁回人：'+escAttr(rejectInfo.by||'—')+(rejectInfo.date?' · '+escAttr(rejectInfo.date):'')+'</div>'+(rejectInfo.comment?'<div style="margin-top:4px;color:#6a1b1b">原因：'+escAttr(rejectInfo.comment)+'</div>':'')+'</div>':'';
+  var rejectBanner=!mixedGroupProgress&&requestIsRejected(b)?'<div class="ux-reject-card" style="margin:10px 12px 0"><div class="ux-reject-title">這張繳費單已被駁回</div><div>駁回人：'+escAttr(rejectInfo.by||'—')+(rejectInfo.date?' · '+escAttr(rejectInfo.date):'')+'</div>'+(rejectInfo.comment?'<div style="margin-top:4px;color:#6a1b1b">原因：'+escAttr(rejectInfo.comment)+'</div>':'')+'</div>':'';
   var shRuntime=approvalTimelineWithRuntimeLogs('bill',b,{includeSubmitFallback:true});
   var sh=shRuntime.html;
   var cur=activeStep(b)||{};
@@ -31340,7 +31341,7 @@ function showBillApprD(b){
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:var(--font-sans);font-size:10px;color:#c0a080">'+escAttr(billGroupNo(b))+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+billGroupTitle(b)+'簽核 · '+escAttr(e.s||'')+(groupCount>1?' · '+groupCount+' 張':'')+'</div></div></div>'
     +rejectBanner
     +(historyBatchReadOnly?'':entityDeptEditorHtml('bill',b.id,b.eid,b.dc))
-    +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+escAttr(e.s||'')+'</span>'],['部門',escAttr((b.dc||'—')+' '+(d.n||''))],['申請人',escAttr(b.applicant||'—')],['繳費人',escAttr(groupCount>1?billGroupPayerSummary(b):(b.payer||'—'))],['項目',escAttr(billGroupItemSummary(b))],['服務月份 / 費用期間',escAttr(groupCount>1?'依各張明細':(b.period||'—'))],['應收金額','<strong>'+fmt(groupTotal)+'</strong>'],['簽核狀態','<span class="badge '+(String(b.approvalStatus||'').toLowerCase()==='cancelled'?'b-gray':requestIsRejected(b)?'b-rej':(groupRows.every(billApprovalCompleted)?'b-ok':'b-wait'))+'">'+escAttr(billApprovalLabel(b))+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
+    +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+escAttr(e.s||'')+'</span>'],['部門',escAttr((b.dc||'—')+' '+(d.n||''))],['申請人',escAttr(b.applicant||'—')],['繳費人',escAttr(groupCount>1?billGroupPayerSummary(b):(b.payer||'—'))],['項目',escAttr(billGroupItemSummary(b))],['服務月份 / 費用期間',escAttr(groupCount>1?'依各張明細':(b.period||'—'))],['應收金額','<strong>'+fmt(groupTotal)+'</strong>'],['簽核狀態','<span class="badge '+(mixedGroupProgress?'b-wait':String(b.approvalStatus||'').toLowerCase()==='cancelled'?'b-gray':requestIsRejected(b)?'b-rej':(groupRows.every(billApprovalCompleted)?'b-ok':'b-wait'))+'">'+escAttr(mixedGroupProgress?'整批含不同進度':billApprovalLabel(b))+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
     +billGroupDetailHtml(b)
     +'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">簽核進度</div>'+sh+'</div>'
     +versionPendingH
