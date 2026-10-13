@@ -13,6 +13,7 @@ vm.runInContext(between('function expensePostingRecoveryHtml(', 'function expens
 context.num=Number;
 vm.runInContext(between('function purchaseActualAmount(', 'function purchaseVarianceAmount('),context);
 vm.runInContext(between('function purchaseFinalRecoveryHtml(', 'function purchaseAmountCompareHtml('),context);
+vm.runInContext(between('function requestApplicantWithdrawButtonHtml(', 'function invoiceIsMine('),context);
 vm.runInContext(between('window.openDetail=function(', 'window.doApprove='),context);
 const attack='<img src=x onerror="globalThis.injected=true">';
 context.REQS.push({id:'r1',type:'payment_request',status:'completed',amt:100,files:[],steps:[],no:'R1',dc:'D1',eid:'E1',desc:attack,app:attack,payee:attack,bankName:attack,bankBranch:attack,bankNo:attack,bankAcc:attack,expectedPayDate:attack,date:attack,drN:attack,crN:attack});

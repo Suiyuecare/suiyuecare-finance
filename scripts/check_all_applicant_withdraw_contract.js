@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(process.env.FINANCE_WITHDRAW_SOURCE_ROOT || path.resolve(__dirname, '..'));
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const migrationPath = path.join(root, 'supabase/migrations/20261005173534_applicant_withdraw_bill_invoice_v1.sql');
 const migration = fs.existsSync(migrationPath) ? fs.readFileSync(migrationPath, 'utf8') : '';
@@ -39,6 +39,17 @@ function namedFunction(name) {
       if (escape) escape = false;
       else if (char === '\\') escape = true;
       else if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '/' && index[i + 1] === '/') {
+      i = index.indexOf('\n', i);
+      if (i < 0) throw new Error(`Unterminated line comment in ${name}`);
+      continue;
+    }
+    if (char === '/' && index[i + 1] === '*') {
+      const endComment = index.indexOf('*/', i + 2);
+      if (endComment < 0) throw new Error(`Unterminated block comment in ${name}`);
+      i = endComment + 1;
       continue;
     }
     if (char === '"' || char === "'" || char === '`') {
@@ -128,7 +139,7 @@ const context = {
 vm.createContext(context);
 for (const name of [
   'incomeApplicantWithdrawAvailability', 'canWithdrawIncomeDocument',
-  'incomeApplicantWithdrawButtonHtml', 'approvalHistoryBatchReadOnly', 'approvalHistoryModalRequiresManagement',
+  'incomeApplicantWithdrawButtonHtml', 'approvalHistoryWithdrawalRows', 'approvalHistoryBatchReadOnly', 'approvalHistoryModalRequiresManagement',
   'approvalHistoryIncomeWriteBlocked', 'rejectApprovalHistoryIncomeWrite', 'approvalHistoryModalVerifiedRow', 'withdrawIncomeDocument',
   'requestIsMine', 'requestReachedCeoFunding', 'laborElectronicMarker',
   'laborElectronicUninvited', 'canWithdrawRequest', 'billIsMine', 'invoiceIsMine',
@@ -170,34 +181,40 @@ function compiledButtonAction(html, callback, expectedId) {
 
 check('single bill applicant may withdraw while approval is pending', allow('bill', [row('bill-1')]));
 check('single invoice applicant may withdraw while approval is pending', allow('invoice', [row('invoice-1')]));
-context.APPROVAL_HISTORY_MODAL_CONTEXT = { kind: 'bill', identity: 'current-modal-owner', ids: new Set(['bill-1']) };
-check('an authorized single bill history detail routes withdrawal to full management',
-  !allow('bill', [row('bill-1')]) && context.incomeApplicantWithdrawButtonHtml('bill', fixtures.bill[0], true).includes('openIncomeBatchManagement')
-  && !context.incomeApplicantWithdrawButtonHtml('bill', fixtures.bill[0], true).includes('withdrawBill'));
-check('a batch bill detail cannot offer partial withdrawal and links to its full management page',
-  !allow('bill', [row('bill-1', { batchId: 'BATCH-1', batchCount: 2 })])
-  && context.incomeApplicantWithdrawButtonHtml('bill', fixtures.bill[0], true).includes("openIncomeBatchManagement('bill'")
-  && !context.incomeApplicantWithdrawButtonHtml('bill', fixtures.bill[0], true).includes('withdrawBill'));
-check('batch bill history detail is read only for workflow actions', context.approvalHistoryBatchReadOnly('bill', fixtures.bill[0]));
-context.APPROVAL_HISTORY_MODAL_CONTEXT = { kind: 'inv', identity: 'current-modal-owner', ids: new Set(['invoice-1']) };
-check('an authorized single invoice history detail routes withdrawal to full management',
-  !allow('invoice', [row('invoice-1')]) && context.incomeApplicantWithdrawButtonHtml('invoice', fixtures.invoice[0], true).includes('openIncomeBatchManagement')
-  && !context.incomeApplicantWithdrawButtonHtml('invoice', fixtures.invoice[0], true).includes('withdrawInvoice'));
-check('a batch invoice detail cannot offer partial withdrawal and links to its full management page',
-  !allow('invoice', [row('invoice-1', { batchId: 'BATCH-1' })])
-  && context.incomeApplicantWithdrawButtonHtml('invoice', fixtures.invoice[0], true).includes("openIncomeBatchManagement('invoice'")
-  && !context.incomeApplicantWithdrawButtonHtml('invoice', fixtures.invoice[0], true).includes('withdrawInvoice'));
-check('batch invoice history detail is read only for workflow actions', context.approvalHistoryBatchReadOnly('inv', fixtures.invoice[0]));
+function pinHistory(kind, rows, options = {}) {
+  context.APPROVAL_HISTORY_MODAL_CONTEXT = {
+    kind, identity: 'current-modal-owner', ids: new Set(rows.map(item => item.id)),
+    personallyApplied: true, sourceFingerprint: JSON.stringify(rows[0]),
+    sourceFingerprints: Object.fromEntries(rows.map(item => [item.id, JSON.stringify(item)])),
+    withdrawalBatchVerified: true, ...options
+  };
+}
+const freshBill = row('bill-1');
+pinHistory('bill', [freshBill]);
+check('fresh authorized single bill history exposes enabled original applicant withdrawal',
+  allow('bill', [freshBill]) && compiledButtonAction(context.incomeApplicantWithdrawButtonHtml('bill', freshBill, true), 'withdrawBill', 'bill-1'));
+const partialBill = row('bill-1', { batchId: 'BATCH-1', batchCount: 2 });
+pinHistory('bill', [partialBill]);
+check('a partial declared bill batch explains disabled withdrawal instead of routing employee to management',
+  !allow('bill', [partialBill]) && /disabled aria-disabled="true"/.test(context.incomeApplicantWithdrawButtonHtml('bill', partialBill, true)));
+check('batch bill history remains read only for approval and editing actions', context.approvalHistoryBatchReadOnly('bill', partialBill));
+const freshInvoice = row('invoice-1');
+pinHistory('inv', [freshInvoice]);
+check('fresh authorized single invoice history exposes enabled original applicant withdrawal',
+  allow('invoice', [freshInvoice]) && compiledButtonAction(context.incomeApplicantWithdrawButtonHtml('invoice', freshInvoice, true), 'withdrawInvoice', 'invoice-1'));
+const unverifiedInvoice = row('invoice-1', { batchId: 'BATCH-1' });
+pinHistory('inv', [unverifiedInvoice], { withdrawalBatchVerified: false });
+check('an invoice history batch without exact sibling verification fails closed',
+  !allow('invoice', [unverifiedInvoice]) && /disabled aria-disabled="true"/.test(context.incomeApplicantWithdrawButtonHtml('invoice', unverifiedInvoice, true)));
+check('batch invoice history remains read only for approval and editing actions', context.approvalHistoryBatchReadOnly('inv', unverifiedInvoice));
 const legacyBill = row('legacy-bill-1', { batchId: '', createdAt: '2026-10-08T08:00:00Z' });
-context.APPROVAL_HISTORY_MODAL_CONTEXT = { kind: 'bill', identity: 'current-modal-owner', ids: new Set(['legacy-bill-1']) };
-check('legacy bill without batch ID cannot mutate a one-row history projection',
-  !allow('bill', [legacyBill]) && context.approvalHistoryBatchReadOnly('bill', legacyBill)
-  && context.incomeApplicantWithdrawButtonHtml('bill', legacyBill, true).includes('openIncomeBatchManagement'));
+pinHistory('bill', [legacyBill], { sourceFingerprints: null });
+check('legacy bill history without fresh complete source proof cannot mutate',
+  !allow('bill', [legacyBill]) && /disabled aria-disabled="true"/.test(context.incomeApplicantWithdrawButtonHtml('bill', legacyBill, true)));
 const legacyInvoice = row('legacy-invoice-1', { batchId: '', sharedSource: 'same-upload.xls' });
-context.APPROVAL_HISTORY_MODAL_CONTEXT = { kind: 'inv', identity: 'current-modal-owner', ids: new Set(['legacy-invoice-1']) };
-check('legacy shared-source invoice without batch ID cannot mutate a one-row history projection',
-  !allow('invoice', [legacyInvoice]) && context.approvalHistoryBatchReadOnly('inv', legacyInvoice)
-  && context.incomeApplicantWithdrawButtonHtml('invoice', legacyInvoice, true).includes('openIncomeBatchManagement'));
+pinHistory('inv', [legacyInvoice], { sourceFingerprints: null });
+check('legacy shared-source invoice without fresh complete source proof cannot mutate',
+  !allow('invoice', [legacyInvoice]) && /disabled aria-disabled="true"/.test(context.incomeApplicantWithdrawButtonHtml('invoice', legacyInvoice, true)));
 context.S.user.id = 'signer-1';
 check('a signer never sees applicant withdrawal from bill or invoice history',
   context.incomeApplicantWithdrawButtonHtml('invoice', fixtures.invoice[0], true) === ''
@@ -214,14 +231,17 @@ check('whole bill batch can withdraw when all rows belong to applicant', allow('
 sourceComplete = false;
 verified = false;
 const historyBill = row('bill-1');
-context.APPROVAL_HISTORY_MODAL_CONTEXT = { kind: 'bill', identity: 'current-modal-owner', ids: new Set(['bill-1']), sourceFingerprint: JSON.stringify(historyBill) };
-check('single history bill is read only even with a fresh exact source row', !allow('bill', [historyBill]));
+pinHistory('bill', [historyBill]);
+check('fresh exact history bill remains applicant-withdrawable after capped bootstrap', allow('bill', [historyBill]));
 historyBill.note = 'changed after opening';
 check('changed history bill cannot reuse a stale detail trust marker', !context.canWithdrawIncomeDocument('bill', historyBill));
 const historyInvoice = row('invoice-1');
-context.APPROVAL_HISTORY_MODAL_CONTEXT = { kind: 'inv', identity: 'current-modal-owner', ids: new Set(['invoice-1']), sourceFingerprint: JSON.stringify(historyInvoice) };
-check('single history invoice is read only even with a fresh exact source row', !allow('invoice', [historyInvoice]));
-const historyExpense = { id: 'req-1', applicantId: 'applicant-1', status: 'pending_accountant', steps: [{ rk: 'accountant', a: '' }], approvalStep: 1, rowVersion: 3 };
+pinHistory('inv', [historyInvoice]);
+check('fresh exact history invoice remains applicant-withdrawable after capped bootstrap', allow('invoice', [historyInvoice]));
+const staleIdentityInvoice = { ...historyInvoice };
+pinHistory('inv', [staleIdentityInvoice], { identity: 'old-modal-owner' });
+check('history invoice proof is invalidated after identity change', !allow('invoice', [staleIdentityInvoice]));
+const historyExpense = { tenantId: 'tenant-1', dataEnv: 'production', id: 'req-1', applicantId: 'applicant-1', status: 'pending_accountant', steps: [{ rk: 'accountant', a: '' }], approvalStep: 1, rowVersion: 3 };
 context.APPROVAL_HISTORY_MODAL_CONTEXT = { kind: 'req', identity: 'current-modal-owner', ids: new Set(['req-1']), sourceFingerprint: JSON.stringify(historyExpense) };
 check('fresh authorized single history expense retains applicant withdrawal after a capped bootstrap', context.canWithdrawRequest(historyExpense));
 context.APPROVAL_HISTORY_MODAL_CONTEXT.denied = true;
@@ -280,12 +300,12 @@ check('invoice management search and history batch route are present in the page
   index.includes('id="invoice-manage-search"')
   && index.includes('id="invoice-manage-list"')
   && index.includes('window.openIncomeBatchManagement=function(kind,id)'));
-check('all income workflow handlers reject direct writes from personal history',
+check('all income approval/edit handlers reject personal history and withdrawal alone requires exact own proof',
   ['apprApproveBill', 'apprReturnPreviousBill', 'apprRejectBill', 'apprApproveInv', 'apprReturnPreviousInv', 'apprRejectInv',
     'submitReceiptReview', 'approveReceiptReview', 'returnReceiptReview'].every(name =>
     new RegExp('window\\.' + name + '=async function\\([^)]*\\)\\{\\s*if\\(rejectApprovalHistoryIncomeWrite\\(').test(index))
   && /window\.saveEntityDeptOverride=async function\(kind,id\)\{\s*if\(\(kind==='bill'\|\|kind==='invoice'\)\&\&rejectApprovalHistoryIncomeWrite/.test(index)
-  && /async function withdrawIncomeDocument\(kind,id\)\{\s*if\(rejectApprovalHistoryIncomeWrite/.test(index));
+  && /approvalHistoryIncomeWriteBlocked[\s\S]*approvalHistoryWithdrawalRows/.test(namedFunction('withdrawIncomeDocument')));
 const routeStart = index.indexOf('window.openIncomeBatchManagement=function(kind,id){');
 const routeEnd = index.indexOf('\n};', routeStart) + 3;
 vm.runInContext(index.slice(routeStart, routeEnd), context);
@@ -317,7 +337,7 @@ const detailContext = {
   approvalActionFields: () => '', approvalApplicantIds: () => [],
   accountingLinesTitleForRequest: () => '', expenseInvoiceAccountingReviewHtml: () => '',
   requestRejectReason: () => ({}), requestIsRejected: () => false,
-  canReturnPreviousStep: () => false, canWithdrawRequest: () => false,
+  canReturnPreviousStep: () => false, canWithdrawRequest: () => false, requestApplicantWithdrawButtonHtml: () => '',
   requestCashPostedAt: () => false, approvalActionSectionHtml: value => value,
   purchaseFinalRecoveryHtml: () => '', expenseRevisionRecoveryHtml: () => '',
   expensePostingRecoveryHtml: () => '', supervisorReviewCardHtml: () => '',
@@ -516,7 +536,7 @@ async function runActions() {
       && /window\.withdrawInvoice=function/.test(index));
   check('expense and labor withdrawal is shown in mine and request detail views',
     /S\.aT==='mine'[\s\S]*canWithdrawRequest\(r\)[\s\S]*withdrawRequest\(/.test(listRenderer)
-      && /window\.openDetail=function[\s\S]*canWithdrawRequest\(r\)[\s\S]*withdrawRequest\(/.test(index));
+      && /window\.openDetail=function[\s\S]*requestApplicantWithdrawButtonHtml\(r\)/.test(index) && /withdrawRequest\(/.test(namedFunction('requestApplicantWithdrawButtonHtml')));
 
   check('new withdrawal migration is nonempty and defines both authenticated RPCs',
     migration.length > 2000
