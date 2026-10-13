@@ -9464,14 +9464,76 @@ function approvalHistoryModalVerifiedRow(kind,row){
     &&ctx.sourceFingerprint===JSON.stringify(row)
     &&(!canAccessPage||canAccessPage('approvals')));
 }
+function approvalHistoryWithdrawalRows(kind,record){
+  var ctx=APPROVAL_HISTORY_MODAL_CONTEXT;
+  if(!ctx||!record||ctx.kind!==kind||!ctx.ids||!ctx.ids.has(String(record.id))
+    ||ctx.denied===true||ctx.personallyApplied!==true||ctx.identity!==approvalHistoryModalIdentity()
+    ||!approvalHistoryPageAllowed()||!ctx.sourceFingerprints)return null;
+  var actorId=String(S.user&&S.user.id||''),tenantId=String(currentTenantId()||'');
+  var rows=(kind==='bill'?BILLS:kind==='inv'?INVS:[]).filter(function(row){return ctx.ids.has(String(row.id));});
+  if(!actorId||!rows.length||rows.length!==ctx.ids.size||Object.keys(ctx.sourceFingerprints).length!==rows.length
+    ||rows.some(function(row){return String(row.applicantId||'')!==actorId
+      ||String(rowTenantId(row)||'')!==tenantId||!inActiveDataEnvironment(row)
+      ||ctx.sourceFingerprints[String(row.id)]!==JSON.stringify(row);}))return null;
+  var batchId=String(record.batchId||'').trim();
+  if(rows.some(function(row){return String(row.batchId||'').trim()!==batchId;}))return null;
+  if(!batchId&&rows.length!==1)return null;
+  // Bill history is split by workflow scope. Verify durable batch membership,
+  // independently of that display scope, without broad-loading a management page.
+  if(batchId&&ctx.withdrawalBatchVerified!==true)return null;
+  if(kind==='bill'&&batchId&&rows.some(function(row){return num(row.batchCount)>0&&num(row.batchCount)!==rows.length;}))return null;
+  // The mutation RPC also rechecks ALL siblings atomically under lock, including
+  // any anomalous sibling outside this actor's read scope.
+  return rows;
+}
+async function verifyApprovalHistoryWithdrawalBatch(ctx,rows,controller){
+  ctx.withdrawalBatchVerified=false;
+  var actorId=String(S.user&&S.user.id||''),batchId=String(rows[0]&&rows[0].batchId||'').trim();
+  if(!ctx.personallyApplied||!actorId||!rows.length||rows.some(function(row){return String(row.applicantId||'')!==actorId;}))return;
+  if(!batchId){ctx.withdrawalBatchVerified=rows.length===1;return;}
+  var isBill=ctx.kind==='bill',limit=isBill?150:500;
+  if(rows.length>limit)return;
+  if(isBill&&rows.some(function(row){return num(row.batchCount)>0&&num(row.batchCount)!==rows.length;}))return;
+  try{
+    // No applicant filter: an anomalous visible sibling must prevent partial
+    // withdrawal. RLS remains authoritative; this is only a targeted read.
+    var operation=getSb().from(isBill?'bills':'invoices')
+      .select('id,batch_id,row_version,applicant_id,tenant_id,data_environment',{count:'exact'})
+      .eq('tenant_id',currentTenantId()).eq('data_environment',activeDataEnvironment())
+      .eq('batch_id',batchId).order('id',{ascending:true}).range(0,limit);
+    if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
+    var response=await withOperationTimeout(operation,'抽單批次確認',12000);
+    if(APPROVAL_HISTORY_MODAL_CONTEXT!==ctx||ctx.identity!==approvalHistoryModalIdentity()||!approvalHistoryPageAllowed())return;
+    var members=response&&response.data;
+    if(!response||response.error||!Array.isArray(members)||response.count!==rows.length||members.length!==rows.length)return;
+    var ids=new Set();
+    var valid=members.every(function(member){
+      var id=String(member.id||''),row=rows.find(function(item){return String(item.id)===id;});
+      if(!row||ids.has(id))return false;ids.add(id);
+      return String(member.applicant_id||'')===actorId&&String(member.tenant_id||'')===String(currentTenantId()||'')
+        &&member.data_environment===activeDataEnvironment()&&String(member.batch_id||'').trim()===batchId
+        &&Number(member.row_version)>0&&Number(member.row_version)===Number(row.rowVersion)
+        &&ctx.sourceFingerprints[id]===JSON.stringify(row);
+    });
+    ctx.withdrawalBatchVerified=valid;
+  }catch(error){console.warn('Applicant withdrawal batch check unavailable',String(error&&error.code||'read_failed'));}
+}
+async function openApprovalHistoryWithdrawal(key){
+  var result=await openApprovalHistoryItem(key);
+  if(!result||!result.ok)return result;
+  var target=document.querySelector('[data-applicant-withdraw]');
+  if(target){target.scrollIntoView({block:'center'});target.focus({preventScroll:true});}
+  return result;
+}
+window.openApprovalHistoryWithdrawal=openApprovalHistoryWithdrawal;
 function approvalHistoryDetailFeedback(key,message,busy){
   if(typeof document==='undefined')return;
   document.querySelectorAll('[data-history-detail-message]').forEach(function(node){
     var active=node.getAttribute('data-history-detail-message')===key;
     node.textContent=active?message:'';
   });
-  document.querySelectorAll('[data-history-open]').forEach(function(node){
-    var active=node.getAttribute('data-history-open')===key;
+  document.querySelectorAll('[data-history-open], [data-history-withdraw]').forEach(function(node){
+    var active=(node.getAttribute('data-history-open')||node.getAttribute('data-history-withdraw'))===key;
     node.disabled=!!(active&&busy);node.setAttribute('aria-busy',String(!!(active&&busy)));
   });
 }
@@ -9539,7 +9601,7 @@ function openApprovalHistoryItem(key){
     var operation=client.rpc('finance_personal_document_detail_v1',{p_history_key:key,p_data_environment:activeDataEnvironment()});
     if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
     return withOperationTimeout(operation,'個人單據明細',30000);
-  }).then(function(result){
+  }).then(async function(result){
     if(approvalHistoryRejectDeniedResponse(owner,list,seq,state))return {ok:false,forbidden:true};
     if(!current())return {ok:false,stale:true};
     if(result&&result.error)throw result.error;
@@ -9569,7 +9631,11 @@ function openApprovalHistoryItem(key){
     if(table==='expense_requests')REQS=next;else if(table==='bills')BILLS=next;else INVS=next;
     // Pin this fresh, fully authorized group. Legacy grouping must not append
     // other cached siblings or stale rows to the detail/action modal.
-    APPROVAL_HISTORY_MODAL_CONTEXT={identity:approvalHistoryModalIdentity(),kind:table==='expense_requests'?'req':table==='bills'?'bill':'inv',ids:ids,sourceFingerprint:JSON.stringify(raw)};
+    APPROVAL_HISTORY_MODAL_CONTEXT={identity:approvalHistoryModalIdentity(),kind:table==='expense_requests'?'req':table==='bills'?'bill':'inv',ids:ids,sourceFingerprint:JSON.stringify(raw),
+      personallyApplied:entry.personally_applied===true,sourceFingerprints:rows.reduce(function(all,row){all[String(row.id)]=JSON.stringify(row);return all;},{})};
+    var modalContext=APPROVAL_HISTORY_MODAL_CONTEXT;
+    if(table!=='expense_requests')await verifyApprovalHistoryWithdrawalBatch(modalContext,rows,controller);
+    if(!current()||APPROVAL_HISTORY_MODAL_CONTEXT!==modalContext)return {ok:false,stale:true};
     var item={kind:entry.kind,raw:raw,rows:rows,historyTrusted:true,historyKey:key,historyParticipantSteps:entry.participant_steps};
     state.status='ready';approvalHistoryDetailFeedback(key,'',false);
     openApprovalFullItem(item,key);
@@ -13981,7 +14047,7 @@ function canWithdrawRequest(r){
   if(!S.user||!r||!r.applicantId||String(r.applicantId)!==String(S.user.id||''))return false;
   var historyContext=APPROVAL_HISTORY_MODAL_CONTEXT;
   if(historyContext&&historyContext.kind==='req'&&historyContext.ids.has(String(r.id))
-    &&(historyContext.denied||!approvalHistoryPageAllowed()))return false;
+    &&(!approvalHistoryModalVerifiedRow('req',r)||!approvalHistoryPageAllowed()))return false;
   if(!requestIsMine(r)||!isReqOpen(r)||r.status==='cancelled'||requestReachedCeoFunding(r))return false;
   // An external labor statement has an independent signature/payment lifecycle.
   // Show withdrawal only after its current server status is known to be uninvited.
@@ -13992,6 +14058,21 @@ function canWithdrawRequest(r){
   var broadTrusted=approvalSourceTableComplete('expense_requests')&&!!authId&&String(remoteDataAuthUserId||'')===authId
     &&String(rowTenantId(r)||'')===String(currentTenantId()||'')&&inActiveDataEnvironment(r);
   return approvalRowIsLocallyVerified('expense_requests',r)||broadTrusted||approvalHistoryModalVerifiedRow('req',r);
+}
+function requestApplicantWithdrawButtonHtml(r){
+  if(!r||!S.user||!r.applicantId||String(r.applicantId)!==String(S.user.id||''))return '';
+  var allowed=canWithdrawRequest(r),reason='';
+  if(!allowed){
+    if(r.status==='cancelled')reason='這張單據已抽單取消，原單與處理紀錄仍會保留。';
+    else if(!isReqOpen(r))reason='單據已結束簽核，請洽會計確認後續處理。';
+    else if(requestReachedCeoFunding(r))reason='單據已進入出納、撥款或入帳流程，請洽會計確認後續處理。';
+    else if(laborElectronicMarker(r)&&!laborElectronicUninvited(laborElectronicCached(r)))reason='電子勞報簽署狀態尚未確認，或已發出簽署邀請，請先確認簽署與付款進度。';
+    else reason='單據內容或登入權限尚未確認，請重新開啟明細後再試。';
+  }
+  return '<div data-applicant-withdraw tabindex="-1" style="border-top:1px solid #f0e6d6;padding:11px">'
+    +'<button type="button" class="btn-s" style="width:100%;justify-content:center;color:#8a1010;border-color:#f0b0b0;min-height:44px" onclick="withdrawRequest('+financeInlineJsString(r.id)+')"'
+    +(allowed?'':' disabled aria-disabled="true" title="'+escAttr(reason)+'"')+'>申請人抽單取消</button>'
+    +'<div style="font-size:12px;color:#6e6259;line-height:1.5;margin-top:6px">'+escAttr(allowed?'抽單後會停止簽核，保留原單、附件與處理紀錄。':reason)+'</div></div>';
 }
 function invoiceIsMine(i){
   if(!S.user||!i)return false;
@@ -14564,14 +14645,14 @@ function incomeApplicantWithdrawAvailability(kind,record){
   if(!actorId||rows.some(function(row){return !row.applicantId||String(row.applicantId)!==actorId;})){
     return{ok:false,reason:'只有這整批單據的原申請人可以抽單',rows:rows};
   }
-  // Personal history deliberately returns one authorized source row. A batch
-  // action must never infer that the rest of its siblings were loaded.
-  if(approvalHistoryModalRequiresManagement(isBill?'bill':'inv',record)){
-    return{ok:false,reason:'歷史查詢只開啟單張，尚未確認完整批次；請到繳費單或發票管理頁抽單',rows:rows};
+  var historyReadOnly=approvalHistoryBatchReadOnly(isBill?'bill':'inv',record);
+  var historyRows=historyReadOnly?approvalHistoryWithdrawalRows(isBill?'bill':'inv',record):null;
+  if(historyReadOnly&&!historyRows){
+    return{ok:false,reason:'整批單據或最新內容尚未確認，請重新開啟明細；同批進度不同時須由會計確認，不能只抽回部分。',rows:rows};
   }
   var table=isBill?'bills':'invoices';
   var groupingPossible=isBill?billGroupKey(record).indexOf('bill:')!==0:invoiceGroupKey(record).indexOf('inv:')!==0;
-  if(groupingPossible&&!approvalSourceTableComplete(table)
+  if(groupingPossible&&!historyRows&&!approvalSourceTableComplete(table)
     &&(!isBill||!record.batchId||rows.some(function(row){return num(row.batchCount)<=0;}))){
     return{ok:false,reason:'整批單據尚未確認全部載齊，請重新整理後再試',rows:rows};
   }
@@ -14603,7 +14684,7 @@ function incomeApplicantWithdrawAvailability(kind,record){
   var authId=String((S.user&&((S.user.authUserId)||(S.user.auth_user_id)))||'');
   var broadTrusted=approvalSourceTableComplete(table)&&!!authId&&String(remoteDataAuthUserId||'')===authId;
   if(rows.some(function(row){
-    return !approvalRowIsLocallyVerified(table,row)
+    return !historyRows&&!approvalRowIsLocallyVerified(table,row)
       &&!(broadTrusted&&String(rowTenantId(row)||'')===String(currentTenantId()||'')&&inActiveDataEnvironment(row));
   }))return{ok:false,reason:'正在確認這整批單據的最新內容，請稍後再試',rows:rows};
   if(!approvalFreezeExpectedSteps(kind,rows))return{ok:false,reason:'單據版本尚未確認，請重新整理後再試',rows:rows};
@@ -14617,18 +14698,12 @@ function incomeApplicantWithdrawButtonHtml(kind,record,detail){
   var actorId=String(S.user&&S.user.id||'');
   var mine=!!(actorId&&rows.some(function(row){return String(row.applicantId||'')===actorId;}));
   if(!mine)return'';
-  if(approvalHistoryModalRequiresManagement(kind==='bill'?'bill':'inv',record)){
-    var page=kind==='bill'?'bills':'invoices',label=kind==='bill'?'繳費單管理':'發票管理';
-    var canOpen=typeof canAccessPage==='function'&&canAccessPage(page);
-    return '<div style="border-top:1px solid #f0e6d6;padding:11px;color:#6e6259;font-size:11px;line-height:1.6">目前只載入你選的這張，尚未確認是否有同批單據，不能從這裡抽回部分單據。'
-      +(canOpen?'<button type="button" class="btn-g" style="display:block;margin-top:7px" onclick="openIncomeBatchManagement(\''+kind+'\','+financeInlineJsString(record.id)+')">到'+label+'查這批與抽單</button>':'請聯絡管理員核對完整批次。')+'</div>';
-  }
   var availability=incomeApplicantWithdrawAvailability(kind,record);
   var label=(rows.length>1?'抽回整批 '+rows.length+' 張':'申請人抽單取消');
   var callback=kind==='bill'?'withdrawBill':'withdrawInvoice';
   var button='<button type="button" class="btn-s" style="color:#8a1010;border-color:#f0b0b0'+(detail?';width:100%;justify-content:center':'')+'" onclick="event.stopPropagation();'+callback+'('+financeInlineJsString(record.id)+')"'+(availability.ok?'':' disabled aria-disabled="true" title="'+escAttr(availability.reason)+'"')+'>'+label+'</button>';
   if(!detail)return button+(availability.ok?'':'<div style="font-size:10px;color:#6e6259;margin-top:3px">'+escAttr(availability.reason)+'</div>');
-  return'<div style="border-top:1px solid #f0e6d6;padding:11px">'+button+'<div style="font-size:11px;color:#6e6259;line-height:1.5;margin-top:6px">'+(availability.ok?'抽單後整批會停止簽核並保留處理紀錄。':escAttr(availability.reason))+'</div></div>';
+  return'<div data-applicant-withdraw tabindex="-1" style="border-top:1px solid #f0e6d6;padding:11px">'+button+'<div style="font-size:12px;color:#6e6259;line-height:1.5;margin-top:6px">'+(availability.ok?'抽單後整批會停止簽核並保留原單、附件與處理紀錄。':escAttr(availability.reason))+'</div></div>';
 }
 var INCOME_MANAGEMENT_SEARCH={owner:'',bill:'',invoice:''};
 function incomeManagementSearchState(){
@@ -27083,11 +27158,14 @@ window.withdrawRequest=async function(rid){
   }
 };
 async function withdrawIncomeDocument(kind,id){
-  if(rejectApprovalHistoryIncomeWrite(kind==='bill'?'bill':'inv',id))return false;
   if(S.incomeWithdrawBusy)return;
   var source=kind==='bill'?BILLS:kind==='invoice'?INVS:null;
   var record=source&&source.find(function(row){return row.id===id;});
   if(!record)return;
+  if(approvalHistoryIncomeWriteBlocked(kind==='bill'?'bill':'inv',id)
+    &&!approvalHistoryWithdrawalRows(kind==='bill'?'bill':'inv',record)){
+    alert('目前無法抽單：整批單據或最新內容尚未確認，請重新開啟明細。');return false;
+  }
   var availability=incomeApplicantWithdrawAvailability(kind,record);
   if(!availability.ok){alert('目前無法抽單：'+availability.reason);return;}
   var rows=availability.rows,ids=rows.map(function(row){return row.id;});
@@ -27511,10 +27589,6 @@ window.openDetail=function(rid){
   var postingRecovery=expensePostingRecoveryHtml(r);if(postingRecovery)acts=[postingRecovery];
   var procurementRecovery=procurementSubmissionRecoveryHtml(r);if(procurementRecovery)acts=[procurementRecovery];
   if(r.voucherId)acts.push('<button class="btn-g" onclick="showVoucherById(\''+r.voucherId+'\')">查看傳票 '+r.voucherId+'</button>');
-  if(canWithdrawRequest(r)&&(!curStep||curStep.rk!=='applicant_revision'))acts.push('<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest(\''+r.id+'\')">申請人抽單取消</button>');
-  else if(laborMarker&&requestIsMine(r)&&isReqOpen(r)&&!requestReachedCeoFunding(r)){
-    acts.push('<span style="font-size:11px;color:#6e6259">講師邀請或勞報資料狀態尚未確認，或已建立；請查看下方進度。已建立後需由會計協助處理。</span>');
-  }
   if(!laborMarker&&requestCashPostedAt(r))acts.push(paymentConcernButtonHtml(r));
   if(laborMarker){
     var laborReady=!!laborState&&['reviewed','accrued','partially_paid','paid'].indexOf(laborState.status)>-1;
@@ -27526,6 +27600,7 @@ window.openDetail=function(rid){
       if(!laborLegacyFinancialStep&&canActRequest(r)&&returnBtn)acts.push(returnBtn);
     }
   }
+  acts.push(requestApplicantWithdrawButtonHtml(r));
   el('detail-act').innerHTML=acts.join('');
   // FIX 3：顯示匯款欄位
   var feeAmt=r.type==='advance_request'?0:requestBankFeeAmount(r);
@@ -29476,7 +29551,8 @@ function renderApprovalHistorySummaries(runtime){
     var state=String(s.approval_status||s.status||'').toLowerCase();
     var stateLabel=state==='cancelled'?'已抽單取消':state==='rejected'?'被駁回':state==='completed'?(item.kind==='bill'?'已核准':'已完成'):state==='delivered'?'已交付':(SL[state]||'處理中');
     return '<tr data-appr-key="'+escAttr(key)+'" data-history-key="'+escAttr(key)+'">'
-      +'<td class="appr-col-select"><button type="button" class="btn-g" style="min-height:44px!important;white-space:nowrap" data-history-open="'+escAttr(key)+'" onclick="openApprovalItem(this.getAttribute(\'data-history-open\'))">查看明細</button></td>'
+      +'<td class="appr-col-select"><div style="display:grid;gap:6px"><button type="button" class="btn-g" style="min-height:44px!important;white-space:nowrap" data-history-open="'+escAttr(key)+'" onclick="openApprovalItem(this.getAttribute(\'data-history-open\'))">查看明細</button>'
+      +(item.historyPersonallyApplied?'<button type="button" class="btn-s" style="min-height:44px!important;justify-content:center;white-space:nowrap" data-history-withdraw="'+escAttr(key)+'" onclick="openApprovalHistoryWithdrawal(this.getAttribute(\'data-history-withdraw\'))">抽單</button>':'')+'</div></td>'
       +'<td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">'+escAttr(recordNo)+'</span><span class="approval-form-badges"><span class="badge b-gray">'+escAttr(type)+'</span>'+(batch?'<span class="badge b-blue">整批 '+item.historySourceCount+' 張</span>':'')+'<span class="badge '+participationClass+'">'+escAttr(item.historyParticipationLabel)+'</span><span class="badge '+(state==='rejected'?'b-rej':state==='completed'?'b-ok':'b-wait')+'">'+escAttr(stateLabel)+'</span>'+(s.has_attachments?'<span class="badge b-gray">附有憑證</span>':'')+'</span></div></td>'
       +'<td class="appr-col-dept">'+escAttr(s.department_name||s.department_code||'—')+'</td>'
       +'<td class="appr-col-applicant">'+escAttr(s.applicant||'—')+'</td>'
@@ -31129,12 +31205,12 @@ function showApprD(r){
   else if(canAct&&r.status==='pending_voucher')actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+advanceFinalAmtField+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;background:#1a4080;margin-bottom:5px" onclick="doConfirmVoucher('+idArg+')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn+'</div>';
   else if(canAct)actH='<div style="border-top:1px solid #f0e6d6;padding:11px">'+(cur.rk==='cashier'?'<div style="font-size:11px;color:#7a3b00;line-height:1.6;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px;margin-bottom:8px">按下出納放款後，系統會先在現金流量表認列撥款 '+fmt(ceoCashImpactAmount(r))+'；最後一關會計收到憑據後才更新資產負債表與損益表。</div>':'')+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApprove('+idArg+')">'+(cur.rk==='cashier'?'出納放款並更新現金流':'核准此申請')+'</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprReject('+idArg+')">不通過</button></div>';
   if(laborElectronicMarker(r))actH='<div style="padding:11px;border-top:1px solid #d9e8d4;background:#f7fcf4"><div style="font-size:11px;color:#1a5010;line-height:1.6;margin-bottom:8px">此申請使用講師電子勞報專用流程；簽署、會計覆核、主管簽核及實際付款請在完整詳情處理。</div><button type="button" class="btn-g" onclick="closeAppr();openDetail('+financeInlineJsString(r.id)+')">開啟電子勞報詳情</button></div>';
-  if(canWithdrawRequest(r)&&!isApplicantRevision)actH+='<div style="border-top:1px solid #f0e6d6;padding:11px"><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010;border-color:#f0b0b0" onclick="withdrawRequest('+idArg+')">申請人抽單取消</button><div style="font-size:10px;color:#8b7358;line-height:1.5;margin-top:6px">抽單後會停止後續簽核並保留原單紀錄。</div></div>';
   if(requestCashPostedAt(r))actH+=paymentConcernButtonHtml(r);
   actH=approvalActionSectionHtml(actH);
   var purchaseRecovery=purchaseFinalRecoveryHtml(r);if(purchaseRecovery&&canAct)actH=purchaseRecovery+returnBtn;
   var revisionRecovery=expenseRevisionRecoveryHtml(r);if(revisionRecovery)actH=revisionRecovery;
   var postingRecovery=expensePostingRecoveryHtml(r);if(postingRecovery)actH=postingRecovery;
+  actH+=requestApplicantWithdrawButtonHtml(r);
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:var(--font-sans);font-size:10px;color:#c0a080">'+escAttr(r.no||'')+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+escAttr(r.app||'')+' · '+escAttr(e.s||'')+'</div></div></div>'
     +rejectBanner
@@ -31171,7 +31247,7 @@ function showBillApprD(b){
   var btnText=cur.rk==='applicant_confirm'?'確認繳費單可提供繳費人':(groupCount>1?'核准整批繳費單':'核准此繳費單');
   var returnBtn=!historyBatchReadOnly&&groupRows.some(function(row){return canActBill(row)&&canReturnPreviousStep(row);})?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousBill('+idArg+')">退回上一關</button>':'';
   var versionPendingH=!historyBatchReadOnly&&!billVersionReady&&groupRows.some(canActBill)?'<div style="margin:10px 12px;padding:9px 10px;border:1px solid #efd7b8;border-radius:8px;background:#fff8ed;color:#7a3b00;font-size:11px;line-height:1.6">單據內容版本尚未完成載入，請關閉後重新開啟確認；系統不會送出未確認版本的簽核。</div>':'';
-  var historyBatchHint=historyBatchReadOnly&&groupRows.some(canActBill)?'<div style="margin:10px 12px;padding:9px 10px;border:1px solid #efd7b8;border-radius:8px;background:#fff8ed;color:#7a3b00;font-size:11px;line-height:1.6">過往單據只開啟這一張，整批簽核請到待簽核清單處理。<button type="button" class="btn-g" style="display:block;margin-top:7px" onclick="closeAppr();openApprovalTab(\'p\')">到待簽核清單</button></div>':'';
+  var historyBatchHint=historyBatchReadOnly&&groupRows.some(canActBill)?'<div style="margin:10px 12px;padding:9px 10px;border:1px solid #efd7b8;border-radius:8px;background:#fff8ed;color:#7a3b00;font-size:11px;line-height:1.6">過往單據供查閱；整批簽核請到待簽核清單處理。<button type="button" class="btn-g" style="display:block;margin-top:7px" onclick="closeAppr();openApprovalTab(\'p\')">到待簽核清單</button></div>':'';
   var actH=canAct?'<div style="border-top:1px solid #f0e6d6;padding:11px">'+accountantHint+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApproveBill('+idArg+')">'+btnText+'</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprRejectBill('+idArg+')">不通過</button></div>':'';
   actH=approvalActionSectionHtml(actH)+incomeApplicantWithdrawButtonHtml('bill',b,true);
   el('appr-inner').innerHTML=
@@ -31215,7 +31291,7 @@ function showInvApprD(i,item){
   var invBtn=(cur&&cur.rk==='applicant_invoice_delivery')?'確認已交付並認列收入':(cur&&cur.rk==='accountant_invoice'?'開立完成並進入收款追蹤':'核准此發票');
   var invReturnBtn=canReturnPreviousStep(i)?'<button class="btn-s" style="width:100%;justify-content:center;color:#9a5a00;margin-bottom:5px" onclick="apprReturnPreviousInv('+idArg+')">退回上一關</button>':'';
   var versionPendingH=!historyBatchReadOnly&&!invoiceVersionReady&&canActInvoice(i)?'<div style="margin:10px 12px;padding:9px 10px;border:1px solid #efd7b8;border-radius:8px;background:#fff8ed;color:#7a3b00;font-size:11px;line-height:1.6">單據內容版本尚未完成載入，請關閉後重新開啟確認；系統不會送出未確認版本的簽核。</div>':'';
-  var historyBatchHint=historyBatchReadOnly&&canActInvoice(i)?'<div style="margin:10px 12px;padding:9px 10px;border:1px solid #efd7b8;border-radius:8px;background:#fff8ed;color:#7a3b00;font-size:11px;line-height:1.6">過往單據只開啟這一張，整批簽核請到待簽核清單處理。<button type="button" class="btn-g" style="display:block;margin-top:7px" onclick="closeAppr();openApprovalTab(\'p\')">到待簽核清單</button></div>':'';
+  var historyBatchHint=historyBatchReadOnly&&canActInvoice(i)?'<div style="margin:10px 12px;padding:9px 10px;border:1px solid #efd7b8;border-radius:8px;background:#fff8ed;color:#7a3b00;font-size:11px;line-height:1.6">過往單據供查閱；整批簽核請到待簽核清單處理。<button type="button" class="btn-g" style="display:block;margin-top:7px" onclick="closeAppr();openApprovalTab(\'p\')">到待簽核清單</button></div>':'';
   var actH=canAct?'<div style="border-top:1px solid #f0e6d6;padding:11px">'+(canEditIncomeCategory?incomeCategoryH:'')+invFieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApproveInv('+idArg+')">'+invBtn+'</button>'+invReturnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprRejectInv('+idArg+')">不通過</button></div>':'';
   actH=approvalActionSectionHtml(actH)+incomeApplicantWithdrawButtonHtml('invoice',i,true);
   el('appr-inner').innerHTML=
@@ -31250,7 +31326,8 @@ function showReceiptTaskD(i){
   var actH='';
   if(!historyReadOnly&&canActReceipt(i)&&i.status==='unpaid'&&S.user&&currentRoleKey()==='accountant')actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><label class="fl">收款證明（必填）</label><input type="file" id="receipt-task-files" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" style="margin-bottom:7px;font-size:11px;width:100%"><textarea id="receipt-task-note" rows="2" placeholder="備註（選填）…" style="margin-bottom:7px;font-size:12px"></textarea><button class="btn-p" style="width:100%;justify-content:center" onclick="submitReceiptReview('+financeInlineJsString(i.id)+',\'receipt-task-files\',\'receipt-task-note\')">送執行長確認</button></div>';
   if(!historyReadOnly&&canActReceipt(i)&&i.status==='pending_receipt_review'&&S.user&&currentRoleKey()==='ceo')actH='<div style="border-top:1px solid #f0e6d6;padding:11px"><textarea id="receipt-review-note" rows="2" placeholder="確認備註（選填）…" style="margin-bottom:7px;font-size:12px"></textarea><button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px;background:#1a7040" onclick="approveReceiptReview('+financeInlineJsString(i.id)+')">確認收款無誤並入現金流</button><button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="returnReceiptReview('+financeInlineJsString(i.id)+')">退回會計補件</button></div>';
-  if(historyReadOnly&&canActReceipt(i))actH='<div style="margin:10px 12px;padding:9px 10px;border:1px solid #efd7b8;border-radius:8px;background:#fff8ed;color:#7a3b00;font-size:11px;line-height:1.6">過往單據只開啟這一張。收款處理請到完整待簽核清單。<button type="button" class="btn-g" style="display:block;margin-top:7px" onclick="closeAppr();openApprovalTab(\'p\')">到待簽核清單</button></div>';
+  if(historyReadOnly&&canActReceipt(i))actH='<div style="margin:10px 12px;padding:9px 10px;border:1px solid #efd7b8;border-radius:8px;background:#fff8ed;color:#7a3b00;font-size:11px;line-height:1.6">過往單據供查閱。收款處理請到完整待簽核清單。<button type="button" class="btn-g" style="display:block;margin-top:7px" onclick="closeAppr();openApprovalTab(\'p\')">到待簽核清單</button></div>';
+  actH+=incomeApplicantWithdrawButtonHtml('invoice',i,true);
   actH=approvalActionSectionHtml(actH);
   el('appr-inner').innerHTML=
     '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:var(--font-sans);font-size:10px;color:#c0a080">'+escAttr(invoiceGroupNo(i))+'</div><div style="font-size:12px;font-weight:500;color:#334155">收款待辦 · '+escAttr(e.s||'')+(groupCount>1?' · 整批 '+groupCount+' 張':'')+'</div></div></div>'
