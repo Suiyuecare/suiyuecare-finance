@@ -9550,7 +9550,8 @@ function startApprovalHistoryWithdrawalCheck(ctx,rows,record){
     var host=el('appr-inner'),section=host&&host.querySelector('[data-applicant-withdraw]');
     if(!section)return;
     var focused=section.contains(document.activeElement);
-    section.outerHTML=incomeApplicantWithdrawButtonHtml(ctx.kind==='bill'?'bill':'invoice',record,true);
+    try{section.outerHTML=incomeApplicantWithdrawButtonHtml(ctx.kind==='bill'?'bill':'invoice',record,true);}
+    catch(error){section.innerHTML='<button type="button" class="btn-s" disabled aria-disabled="true">抽單</button><p>單據內容已更新，請關閉後重新開啟明細。</p>';}
     if(focused){var next=host.querySelector('[data-applicant-withdraw]');if(next)next.focus({preventScroll:true});}
   };
   refresh();
@@ -9561,7 +9562,8 @@ function startApprovalHistoryWithdrawalCheck(ctx,rows,record){
 async function openApprovalHistoryWithdrawal(key){
   var result=await openApprovalHistoryItem(key);
   if(!result||!result.ok)return result;
-  var target=document.querySelector('[data-applicant-withdraw]');
+  var host=S.page==='detail'?el('detail-act'):el('appr-inner');
+  var target=host&&host.querySelector('[data-applicant-withdraw]');
   if(target){target.scrollIntoView({block:'center'});target.focus({preventScroll:true});}
   return result;
 }
