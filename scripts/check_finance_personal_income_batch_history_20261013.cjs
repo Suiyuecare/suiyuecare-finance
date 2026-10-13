@@ -8,16 +8,25 @@ const path=require('node:path');
 const os=require('node:os');
 const crypto=require('node:crypto');
 const {PGlite}=require('@electric-sql/pglite');
+const {Client}=require('pg');
 const {createSummarySearchFixture,addSummarySearchDocument,fixtureIdentity:who}=require('./check_approval_history_summary.cjs');
 const root=path.resolve(__dirname,'..');
 const read=file=>fs.readFileSync(path.join(root,file),'utf8');
 const migrationPath='supabase/migrations/20261013091838_finance_personal_income_batch_history_v1.sql';
 const migration=read(migrationPath);
 const identityMigration=read('supabase/migrations/20261012112652_finance_personal_history_identity_once_v1.sql');
+const strip=sql=>sql.replace(/^\\set ON_ERROR_STOP on\r?\n/,'');
+const nativePath=process.env.FINANCE_HISTORY_NATIVE_PG_CONFIG||process.env.FINANCE_NATIVE_PG_CONFIG;
+if(process.env.FINANCE_HISTORY_NATIVE_REQUIRED==='1'&&!nativePath)
+  throw Error('Native income batch history proof is required, but no private PostgreSQL config was supplied');
+const nativeConfig=nativePath?JSON.parse(fs.readFileSync(path.resolve(nativePath),'utf8')):null;
+if(nativeConfig&&!['127.0.0.1','::1','localhost'].includes(nativeConfig.host))
+  throw Error('Income batch history fixtures may only connect to loopback disposable PostgreSQL');
 const authorities=JSON.parse(read('scripts/fixtures/finance_history_identity_authorities_20261012.json'));
 const output=process.argv[2]?path.resolve(process.argv[2]):fs.mkdtempSync(path.join(os.tmpdir(),'finance-income-batch-sql-'));
 const uid=who.authUserId,sid='00000000-0000-0000-0000-000000000021',email='history.fixture@suiyuecare.com';
-const evidence={scope:'Local PGlite, actual source-pinned RPCs/identity authority, fictional records only',migration:migrationPath,checks:[]};
+const databaseName='finance_income_batch_'+crypto.randomUUID().replaceAll('-','');
+const evidence={scope:'Disposable local PostgreSQL, actual source-pinned RPCs/identity authority, fictional records only',migration:migrationPath,checks:[]};
 const check=name=>{evidence.checks.push(name);console.log('PASS '+name);};
 const sortedIds=item=>item.source_ids.slice().sort();
 const counts=item=>{
@@ -30,7 +39,7 @@ const counts=item=>{
   return value;
 };
 async function main(){
- const db=new PGlite();
+ let admin,client,pglite,db,createdDatabase=false;
  const summary=async(scope='all',limit=50,offset=0,search=null,env='test')=>(await db.query(
    'select public.finance_personal_document_summary_v1($1,$2,$3,$4,$5) result',[scope,limit,offset,search,env])).rows[0].result;
  const detail=async(key,env='test')=>(await db.query(
@@ -66,6 +75,17 @@ async function main(){
    check(name);
  };
  try{
+ if(nativeConfig){
+   admin=new Client(nativeConfig);await admin.connect();
+   for(const role of ['anon','authenticated','service_role'])
+     assert((await admin.query('select 1 from pg_roles where rolname=$1',[role])).rowCount,
+       'Native fixture role must already exist in the explicitly configured test service: '+role);
+   await admin.query('create database '+databaseName);createdDatabase=true;
+   client=new Client({...nativeConfig,database:databaseName});await client.connect();
+   db={query:(sql,args)=>client.query(sql,args),
+     exec:sql=>client.query(sql.replace(/create role (anon|authenticated|service_role);/g,''))};
+   evidence.engine='native PostgreSQL';
+ }else{pglite=new PGlite();db=pglite;evidence.engine='PGlite';}
   await createSummarySearchFixture(db);
   await db.exec(`
     alter table public.finance_users add column name text,add column role text default 'employee',
@@ -118,6 +138,9 @@ async function main(){
   await db.exec('begin;'+identityMigration+"\ninsert into supabase_migrations.schema_migrations(version,name) values('20261012112652','finance_personal_history_identity_once_v1');commit;");
   const beforeAuthority=await authority();
   assert.equal(beforeAuthority.find(x=>x.name==='private.finance_personal_document_authorized_v1').source_md5,'1db71550a2ec13ece520e25abb211e09');
+  await db.exec(strip(read('scripts/finance_personal_history_identity_once_postflight.sql')));
+  await db.exec(strip(read('scripts/finance_personal_history_postflight.sql')));
+  await db.exec(strip(read('scripts/finance_personal_income_batch_history_preflight.sql')));
   check('exact current identity-once migration and source/ACL baseline installed');
 
   for(let n=1;n<=4;n++){
@@ -149,8 +172,11 @@ async function main(){
   assert.equal((await detail('bills:B-A-1')).item.source_count,1);
   check('reproduced old failure: one bill submission is four personal list rows and singleton detail');
   const beforeRows=await businessFingerprint();
+  const phaseFingerprint=async()=>(await db.query(strip(read('scripts/finance_personal_income_batch_history_fingerprint.sql')))).rows[0].fingerprint;
+  const beforePhaseFingerprint=await phaseFingerprint();
   await db.exec('begin;'+migration+'\nrollback;');
   assert.deepEqual(await authority(),beforeAuthority);assert.equal(await businessFingerprint(),beforeRows);
+  assert.equal(await phaseFingerprint(),beforePhaseFingerprint);
   assert.deepEqual(await summary('mine'),before);
   check('populated migration rehearsal rolls back every function/ACL and leaves all business/projection/identity rows unchanged');
   for(const [name,sql] of [
@@ -176,6 +202,27 @@ async function main(){
     if(row.name.startsWith('private.'))assert.equal(after.source_md5,row.source_md5);
   }
   check('only two public RPC bodies change; private identity-once/page/actor helpers, all ACLs and business rows remain identical');
+  await assert.rejects(()=>db.exec(strip(read('scripts/finance_personal_history_identity_once_postflight.sql'))),e=>e.code==='55000');
+  await assert.rejects(()=>db.exec(strip(read('scripts/finance_personal_history_postflight.sql'))),e=>e.code==='P0001');
+  await assert.rejects(()=>db.exec(strip(read('scripts/finance_personal_income_batch_history_postflight.sql'))),e=>e.code==='55000');
+  check('old and new postflights reject new public bodies unless the exact new migration ledger is recorded');
+  await db.exec("insert into supabase_migrations.schema_migrations(version,name) values('20261013091838','finance_personal_income_batch_history_v1');");
+  await db.exec(strip(read('scripts/finance_personal_income_batch_history_postflight.sql')));
+  await db.exec(strip(read('scripts/finance_personal_history_identity_once_postflight.sql')));
+  await db.exec(strip(read('scripts/finance_personal_history_postflight.sql')));
+  check('new phase and version-aware prior postflights accept only exact new bodies while retaining identity/ACL/projection checks');
+  const beforeCanary=await phaseFingerprint();
+  await db.exec("select set_config('fixture.uid','',false)");
+  const canaryResults=await db.exec(read('scripts/finance_personal_income_batch_history_canary.sql'));
+  await db.exec("select set_config('fixture.uid','"+uid+"',false)");
+  assert.equal(await phaseFingerprint(),beforeCanary);
+  const results=Array.isArray(canaryResults)?canaryResults:[canaryResults];
+  const canary=results.flatMap(x=>x.rows||[]).find(x=>x.personal_income_batch_history_canary_result);
+  assert(canary,'actual canary result returned');
+  assert.deepEqual(canary.personal_income_batch_history_canary_result,{
+    canary:'readonly_personal_income_batch_history_v1',ok:true,rolled_back:true,
+    identity_scope_preserved:true,permission_guard_preserved:true,live_latency_proven:false});
+  check('actual read-only metadata/anonymous canary rolls back, preserves fingerprints and reports the protected release marker');
 
   const all=await summary(),mine=await summary('mine');
   const batch=mine.items.find(x=>x.record_type==='bills'&&x.batch_id==='BILLB-FICTION-4');
@@ -286,6 +333,11 @@ async function main(){
   evidence.sha256=crypto.createHash('sha256').update(migration).digest('hex');
   evidence.completedAt=new Date().toISOString();
   console.log('INCOME_BATCH_PERSONAL_HISTORY_CHECKS='+evidence.checks.length);
- } finally{await db.close();fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'evidence.json'),JSON.stringify(evidence,null,2));}
+ } finally{
+   if(client)await client.end();
+   if(admin){try{if(createdDatabase)await admin.query('drop database if exists '+databaseName);}finally{await admin.end();}}
+   if(pglite)await pglite.close();
+   fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'evidence.json'),JSON.stringify(evidence,null,2));
+ }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

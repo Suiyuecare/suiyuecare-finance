@@ -7,9 +7,14 @@ declare
   v_proc pg_catalog.pg_proc%rowtype;
   v_identity_once boolean;
   v_batch_history boolean;
+  v_income_batch_history boolean;
 begin
   v_identity_once:=exists(select 1 from supabase_migrations.schema_migrations where version='20261012112652' and name='finance_personal_history_identity_once_v1');
+  v_income_batch_history:=exists(select 1 from supabase_migrations.schema_migrations where version='20261013091838' and name='finance_personal_income_batch_history_v1');
   v_batch_history:=exists(select 1 from supabase_migrations.schema_migrations where version='20261010130000' and name='finance_personal_invoice_batch_history_v1');
+  if v_income_batch_history and (not v_identity_once or not v_batch_history) then
+    raise exception 'Personal income batch history prerequisites absent';
+  end if;
   if not exists (select 1 from supabase_migrations.schema_migrations
       where version = '20261008055528'
         and name = 'finance_personal_document_history_v1') then
@@ -44,7 +49,7 @@ begin
       raise exception 'Personal history owner/signature predicate drifted';
     end if;
     if v_signature like '%detail_v1%' and v_batch_history
-       and pg_catalog.md5(v_proc.prosrc) is distinct from '34989c18188536e079e63ff81370c2cf' then
+       and pg_catalog.md5(v_proc.prosrc) is distinct from (case when v_income_batch_history then '07b0d08b0dc4207b38bcae747e5624bb' else '34989c18188536e079e63ff81370c2cf' end) then
       raise exception 'Personal history complete batch detail source drifted';
     end if;
     if v_signature like '%detail_v1%' and not v_batch_history
@@ -56,7 +61,7 @@ begin
       raise exception 'Personal history detail key/scope predicate drifted';
     end if;
     if v_signature like '%summary_v1%' and v_batch_history
-       and pg_catalog.md5(v_proc.prosrc) is distinct from 'f68644d4f30ee10fd4b2bd76da4a2b83' then
+       and pg_catalog.md5(v_proc.prosrc) is distinct from (case when v_income_batch_history then '2af52ffb295bd15d59092f400dfd70f7' else 'f68644d4f30ee10fd4b2bd76da4a2b83' end) then
       raise exception 'Personal history complete batch summary source drifted';
     end if;
     if v_signature like '%summary_v1%' and not v_batch_history
