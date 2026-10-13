@@ -34,6 +34,33 @@ function setup(){
  vm.createContext(c);vm.runInContext(['approvalPendingInvoiceSummaryItems','approvalPendingBillSummaryItems','approvalPendingCandidateItems','approvalIncomeGroupOwnerIdentity','approvalBillCanonicalRows','openApprovalBillSummaryItem','openFinanceIncomeNotification','billCreatedBucket','billGroupKey','billGroupRows','billGroupTotal','billGroupCount','billGroupLeader','billGroupApprovalRows','invoiceGroupApprovalRows','approvalItemKey','approvalItemSourceTable','approvalSummaryItemsForRows','approvalRowsForSourceTable','approvalTrustedTaskStrictlyMatchesRow','approvalRecordsActionAvailability','approvalItemActionAvailability','approvalItemActionRows','approvalRowFormNo','approvalRowType','approvalRowAmount','approvalRowSummary','approvalRowStatus','renderApprList','approvalRowVersion','approvalExpectedStepIds','approvalExpectedVersionsValid','approvalValidatedExpectedSteps','billActiveStepTransaction'].map(n=>source(n)).join('\n'),c);
  return c;
 }
+function emailSetup(table='bills'){
+ const c=setup(),tenant='00000000-0000-0000-0000-000000000001';
+ c.financeAuthIdentityEpoch=1;c.S.page='dashboard';c.cleared=0;c.emailQueries=[];c.bootstrapCalls=0;c.legacyHydrateCalls=0;
+ c.BILLS.forEach(row=>{row.tenantId=tenant;row.dataEnv='production';});
+ if(table==='invoices'){
+  c.INVS=c.BILLS.slice(0,3).map((row,i)=>({...row,id:'I'+i,no:'INV-I'+i,total:row.amt}));c.BILLS=[];
+  c.summaries=[{...c.summaries[0],source_table:table,source_ids:['I0','I1','I2'],representative_source_id:'I0',task_ids:['task-I0','task-I1','task-I2']}];
+  c.tasks=c.tasks.slice(0,3).map((task,i)=>({...task,source_table:table,task_id:'task-I'+i,source_id:'I'+i}));
+  c.canActInvoice=()=>true;c.invoiceActiveApprovalStepKey=()=> 'accountant';
+  c.showInvApprD=(row,item)=>{c.invoiceOpened={row,item};};
+ }
+ c.originalRows=plain(table==='bills'?c.BILLS:c.INVS);const anchor=c.originalRows[1];
+ c.link={version:'2',sourceTable:table,sourceId:anchor.id,sourceGroupId:anchor.batchId,sourceNo:anchor.no,tenantId:tenant,dataEnvironment:'production'};
+ c.remoteRows=[{...anchor,amt:777,verified:false}];
+ c.pendingApprovalDeepLink=()=>c.link;c.clearApprovalDeepLinkIntent=()=>{c.cleared++;c.link=null;};
+ c.currentTenantId=()=>tenant;c.DATA_ENV_PRODUCTION='production';c.DATA_ENV_TEST='test';
+ c.rowTenantId=row=>row.tenantId||row.tenant_id;c.rowDataEnvironment=row=>row.dataEnv||row.data_environment;
+ c.mapBill=row=>({...row});c.mapInv=row=>({...row});c.canAccessPage=()=>c.pageAllowed!==false;
+ c.withOperationTimeout=async value=>await value;c.recordRemoteReadIssue=()=>{};c.alert=x=>{c.alerted=x;};
+ c.guardedNav=async page=>{if(c.navigate)await c.navigate();if(!c.cancelNavigation)c.S.page=page;};
+ c.hydrateApprovalDeepLinkRecord=async()=>{c.legacyHydrateCalls++;throw Error('income must not use old partial-cache hydrator');};
+ c.loadApprovalFastBootstrap=async()=>{c.bootstrapCalls++;if(c.bootstrap)return c.bootstrap();return{ok:true};};
+ c.getSb=()=>({from(table){const query={table,filters:[]};c.emailQueries.push(query);return{select(){return this;},eq(k,v){query.filters.push([k,v]);return this;},limit(n){query.limit=n;return this;},then(resolve,reject){return Promise.resolve(c.read?c.read():{data:c.remoteRows,error:null}).then(resolve,reject);}};}});
+ vm.runInContext(['approvalDeepLinkTenantId','approvalDeepLinkDataEnvironment','approvalDeepLinkScopeMatches','approvalDeepLinkRowMatches','approvalDeepLinkRecord','approvalDeepLinkRemoteRows','openIncomeApprovalDeepLink','openPendingApprovalDeepLink'].map(name=>source(name)).join('\n'),c);
+ return c;
+}
+function pause(){let resolve;const promise=new Promise(r=>{resolve=r;});return{promise,resolve};}
 (async()=>{
  let c=setup(),items=c.approvalPendingCandidateItems(c.BILLS.map(raw=>({kind:'bill',raw,rows:[raw]})));
  assert.equal(items.length,2);assert.deepEqual(plain(items.map(i=>i.rows.length)),[3,2]);assert(items.every(i=>c.approvalItemActionAvailability(i).ok));
@@ -61,5 +88,44 @@ function setup(){
 
  c=setup();c.INVS=c.BILLS.slice(0,3).map((r,i)=>({...r,id:'I'+i,no:'INV-I'+i,total:r.amt}));c.BILLS=[];c.summaries=[{...c.summaries[0],source_table:'invoices',source_ids:['I0','I1','I2'],representative_source_id:'I0',task_ids:['task-I0','task-I1','task-I2']}];c.tasks=c.tasks.slice(0,3).map((t,i)=>({...t,source_table:'invoices',task_id:'task-I'+i,source_id:'I'+i}));c.canActInvoice=()=>true;c.invoiceActiveApprovalStepKey=()=> 'accountant';c.showInvApprD=(row,item)=>{c.invoiceOpened={row,item};};assert(await c.openFinanceIncomeNotification('invoices',c.INVS[1],{}));assert.deepEqual(plain(c.invoiceOpened.item.rows.map(r=>r.id)),['I0','I1','I2']);pass('current invoice notification uses exact canonical group with all siblings');
  c=setup();c.summaries=[];let finishHistory;const historyWait=new Promise(r=>{finishHistory=r;});c.openApprovalTab=()=>historyWait;const historyLate=c.openFinanceIncomeNotification('bills',c.BILLS[0],{});await Promise.resolve();c.CURRENT_PERMISSION_SNAPSHOT={scope:'new-department'};finishHistory({ok:true});assert.equal(await historyLate,false);assert.equal(c.historyOpened,undefined);pass('scope change during history navigation prevents late detail opening');
+
+ for(const table of ['bills','invoices']){
+  c=emailSetup(table);const full=c.originalRows; if(table==='bills')c.BILLS=[full[1]];else c.INVS=[full[1]];
+  c.bootstrap=async()=>{if(table==='bills')c.BILLS=full;else c.INVS=full;return{ok:true};};
+  assert(await c.openPendingApprovalDeepLink({final:true}));assert.equal(c.cleared,1);assert.equal(c.legacyHydrateCalls,0);assert.equal(c.bootstrapCalls,1);
+  const rows=table==='bills'?c.opened.rows:c.invoiceOpened.item.rows;
+  assert.deepEqual(plain(rows.map(row=>row.id)),table==='bills'?['A0','A1','A2']:['I0','I1','I2']);assert.equal(rows.reduce((n,row)=>n+row.amt,0),303);
+  assert.equal(c.emailQueries.length,1);assert.equal(c.emailQueries[0].table,table);assert.equal(c.emailQueries[0].limit,1);
+  assert.deepEqual(plain(c.emailQueries[0].filters),[['tenant_id','00000000-0000-0000-0000-000000000001'],['data_environment','production'],['id',table==='bills'?'A1':'I1']]);
+ }pass('actual Email handler revalidates cached bill and invoice anchors, then opens exact full pending batches');
+ for(const table of ['bills','invoices']){
+  c=emailSetup(table);const first=c.originalRows[1],ids=c.originalRows.filter(row=>row.batchId==='A').map(row=>row.id);
+  c.summaries=[];if(table==='bills')c.BILLS=[first];else c.INVS=[first];
+  c.history={status:'ready',items:[{recordType:table,historyKey:table+':'+ids[0],historySourceIds:ids}]};
+  assert(await c.openPendingApprovalDeepLink({final:true}));assert.equal(c.historyOpened,table+':'+ids[0]);assert.equal(c.opened,undefined);assert.equal(c.invoiceOpened,undefined);assert.equal(c.legacyHydrateCalls,0);assert.equal(c.cleared,1);
+  assert.equal((table==='bills'?c.BILLS:c.INVS).length,1);assert.equal((table==='bills'?c.BILLS:c.INVS)[0].amt,101);
+ }pass('historical Email with one cached sibling uses participant history detail rather than singleton merge or modal');
+ c=emailSetup();c.BILLS.splice(0,1);assert.equal(await c.openPendingApprovalDeepLink({final:true}),false);assert.equal(c.opened,undefined);assert.equal(c.cleared,0);assert(c.link);pass('Email missing a canonical member preserves original intent without opening partial batch');
+ c=emailSetup();c.summaries=[];assert.equal(await c.openPendingApprovalDeepLink({final:true}),false);assert.equal(c.cleared,0);assert(c.link);assert.equal(c.opened,undefined);pass('unavailable historical Email keeps original pending link for safe retry');
+ for(const change of [{id:'other'},{no:'other'},{batchId:'other'},{tenantId:'00000000-0000-0000-0000-000000000002'},{dataEnv:'test'}]){
+  c=emailSetup();Object.assign(c.remoteRows[0],change);assert.equal(await c.openPendingApprovalDeepLink({final:true}),false);assert.equal(c.cleared,0);assert.equal(c.bootstrapCalls,0);assert.equal(c.opened,undefined);
+ }pass('Email immutable ID, displayed number, batch, tenant and environment must all match current authorized source');
+ for(const response of [{data:[],error:null},{data:null,error:{code:'42501',message:'denied'}},{data:null,error:{code:'57014',message:'timeout'}}]){
+  c=emailSetup();c.read=()=>response;assert.equal(await c.openPendingApprovalDeepLink({final:true}),false);assert.equal(c.cleared,0);assert.equal(c.bootstrapCalls,0);assert(c.link);
+ }pass('Email denied, missing and timed-out source keeps intent and cannot fall back to cached private data');
+ c=emailSetup();c.link.version='1';c.link.sourceId='';c.link.sourceGroupId='';assert(await c.openPendingApprovalDeepLink({final:true}));assert.equal(c.emailQueries[0].limit,2);assert.deepEqual(plain(c.emailQueries[0].filters[2]),['no','BILL-A1']);
+ c=emailSetup();c.link.sourceId='';c.remoteRows.push({...c.remoteRows[0],id:'ambiguous'});assert.equal(await c.openPendingApprovalDeepLink({final:true}),false);assert.equal(c.cleared,0);pass('legacy Email number lookup remains scoped and refuses ambiguous sources');
+ for(const mutate of [ctx=>{ctx.owner='person-b';},ctx=>{ctx.CURRENT_PERMISSION_SNAPSHOT={scope:'revoked'};},ctx=>{ctx.financeAuthIdentityEpoch++;},ctx=>{ctx.financeWorkspaceIdentityBlocked=true;}]){
+  c=emailSetup();const wait=pause();c.read=()=>wait.promise;const opening=c.openPendingApprovalDeepLink({final:true});mutate(c);wait.resolve({data:c.remoteRows,error:null});assert.equal(await opening,false);assert.equal(c.cleared,0);assert.equal(c.bootstrapCalls,0);assert.equal(c.opened,undefined);assert.equal(c.BILLS[1].amt,101);
+ }pass('Email late source responses cannot merge, open or consume intent after account, scope, session or suspension changes');
+ for(const stage of ['navigation','bootstrap','history']){
+  c=emailSetup();const started=pause(),wait=pause();const block=()=>{started.resolve();return wait.promise;};
+  if(stage==='navigation')c.navigate=block;else if(stage==='bootstrap')c.bootstrap=block;else{c.summaries=[];c.history={status:'ready',items:[{recordType:'bills',historyKey:'bills:A0',historySourceIds:['A0','A1','A2']}]};c.openApprovalTab=block;}
+  const opening=c.openPendingApprovalDeepLink({final:true});await started.promise;c.CURRENT_PERMISSION_SNAPSHOT={scope:'changed-during-'+stage};wait.resolve({ok:true});assert.equal(await opening,false);assert.equal(c.cleared,0);assert.equal(c.opened,undefined);assert.equal(c.historyOpened,undefined);
+ }pass('Email permission changes during navigation, pending load and history lookup block every late open');
+ c=emailSetup();const started=pause(),wait=pause();c.bootstrap=()=>{started.resolve();return wait.promise;};const sessionOpening=c.openPendingApprovalDeepLink({final:true});await started.promise;c.financeAuthIdentityEpoch++;wait.resolve({ok:true});assert.equal(await sessionOpening,false);assert.equal(c.opened,undefined);assert.equal(c.cleared,0);pass('Email session epoch guard reaches shared batch opener during bootstrap');
+ c=emailSetup();c.cancelNavigation=true;assert.equal(await c.openPendingApprovalDeepLink({final:true}),false);assert.equal(c.cleared,0);assert.equal(c.bootstrapCalls,0);assert.equal(c.opened,undefined);pass('cancelled dirty-form navigation preserves Email intent and does not open a modal over the draft');
+ for(const change of [ctx=>{ctx.pageAllowed=false;},ctx=>{ctx.link.tenantId='00000000-0000-0000-0000-000000000002';},ctx=>{ctx.link.dataEnvironment='test';}]){c=emailSetup();change(c);assert.equal(await c.openPendingApprovalDeepLink({final:true}),false);assert.equal(c.emailQueries.length,0);assert.equal(c.cleared,0);assert(c.link);}pass('Email initial role or scope denial keeps the original intent and performs no reads');
+ c=emailSetup();c.read=()=>Promise.reject(Error('network'));assert.equal(await c.openPendingApprovalDeepLink({final:true}),false);assert.equal(c.cleared,0);c=emailSetup();c.bootstrap=()=>Promise.reject(Error('network'));assert.equal(await c.openPendingApprovalDeepLink({final:true}),false);assert.equal(c.cleared,0);pass('Email network rejection at either read layer is retryable and does not consume link');
  console.log(checks+' bill pending canonical behavior groups passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});
