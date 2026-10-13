@@ -534,3 +534,13 @@ supabase/.temp
 !scripts/check_deferred_document_startup_20261013.cjs
 !scripts/check_deferred_document_startup_browser_20261013.cjs
 !docs/finance-deferred-document-startup-20261013.md
+
+# Complete income batches and sealed release gates.
+!scripts/check_income_batch_history_frontend_20261013.cjs
+!scripts/check_income_batch_history_browser_20261013.cjs
+!scripts/check_bill_pending_canonical_20261013.cjs
+!scripts/check_finance_personal_income_batch_history_20261013.cjs
+!scripts/finance_personal_income_batch_history_preflight.sql
+!scripts/finance_personal_income_batch_history_postflight.sql
+!scripts/finance_personal_income_batch_history_fingerprint.sql
+!scripts/finance_personal_income_batch_history_canary.sql
