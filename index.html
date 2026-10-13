@@ -29712,7 +29712,7 @@ function renderApprList(data){
       +approvalWaitCellHtml(item)
       +'</tr>';
   }).join('');
-  l.innerHTML='<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table compact">'+approvalTableHeaderHtml()+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(total,page,pages)+'</div>';
+  l.innerHTML='<div class="card"><div class="finance-detail-scroll approval-worklist-scroll" tabindex="0" role="region" aria-label="簽核清單，可左右捲動"><table class="approval-table finance-list-table compact approval-worklist-table">'+approvalTableHeaderHtml()+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(total,page,pages)+'</div>';
   refreshApprovalBulkCount();
   syncApprovalWaitTimer();
 }
@@ -29745,7 +29745,7 @@ function renderApprDraftList(){
       +'<td class="appr-col-payDate date-cell" style="color:#94a3b8">'+escAttr(approvalShortDate(fields['nr-paydate']||'—'))+'</td>'
       +'</tr>';
   }).join('');
-  l.innerHTML=statusHtml+'<div class="card"><div style="overflow-x:auto"><table class="approval-table finance-list-table compact">'+approvalTableHeaderHtml()+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(total,page,pages,!statusHtml)+'</div>';
+  l.innerHTML=statusHtml+'<div class="card"><div class="finance-detail-scroll approval-worklist-scroll" tabindex="0" role="region" aria-label="草稿清單，可左右捲動"><table class="approval-table finance-list-table compact approval-worklist-table">'+approvalTableHeaderHtml()+'<tbody>'+rows+'</tbody></table></div>'+approvalPagerHtml(total,page,pages,!statusHtml)+'</div>';
 }
 window.openApprovalDraft=function(id){
   var d=(DRAFTS||[]).find(function(x){return x.id===id;});
