@@ -182,6 +182,7 @@ jobs:
           pnpm test:personal-bill-batch-history-browser
           pnpm test:bill-form-attachments-browser
           pnpm test:applicant-history-withdraw-browser
+          pnpm test:finance-oauth-account-guard-browser
           pnpm test:personnel-workspace-browser
           pnpm test:history-search-browser
           pnpm test:deferred-startup-browser
@@ -195,6 +196,15 @@ jobs:
           pnpm test:finance-ui-interactions
           pnpm test:audit-controls-native-concurrency
           pnpm test:audit-controls-browser-20260927
+
+      - name: Retain fictional OAuth account boundary evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: finance-oauth-account-guard-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/finance-oauth-account-guard-browser-20261013
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Retain fictional searchable-select evidence even on failure
         if: always()
