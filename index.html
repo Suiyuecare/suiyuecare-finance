@@ -9442,7 +9442,11 @@ function approvalHistoryModalIdentity(){
   return JSON.stringify([approvalFastBootstrapIdentity(),S.user.id,activeDataEnvironment(),typeof normalizedRoleKey==='function'?normalizedRoleKey(S.user):S.user.role||'',typeof CURRENT_PERMISSION_SNAPSHOT==='undefined'?null:CURRENT_PERMISSION_SNAPSHOT]);
 }
 function cancelApprovalHistoryDetail(clearModal){
-  if(clearModal)APPROVAL_HISTORY_MODAL_CONTEXT=null;
+  if(clearModal){
+    var batchController=APPROVAL_HISTORY_MODAL_CONTEXT&&APPROVAL_HISTORY_MODAL_CONTEXT.withdrawalController;
+    if(batchController){try{batchController.abort();}catch(_){} }
+    APPROVAL_HISTORY_MODAL_CONTEXT=null;
+  }
   var state=APPROVAL_HISTORY_DETAIL_RUNTIME;
   if(state.controller){try{state.controller.abort();}catch(_){} }
   APPROVAL_HISTORY_DETAIL_RUNTIME={seq:state.seq+1,identity:'',key:'',status:'idle',promise:null,controller:null,context:null};
@@ -9517,6 +9521,29 @@ async function verifyApprovalHistoryWithdrawalBatch(ctx,rows,controller){
     });
     ctx.withdrawalBatchVerified=valid;
   }catch(error){console.warn('Applicant withdrawal batch check unavailable',String(error&&error.code||'read_failed'));}
+}
+function startApprovalHistoryWithdrawalCheck(ctx,rows,record){
+  if(ctx.kind==='req')return;
+  var eligible=ctx.personallyApplied&&rows.length&&rows.every(function(row){
+    return String(row.applicantId||'')===String(S.user&&S.user.id||'')
+      &&row.status==='unpaid'&&String(row.approvalStatus||'').indexOf('pending')===0
+      &&!row.paidAt&&!row.voidedAt;
+  });
+  if(!eligible)return;
+  ctx.withdrawalBatchChecking=true;
+  ctx.withdrawalController=typeof AbortController!=='undefined'?new AbortController():null;
+  var refresh=function(){
+    if(APPROVAL_HISTORY_MODAL_CONTEXT!==ctx||ctx.identity!==approvalHistoryModalIdentity()||!approvalHistoryPageAllowed())return;
+    var host=el('appr-inner'),section=host&&host.querySelector('[data-applicant-withdraw]');
+    if(!section)return;
+    var focused=section.contains(document.activeElement);
+    section.outerHTML=incomeApplicantWithdrawButtonHtml(ctx.kind==='bill'?'bill':'invoice',record,true);
+    if(focused){var next=host.querySelector('[data-applicant-withdraw]');if(next)next.focus({preventScroll:true});}
+  };
+  refresh();
+  ctx.withdrawalPromise=verifyApprovalHistoryWithdrawalBatch(ctx,rows,ctx.withdrawalController).finally(function(){
+    ctx.withdrawalBatchChecking=false;ctx.withdrawalController=null;refresh();
+  });
 }
 async function openApprovalHistoryWithdrawal(key){
   var result=await openApprovalHistoryItem(key);
@@ -9601,7 +9628,7 @@ function openApprovalHistoryItem(key){
     var operation=client.rpc('finance_personal_document_detail_v1',{p_history_key:key,p_data_environment:activeDataEnvironment()});
     if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
     return withOperationTimeout(operation,'個人單據明細',30000);
-  }).then(async function(result){
+  }).then(function(result){
     if(approvalHistoryRejectDeniedResponse(owner,list,seq,state))return {ok:false,forbidden:true};
     if(!current())return {ok:false,stale:true};
     if(result&&result.error)throw result.error;
@@ -9634,11 +9661,10 @@ function openApprovalHistoryItem(key){
     APPROVAL_HISTORY_MODAL_CONTEXT={identity:approvalHistoryModalIdentity(),kind:table==='expense_requests'?'req':table==='bills'?'bill':'inv',ids:ids,sourceFingerprint:JSON.stringify(raw),
       personallyApplied:entry.personally_applied===true,sourceFingerprints:rows.reduce(function(all,row){all[String(row.id)]=JSON.stringify(row);return all;},{})};
     var modalContext=APPROVAL_HISTORY_MODAL_CONTEXT;
-    if(table!=='expense_requests')await verifyApprovalHistoryWithdrawalBatch(modalContext,rows,controller);
-    if(!current()||APPROVAL_HISTORY_MODAL_CONTEXT!==modalContext)return {ok:false,stale:true};
     var item={kind:entry.kind,raw:raw,rows:rows,historyTrusted:true,historyKey:key,historyParticipantSteps:entry.participant_steps};
     state.status='ready';approvalHistoryDetailFeedback(key,'',false);
     openApprovalFullItem(item,key);
+    startApprovalHistoryWithdrawalCheck(modalContext,rows,raw);
     return {ok:true,item:item};
   }).catch(function(error){
     if(approvalHistoryRejectDeniedResponse(owner,list,seq,state))return {ok:false,forbidden:true};
@@ -14647,18 +14673,6 @@ function incomeApplicantWithdrawAvailability(kind,record){
   }
   var historyReadOnly=approvalHistoryBatchReadOnly(isBill?'bill':'inv',record);
   var historyRows=historyReadOnly?approvalHistoryWithdrawalRows(isBill?'bill':'inv',record):null;
-  if(historyReadOnly&&!historyRows){
-    return{ok:false,reason:'整批單據或最新內容尚未確認，請重新開啟明細；同批進度不同時須由會計確認，不能只抽回部分。',rows:rows};
-  }
-  var table=isBill?'bills':'invoices';
-  var groupingPossible=isBill?billGroupKey(record).indexOf('bill:')!==0:invoiceGroupKey(record).indexOf('inv:')!==0;
-  if(groupingPossible&&!historyRows&&!approvalSourceTableComplete(table)
-    &&(!isBill||!record.batchId||rows.some(function(row){return num(row.batchCount)<=0;}))){
-    return{ok:false,reason:'整批單據尚未確認全部載齊，請重新整理後再試',rows:rows};
-  }
-  if(isBill&&rows.some(function(row){return num(row.batchCount)>0&&num(row.batchCount)!==rows.length;})){
-    return{ok:false,reason:'整批繳費單明細尚未載齊，請重新整理後再試',rows:rows};
-  }
   if(rows.some(function(row){
     var approval=String(row.approvalStatus||'').toLowerCase();
     var status=String(row.status||'').toLowerCase();
@@ -14677,6 +14691,18 @@ function incomeApplicantWithdrawAvailability(kind,record){
     if(row.receiptFiles&&row.receiptFiles.length)return true;
     return false;
   }))return{ok:false,reason:isBill?'單據已核准、連結發票或開始收款，請洽會計確認後續處理':'發票已開立、交付或進入收款，請洽會計確認作廢或沖銷',rows:rows};
+  if(historyReadOnly&&!historyRows){
+    return{ok:false,reason:APPROVAL_HISTORY_MODAL_CONTEXT.withdrawalBatchChecking?'正在確認整批單據，確認完成後即可抽單。':'整批單據或最新內容尚未確認，請重新開啟明細；同批進度不同時須由會計確認，不能只抽回部分。',rows:rows};
+  }
+  var table=isBill?'bills':'invoices';
+  var groupingPossible=isBill?billGroupKey(record).indexOf('bill:')!==0:invoiceGroupKey(record).indexOf('inv:')!==0;
+  if(groupingPossible&&!historyRows&&!approvalSourceTableComplete(table)
+    &&(!isBill||!record.batchId||rows.some(function(row){return num(row.batchCount)<=0;}))){
+    return{ok:false,reason:'整批單據尚未確認全部載齊，請重新整理後再試',rows:rows};
+  }
+  if(isBill&&rows.some(function(row){return num(row.batchCount)>0&&num(row.batchCount)!==rows.length;})){
+    return{ok:false,reason:'整批繳費單明細尚未載齊，請重新整理後再試',rows:rows};
+  }
   if(S.demoLogin)return{ok:false,reason:'示範模式不會變更正式單據',rows:rows};
   if(!hasSupabase())return{ok:false,reason:'正式資料服務尚未連線，請重新整理後再試',rows:rows};
   if(!approvalHardSafetyReady())return{ok:false,reason:'登入與資料權限正在確認，請稍後再試',rows:rows};
