@@ -6,6 +6,7 @@
 
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 | --- | --- | --- | --- | --- |
+| 簽核清單欄寬 | approval-worklist-table / approval-worklist-scroll | finance-core.css；renderApprList / renderApprDraftList | 桌機和平板固定欄寬、長單號欄內換行；空間不足只捲動表格；手機沿用 mobile-ux-engine 卡片 | 長批次繳費／發票單號、金額完整、待辦／出納／歷史、Chromium／WebKit 多尺寸 |
 | 人員可見範圍 | visiblePersonnelUsers() | index.html 既有資料載入與 canAccessPage('users') | 沿用已授權目錄；不擴張後端讀取範圍 | 真 index 人資／唯讀／撤權瀏覽器檢查 |
 | 人員變更 | openEditU / toggleU / deleteUserAccount | index.html reliable RPC、member.role.manage 與原離職交接 guard | UI callback 只觸發一次；新人須新增後交接 | personnel-save 與 workspace 實際 handler 驗收 |
 | 身分及登入狀態 | Google health / presentation helpers | index.html normalizeFinanceGoogleLoginHealth | 啟用、綁定、待新帳號驗證、未知與失敗分開顯示 | 六種狀態、未綁定、唯讀與換身分瀏覽器檢查 |

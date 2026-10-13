@@ -4734,6 +4734,24 @@ input:focus,select:focus,textarea:focus{
 .draft-load-status[data-draft-state="error"]{border-color:#e9bb8e;background:#fff8ed}
 .draft-load-status button{min-height:44px!important;min-width:44px!important;flex-shrink:0}
 
+/* Worklist geometry is independent of identifier length. Keep the existing
+   phone-card owner; only desktop/tablet tables use bounded column widths. */
+#pg-approvals .approval-worklist-scroll{width:100%;contain:inline-size}
+@media(min-width:761px){
+  #pg-approvals .approval-worklist-table{width:100%!important;min-width:1240px!important;table-layout:fixed!important}
+  #pg-approvals .approval-worklist-table .appr-col-select{width:64px}
+  #pg-approvals .approval-worklist-table .appr-col-formNo{width:224px}
+  #pg-approvals .approval-worklist-table .appr-col-dept{width:144px}
+  #pg-approvals .approval-worklist-table .appr-col-applicant{width:96px}
+  #pg-approvals .approval-worklist-table .appr-col-amount{width:128px}
+  #pg-approvals .approval-worklist-table .appr-col-applyDate{width:92px}
+  #pg-approvals .approval-worklist-table .appr-col-payDate,#pg-approvals .approval-worklist-table .appr-col-actionDate{width:104px}
+  #pg-approvals .approval-worklist-table .appr-col-waitTime{width:112px}
+  #pg-approvals .approval-worklist-table .approval-form-number{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+  #pg-approvals .approval-worklist-table :is(.appr-col-amount,.appr-col-applyDate,.appr-col-payDate,.appr-col-actionDate,.appr-col-waitTime){white-space:nowrap!important;word-break:normal;font-variant-numeric:tabular-nums}
+  #pg-approvals .approval-worklist-table .summary-cell{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden!important;max-height:4.5em!important}
+}
+
 /* Keep summary columns legible inside the horizontal mobile table. */
 #pg-approvals .approval-history-summary-table .appr-col-select{width:100px!important}
 #pg-approvals .approval-history-summary-table .appr-col-purpose{width:312px!important}
