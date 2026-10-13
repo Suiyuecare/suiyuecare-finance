@@ -4072,11 +4072,11 @@ function expenseAttachmentFailureDiagnostic(error,stage,correlationId){
   var allowedStages={source_read:true,bundle_prepare:true,refund_excel_prepare:true,request_upload:true,passbook_upload:true,upload_preflight:true,draft_promotion_read:true,metadata_write:true,signed_read:true,upload_identity:true};
   var reasonStages={attachment_read_failed:'source_read',attachment_preflight_failed:'upload_preflight',file_type_not_allowed:'upload_preflight',file_too_large:'upload_preflight',archive_promotion_read_failed:'draft_promotion_read',archive_promotion_empty:'draft_promotion_read',metadata_insert_failed:'metadata_write',metadata_insert_cleanup_failed:'metadata_write',signed_url_failed:'signed_read',signed_url_cleanup_failed:'signed_read',attachment_upload_identity_changed:'upload_identity',resumable_auth_required:'upload_identity'};
   var allowedNames={NotReadableError:true,NotFoundError:true,SecurityError:true,AbortError:true,InvalidStateError:true,QuotaExceededError:true,EncodingError:true,TypeError:true,NetworkError:true};
-  var diagnostic={stage:allowedStages[stage]?stage:'source_read',errorName:'Error',errorCode:'UNKNOWN_ATTACHMENT_ERROR',correlationId:/^expense_submit_[a-f0-9-]{36}$/i.test(String(correlationId||''))?String(correlationId):'expense_attachment_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10)};
+  var diagnostic={stage:Object.prototype.hasOwnProperty.call(allowedStages,stage)?stage:'source_read',errorName:'Error',errorCode:'UNKNOWN_ATTACHMENT_ERROR',correlationId:/^expense_submit_[a-f0-9-]{36}$/i.test(String(correlationId||''))?String(correlationId):'expense_attachment_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10)};
   var current=error;
   for(var depth=0;current&&depth<5;depth++){
-    if(reasonStages[current.reason])diagnostic.stage=reasonStages[current.reason];
-    if(allowedNames[current.name])diagnostic.errorName=current.name;
+    if(Object.prototype.hasOwnProperty.call(reasonStages,current.reason))diagnostic.stage=reasonStages[current.reason];
+    if(Object.prototype.hasOwnProperty.call(allowedNames,current.name))diagnostic.errorName=current.name;
     var code=String(current.code==null?'':current.code);
     if(/^\d{1,5}$/.test(code)||['CLIENT_TIMEOUT','CLIENT_CANCELLED'].indexOf(code)>-1)diagnostic.errorCode=code;
     current=current.sourceError||current.cause;

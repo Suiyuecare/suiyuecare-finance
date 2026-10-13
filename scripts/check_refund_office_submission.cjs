@@ -118,6 +118,15 @@ async function run(){
   if(options.failNativeRead||options.unreadableReference)check('NotReadableError yields actionable reselection without discarding form',meta.errorName==='NotReadableError'&&f.trace.alerts.some(m=>m.includes('重新選取')&&m.includes('保留')));
   if(options.savedDraft)check('failed promotion never deletes original draft objects',f.draftPaths.every(p=>f.objects.has(p))&&!f.trace.removed.some(p=>f.draftPaths.includes(p)));
  }
+ const diagnosticFixture=fixture(),diagnosticId='expense_submit_00000000-0000-4000-8000-000000000777';
+ for(const inheritedKey of ['constructor','__proto__','toString']){
+  const unknown=JSON.parse(JSON.stringify(diagnosticFixture.c.expenseAttachmentFailureDiagnostic({name:inheritedKey,reason:inheritedKey},inheritedKey,diagnosticId)));
+  check('inherited keys never bypass stage/name/reason allowlists',unknown.stage==='source_read'&&unknown.errorName==='Error'&&Object.keys(unknown).sort().join('|')==='correlationId|errorCode|errorName|stage');
+  const mapped=diagnosticFixture.c.expenseAttachmentFailureDiagnostic({reason:'attachment_preflight_failed',cause:{name:inheritedKey,reason:inheritedKey}},'request_upload',diagnosticId);
+  check('nested inherited reason/name cannot overwrite a valid mapped stage',mapped.stage==='upload_preflight'&&mapped.errorName==='Error');
+  const readable=diagnosticFixture.c.expenseAttachmentFailureDiagnostic({name:inheritedKey,reason:inheritedKey,sourceError:{name:'NotReadableError'}},'request_upload',diagnosticId);
+  check('valid nested DOM identity remains traceable after rejected inherited keys',readable.stage==='request_upload'&&readable.errorName==='NotReadableError');
+ }
  const denied=fixture({notificationDenied:true});await denied.c.submitNR();
  check('genuine required contract denial still blocks before uploading',denied.trace.dispatches.length===0&&denied.trace.uploads.length===0&&denied.trace.events.some(e=>e[0]==='submit_preflight'&&e[1]==='critical'));
  const brokenLogger=fixture({excelFails:true});brokenLogger.c.recordOpsEvent=(...args)=>{if(args[0]==='expense_attachment_preparation_failed')throw Error('fictional diagnostic unavailable');brokenLogger.trace.events.push(args);return{id:'fictional-event'};};await brokenLogger.c.submitNR();check('diagnostic transport cannot break preserved failure UI',brokenLogger.trace.dispatches.length===0&&!brokenLogger.c.S.nrSubmitting&&brokenLogger.trace.alerts.some(m=>m.includes('事件識別')));
