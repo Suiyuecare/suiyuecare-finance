@@ -204,6 +204,9 @@ supabase/.temp
 
 # Bill attachment regression checks retained in the sealed source.
 !scripts/check_bill_approval_attachment_flow.cjs
+!scripts/check_bill_form_attachments_20261013.cjs
+!scripts/check_bill_form_attachments_browser_20261013.cjs
+!scripts/check_applicant_history_withdraw_browser_20261013.cjs
 !scripts/check_attachment_experience_20261002.cjs
 !scripts/check_formal_resumable_upload.cjs
 !scripts/check_refund_office_submission.cjs
