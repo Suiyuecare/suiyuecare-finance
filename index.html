@@ -15201,6 +15201,13 @@ async function enterByEmail(email,opts){
     showFinanceLoginAccountGuidance({expectedEmail:expectedEmail,actualEmail:loginEmail,state:'mismatch'});
     return false;
   }
+  // Every entry path must honor the current account selection before linking
+  // an identity or reading a Finance profile, including restored sessions.
+  if(expectedEmail&&loginEmail!==expectedEmail){
+    await showFinanceOAuthFailure('oauth_email_match','account_mismatch','Finance 收到的 Google 帳號與入口網指定帳號不同。',{expectedEmail:expectedEmail,actualEmail:loginEmail});
+    try{await client.auth.signOut({scope:'local'});}catch(expectedSignOutErr){console.warn('Finance expected account sign out failed:',expectedSignOutErr);}
+    return false;
+  }
   var completedLink=await completeCurrentGoogleAccountLinkV2();
   if(completedLink.transient){
     showFinanceLoginServiceUnavailable();
@@ -16000,7 +16007,9 @@ async function bootAuthGate(){
     }
     var handled=await handleOAuthReturn();
     if(handled&&S.user)return true;
-    if(!S.user){
+    // A handled callback can be a failure. Never hide it by entering an older
+    // session that survived an exchange, provider or local-storage error.
+    if(!handled&&!S.user){
       var sess=await currentSupabaseSession();
       var email=sess&&sess.user?supabaseAuthUserPreferredEmail(sess.user):'';
       if(email){

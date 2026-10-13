@@ -89,6 +89,8 @@ scripts/*
 !scripts/check_income_reconcile_migration.cjs
 !scripts/check_release_artifact.js
 !scripts/check_finance_login_account_switch_contract.js
+!scripts/check_finance_oauth_account_guard_20261013.cjs
+!scripts/check_finance_oauth_account_guard_browser_20261013.cjs
 !scripts/check_receipt_attachment_dedup_and_labor_tax.js
 !scripts/check_finance_production_release_contract.js
 !scripts/finance_production_release_guard.js
