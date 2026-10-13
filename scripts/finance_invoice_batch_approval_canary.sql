@@ -9,6 +9,8 @@ declare
   v_refresh oid := pg_catalog.to_regprocedure('private.finance_refresh_invoice_batch_approval_notification_v1()')::oid;
   v_history_summary oid := pg_catalog.to_regprocedure('public.finance_personal_document_summary_v1(text,integer,integer,text,text)')::oid;
   v_history_detail oid := pg_catalog.to_regprocedure('public.finance_personal_document_detail_v1(text,text)')::oid;
+  v_income_batch_history boolean := exists(select 1 from supabase_migrations.schema_migrations
+    where version='20261013091838' and name='finance_personal_income_batch_history_v1');
 begin
   if auth.uid() is not null or v_enqueue is null or v_refresh is null
      or v_history_summary is null or v_history_detail is null
@@ -23,7 +25,7 @@ begin
          and pg_catalog.pg_get_userbyid(p.proowner)='postgres'
          and p.prosecdef and p.provolatile='s'
          and p.proconfig=array['search_path=""']::text[]
-         and pg_catalog.md5(p.prosrc)='f68644d4f30ee10fd4b2bd76da4a2b83'
+         and pg_catalog.md5(p.prosrc)=(case when v_income_batch_history then '2af52ffb295bd15d59092f400dfd70f7' else 'f68644d4f30ee10fd4b2bd76da4a2b83' end)
      )
      or not exists (
        select 1 from pg_catalog.pg_proc p
@@ -31,7 +33,7 @@ begin
          and pg_catalog.pg_get_userbyid(p.proowner)='postgres'
          and p.prosecdef and p.provolatile='s'
          and p.proconfig=array['search_path=""']::text[]
-         and pg_catalog.md5(p.prosrc)='34989c18188536e079e63ff81370c2cf'
+         and pg_catalog.md5(p.prosrc)=(case when v_income_batch_history then '07b0d08b0dc4207b38bcae747e5624bb' else '34989c18188536e079e63ff81370c2cf' end)
      )
      or pg_catalog.has_function_privilege('anon',v_history_summary,'EXECUTE')
      or pg_catalog.has_function_privilege('anon',v_history_detail,'EXECUTE')

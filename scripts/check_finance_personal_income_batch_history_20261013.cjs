@@ -74,6 +74,19 @@ async function main(){
    finally{await db.exec('rollback;');}
    check(name);
  };
+ const metadataFingerprint=async()=>(await db.query(strip(read('scripts/finance_invoice_batch_approval_fingerprint.sql')))).rows[0].fingerprint;
+ const compatibleRecoveryGates=async(stage)=>{
+   const before=await metadataFingerprint();
+   await db.exec(strip(read('scripts/finance_invoice_batch_approval_postflight.sql')));
+   await db.exec("select set_config('fixture.uid','',false)");
+   try{
+     await db.exec(read('scripts/finance_invoice_batch_approval_canary.sql'));
+     await db.exec(read('scripts/finance_personal_history_identity_once_canary.sql'));
+   }catch(error){await db.exec('rollback;');throw error;}
+   finally{await db.exec("select set_config('fixture.uid','"+uid+"',false)");}
+   assert.equal(await metadataFingerprint(),before);
+   check(stage+' recorded-phase recovery postflight and both read-only canaries preserve exact notification/trigger/identity source and ACLs');
+ };
  try{
  if(nativeConfig){
    admin=new Client(nativeConfig);await admin.connect();
@@ -136,6 +149,33 @@ async function main(){
       await db.exec('grant execute on function '+signature+' to authenticated;');
   }
   await db.exec('begin;'+identityMigration+"\ninsert into supabase_migrations.schema_migrations(version,name) values('20261012112652','finance_personal_history_identity_once_v1');commit;");
+  // Install the real metadata-only notification baseline required by older
+  // recovery gates. The enqueue body comes from the existing source fixture,
+  // never a stub that bypasses its sealed source checks. All fixture invoices
+  // use test environment, so no notification delivery writer is exercised.
+  const cascades=JSON.parse(read('scripts/fixtures/finance_statement_source_cascades_20260913.json'));
+  const enqueueDefinitions=[];
+  const collect=value=>{
+    if(typeof value==='string'&&value.startsWith('CREATE OR REPLACE FUNCTION private.finance_enqueue_current_approval_email()'))enqueueDefinitions.push(value);
+    else if(Array.isArray(value))value.forEach(collect);
+    else if(value&&typeof value==='object')Object.values(value).forEach(collect);
+  };
+  collect(cascades);
+  const enqueue=Array.from(new Set(enqueueDefinitions));assert.equal(enqueue.length,1);
+  assert.equal(crypto.createHash('md5').update(enqueue[0].match(/AS \$function\$([\s\S]*?)\$function\$/)[1]).digest('hex'),'ebae3a8045744a11bfa2892f04d80f2f');
+  await db.exec(`
+    alter table public.invoices add column if not exists approval_step integer;
+    create table public.notification_delivery_events(id text primary key,tenant_id uuid,
+      data_environment text,event_type text,status text,payload jsonb,request_id text,title text,body text);
+    create table private.approval_notification_assignment_state(tenant_id uuid,data_environment text,
+      source_table text,source_group_id text,notification_event_id text,source_record_id text,recipient_finance_user_id text);
+  `);
+  await db.exec(enqueue[0]);
+  await db.exec(`create trigger trg_invoices_enqueue_approval_email after insert or update on public.invoices
+    for each row execute function private.finance_enqueue_current_approval_email();`);
+  await db.exec('begin;'+read('supabase/migrations/20261010120000_finance_invoice_batch_approval_notification_v1.sql')+
+    "\ninsert into supabase_migrations.schema_migrations(version,name) values('20261010120000','finance_invoice_batch_approval_notification_v1');commit;");
+  await compatibleRecoveryGates('old baseline');
   const beforeAuthority=await authority();
   assert.equal(beforeAuthority.find(x=>x.name==='private.finance_personal_document_authorized_v1').source_md5,'1db71550a2ec13ece520e25abb211e09');
   await db.exec(strip(read('scripts/finance_personal_history_identity_once_postflight.sql')));
@@ -174,6 +214,38 @@ async function main(){
   const beforeRows=await businessFingerprint();
   const phaseFingerprint=async()=>(await db.query(strip(read('scripts/finance_personal_income_batch_history_fingerprint.sql')))).rows[0].fingerprint;
   const beforePhaseFingerprint=await phaseFingerprint();
+  const guardPath=process.env.FINANCE_HISTORY_RELEASE_GUARD_PATH
+    ?path.resolve(process.env.FINANCE_HISTORY_RELEASE_GUARD_PATH):path.join(root,'scripts/finance_production_release_guard.js');
+  const guard=require(guardPath);
+  if(typeof guard.preparePersonalIncomeBatchHistoryRehearsal==='function'){
+    fs.mkdirSync(output,{recursive:true});
+    const target='20261013091838';
+    const prior=['20260825103034',...guard.REVIEWED_MIGRATION_CATALOG.filter(version=>version<target)];
+    for(const version of prior)await db.query("insert into supabase_migrations.schema_migrations(version,name) values($1,'fictional_prerequisite') on conflict(version) do nothing",[version]);
+    const rehearsalDirectory=fs.mkdtempSync(path.join(output,'sealed-rehearsal-'));
+    const ledgerFile=path.join(rehearsalDirectory,'synthetic-ledger.txt'),rehearsalFile=path.join(rehearsalDirectory,'protected-rehearsal.sql');
+    fs.writeFileSync(ledgerFile,prior.join('\n')+'\n');
+    guard.preparePersonalIncomeBatchHistoryRehearsal(path.join(root,'supabase/migrations'),rehearsalFile,target,ledgerFile,
+      path.join(root,'scripts/finance_personal_income_batch_history_fingerprint.sql'),
+      path.join(root,'scripts/finance_personal_income_batch_history_canary.sql'),
+      path.join(root,'scripts/finance_personal_income_batch_history_preflight.sql'),
+      path.join(root,'scripts/finance_personal_income_batch_history_postflight.sql'),
+      {count:1,lastVersion:prior[0],sha256:guard.ledgerSha256([prior[0]])});
+    const beforeSealed=await phaseFingerprint();
+    const beforeLedger=(await db.query('select * from supabase_migrations.schema_migrations order by version')).rows;
+    await db.exec("select set_config('fixture.uid','',false)");
+    try{await db.exec(fs.readFileSync(rehearsalFile,'utf8'));}
+    catch(error){await db.exec('rollback;');throw error;}
+    finally{await db.exec("select set_config('fixture.uid','"+uid+"',false)");}
+    assert.equal(await phaseFingerprint(),beforeSealed);
+    assert.deepEqual((await db.query('select * from supabase_migrations.schema_migrations order by version')).rows,beforeLedger);
+    assert.deepEqual(await authority(),beforeAuthority);
+    evidence.sealedRehearsalSHA256=crypto.createHash('sha256').update(fs.readFileSync(rehearsalFile)).digest('hex');
+    evidence.sealedRehearsalPath=rehearsalFile;
+    check('exact release guard sealed rehearsal passes source/ACL/canary gates and rolls back populated fingerprints plus complete ledger');
+  }else if(process.env.FINANCE_HISTORY_NATIVE_REQUIRED==='1'){
+    throw Error('Required native proof cannot skip the current source-sealed income batch release guard');
+  }
   await db.exec('begin;'+migration+'\nrollback;');
   assert.deepEqual(await authority(),beforeAuthority);assert.equal(await businessFingerprint(),beforeRows);
   assert.equal(await phaseFingerprint(),beforePhaseFingerprint);
@@ -210,6 +282,29 @@ async function main(){
   await db.exec(strip(read('scripts/finance_personal_income_batch_history_postflight.sql')));
   await db.exec(strip(read('scripts/finance_personal_history_identity_once_postflight.sql')));
   await db.exec(strip(read('scripts/finance_personal_history_postflight.sql')));
+  await compatibleRecoveryGates('new income batch baseline');
+  const recoveryFiles=[['scripts/finance_invoice_batch_approval_postflight.sql','23514'],
+    ['scripts/finance_invoice_batch_approval_canary.sql','23514'],
+    ['scripts/finance_personal_history_identity_once_canary.sql','55000']];
+  for(const [name,sql,files] of [
+    ['wrong new ledger name',"update supabase_migrations.schema_migrations set name='WRONG-TARGET-NAME' where version='20261013091838'",recoveryFiles],
+    ['public history ACL drift',"grant execute on function public.finance_personal_document_summary_v1(text,integer,integer,text,text) to service_role",recoveryFiles],
+    ['private notification ACL drift',"grant execute on function private.finance_refresh_invoice_batch_approval_notification_v1() to authenticated",recoveryFiles.slice(0,2)]
+  ]){
+    const beforeRecovery=await metadataFingerprint();
+    await db.exec('begin;');
+    try{
+      await db.exec(sql);await db.exec("select set_config('fixture.uid','',false);savepoint recovery_guard;");
+      for(const [filename,code] of files){
+        const source=read(filename),gate=source.includes('FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN')
+          ?source.split('-- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN')[1].split('-- FINANCE_AUTHENTICATED_CANARY_CORE_END')[0]:strip(source);
+        await assert.rejects(()=>db.exec(gate),e=>e.code===code);
+        await db.exec('rollback to savepoint recovery_guard;');
+      }
+    }finally{await db.exec('rollback;');}
+    assert.equal(await metadataFingerprint(),beforeRecovery);
+    check('version-compatible recovery gates still fail closed for '+name);
+  }
   check('new phase and version-aware prior postflights accept only exact new bodies while retaining identity/ACL/projection checks');
   const beforeCanary=await phaseFingerprint();
   await db.exec("select set_config('fixture.uid','',false)");

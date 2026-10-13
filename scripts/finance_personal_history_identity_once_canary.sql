@@ -5,12 +5,14 @@ begin isolation level repeatable read read only;
 set local statement_timeout='20s';
 -- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN
 do $history_identity_once_canary$
-declare v_expected record; v_proc pg_catalog.pg_proc%rowtype;
+declare v_expected record; v_proc pg_catalog.pg_proc%rowtype;v_income_batch_history boolean;
 begin
+  v_income_batch_history:=exists(select 1 from supabase_migrations.schema_migrations
+    where version='20261013091838' and name='finance_personal_income_batch_history_v1');
   for v_expected in select * from (values
       ('private.finance_personal_document_authorized_v1(public.finance_users,text,text,text)',false,'1db71550a2ec13ece520e25abb211e09'),
-      ('public.finance_personal_document_summary_v1(text,integer,integer,text,text)',true,'f68644d4f30ee10fd4b2bd76da4a2b83'),
-      ('public.finance_personal_document_detail_v1(text,text)',true,'34989c18188536e079e63ff81370c2cf'),
+      ('public.finance_personal_document_summary_v1(text,integer,integer,text,text)',true,case when v_income_batch_history then '2af52ffb295bd15d59092f400dfd70f7' else 'f68644d4f30ee10fd4b2bd76da4a2b83' end),
+      ('public.finance_personal_document_detail_v1(text,text)',true,case when v_income_batch_history then '07b0d08b0dc4207b38bcae747e5624bb' else '34989c18188536e079e63ff81370c2cf' end),
       ('private.finance_history_actor_v1()',false,'4fa4b048271075bade4b7ddd3f424fc4'),
       ('private.finance_personal_history_page_allows_v1(public.finance_users)',true,'b2fed44ca1b66208649d50c7bfae921d')
   ) x(signature,security_definer,source_md5) loop
