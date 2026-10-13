@@ -20,6 +20,47 @@ function fakeFile(size, name = 'original.pdf') {
   file.name = name;
   return file;
 }
+function officeFile(kind, size, mime) {
+  // Real uncompressed Open XML packages, including OPC relationships and a
+  // valid main document. They contain only fictional text and padding XML.
+  const main = kind === 'docx' ? 'word/document.xml' : 'xl/workbook.xml';
+  const contentType = kind === 'docx'
+    ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml'
+    : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml';
+  const entries = [
+    ['[Content_Types].xml', `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/${main}" ContentType="${contentType}"/>${kind === 'xlsx' ? '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' : ''}</Types>`],
+    ['_rels/.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="${main}"/></Relationships>`],
+    [main, kind === 'docx'
+      ? '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>虛構退費附件</w:t></w:r></w:p></w:body></w:document>'
+      : '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="退費清冊" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+    ['customXml/item1.xml', '<fixture xmlns="urn:finance:fictional">' + 'x'.repeat(size) + '</fixture>'],
+  ];
+  if (kind === 'xlsx') entries.push(
+    ['xl/_rels/workbook.xml.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'],
+    ['xl/worksheets/sheet1.xml', '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>虛構測試</t></is></c></row></sheetData></worksheet>']);
+  function crc(bytes) {
+    let result = 0xffffffff;
+    for (const byte of bytes) {
+      result ^= byte;
+      for (let bit = 0; bit < 8; bit++) result = (result >>> 1) ^ (0xedb88320 & -(result & 1));
+    }
+    return (result ^ 0xffffffff) >>> 0;
+  }
+  const local = [], central = []; let offset = 0;
+  for (const [entry, value] of entries) {
+    const name = Buffer.from(entry), data = Buffer.from(value), checksum = crc(data);
+    const head = Buffer.alloc(30); head.writeUInt32LE(0x04034b50); head.writeUInt16LE(20, 4);
+    head.writeUInt32LE(checksum, 14); head.writeUInt32LE(data.length, 18); head.writeUInt32LE(data.length, 22); head.writeUInt16LE(name.length, 26);
+    const directory = Buffer.alloc(46); directory.writeUInt32LE(0x02014b50); directory.writeUInt16LE(20, 4); directory.writeUInt16LE(20, 6);
+    directory.writeUInt32LE(checksum, 16); directory.writeUInt32LE(data.length, 20); directory.writeUInt32LE(data.length, 24); directory.writeUInt16LE(name.length, 28); directory.writeUInt32LE(offset, 42);
+    local.push(head, name, data); central.push(directory, name); offset += head.length + name.length + data.length;
+  }
+  const directory = Buffer.concat(central), end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50);
+  end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10); end.writeUInt32LE(directory.length, 12); end.writeUInt32LE(offset, 16);
+  const file = new Blob([Buffer.concat([...local, directory, end])], { type: mime });
+  file.name = `虛構退費附件-${size}.${kind}`;
+  return file;
+}
 function engine() {
   const ctx = { window: { FinanceV4Engines: { register() {} } }, Blob };
   vm.runInNewContext(engineSource, ctx);
@@ -33,7 +74,7 @@ async function main() {
   const fileCtx = {
     Blob, Promise, Date, ATTACHMENT_RESUMABLE_THRESHOLD_BYTES: sixMiB,
     SUPABASE_ATTACHMENT_BUCKET: 'finance-attachments',
-    activeDataEnvironment: () => 'production', fileExt: () => 'pdf', num: Number,
+    activeDataEnvironment: () => 'production', fileExt: attachmentEngine.fileExtension, num: Number,
     FileReader: class { constructor() { readerCreated++; } },
   };
   vm.runInNewContext(between('function fileToAttachment(', 'function safeStorageName('), fileCtx);
@@ -207,6 +248,60 @@ async function main() {
   const previouslyUploaded = await c.uploadAttachmentToSupabase({ n: 'old.pdf', path: 'tenant-a/draft_requests/production/old.pdf' }, {});
   assert.equal(previouslyUploaded.__uploadCreatedThisAttempt, undefined);
   console.log('PASS small files use the existing SDK path and old draft objects are not marked as new');
+
+  const officeSources = [
+    officeFile('docx', 3 * 1024 * 1024, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+    officeFile('docx', Math.floor(1.3 * 1024 * 1024), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+    officeFile('xlsx', Math.floor(57.9 * 1024), ''),
+  ];
+  const officePrepared = [];
+  const readersBeforeOffice = readerCreated, uploadsBeforeOffice = trace.sdk.length, signedBeforeOffice = trace.signed.length;
+  for (const original of officeSources) {
+    assert.equal(attachmentEngine.mimeAllowed(original, original), true, 'official and omitted Safari MIME remain allowed');
+    const item = await fileCtx.fileToAttachment(original, { directUpload: true });
+    assert.equal(item.n, original.name);
+    assert.equal(item.t, attachmentEngine.fileExtension(original.name));
+    assert.equal(item.uploadBlob, original);
+    assert.equal(item.url, '');
+    assert.equal(attachmentEngine.normalizeFileMeta(item).uploadBlob, original);
+    officePrepared.push(item);
+    const uploaded = await c.uploadAttachmentToSupabase(item, {});
+    const transport = trace.sdk.at(-1);
+    assert.equal(transport.blob, original, 'small Office original reaches Storage without a base64 read or decode');
+    assert.deepEqual(Buffer.from(await transport.blob.arrayBuffer()), Buffer.from(await original.arrayBuffer()));
+    assert.equal(transport.options.contentType, original.type || 'application/octet-stream');
+    assert.equal(transport.options.upsert, false);
+    assert.equal(uploaded.size, original.size);
+    assert.equal(Object.hasOwn(uploaded, 'uploadBlob'), false);
+    assert.equal(uploaded.path, fixturePath);
+    assert.equal(trace.rows.at(-1).attachment_state, 'staged');
+    assert.equal(trace.rows.at(-1).uploaded_by, 'user-a');
+    assert.equal(trace.rows.at(-1).tenant_id, 'tenant-a');
+  }
+  assert.equal(readerCreated, readersBeforeOffice, 'all three small Office submissions avoid FileReader');
+  assert.equal(trace.sdk.length - uploadsBeforeOffice, 3);
+  assert.equal(trace.signed.length - signedBeforeOffice, 3, 'every original retains existing signed-download verification');
+  c.normalizeFiles = attachmentEngine.normalizeFiles;
+  c.attachmentLooksPdf = attachmentEngine.looksPdf;
+  c.attachmentLooksImage = attachmentEngine.looksImage;
+  vm.runInContext(between('async function receiptPdfAttachment(', 'function isReceiptBundleAttachment(')
+    + between('async function receiptBundleAttachment(', 'var RECEIPT_VIEWER_STATE='), c);
+  assert.equal(await c.receiptBundleAttachment(officePrepared, { no: 'FICTIONAL-REFUND' }), null,
+    'Office originals must not be duplicated into a base64 HTML summary');
+  assert.equal(attachmentEngine.mimeAllowed({ name: 'renamed.xlsx', type: 'application/zip' }, new Blob(['PK fake archive'], { type: 'application/zip' })), false,
+    'generic ZIP still cannot be admitted by an Office extension');
+  assert.equal(attachmentEngine.mimeAllowed({ name: 'program.exe', type: 'application/x-msdownload' }, new Blob(['MZ'], { type: 'application/x-msdownload' })), false);
+  // OCR must retain its explicit data URL path; submission opt-in is separate.
+  fileCtx.FileReader = class {
+    constructor() { readerCreated++; }
+    readAsDataURL(original) { original.arrayBuffer().then(bytes => { this.result = 'data:' + (original.type || 'application/octet-stream') + ';base64,' + Buffer.from(bytes).toString('base64'); this.onload(); }); }
+  };
+  const forOcr = await fileCtx.fileToAttachment(officeSources[0]);
+  assert.match(forOcr.url, /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,/);
+  assert.equal(forOcr.uploadBlob, undefined);
+  assert.equal(readerCreated, readersBeforeOffice + 1);
+  assert.match(source, /S\.nrFiles\.map\(function\(file\)\{return fileToAttachment\(file,\{directUpload:true\}\);\}\)/);
+  console.log('PASS three real fictional Office packages keep original bytes, size, scope, staged metadata and download checks; no FileReader/HTML duplication; ZIP/executable stay denied and OCR stays separate');
 
   const rowsBeforeNetworkError = trace.rows.length;
   tusBehavior = (upload) => upload.options.onError(new Error('fictional broken connection after chunk'));
@@ -396,4 +491,5 @@ async function main() {
   console.log('PASS pinned same-origin TUS bundle loads and matches provenance digest');
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1; });
+module.exports = { officeFile };
+if (require.main === module) main().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -89,7 +89,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
     requestAnimationFrame:callback=>workspaceFrames.push(callback),restoreFinanceRefreshTarget:target=>workspaceTargets.push(target),
     applyRolePermissions(){},setRuntimeDefaults(){},initFilters(){},consumeFinanceRefreshReturnPage:()=>null,
     pendingApprovalDeepLink:()=>null,isExpenseApplicantRevisionMode:()=>false,shouldPromptUnsavedNewReq:()=>false,
-    shouldPromptUnsavedIncomeDoc:()=>false,canAccessPage:()=>true,buildNR(){},syncMobileNavSelect(){},
+    shouldPromptUnsavedIncomeDoc:()=>false,canAccessPage:()=>true,ensureDeferredFinanceDocumentSources(){},buildNR(){},syncMobileNavSelect(){},
     enhanceLongSelects(){},startSearchableSelectObserver(){},enhanceMobileTables(){},startMobileEnhancer(){}
   },['currentFinanceAuthUserId','financeReauthenticationIdentity','openFinanceWorkspace','guardedNav']);
   workspace.openFinanceWorkspace();

@@ -19,6 +19,10 @@ function fixture(options={}){
 }
 (async()=>{
  {
+  const c=fixture();c.canManageUsers=()=>false;assert((await c.refreshApprovalOrgAdminRuntime(null,'load_remote_data_deferred')).ok);assert.equal(c.calls.length,5);assert(!c.calls.includes('finance_front_office_permission_runtime_health'));assert.equal(c.ORG_ADMIN_RUNTIME.frontOfficeHealth,null);check('a non-manager skips only personnel-manager health and keeps that result unknown');
+  c.canManageUsers=()=>true;c.CURRENT_PERMISSION_SNAPSHOT.permissions=['member.role.manage'];assert((await c.refreshApprovalOrgAdminRuntime(null,'manual_admin_refresh')).ok);assert.equal(c.calls.length,11);assert(c.calls.includes('finance_front_office_permission_runtime_health'));check('an actual personnel-management capability retains the complete health check');
+ }
+ {
   const c=fixture();const [a,b]=await Promise.all([c.refreshApprovalOrgAdminRuntime(null,'load_remote_data_deferred'),c.runCurrentUserRuntimeAssurance()]);assert(a.ok&&b.ok);assert.equal(c.calls.length,6);assert.equal(c.repairs,0);check('concurrent background and own-account checks use six RPCs once, with no unnecessary repair');
   await c.refreshApprovalOrgAdminRuntime(null,'load_remote_data_deferred');assert.equal(c.calls.length,6);check('automatic recent diagnostic read is reused for the same complete identity');
   await c.refreshApprovalOrgAdminRuntime(null,'manual_admin_refresh');assert.equal(c.calls.length,12);check('manual refresh always reads fresh authority, even within the warmup window');

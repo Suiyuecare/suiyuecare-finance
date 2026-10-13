@@ -116,6 +116,7 @@ supabase/.temp
 !scripts/check_finance_auth_recovery_regressions.js
 !scripts/check_finance_auth_recovery_browser.cjs
 !scripts/check_employee_auth_notifications_browser.cjs
+!scripts/check_notification_paging_browser_20261013.cjs
 !scripts/check_employee_progress_concerns_browser.cjs
 !scripts/check_expense_posting_browser.cjs
 !scripts/check_finance_approval_runtime_browser.cjs
@@ -205,6 +206,7 @@ supabase/.temp
 !scripts/check_bill_approval_attachment_flow.cjs
 !scripts/check_attachment_experience_20261002.cjs
 !scripts/check_formal_resumable_upload.cjs
+!scripts/check_refund_office_submission.cjs
 !scripts/check_bill_attachment_browser.cjs
 
 # Reporting source integrity and reconciliation protected release
@@ -250,6 +252,7 @@ supabase/.temp
 !scripts/check_employee_form_ux.js
 !scripts/check_employee_form_ux_browser.cjs
 !scripts/check_employee_auth_notifications.cjs
+!scripts/check_notification_paged_read_20261013.cjs
 !scripts/check_expense_submission_identity.cjs
 !scripts/check_expense_posting_reliability.cjs
 !scripts/check_expense_revision_reliability.cjs
@@ -526,3 +529,8 @@ supabase/.temp
 # Current authorized employee projection postflight regressions
 !scripts/test_portal_employee_projection_postflight.cjs
 !scripts/fixtures/portal_projection_authorities_20261012.json
+
+# Non-accounting document startup and real role/browser regressions
+!scripts/check_deferred_document_startup_20261013.cjs
+!scripts/check_deferred_document_startup_browser_20261013.cjs
+!docs/finance-deferred-document-startup-20261013.md

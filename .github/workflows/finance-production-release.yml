@@ -179,6 +179,8 @@ jobs:
           FINANCE_HISTORY_NATIVE_REQUIRED=1 pnpm test:personal-history-identity-once
           pnpm test:personnel-workspace-browser
           pnpm test:history-search-browser
+          pnpm test:deferred-startup-browser
+          pnpm test:notification-paging-browser
           pnpm test:hr-bridge-browser
           pnpm test:hr-voucher-browser
           pnpm test:hr-contractor-browser

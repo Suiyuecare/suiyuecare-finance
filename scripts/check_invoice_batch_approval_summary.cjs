@@ -45,7 +45,7 @@ function setup(){
     num:value=>Number(value)||0,fmt:value=>'NT$'+Number(value).toLocaleString('en-US'),
     escAttr:value=>String(value==null?'':value).replaceAll('&','&amp;').replaceAll('"','&quot;'),
     financeInlineJsString:value=>JSON.stringify(String(value)),
-    visibleInvoicesForCurrentUser:()=>c.INVS,
+    visibleInvoicesForCurrentUser:()=>c.INVS,financeDocumentSourceReady:()=>true,
     invoiceGroupNo:row=>row.batchId?'整批 '+row.batchId:row.no,
     invoiceIsReceivable:()=>false,invApprovalLabel:()=> '待簽核',
     incomeManagementSearchState:()=>({invoice:''}),incomeApplicantWithdrawButtonHtml:()=>'',

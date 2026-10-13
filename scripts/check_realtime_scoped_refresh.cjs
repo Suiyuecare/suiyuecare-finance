@@ -28,7 +28,7 @@ function fixture(options={}){
   Object.assign(c,{window:{},hasSupabase:()=>true,getSb:()=>client,currentTenantId:()=>c.tenant,activeDataEnvironment:()=>c.environment,
     statementDataIdentity:()=>[c.S.user&&c.S.user.authUserId,c.tenant,c.environment].join('|'),approvalFastBootstrapIdentity:()=>[c.tenant,'auth:'+(c.S.user&&c.S.user.authUserId)].join('|'),normalizedRoleKey:user=>user.role,
     dashboardFinancialSourceIdentity:()=>[c.S.user&&c.S.user.authUserId,c.S.user&&c.S.user.id,c.S.user&&c.S.user.role,c.tenant,c.environment,c.financeWorkspaceIdentityBlocked].join('|'),
-    financeNotificationState:()=>c.notificationState,draftReadinessForCurrentUser:()=>c.draftState,
+    financeNotificationState:()=>c.notificationState,syncFinanceNotificationRows:()=>{},draftReadinessForCurrentUser:()=>c.draftState,
     loadFinanceNotifications:()=>{const pending=Promise.resolve(client.from('notifications').select('*')).then(result=>result.error?{error:result.error}:{data:result.data,error:null});c.notificationState.promise=pending;return pending.finally(()=>{if(c.notificationState.promise===pending)c.notificationState.promise=null})},
     loadCurrentUserDrafts:opts=>{c.draftOptions.push(opts);const pending=Promise.resolve(client.from('draft_requests').select('*')).then(result=>result.error?{error:result.error,complete:false}:{data:result.data,error:null,complete:true});c.draftState.promise=pending;return pending.finally(()=>{if(c.draftState.promise===pending)c.draftState.promise=null})},
     applyRemoteLimit:q=>q,queueFinanceBootstrapRead:(job,wide)=>{c.readWidths.push(wide);return job()},financeBootstrapRead:q=>Promise.resolve(q),inActiveDataEnvironment:row=>(row.data_environment||row.dataEnv||'production')===c.environment,
