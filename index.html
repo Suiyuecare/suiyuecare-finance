@@ -10270,6 +10270,17 @@ async function readRealtimeScopedSource(table,current){
     var notifications=await loadFinanceNotifications({client:getSb()});
     if(!current()||notifications.stale)return {stale:true};
     if(notifications.error)throw notifications.error;
+    // Retire cached history objects so a pre-event request cannot restore stale
+    // rows. Keep the visible tab's verified rows while its replacement loads.
+    var refreshedState=financeNotificationState(),tab=S.nT||'all',previous=refreshedState.history&&refreshedState.history[tab];
+    refreshedState.history={};
+    if(S.page==='notif'&&previous)refreshedState.history[tab]=Object.assign({},previous,{promise:null,status:'stale'});
+    syncFinanceNotificationRows(refreshedState);
+    if(S.page==='notif'){
+      var history=await loadFinanceNotificationHistory({tab:tab});
+      if(!current()||history.stale)return {stale:true};
+      if(history.error)throw history.error;
+    }
     return {ok:true};
   }
   if(table==='draft_requests'){
@@ -40468,7 +40479,7 @@ window.setLegacyPermissionBoardAll=async function(enabled){
 function financeNotificationIdentity(){
   var user=S.user;
   if(!user||financeWorkspaceIdentityBlocked)return '';
-  return JSON.stringify([currentFinanceAuthUserId(),user.id||'',user.email||'',normalizedRoleKey(user),currentTenantId(),activeDataEnvironment(),ROLE_PERMISSIONS]);
+  return JSON.stringify([currentFinanceAuthUserId(),user.id||'',user.email||'',normalizedRoleKey(user),currentTenantId(),activeDataEnvironment(),ROLE_PERMISSIONS,typeof CURRENT_PERMISSION_SNAPSHOT==='undefined'?null:CURRENT_PERMISSION_SNAPSHOT]);
 }
 function financeNotificationState(){
   var identity=financeNotificationIdentity();

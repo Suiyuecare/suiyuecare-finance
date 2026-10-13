@@ -571,6 +571,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'test:personal-history-identity-once': 'node scripts/check_finance_personal_history_identity_once_20261012.cjs',
   'test:personnel-workspace-browser': 'node scripts/check_personnel_workspace_browser_20261012.cjs',
   'test:deferred-startup-browser': 'node scripts/check_deferred_document_startup_browser_20261013.cjs',
+  'test:notification-paging-browser': 'node scripts/check_notification_paging_browser_20261013.cjs',
   'test:history-search-browser': 'node scripts/check_history_search_continuity_browser_20261012.cjs',
   'test:all-applicant-withdraw': 'node scripts/check_all_applicant_withdraw_contract.js && node scripts/check_applicant_withdraw_pglite.mjs',
   'test:procurement-closeout': 'node scripts/check_procurement_closeout_recovery.cjs && node scripts/check_procurement_payment_handler.js && node scripts/check_procurement_specialized_action_guard.js',
@@ -1176,7 +1177,7 @@ const interactionGate = workflow.slice(workflow.indexOf('  interaction-gate:'));
 check('CI runs invoice binding browser coverage after installing browsers in the interaction gate',
   interactionGate.indexOf('pnpm test:invoice-item-bind-browser') > interactionGate.indexOf('pnpm exec playwright install')
     && interactionGate.indexOf('pnpm exec playwright install') >= 0);
-for (const command of ['pnpm test:personnel-workspace-browser', 'pnpm test:history-search-browser', 'pnpm test:deferred-startup-browser']) {
+for (const command of ['pnpm test:personnel-workspace-browser', 'pnpm test:history-search-browser', 'pnpm test:deferred-startup-browser', 'pnpm test:notification-paging-browser']) {
   check(`CI requires focused desktop/mobile browser coverage: ${command}`,
     interactionGate.indexOf(command) > interactionGate.indexOf('pnpm exec playwright install')
       && interactionGate.indexOf('pnpm exec playwright install') >= 0);

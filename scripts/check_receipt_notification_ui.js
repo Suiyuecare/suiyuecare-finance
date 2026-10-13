@@ -19,7 +19,7 @@ function receipt(extra={}){
 }
 function notifications(data={},extra={}){
  const opened=[],readIds=[],alerts=[],queries=[];const runtime={isIdentityBlocked:()=>false,S:{user:{id:'user'},demoLogin:false},INVS:[],REQS:[],BILLS:[],NOTIFS:[{id:'notif',reqId:'one',recordType:'invoices',type:'receipt'}],
-  approvalFastBootstrapIdentity:()=> 'auth',activeDataEnvironment:()=> 'test',currentTenantId:()=> 'tenant',
+  approvalFastBootstrapIdentity:()=> 'auth',permissionIdentity:()=> 'fixture-permissions',activeDataEnvironment:()=> 'test',currentTenantId:()=> 'tenant',
   mapInv:r=>({...r,mapped:'invoice'}),mapBill:r=>({...r,mapped:'bill'}),mapReq:r=>({...r,mapped:'request'}),
   markNotifRead:async id=>readIds.push(id),approvalRowsMarkVerified:()=>{},
   showReceiptTaskD:r=>opened.push(['receipt',r.id]),showInvApprD:r=>opened.push(['invoice',r.id]),showBillApprD:r=>opened.push(['bill',r.id]),openDetail:id=>opened.push(['request',id]),
@@ -78,6 +78,14 @@ async function rejects(name,fn,code){let e;try{await fn();}catch(error){e=error;
  n=notifications();check('Unavailable source leaves notification unread',!await n.ctx.openFinanceNotification('notif')&&n.readIds.length===0&&n.opened.length===0);
  n=notifications({invoices:{id:'one'},bills:{id:'one'}});n.runtime.NOTIFS[0]={id:'notif',reqId:'one',type:'approval'};await n.ctx.openFinanceNotification('notif');check('Ambiguous legacy source never guesses or consumes unread',n.readIds.length===0&&n.opened.length===0);
  n=notifications({invoices:{id:'one'}});let identityCalls=0;n.runtime.approvalFastBootstrapIdentity=()=>++identityCalls===1?'old':'new';await n.ctx.openFinanceNotification('notif');check('Account switch during source read does not open old document',n.readIds.length===0&&n.opened.length===0);
+ for(const type of ['expense_requests','invoices','bills']){
+  let snapshot={permissions:[{scope:'original-department'}]},release,verified=0;
+  const pending=new Promise(resolve=>{release=resolve});
+  n=notifications({}, {permissionIdentity:()=>JSON.stringify(snapshot),approvalRowsMarkVerified:()=>{verified++;},getSb:()=>({from:()=>({select(){return this;},eq(){return this;},maybeSingle:()=>pending})})});
+  n.runtime.NOTIFS[0]={id:'notif',reqId:'one',recordType:type,type:'approval'};
+  const opening=n.ctx.openFinanceNotification('notif');await Promise.resolve();snapshot={permissions:[]};release({data:{id:'one'}});const opened=await opening;
+  check('Same-person permission revocation rejects late '+type+' notification source without merge/open/read',opened===false&&n.opened.length===0&&n.readIds.length===0&&verified===0&&n.runtime.REQS.length===0&&n.runtime.INVS.length===0&&n.runtime.BILLS.length===0);
+ }
  n=notifications({invoices:{id:'one'}},{isIdentityBlocked:()=>true});check('Identity lock blocks notification without consuming unread',!await n.ctx.openFinanceNotification('notif')&&n.queries.length===0&&n.readIds.length===0);
  const start=index.indexOf('function financeNotificationIdentity('),end=index.indexOf('\nwindow.markNotifRead=',start),elements={};
  const ctx={S:{nT:'all',demoLogin:true,user:{id:'fixture',role:'employee'}},FINANCE_NOTIFICATION_STATE:null,financeWorkspaceIdentityBlocked:false,currentFinanceAuthUserId:()=>'',currentTenantId:()=> 'tenant',activeDataEnvironment:()=> 'test',normalizedRoleKey:u=>u.role,ROLE_PERMISSIONS:{},NOTIFS:[{id:`'\"><svg onload=evil()>`,title:'<img src=x onerror=evil()>',body:'<script>evil()</script>',time:'<svg onload=evil()>',type:'receipt'}],lastSyncAt:1,escAttr:v=>String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),el:id=>elements[id]||(elements[id]={style:{},setAttribute(){}})};ctx.window=ctx;vm.runInNewContext(index.slice(start,end),ctx);ctx.renderNotifs();

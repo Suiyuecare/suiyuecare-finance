@@ -31,3 +31,5 @@
 沿用 `financeNotificationState()` 身分隔離、既有通知按鈕與 `.finance-notification-status` 回饋；不新增配色或 overlay。「所有可見通知標為已讀」作用於目前後端授權可見的全部未讀通知，成功後回查，不能只更新已載入頁或樂觀清零。跨身分、撤權、登入鎖定立即清除快取；遲到回應不得回填。
 
 驗收：`check_notification_paged_read_20261013.cjs`、既有 `check_employee_auth_notifications.cjs` 與 actual DOM browser 驗收；包含超過 1,000／2,500 筆、游標、篩選、未讀 exact count、錯誤保留、清空、已讀更新、跨帳號及撤權。
+
+通知快取與通知跳單的身分邊界包含正式權限快照；同一帳號變更範圍後不得重用快取或套用舊回應。Realtime 只更新未讀通知與目前開啟的通知頁，並讓其他通知分頁重新查核；新增／填寫表單不因通知事件重建。

@@ -5,7 +5,7 @@
     return global.FinanceApprovalRuntime;
   }
   var types=['expense_requests','invoices','bills'];
-  function identity(){return runtime().approvalFastBootstrapIdentity()+'|'+runtime().activeDataEnvironment()+'|'+runtime().isIdentityBlocked();}
+  function identity(){return runtime().approvalFastBootstrapIdentity()+'|'+runtime().activeDataEnvironment()+'|'+runtime().permissionIdentity()+'|'+runtime().isIdentityBlocked();}
   function entries(type){return type==='invoices'?runtime().INVS:(type==='bills'?runtime().BILLS:runtime().REQS);}
   function mapped(type,row){return type==='invoices'?runtime().mapInv(row):(type==='bills'?runtime().mapBill(row):runtime().mapReq(row));}
   function setEntries(type,rows){if(type==='invoices')runtime().INVS=rows;else if(type==='bills')runtime().BILLS=rows;else runtime().REQS=rows;}
