@@ -33465,7 +33465,9 @@ window.buildInvoices=function buildInvoices(){
 	if(el('inv-b'))el('inv-b').style.display='block';
   renderInvTable();syncSingleInvoiceIdentifierPlaceholder();applyIncomeFormFieldCustomizations();updInvPrev();renderBatchInvTable();renderBatchTable();renderInvoiceManagementList();
   if(el('inv-cnt'))el('inv-cnt').textContent=financeDocumentSourceReady('invoices')?'共 '+visibleInvs.length+' 張':'總數待確認';
-  setTimeout(function(){markIncomeDocClean('invoices');},0);
+  // Establish defaults once. Background repainting must not accept unsaved
+  // content as a new clean baseline or absorb input in a delayed callback.
+  if(!S.invoiceDirtyBaseline)markIncomeDocClean('invoices');
 }
 window.switchInv=function(mode){
 	S.invMode='batch';S.invMobileChoice='batch';
@@ -34550,7 +34552,8 @@ window.buildBills=function buildBills(){
     refreshSearchableSelect(ent);
   }
   syncDeptOptionsForEntity('b-ent2','bill-dept',currentUserDeptForEntity(currentUserEntityId()));
-  applyIncomeFormFieldCustomizations();renderBillEntryTable();renderBillFlow();renderBillList();setTimeout(function(){markIncomeDocClean('bills');},0);
+  applyIncomeFormFieldCustomizations();renderBillEntryTable();renderBillFlow();renderBillList();
+  if(!S.billDirtyBaseline)markIncomeDocClean('bills');
 };
 var BILL_BATCH_MAX_ITEMS=150;
 var BILL_ROWS=[];
