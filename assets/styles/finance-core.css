@@ -4738,7 +4738,8 @@ input:focus,select:focus,textarea:focus{
 #pg-approvals .approval-history-summary-table .appr-col-select{width:100px!important}
 #pg-approvals .approval-history-summary-table .appr-col-purpose{width:312px!important}
 #pg-approvals .approval-history-summary-table .approval-form-inline{flex-direction:column!important;align-items:center!important;white-space:normal!important;overflow:visible!important}
-#pg-approvals .approval-history-summary-table .approval-form-badges{justify-content:center;flex-wrap:wrap!important}
+#pg-approvals .approval-history-summary-table .approval-form-badges{justify-content:center;flex:0 1 auto!important;flex-wrap:wrap!important;width:100%;max-width:100%;min-width:0}
+#pg-approvals .approval-history-summary-table .approval-form-badges .badge{max-width:100%;white-space:normal;overflow-wrap:anywhere;box-sizing:border-box;line-height:1.5}
 #pg-approvals .approval-history-summary-table .summary-cell{display:-webkit-box!important;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden!important;max-height:4.5em!important}
 
 #pg-approvals #appr-list .card>.approval-history-summary-scroll{overflow-x:auto!important;overflow-y:hidden!important}
