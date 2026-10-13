@@ -39,3 +39,13 @@
 「我申請的」及「曾參與單據」沿用個人單據 summary／detail RPC。繳費單只以正式 `batch_id` 分組，不以單號、時間或相同姓名推測同批。先逐張套用既有本人申請／實際參與權限，再合併同租戶、環境、公司、部門、申請人、狀態、關卡與完整簽核快照相同的來源。不同流程階段分開顯示，不改原單號或簽核業務。
 
 摘要顯示一筆整批、張數與已授權子單合計；「查看明細」重新確認每張子單權限，完整取得來源數、來源識別碼及批次範圍後才開啟。批次狀態或權限變更時提示重新搜尋，不以舊摘要開啟局部明細。既有發票分組維持不變。依據：`20261013091000_finance_personal_bill_batch_history_v1.sql`；驗收：繳費單批次 SQL／瀏覽器測試。
+
+## 繳費單申請附件（2026-10-13）
+
+新增申請的附件入口固定放在明細下方，不藏在 CSV／Excel 匯入工具中。檔案列表、檔案限制、移除、PDF／圖片本機預覽沿用 `FinanceEmployeeFormUX`；不另設預覽或上傳元件。Office 原檔透過既有 `fileToAttachment({directUpload:true})` 與 `uploadAttachmentsToSupabase()` 上傳，不依賴辨識或 FileReader 成功才能送件。
+
+單張及整批共用同一套 `submitBillCore()`：檔案只上傳一次，所有同批子單的 `applicant_submit.files` 保存相同授權附件參照，再交由既有 `finance_submit_bill_batch` 交易保存及 claim。上傳失敗不呼叫建單 RPC，原表單與原檔保留；明確建單失敗只清理本次新上傳檔案。未知結果保留既有 operation key 與附件參照，依既有回查機制確認，不另建單。
+
+附件選擇納入離頁 dirty 判斷；登入恢復僅保存檔名／大小／格式，不把原始檔寫入 sessionStorage。重開後缺原始內容的附件逐項顯示，必須重新選取或由使用者移除後才能送出。跨帳號清除附件及訊息，上傳每一檔之前與之後確認原身分和權限快照，避免將原檔交給新帳號。
+
+驗收：`check_bill_form_attachments_20261013.cjs`（實際 submit／idempotency／recovery／upload coordinator）及 `check_bill_form_attachments_browser_20261013.cjs`（實際 index 與共享元件，Chromium／WebKit，1440／390px）。使用虛構本機 transport，不冒充正式使用者登入或正式 Storage 寫入驗收。

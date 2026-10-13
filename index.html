@@ -637,6 +637,15 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
 	        <span id="bb-pl-inline" style="font-size:11px;color:#94a3b8">可從 Excel 複製多列資料，直接貼到下方表格。</span>
 	      </div>
       <div id="bill-entry-sheet" style="margin-top:9px"></div>
+      <section class="bill-attachments" aria-labelledby="bill-attachments-title">
+        <h3 id="bill-attachments-title">申請附件</h3>
+        <p class="efux-file-note" id="bill-attachments-help">可附上繳費明細、合約或其他佐證。整批申請共用這些附件，簽核人可開啟或下載。PDF、圖片、Word、Excel、CSV，每檔上限 50MB。</p>
+        <button type="button" class="btn-g" id="bill-attachment-picker" aria-describedby="bill-attachments-help" onclick="openBillAttachmentPicker()">＋ 選擇附件</button>
+        <input type="file" id="bill-attachment-input" hidden multiple accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.heic,.heif,.doc,.docx,.xls,.xlsx,.csv" onchange="billAttachmentChange(this)">
+        <div id="bill-attachment-issues" class="efux-file-issues" hidden></div>
+        <div id="bill-attachment-list"></div>
+        <p id="bill-attachment-status" class="efux-file-note" role="status" aria-live="polite"></p>
+      </section>
 	      <div style="font-size:13px;font-weight:800;color:#1f2937;margin:14px 0 9px">2-4. 預計簽核流程</div>
 	      <div id="bill-flow" style="border:1px solid #ead8c2;border-radius:9px;background:#fffaf4;padding:10px;margin-bottom:10px"></div>
 	      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end"><span id="bill-entry-summary" style="flex:1;font-size:11px;color:#94a3b8;text-align:right"></span><button class="btn-p" onclick="submitBill()">送出繳費單申請</button></div>
@@ -3060,7 +3069,7 @@ var S={user:null,page:'dashboard',prev:'dashboard',nT:'all',aT:'p',bF:'all',accS
        lazyRows:[],refundRows:[],purchaseRows:[],hrRows:[],hrPeriod:'',hrLaborPeriod:'',lazyBusy:false,lazyMode:false,
        travelPeople:[],travelRows:[],invMode:'batch',rptTab:'bs',recvEntity:'all',recvMonthFrom:'',recvMonthTo:'',
        dashPeriodMode:'month',dashMonth:'',dashMonthFrom:'',dashMonthTo:'',dashEntity:'all',dashCompanySort:'risk',dashCompanyDir:'asc',dashDeptSort:'risk',dashDeptDir:'asc',dashDeptExpanded:true,dashOrgView:'department',dashReconOpen:null,dashTrendFocus:'',dashFiltersOpen:false,dashDataVersion:0,
-       demoLogin:false,portalLogin:false,nrDraftId:'',approvalRuntimeTasks:[],bRows:[{buyer:'',identifierType:'電子發票',taxid:'',desc:'',amt:'',tax:'',total:'',rate:0.05}],bUploadFiles:[],bUploadPendingFiles:[]};
+       demoLogin:false,portalLogin:false,nrDraftId:'',approvalRuntimeTasks:[],bRows:[{buyer:'',identifierType:'電子發票',taxid:'',desc:'',amt:'',tax:'',total:'',rate:0.05}],bUploadFiles:[],bUploadPendingFiles:[],billFiles:[],billFileIssues:[],billAttachmentOwner:'',billAttachmentStatus:''};
 window.S=S;
 var DRAFT_LEGACY_KEY='module_finance_request_drafts_v1';
 var DRAFT_KEY_BASE='module_finance_request_drafts_v2';
@@ -3771,7 +3780,7 @@ function financeAuthRecoveryDraftSnapshot(){
     });
   }
   var hadFiles=!!(
-    S.bUploadFile||(S.bUploadFiles&&S.bUploadFiles.length)||S.invOcrFile||S.nrPassbookFile||(S.nrFiles&&S.nrFiles.length)||Object.keys(S.travelFiles||{}).some(function(key){return (S.travelFiles[key]||[]).length;})||
+    S.bUploadFile||(S.bUploadFiles&&S.bUploadFiles.length)||(S.billFiles&&S.billFiles.length)||S.invOcrFile||S.nrPassbookFile||(S.nrFiles&&S.nrFiles.length)||Object.keys(S.travelFiles||{}).some(function(key){return (S.travelFiles[key]||[]).length;})||
     (root&&root.querySelector('input[type="file"]')&&Array.from(root.querySelectorAll('input[type="file"]')).some(function(node){return !!(node.files&&node.files.length);}))
   );
   return {
@@ -3787,6 +3796,7 @@ function financeAuthRecoveryDraftSnapshot(){
     invoiceRows:page==='invoices'?JSON.parse(JSON.stringify(S.bRows||[])):null,
     invoiceMode:page==='invoices'?'batch':null,
     billRows:page==='bills'&&typeof BILL_ROWS!=='undefined'?JSON.parse(JSON.stringify(BILL_ROWS||[])):null,
+    billFiles:page==='bills'?(S.billFiles||[]).map(incomeFileSignature):null,
     hadFiles:hadFiles
   };
 }
@@ -3919,7 +3929,7 @@ async function restoreFinanceAuthRecoveryDraft(){
     S.nrDirtyBaseline='__auth_recovered_unsaved__';
   }
   if(draft.page==='invoices')buildInvoices();
-  if(draft.page==='bills')buildBills();
+  if(draft.page==='bills'){restoreBillAttachmentManifest(draft.billFiles||[]);buildBills();}
   var restored=applyFinanceAuthRecoveryFields(draft);
   if(!restored||!financeAuthRecoveryContentMatches(draft))return financeAuthRecoveryFailed(draft);
   sessionRemoveItem(draft.__storageKey||financeAuthRecoveryStorageKey(draft));
@@ -5101,11 +5111,13 @@ function uploadAttachmentWithTrackedTimeout(att,ctx,label,timeoutMs){
   });
 }
 async function uploadAttachmentsToSupabase(files,ctx){
+  if(ctx&&typeof ctx.assertCurrent==='function')ctx.assertCurrent();
   files=await preflightAttachmentsForSupabase(files,ctx);
   var out=[];
   var created=[];
   for(var i=0;i<(files||[]).length;i++){
     try{
+      if(ctx&&typeof ctx.assertCurrent==='function')ctx.assertCurrent();
       var size=num(files[i]&&files[i].size);
       var timeout=size>=ATTACHMENT_RESUMABLE_THRESHOLD_BYTES?ATTACHMENT_LARGE_UPLOAD_TIMEOUT_MS:ATTACHMENT_UPLOAD_TIMEOUT_MS;
       var uploadContext=ctx;
@@ -5118,6 +5130,7 @@ async function uploadAttachmentsToSupabase(files,ctx){
       var uploaded=await uploadAttachmentWithTrackedTimeout(files[i],uploadContext,'第 '+(i+1)+' 個附件上傳',timeout);
       out.push(uploaded);
       if(uploaded&&uploaded.__uploadCreatedThisAttempt)created.push(uploaded);
+      if(ctx&&typeof ctx.assertCurrent==='function')ctx.assertCurrent();
     }catch(err){
       var meta=normalizeFileMeta(files[i]);
       var msg=formatStorageUploadError(err);
@@ -16214,6 +16227,8 @@ function clearFinanceLoginState(){
   // The durable snapshot remains scoped to its original owner in browser
   // storage; never carry its in-memory lock into another account's session.
   S.nrSubmissionConfirmationPending=null;
+  S.billFiles=[];S.billFileIssues=[];S.billAttachmentOwner='';S.billAttachmentStatus='';
+  if(typeof renderBillAttachments==='function')renderBillAttachments();
   S.user=null;
   FINANCE_NOTIFICATION_STATE=null;NOTIFS=[];
   S.demoLogin=false;
@@ -16698,6 +16713,7 @@ function incomeDirtySnapshot(page){
     return JSON.stringify(stableSnapshotValue({
       fields:incomeFieldValues(['b-app','b-ent2','bill-dept','bill-reason','bill-note']),
       billRows:BILL_ROWS||[],
+      attachments:(S.billFiles||[]).map(incomeFileSignature),
       uploadName:(el('bb-fn')||{}).textContent||''
     }));
   }
@@ -34670,7 +34686,7 @@ window.buildBills=function buildBills(){
     refreshSearchableSelect(ent);
   }
   syncDeptOptionsForEntity('b-ent2','bill-dept',currentUserDeptForEntity(currentUserEntityId()));
-  applyIncomeFormFieldCustomizations();renderBillEntryTable();renderBillFlow();renderBillList();
+  applyIncomeFormFieldCustomizations();renderBillEntryTable();renderBillFlow();renderBillList();renderBillAttachments();
   if(!S.billDirtyBaseline)markIncomeDocClean('bills');
 };
 var BILL_BATCH_MAX_ITEMS=150;
@@ -34993,6 +35009,58 @@ window.markBPaid=async function(id){
 };
 window.autoFillBill=function(){};
 window.switchBillTab=function(){renderBillEntryTable();};
+function renderBillAttachments(){
+  var owner=incomeSubmissionOwner();
+  if(S.billAttachmentOwner&&S.billAttachmentOwner!==owner){S.billFiles=[];S.billFileIssues=[];S.billAttachmentStatus='';}
+  S.billAttachmentOwner=owner;
+  var engine=window.FinanceEmployeeFormUX,locked=!!POSTING_IN_FLIGHT.billSubmit;
+  if(engine){engine.renderFiles(el('bill-attachment-list'),S.billFiles||[],{onRemove:locked?null:window.removeBillAttachment,fileNote:function(file){return file.__billMissing?'待重新選取':'';}});engine.fileIssues(el('bill-attachment-issues'),S.billFileIssues||[]);}
+  ['bill-attachment-picker','bill-attachment-input'].forEach(function(id){var node=el(id);if(node)node.disabled=locked;});
+  var status=el('bill-attachment-status');
+  if(status)status.textContent=(S.billFiles||[]).some(function(file){return file.__billMissing;})?'部分附件需重新選取；同名、大小與格式相符的檔案會替換待恢復項目。也可移除不需要的附件後再送出。':S.billAttachmentStatus||'';
+}
+function restoreBillAttachmentManifest(manifest){
+  var owner=incomeSubmissionOwner(),existing=S.billAttachmentOwner===owner?(S.billFiles||[]).slice():[];
+  S.billFiles=(manifest||[]).map(function(meta){
+    var key=JSON.stringify(incomeFileSignature(meta)),index=existing.findIndex(function(file){return JSON.stringify(incomeFileSignature(file))===key;});
+    if(index>=0)return existing.splice(index,1)[0];
+    return Object.assign({},meta,{__billMissing:true});
+  });
+  S.billAttachmentOwner=owner;S.billFileIssues=[];S.billAttachmentStatus='';
+}
+window.openBillAttachmentPicker=function(){
+  if(POSTING_IN_FLIGHT.billSubmit||financeWorkspaceIdentityBlocked)return;
+  S.billAttachmentPickerIdentity=incomeSubmissionIdentity();
+  var input=el('bill-attachment-input');if(input)input.click();
+};
+window.billAttachmentChange=function(input){
+  var pickerIdentity=S.billAttachmentPickerIdentity;S.billAttachmentPickerIdentity='';
+  if(POSTING_IN_FLIGHT.billSubmit||financeWorkspaceIdentityBlocked||!incomeSubmissionIdentityCurrent(pickerIdentity)){if(input)input.value='';return;}
+  renderBillAttachments();
+  var engine=window.FinanceEmployeeFormUX;
+  if(!engine){S.billAttachmentStatus='附件工具尚未載入，請保留表單並重新整理後再選取。';renderBillAttachments();return;}
+  var selected=engine.selectFiles(input.files,function(file){assertAttachmentUploadable(file,file);});
+  S.billFiles=S.billFiles||[];
+  selected.accepted.forEach(function(file){
+    var key=JSON.stringify(incomeFileSignature(file)),index=S.billFiles.findIndex(function(old){return old.__billMissing&&JSON.stringify(incomeFileSignature(old))===key;});
+    if(index>=0)S.billFiles[index]=file;else S.billFiles.push(file);
+  });
+  S.billFileIssues=selected.rejected;S.billAttachmentStatus='';input.value='';renderBillAttachments();
+};
+window.removeBillAttachment=function(index){
+  if(POSTING_IN_FLIGHT.billSubmit||financeWorkspaceIdentityBlocked)return;
+  renderBillAttachments();
+  (S.billFiles||[]).splice(index,1);S.billAttachmentStatus='';renderBillAttachments();
+};
+async function billInitialStepFiles(files,ctx,identity){
+  if(S.billAttachmentOwner!==incomeSubmissionOwner()||files.some(function(file){return file.__billMissing;}))throw new Error('附件尚未恢復，請重新選取標示的檔案，或移除不需要的附件。');
+  var prepared=await Promise.all(files.map(function(file){return fileToAttachment(file,{directUpload:true});}));
+  if(!incomeSubmissionIdentityCurrent(identity))throw new Error('登入身分或權限已變更，這張單尚未送出。');
+  return uploadAttachmentsToSupabase(prepared,Object.assign({},ctx,{recordType:'bills',kind:'bill_initial',assertCurrent:function(){if(!incomeSubmissionIdentityCurrent(identity))throw new Error('登入身分或權限已變更，已停止附件上傳。');},onProgress:function(sent,total,detail){
+    if(!incomeSubmissionIdentityCurrent(identity))return;
+    S.billAttachmentStatus='附件上傳 '+(detail&&detail.fileIndex||1)+'／'+files.length+' · '+(total?Math.round(sent/total*100):0)+'%';renderBillAttachments();
+  }}));
+}
 async function submitBillCore(){
   var submissionIdentity=incomeSubmissionIdentity();
   if(!await guardSubmissionIdentityDirectory('申請繳費單')||!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
@@ -35000,6 +35068,7 @@ async function submitBillCore(){
   if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   syncBillRowsFromDom();
   var submissionFormUi=incomeSubmissionFormUi('bill');
+  var billFiles=(S.billFiles||[]).slice();
   var eid=(el('b-ent2')||{}).value||'E1';
   var appUser=S.user||USERS[0];
   var appName=appUser?(appUser.n||appUser.email||'申請人'):'申請人';
@@ -35035,7 +35104,7 @@ async function submitBillCore(){
   if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!billRouteReady.ok)return;
   var billStepsForPreflight=billRouteReady.steps;
-  var p1=await p1SubmissionPreflight('bill',{label:'申請繳費單',steps:billStepsForPreflight,hasAttachments:false});
+  var p1=await p1SubmissionPreflight('bill',{label:'申請繳費單',steps:billStepsForPreflight,hasAttachments:!!billFiles.length});
   if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!p1.ok)return;
   var batchCreatedAt=new Date().toISOString();
@@ -35048,6 +35117,20 @@ async function submitBillCore(){
     var nextStep=steps.find(function(s){return !s.a;})||null;
     return{id:'b_'+Date.now()+'_'+Math.random().toString(36).slice(2),no:'BILL-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*9000+1000)),item:r.item,ik:billItemKey(r.item),eid:eid,entL:gE(eid).full,dc:dc,amt:num(r.amt),due:todaySlash(),method:'繳費單',note:displayNote,payer:r.payer,period:r.period,batchId:batchId,batchNo:batchNo,batchCount:valid.length,batchTotal:batchTotal,batchCreatedAt:batchCreatedAt,status:'unpaid',approvalStatus:nextStep?nextStep.status:'completed',approvalStep:nextStep?2:steps.length,steps:steps,applicant:appName,applicantId:appUser?appUser.id:'',applicantEmail:appUser?appUser.email:'',dataEnv:activeDataEnvironment()};
   });
+  var initialFiles=[];
+  if(billFiles.length){
+    try{
+      initialFiles=await billInitialStepFiles(billFiles,{recordNo:batchNo||rows[0].no,date:todayIso(),entityId:eid,departmentCode:dc},submissionIdentity);
+      if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
+      rows.forEach(function(row){row.steps[0].files=normalizeFiles(initialFiles);});
+      S.billAttachmentStatus='附件已上傳，正在確認送件結果。';renderBillAttachments();
+    }catch(uploadError){
+      if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
+      S.billAttachmentStatus='附件未完成，申請尚未送出。'+formatStorageUploadError(uploadError)+' 原內容與檔案已保留，可修正後重試。';renderBillAttachments();
+      if(typeof failActionFeedback==='function')failActionFeedback('尚未送出',S.billAttachmentStatus);
+      return false;
+    }
+  }
   rows[0].submissionFormUi=submissionFormUi;
   var runtimeBillSource=rows[0];
   var batchWrite=await insertMembershipOrgSubmittedBatch(
@@ -35056,7 +35139,12 @@ async function submitBillCore(){
   );
   if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!settingsWriteResultOk(batchWrite)){
-    if(batchWrite.unknown){alert(batchWrite.error.message);return;}
+    if(batchWrite.unknown){if(initialFiles.length){S.billAttachmentStatus='送件結果待確認；原附件已保留，請使用上方「確認原送單結果」。';renderBillAttachments();}alert(batchWrite.error.message);return;}
+    if(initialFiles.length){
+      await cleanupUploadedSupabaseAttachments([newlyUploadedAttachmentResults(initialFiles)],'繳費單送件失敗附件清理');
+      if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
+      S.billAttachmentStatus='申請尚未送出；原內容與檔案已保留，可修正後重試。';renderBillAttachments();
+    }
     return recordBillWriteFailure('建立批次繳費單',runtimeBillSource,batchWrite,{insertedCount:0,totalCount:rows.length});
   }
   var billStamps=batchWrite.orgStamps||batchWrite.data&&batchWrite.data.rows||[];
@@ -35074,8 +35162,9 @@ window.submitBill=async function(){
   var lockKey='billSubmit';
   if(POSTING_IN_FLIGHT[lockKey]){alert('這批繳費單正在送出，請勿重複按送出。');return;}
   POSTING_IN_FLIGHT[lockKey]=true;
+  if(typeof renderBillAttachments==='function')renderBillAttachments();
   try{return await submitBillCore();}
-  finally{delete POSTING_IN_FLIGHT[lockKey];}
+  finally{delete POSTING_IN_FLIGHT[lockKey];if(typeof renderBillAttachments==='function')renderBillAttachments();}
 };
 
 // ══ 收款情形 ══
@@ -42963,7 +43052,7 @@ function clearIncomeSubmissionFormIfUnchanged(entry){
     S.bRows=[defaultInvoiceBatchRow()];S.bUploadFile=null;S.bUploadFiles=[];S.bUploadPendingFiles=[];ids=['bfile','b-reason','b-note'];renderBatchTable();
     if(el('batch-pw'))el('batch-pw').style.display='none';if(el('batch-dz'))el('batch-dz').classList.remove('filled');
   }else if(ui.mode==='bill'){
-    BILL_ROWS=[defaultBillRow()];ids=['bill-reason','bill-note'];renderBillEntryTable();
+    BILL_ROWS=[defaultBillRow()];S.billFiles=[];S.billFileIssues=[];S.billAttachmentStatus='';ids=['bill-reason','bill-note','bill-attachment-input'];renderBillEntryTable();if(typeof renderBillAttachments==='function')renderBillAttachments();
   }else return false;
   ids.forEach(function(id){var node=el(id);if(node)node.value='';});markIncomeDocClean(page);return true;
 }

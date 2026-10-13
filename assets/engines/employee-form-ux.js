@@ -99,7 +99,9 @@
       var name = file.name || file.n || '附件';
       var info = document.createElement('div'); info.className = 'efux-file-info';
       var fullName = document.createElement('strong'); fullName.textContent = name;
-      var meta = document.createElement('span'); meta.textContent = sizeLabel(file.size) + (file.__revisionOriginal ? ' · 原附件保留' : '');
+      var meta = document.createElement('span');
+      var fileNote = typeof options.fileNote === 'function' ? String(options.fileNote(file) || '') : '';
+      meta.textContent = sizeLabel(file.size) + (file.__revisionOriginal ? ' · 原附件保留' : '') + (fileNote ? ' · ' + fileNote : '');
       info.append(fullName,meta); row.append(info);
       var local = localBlob(file);
       if (local) { var view = document.createElement('button'); view.type='button'; view.className='btn-g'; view.textContent=local.type==='application/pdf'?'開啟／下載':'預覽'; view.setAttribute('aria-label',view.textContent+' '+name); view.addEventListener('click',function () { preview(file,view); }); row.append(view); }
