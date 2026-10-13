@@ -246,6 +246,7 @@ const manageNodes = {
 const originalInvoiceApprovalLabel = context.invApprovalLabel;
 const originalBillApprovalLabel = context.billApprovalLabel;
 context.el = id => manageNodes[id] || null;
+context.financeDocumentSourceReady = () => true;
 context.fmt = value => String(value);
 context.invApprovalLabel = () => '待簽核';
 context.billApprovalLabel = () => '待簽核';
