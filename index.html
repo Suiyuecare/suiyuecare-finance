@@ -9562,6 +9562,9 @@ function startApprovalHistoryWithdrawalCheck(ctx,rows,record){
 async function openApprovalHistoryWithdrawal(key){
   var result=await openApprovalHistoryItem(key);
   if(!result||!result.ok)return result;
+  var ctx=APPROVAL_HISTORY_MODAL_CONTEXT;
+  await new Promise(function(resolve){requestAnimationFrame(resolve);});
+  if(!ctx||APPROVAL_HISTORY_MODAL_CONTEXT!==ctx||ctx.identity!==approvalHistoryModalIdentity()||!approvalHistoryPageAllowed())return result;
   var host=S.page==='detail'?el('detail-act'):el('appr-inner');
   var target=host&&host.querySelector('[data-applicant-withdraw]');
   if(target){target.scrollIntoView({block:'center'});target.focus({preventScroll:true});}
