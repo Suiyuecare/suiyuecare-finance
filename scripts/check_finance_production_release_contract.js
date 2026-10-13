@@ -1153,6 +1153,9 @@ for(const job of [databaseJob,promoteJob])for(const line of job.split('\n').filt
  const evaluated=spawnSync('sh',['-c',condition+'; then exit 0; else exit 1; fi'],{env:{...process.env,RELEASE_PHASE:guard.RELEASE_PHASE_DATABASE_HR_BRIDGE},encoding:'utf8'});
  assert.equal(evaluated.status,line.includes('= "database_hr_bridge_20260922"')&&!line.includes('!= "database_hr_bridge_20260922"')?0:1,'HR bridge executes only read-only canaries: '+line);
 }
+for (const command of ['pnpm test:income-batch-history-browser','FINANCE_HISTORY_NATIVE_REQUIRED=1 pnpm test:personal-income-batch-history']) {
+  assert(candidateJob.indexOf(command)>candidateJob.indexOf('pnpm exec playwright install') && candidateJob.indexOf(command)<candidateJob.indexOf('vercel@59.3.0 build --prod'),'Complete income batch validation must finish before candidate build: '+command);
+}
 assert.ok(candidateJob.indexOf('pnpm test:hr-voucher-browser')>candidateJob.indexOf('pnpm test:hr-bridge-browser')&&candidateJob.indexOf('pnpm test:hr-voucher-browser')<candidateJob.indexOf('vercel@59.3.0 build --prod'));
 assert.ok(candidateJob.indexOf('pnpm test:hr-bridge-browser')>candidateJob.indexOf('pnpm exec playwright install')&&candidateJob.indexOf('pnpm test:hr-bridge-browser')<candidateJob.indexOf('vercel@59.3.0 build --prod'));
 for(const name of ['test:hr-bridge','test:hr-bridge-release','test:hr-voucher-posting','test:hr-accounting-privacy'])assert.ok(JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).scripts['release:preflight'].includes('pnpm '+name));

@@ -125,9 +125,23 @@ try {
       live_latency_proven: false
     }
   });
+  const incomeBatchHistoryContract = Object.freeze({
+    filename: 'finance_personal_income_batch_history_canary.sql',
+    marker: 'personal_income_batch_history_canary_result',
+    domain: 'personal_income_batch_history',
+    result: {
+      canary: 'readonly_personal_income_batch_history_v1',
+      ok: true,
+      rolled_back: true,
+      identity_scope_preserved: true,
+      permission_guard_preserved: true,
+      live_latency_proven: false
+    }
+  });
   assert.equal(domains.get(identityOnceContract.result.canary), identityOnceContract.domain);
   let verified = 0;
   let identityOnceVerified = 0;
+  let incomeBatchHistoryVerified = 0;
   for (const name of fs.readdirSync(scripts).filter(name => /^finance_.*canary\.sql$/.test(name))) {
     // The separate human-accounting gate does not use these release parsers.
     if (name === 'finance_production_human_accounting_canary.sql' || name === 'finance_human_accounting_float_canary.sql') continue;
@@ -170,11 +184,37 @@ try {
       identityOnceVerified++;
       pass('identity-once actual final SQL has the exact new marker/domain and rejects five altered flags, wrong canary, wrong marker and duplicate results');
     }
+    if (name === incomeBatchHistoryContract.filename) {
+      const rows = actualResults.flatMap(result => result.rows || []);
+      assert.equal(rows.length, 1, 'income-batch-history final SQL must emit exactly one result row');
+      assert.deepEqual(rows[0][incomeBatchHistoryContract.marker], incomeBatchHistoryContract.result,
+        'actual SQL must preserve exact identity, permission, rollback and unproven-live-latency flags');
+      const negative = join(outputDir, 'income-batch-history-negative.json');
+      const verifyNegative = payload => {
+        fs.writeFileSync(negative, JSON.stringify(payload));
+        assert.throws(() => guard.verifyReportsCanary(negative, incomeBatchHistoryContract.domain));
+      };
+      for (const flag of ['ok', 'rolled_back', 'identity_scope_preserved', 'permission_guard_preserved', 'live_latency_proven']) {
+        verifyNegative([{[incomeBatchHistoryContract.marker]: {
+          ...incomeBatchHistoryContract.result,
+          [flag]: !incomeBatchHistoryContract.result[flag]
+        }}]);
+      }
+      verifyNegative([{[incomeBatchHistoryContract.marker]: {...incomeBatchHistoryContract.result, canary: 'wrong-canary'}}]);
+      verifyNegative([{wrong_marker: incomeBatchHistoryContract.result}]);
+      verifyNegative([
+        {[incomeBatchHistoryContract.marker]: incomeBatchHistoryContract.result},
+        {[incomeBatchHistoryContract.marker]: incomeBatchHistoryContract.result}
+      ]);
+      incomeBatchHistoryVerified++;
+      pass('income-batch-history actual final SQL has the exact new marker/domain and rejects five altered flags, wrong canary, wrong marker and duplicate results');
+    }
     verified++;
   }
   assert.equal(identityOnceVerified, 1, 'the reviewed identity-once file must be explicitly covered exactly once');
-  assert.equal(verified - identityOnceVerified, 39, 'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
-  assert.equal(verified, 40, 'the 39 original results plus the exact reviewed identity-once result are covered');
-  pass('all 39 original final SQL results and the reviewed identity-once result satisfy their protected release parsers');
+  assert.equal(incomeBatchHistoryVerified, 1, 'the reviewed income batch history result is explicitly covered once');
+  assert.equal(verified - identityOnceVerified - incomeBatchHistoryVerified, 39, 'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
+  assert.equal(verified, 41, 'the 39 original results plus exact identity-once and income batch history results are covered');
+  pass('all 39 original final SQL results and both reviewed personal history results satisfy their protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);
