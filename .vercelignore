@@ -526,3 +526,8 @@ supabase/.temp
 # Current authorized employee projection postflight regressions
 !scripts/test_portal_employee_projection_postflight.cjs
 !scripts/fixtures/portal_projection_authorities_20261012.json
+
+# Non-accounting document startup and real role/browser regressions
+!scripts/check_deferred_document_startup_20261013.cjs
+!scripts/check_deferred_document_startup_browser_20261013.cjs
+!docs/finance-deferred-document-startup-20261013.md

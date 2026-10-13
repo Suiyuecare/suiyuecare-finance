@@ -359,6 +359,9 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/check_approval_navigation_browser.cjs',
   'scripts/check_invoice_table_layout_browser.cjs',
   'scripts/check_invoice_accounting_unified_contract.cjs',
+  'scripts/check_deferred_document_startup_20261013.cjs',
+  'scripts/check_deferred_document_startup_browser_20261013.cjs',
+  'docs/finance-deferred-document-startup-20261013.md',
   'scripts/check_startup_read_coordination.cjs',
   'scripts/check_realtime_scoped_refresh.cjs',
   'scripts/check_dashboard_financial_sources.cjs',
@@ -564,6 +567,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
 const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'test:personal-history-identity-once': 'node scripts/check_finance_personal_history_identity_once_20261012.cjs',
   'test:personnel-workspace-browser': 'node scripts/check_personnel_workspace_browser_20261012.cjs',
+  'test:deferred-startup-browser': 'node scripts/check_deferred_document_startup_browser_20261013.cjs',
   'test:history-search-browser': 'node scripts/check_history_search_continuity_browser_20261012.cjs',
   'test:all-applicant-withdraw': 'node scripts/check_all_applicant_withdraw_contract.js && node scripts/check_applicant_withdraw_pglite.mjs',
   'test:procurement-closeout': 'node scripts/check_procurement_closeout_recovery.cjs && node scripts/check_procurement_payment_handler.js && node scripts/check_procurement_specialized_action_guard.js',
@@ -574,7 +578,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'test:procurement-closeout-browser': 'node scripts/check_procurement_closeout_browser.cjs',
   'test:personnel-save-browser': 'node scripts/check_personnel_save_browser.cjs',
   'test:personnel-save': 'node scripts/check_personnel_save_reliability.cjs && node scripts/test_personnel_save_conflict_nonretry.mjs && node scripts/test_member_save_reliable_receipt.mjs',
-  'test:history-performance': "node scripts/check_startup_read_coordination.cjs && node scripts/check_approval_history_loading.cjs && node scripts/check_approval_history_page_first.cjs && node scripts/test_history_performance_release_batch.mjs",
+  'test:history-performance': "node scripts/check_deferred_document_startup_20261013.cjs && node scripts/check_startup_read_coordination.cjs && node scripts/check_approval_history_loading.cjs && node scripts/check_approval_history_page_first.cjs && node scripts/test_history_performance_release_batch.mjs",
   'test:employee-reliability': "node scripts/check_employee_payment_concerns.cjs && node scripts/check_employee_progress_contacts.cjs && node scripts/check_employee_form_ux.js && node scripts/check_employee_auth_notifications.cjs && node scripts/check_expense_submission_identity.cjs && node scripts/check_expense_posting_reliability.cjs && node scripts/check_expense_revision_reliability.cjs && node scripts/check_expense_revision_export_version.cjs && node scripts/test_employee_reliability_release_batch.mjs",
   'test:invoice-item-review': 'node scripts/check_invoice_accounting_unified_contract.cjs',
   'test:invoice-item-bind-browser': 'node scripts/check_invoice_item_manual_binding_browser.cjs',
@@ -775,6 +779,9 @@ const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
   'scripts/check_approval_navigation_browser.cjs',
   'scripts/check_invoice_table_layout_browser.cjs',
   'scripts/check_invoice_accounting_unified_contract.cjs',
+  'scripts/check_deferred_document_startup_20261013.cjs',
+  'scripts/check_deferred_document_startup_browser_20261013.cjs',
+  'docs/finance-deferred-document-startup-20261013.md',
   'scripts/check_startup_read_coordination.cjs',
   'scripts/check_dashboard_financial_sources.cjs',
   'scripts/check_dashboard_aggregate_loading.cjs',
@@ -1164,7 +1171,7 @@ const interactionGate = workflow.slice(workflow.indexOf('  interaction-gate:'));
 check('CI runs invoice binding browser coverage after installing browsers in the interaction gate',
   interactionGate.indexOf('pnpm test:invoice-item-bind-browser') > interactionGate.indexOf('pnpm exec playwright install')
     && interactionGate.indexOf('pnpm exec playwright install') >= 0);
-for (const command of ['pnpm test:personnel-workspace-browser', 'pnpm test:history-search-browser']) {
+for (const command of ['pnpm test:personnel-workspace-browser', 'pnpm test:history-search-browser', 'pnpm test:deferred-startup-browser']) {
   check(`CI requires focused desktop/mobile browser coverage: ${command}`,
     interactionGate.indexOf(command) > interactionGate.indexOf('pnpm exec playwright install')
       && interactionGate.indexOf('pnpm exec playwright install') >= 0);

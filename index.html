@@ -3360,6 +3360,7 @@ function setFinanceWorkspaceIdentityBlocked(blocked){
   var wasBlocked=financeWorkspaceIdentityBlocked;
   financeWorkspaceIdentityBlocked=!!blocked;
   if(blocked&&typeof retireFinanceBootstrapReadQueue==='function')retireFinanceBootstrapReadQueue('');
+  if(blocked&&typeof resetDeferredFinanceDocumentSources==='function')resetDeferredFinanceDocumentSources();
   if(blocked&&typeof clearSystemHealthRuntime==='function')clearSystemHealthRuntime();
   if(blocked&&window.FinanceEmployeeFormUX)FinanceEmployeeFormUX.closePreview();
   if(blocked&&typeof window.closeReceiptViewer==='function')window.closeReceiptViewer();
@@ -6912,6 +6913,100 @@ async function loadStatementSourcePages(client,table,options){
     return {data:null,error:error,count:null};
   }
 }
+// Full document sources belong to lists/reports, not an employee's login,
+// new form, drafts or server-paged history. Unknown totals stay unknown.
+var FINANCE_DEFERRED_DOCUMENT_SOURCES={};
+function resetDeferredFinanceDocumentSources(){
+  Object.keys(FINANCE_DEFERRED_DOCUMENT_SOURCES).forEach(function(table){var state=FINANCE_DEFERRED_DOCUMENT_SOURCES[table];if(state.controller)state.controller.abort();});
+  FINANCE_DEFERRED_DOCUMENT_SOURCES={};
+}
+function financeLoadsCompleteAccountingSources(){
+  return !!(S.user&&['ceo','admin_director','accountant','external_audit','board','shareholder'].indexOf(normalizedRoleKey(S.user))>-1);
+}
+function financeDefersDocumentSources(){return !!(S.user&&hasSupabase()&&!S.demoLogin&&!financeLoadsCompleteAccountingSources());}
+function financeDocumentSourcesForPage(page){
+  if(page==='approvals'&&APPROVAL_FAST_BOOTSTRAP.status==='fallback'&&APPROVAL_FAST_BOOTSTRAP.identity===approvalFastBootstrapIdentity())return ['expense_requests','bills','invoices'];
+  if(['reports','ledger','vouchers','compliance','health','settings','users','shareholder','accounts'].indexOf(page)>-1)return ['expense_requests','bills','invoices'];
+  return {expenses:['expense_requests'],bills:['bills'],invoices:['invoices'],recv:['invoices']}[page]||[];
+}
+function financeDeferredDocumentState(table){
+  var identity=dashboardFinancialSourceIdentity(),state=FINANCE_DEFERRED_DOCUMENT_SOURCES[table];
+  if(!state||state.identity!==identity){
+    if(state&&state.controller)state.controller.abort();
+    state={identity:identity,status:'deferred',complete:false,total:null,error:'',promise:null,controller:null};
+    FINANCE_DEFERRED_DOCUMENT_SOURCES[table]=state;
+  }
+  return state;
+}
+function financeDocumentSourceReady(table){return !financeDefersDocumentSources()||financeDeferredDocumentState(table).complete===true;}
+function financeDeferredDocumentResult(table){
+  var state=financeDeferredDocumentState(table);
+  return {data:null,error:null,count:state.complete?state.total:null,deferred:true,complete:state.complete,identity:state.identity};
+}
+function financeDeferredDocumentStatusHtml(table){
+  var state=financeDeferredDocumentState(table),label={expense_requests:'申請紀錄',invoices:'發票紀錄',bills:'繳費紀錄'}[table]||'單據紀錄';
+  var text=state.status==='loading'?'正在讀取完整'+label+'，總數尚待確認。':state.status==='error'?'完整'+label+'尚未讀取完成；目前不能確認總數。':'完整'+label+'尚未載入；可先辦理申請與查看已確認的待辦。';
+  return '<div class="rw-notice'+(state.status==='error'?' error':'')+'" role="status" aria-busy="'+(state.status==='loading'?'true':'false')+'"><span>'+escAttr(text)+'</span>'
+    +(state.status==='loading'?'':' <button type="button" class="btn-g" style="min-height:44px" onclick="retryDeferredFinanceDocumentSource(\''+table+'\')">'+(state.status==='error'?'重試讀取紀錄':'讀取完整紀錄')+'</button>')+'</div>';
+}
+function financeDocumentRows(table){return {expense_requests:REQS,invoices:INVS,bills:BILLS}[table]||[];}
+function refreshDeferredFinanceDocumentSurface(table){
+  if(S.page==='expenses'&&table==='expense_requests')buildExp();
+  else if(S.page==='invoices'&&table==='invoices'){
+    renderInvoiceManagementList();renderBatchInvTable();
+    if(el('inv-cnt'))el('inv-cnt').textContent=financeDocumentSourceReady(table)?'共 '+visibleInvoicesForCurrentUser().length+' 張':'總數待確認';
+  }else if(S.page==='bills'&&table==='bills')renderBillList();
+  else if(S.page==='recv'&&table==='invoices')buildRecv();
+  else if(S.page==='dashboard')buildDash();
+  else if(financeDocumentSourcesForPage(S.page).indexOf(table)>-1)buildAll({pageOnly:true});
+}
+function loadDeferredFinanceDocumentSource(client,table,options){
+  options=options||{};
+  if(['expense_requests','bills','invoices'].indexOf(table)<0)return Promise.reject(new Error('不支援的單據來源'));
+  var state=financeDeferredDocumentState(table);
+  if(state.promise)return state.promise;
+  if(!options.force&&state.complete)return Promise.resolve(financeDeferredDocumentResult(table));
+  var snapshot=financeReadSourceSnapshot(financeDocumentRows(table));
+  var controller=typeof AbortController!=='undefined'?new AbortController():null;
+  state.status='loading';state.error='';state.complete=false;state.controller=controller;
+  function current(){return FINANCE_DEFERRED_DOCUMENT_SOURCES[table]===state&&state.identity===dashboardFinancialSourceIdentity()&&!financeWorkspaceIdentityBlocked;}
+  setApprovalSourceCompleteness(table,false,approvalFastBootstrapIdentity());
+  state.promise=queueFinanceBootstrapRead(async function(signal){
+    if(!current())return {data:null,error:null,stale:true};
+    var abort=function(){if(controller)controller.abort();};
+    if(signal&&controller){if(signal.aborted)abort();else signal.addEventListener('abort',abort,{once:true});}
+    try{return await loadStatementSourcePages(client,table,{deferCommit:true,signal:controller?controller.signal:signal,isCurrent:current});}
+    finally{if(signal&&controller)signal.removeEventListener('abort',abort);}
+  },true,true).then(function(result){
+    if(!current())return {data:null,error:null,stale:true};
+    if(!result||result.error||!Array.isArray(result.data)||!approvalRemoteSourceResultComplete(result,1))throw result&&result.error||new Error('完整單據筆數尚未確認');
+    var mapped=result.data.map({expense_requests:mapReq,invoices:mapInv,bills:mapBill}[table]);
+    var rows=mergeFinanceReadSourceRows(snapshot,mapped,financeDocumentRows(table)).filter(inActiveDataEnvironment);
+    if(table==='expense_requests')REQS=rows;else if(table==='invoices')INVS=rows;else BILLS=rows;
+    state.status='ready';state.complete=true;state.total=result.count;
+    commitStatementSourceResult(result);setApprovalSourceCompleteness(table,true,approvalFastBootstrapIdentity());
+    invalidateDashboardFinancialModel();refreshDeferredFinanceDocumentSurface(table);return result;
+  }).catch(function(error){
+    if(!current())return {data:null,error:null,stale:true};
+    state.status='error';state.complete=false;state.total=null;state.error=String(error&&error.message||error);
+    setApprovalSourceCompleteness(table,false,approvalFastBootstrapIdentity());
+    recordRemoteReadIssue('完整單據紀錄',error);refreshDeferredFinanceDocumentSurface(table);
+    return {data:null,error:error};
+  }).finally(function(){if(FINANCE_DEFERRED_DOCUMENT_SOURCES[table]===state){state.promise=null;state.controller=null;}});
+  refreshDeferredFinanceDocumentSurface(table);
+  return state.promise;
+}
+function ensureDeferredFinanceDocumentSources(page,force){
+  if(!financeDefersDocumentSources()||financeWorkspaceIdentityBlocked||!canAccessPage(page))return;
+  financeDocumentSourcesForPage(page).forEach(function(table){
+    var state=financeDeferredDocumentState(table);
+    if(force||state.status==='deferred')loadDeferredFinanceDocumentSource(getSb(),table,{force:!!force});
+  });
+}
+window.retryDeferredFinanceDocumentSource=function(table){
+  if(financeWorkspaceIdentityBlocked||!financeDefersDocumentSources()||!canAccessPage(S.page)||financeDocumentSourcesForPage(S.page).indexOf(table)<0)return Promise.resolve({ok:false,skipped:true});
+  return loadDeferredFinanceDocumentSource(getSb(),table,{force:true});
+};
 function applyRemoteLimit(query,count){
   var engine=financeDataEngine();
   if(engine&&typeof engine.applyRemoteLimit==='function')return engine.applyRemoteLimit(query,count);
@@ -7369,7 +7464,7 @@ async function performApprovalOrgAdminRuntimeRead(client,reason,state){
         var users=(USERS||[]).filter(function(u){return u&&u.active!==false;}).length;
         return {ok:true,department_count:(DEPTS||[]).length,position_count:Object.keys(RL||{}).length,active_user_count:users,primary_role_count:users,missing_primary_role_count:0,role_without_department_count:0,manager_without_role_count:0,source:'frontend_fallback'};
       })
-      ,client.rpc('finance_front_office_permission_runtime_health',{})
+      ,typeof canManageUsers==='function'&&!canManageUsers()?Promise.resolve({data:null,error:null,skipped:true}):client.rpc('finance_front_office_permission_runtime_health',{})
       ,client.rpc('finance_department_runtime_health',{})
     ]),'登入組織資料',12000);
     if(!current())return {ok:false,stale:true};
@@ -7380,7 +7475,7 @@ async function performApprovalOrgAdminRuntimeRead(client,reason,state){
     if(frontRes&&frontRes.error){
       frontHealthError=(frontRes.error.message||String(frontRes.error)||'人員權限 runtime health 讀取失敗');
       if(!isRpcMissing(frontRes.error))console.warn('Front-office permission runtime health failed:',frontHealthError);
-    }else{
+    }else if(!(frontRes&&frontRes.skipped)){
       frontHealth=normalizeFrontOfficePermissionRuntimeHealth(frontRes&&frontRes.data);
     }
     ORG_ADMIN_RUNTIME={
@@ -8409,6 +8504,7 @@ function approvalDraftsCompleteForCurrentUser(){
   var state=draftReadinessForCurrentUser();return !!(state.identity&&state.status==='ready'&&state.complete===true);
 }
 function approvalRemoteSourceResultComplete(result,limit){
+  if(result&&result.deferred)return result.complete===true&&result.identity===dashboardFinancialSourceIdentity();
   if(!result||result.error||!Array.isArray(result.data))return false;
   limit=Math.max(1,Number(limit)||1);
   if(result.count!=null&&isFinite(Number(result.count))&&Number(result.count)>=0)return result.data.length>=Number(result.count);
@@ -9634,6 +9730,7 @@ async function performRemoteDataLoad(){
   var publishedSources={};
   var sourceSnapshots={};
   if(!activeAuthUserId||!activeApprovalIdentity)return false;
+  if(financeDefersDocumentSources())resetDeferredFinanceDocumentSources();
   resetApprovalSourceCompleteness(activeApprovalIdentity);
   var personalDraftRead=loadCurrentUserDrafts({client:client,force:true,reason:'broad_bootstrap'});
   var approvalFastInvariantValid=APPROVAL_FAST_BOOTSTRAP.identity===activeApprovalIdentity
@@ -9706,6 +9803,12 @@ async function performRemoteDataLoad(){
       if(fastPromise)try{await fastPromise;}catch(_){}
       if(fastIdentity!==approvalFastBootstrapIdentity())return {data:[],error:new Error('登入身分已變更')};
       if(index===8)return personalDraftRead;
+      var deferredTable={1:'expense_requests',3:'bills',4:'invoices'}[index];
+      if(deferredTable&&financeDefersDocumentSources()){
+        if(financeDocumentSourcesForPage(S.page).indexOf(deferredTable)<0)return financeDeferredDocumentResult(deferredTable);
+        sourceSnapshots[index]=financeReadSourceSnapshot(financeDocumentRows(deferredTable));
+        return loadDeferredFinanceDocumentSource(client,deferredTable,{force:true}).then(function(result){return publishReadSource(index,result);});
+      }
       return queueFinanceBootstrapRead(function(signal){
         if([1,2,3,4].indexOf(index)>-1)sourceSnapshots[index]=financeReadSourceSnapshot({1:REQS,2:VOUCHERS,3:BILLS,4:INVS}[index]);
         return financeBootstrapRead(job(signal),'正式資料 '+index,index===1||index===4?120000:20000,signal);
@@ -9755,6 +9858,7 @@ async function performRemoteDataLoad(){
   setApprovalSourceCompleteness('draft_requests',approvalDraftsCompleteForCurrentUser(),activeApprovalIdentity);
   function rowsAt(idx,label,currentRows,preserveCurrentRows){
     var item=res[idx]||{};
+    if(item.deferred)return currentRows||[];
     if(item.error){
       if((idx===2||idx===6)&&typeof rejectFinanceAccountingRead==='function')rejectFinanceAccountingRead(item.error);
       if(isTransientRemoteReadError(item.error)){
@@ -16365,6 +16469,7 @@ async function guardedNav(id,btn){
   if(window.FinanceHrBridge)window.FinanceHrBridge.dispose();
   if(S.page==='users'&&id!=='users'&&window.FinancePersonnelWorkspace)FinancePersonnelWorkspace.suspend();
   if(id!=='detail')S.prev=S.page;S.page=id;
+  ensureDeferredFinanceDocumentSources(id,false);
   document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on');});
   document.querySelectorAll('.ni').forEach(function(n){n.classList.remove('on');var d=n.querySelector('.dot');if(d)d.remove();});
   var pg=el('pg-'+id);if(pg)pg.classList.add('on');
@@ -16576,6 +16681,7 @@ function buildAll(options){
   updateRecvSidebarBadge();
   updateModuleTodoBadge();
   var page=S.page||'dashboard';
+  ensureDeferredFinanceDocumentSources(page,false);
   if(page==='dashboard')buildDash();
   if(page==='expenses')buildExp();
   if(page==='approvals')buildApprovals();
@@ -19197,6 +19303,7 @@ function dashAlertHtml(pm,period,eid){
 }
 function employeeDashboardGuideHtml(myReqs,pendingMine,drafts){
   var pending=pendingMine.length,done=myReqs.filter(function(r){return r.status==='completed';}).length;
+  var recordsComplete=financeDocumentSourceReady('expense_requests');
   return '<div class="employee-guide">'
     +'<div class="employee-guide-main">'
       +'<div class="employee-guide-kicker">START HERE</div>'
@@ -19212,9 +19319,9 @@ function employeeDashboardGuideHtml(myReqs,pendingMine,drafts){
     +'<div class="employee-guide-card">'
       +'<div class="employee-guide-card-title">我的目前狀態</div>'
       +'<div class="employee-guide-list">'
-        +'<div>進行中申請：<strong>'+pending+' 筆</strong>。若主管退回，打開該單即可看退回原因與補件位置。</div>'
+        +'<div>進行中申請：<strong>'+(recordsComplete?pending+' 筆':'待確認')+'</strong>。完整紀錄可到「我的申請」查看。</div>'
         +'<div>暫存表單：<strong>'+drafts+' 筆</strong>。暫存只自己看得到，還沒有送主管。</div>'
-        +'<div>已完成申請：<strong>'+done+' 筆</strong>。完成後會由會計依規則入帳。</div>'
+        +'<div>已完成申請：<strong>'+(recordsComplete?done+' 筆':'待確認')+'</strong>。完成後會由會計依規則入帳。</div>'
       +'</div>'
     +'</div>'
   +'</div>';
@@ -19789,8 +19896,11 @@ function buildDash(){
     dashboardRenderFreshness(bundle);dashboardRenderVerdict(bundle);dashboardRenderKpis(bundle);dashboardRenderTrend(bundle);dashboardRenderDepartments(bundle);dashboardSyncOrganization();dashboardRenderReceivables(bundle);dashboardRenderRisks(bundle,pm);dashboardRenderReconciliation(bundle);
   }
   if(work)work.open=!financeView;
-  if(el('dash-work-summary'))el('dash-work-summary').textContent=pm.length+' 筆待處理 · '+notificationView.summary+' · '+allReqs.length+' 筆申請';
-  var tb=el('dash-tbl');if(tb){tb.innerHTML=allReqs.slice(0,6).map(function(r){return requestListRowHtml(r,'openRequestModal');}).join('');if(!allReqs.length)tb.innerHTML='<tr><td colspan="7"><div class="employee-empty-state"><strong>'+(financeView?'目前沒有申請記錄':'你還沒有送出任何申請')+'</strong><span>'+(financeView?'切換公司可查看其他資料。':'第一次使用可以先從「新增申請」開始，暫存不會送給主管。')+'</span>'+(!financeView?'<button class="btn-p" onclick="nav(\'newreq\',null)">建立第一張申請</button>':'')+'</div></td></tr>';}
+  if(el('dash-work-summary'))el('dash-work-summary').textContent=pm.length+' 筆待處理 · '+notificationView.summary+' · '+(financeDocumentSourceReady('expense_requests')?allReqs.length+' 筆申請':'申請總數待確認');
+  var tb=el('dash-tbl');if(tb){tb.innerHTML=allReqs.slice(0,6).map(function(r){return requestListRowHtml(r,'openRequestModal');}).join('');if(!allReqs.length){
+    if(!financeDocumentSourceReady('expense_requests'))tb.innerHTML='<tr><td colspan="7"><div class="employee-empty-state"><strong>申請紀錄總數尚待確認</strong><span>可直接到「我的申請」查詢完整歷史紀錄，也可先新增申請。</span><button class="btn-g" onclick="nav(\'approvals\',null);setTimeout(function(){apprTab(\'mine\')},0)">查看我的申請</button></div></td></tr>';
+    else tb.innerHTML='<tr><td colspan="7"><div class="employee-empty-state"><strong>'+(financeView?'目前沒有申請記錄':'你還沒有送出任何申請')+'</strong><span>'+(financeView?'切換公司可查看其他資料。':'第一次使用可以先從「新增申請」開始，暫存不會送給主管。')+'</span>'+(!financeView?'<button class="btn-p" onclick="nav(\'newreq\',null)">建立第一張申請</button>':'')+'</div></td></tr>';
+  }}
   if(el('dash-notif'))el('dash-notif').innerHTML=financeNotificationStatusHtml(notificationView)+(notificationView.rows.filter(function(n){return!n.read;}).slice(0,3).map(function(n){return '<div class="dash-notif-row"'+notificationClickAttributes(n)+'><span></span><div><strong>'+escAttr(n.title)+'</strong><small>'+escAttr(n.time)+'</small></div></div>';}).join('')||(notificationView.verified?'<div class="dash-empty">目前沒有未讀通知'+(notificationView.partial?'（僅已載入範圍）':'')+'。</div>':''));
   scheduleMobileEnhance(el('pg-dashboard'));
   if(!S.demoLogin&&hasSupabase()&&financeNotificationState().status==='idle')loadFinanceNotifications();
@@ -26497,8 +26607,8 @@ function updateExpenseFilterUi(state,shown,total,errors){
   var badge=el('exp-active-filter-count');
   if(badge){badge.textContent=advancedCount;badge.hidden=!advancedCount;}
   var count=el('exp-count');
-  if(count)count.textContent=active?('符合 '+shown+' 筆／全集團共 '+total+' 筆'):('全集團共 '+total+' 筆');
-  var result=el('exp-result-count');if(result)result.textContent='顯示 '+shown+' / '+total+' 筆';
+  if(count)count.textContent=total==null?'完整紀錄總數待確認':active?('符合 '+shown+' 筆／全集團共 '+total+' 筆'):('全集團共 '+total+' 筆');
+  var result=el('exp-result-count');if(result)result.textContent=total==null?'紀錄尚未完整載入':'顯示 '+shown+' / '+total+' 筆';
   var error=el('exp-filter-error');if(error)error.textContent=(errors||[]).join('；');
 }
 window.setExpenseAdvancedOpen=function(open){
@@ -26554,11 +26664,12 @@ window.filterExp=function(){
     return true;
   });
   EXPENSE_LAST_FILTER_STATE=state;
-  updateExpenseFilterUi(state,filtered.length,REQS.length,errors);
+  updateExpenseFilterUi(state,financeDocumentSourceReady('expense_requests')?filtered.length:null,financeDocumentSourceReady('expense_requests')?REQS.length:null,errors);
   renderExp(filtered,state);
 };
 function renderExp(data,state){
   var tb=el('exp-tbody');if(!tb)return;
+  if(!financeDocumentSourceReady('expense_requests')){tb.innerHTML='<tr><td colspan="7">'+financeDeferredDocumentStatusHtml('expense_requests')+'</td></tr>';return;}
   if(!data.length){
     var active=expenseHasActiveFilters(state||expenseFilterState());
     tb.innerHTML='<tr><td colspan="7"><div class="expense-empty"><strong>'+(active?'找不到符合條件的放款申請':'目前沒有放款申請')+'</strong><span>'+(active?'請調整關鍵字或篩選區間':'新增申請後會顯示在這裡')+'</span>'+(active?'<button type="button" class="btn-g" onclick="clearExpenseFilters()">清除所有條件</button>':'')+'</div></td></tr>';
@@ -26797,6 +26908,7 @@ function receivableTodoCount(){
 function updateRecvSidebarBadge(count){
   var badge=el('recv-cnt');
   if(!badge)return;
+  if(!financeDocumentSourceReady('invoices')){badge.textContent='—';badge.style.display='inline-flex';badge.title='收款紀錄尚未完整確認';return;}
   var n=arguments.length?count:receivableTodoCount();
   n=Math.max(0,Math.round(num(n)));
   badge.textContent=n>0?(n>99?'99+':String(n)):'';
@@ -33304,7 +33416,7 @@ window.buildInvoices=function buildInvoices(){
 	if(el('inv-s'))el('inv-s').style.display='none';
 	if(el('inv-b'))el('inv-b').style.display='block';
   renderInvTable();syncSingleInvoiceIdentifierPlaceholder();applyIncomeFormFieldCustomizations();updInvPrev();renderBatchInvTable();renderBatchTable();renderInvoiceManagementList();
-  if(el('inv-cnt'))el('inv-cnt').textContent='共 '+visibleInvs.length+' 張';
+  if(el('inv-cnt'))el('inv-cnt').textContent=financeDocumentSourceReady('invoices')?'共 '+visibleInvs.length+' 張':'總數待確認';
   setTimeout(function(){markIncomeDocClean('invoices');},0);
 }
 window.switchInv=function(mode){
@@ -33901,6 +34013,7 @@ function renderInvTable(){
 }
 function renderInvoiceManagementList(){
   var root=el('invoice-manage-list');if(!root)return;
+  if(!financeDocumentSourceReady('invoices')){root.innerHTML=financeDeferredDocumentStatusHtml('invoices');return;}
   var query=incomeManagementSearchState().invoice.trim().toLocaleLowerCase('zh-Hant');
   var input=el('invoice-manage-search');if(input&&input.value!==incomeManagementSearchState().invoice)input.value=incomeManagementSearchState().invoice;
   var visible=visibleInvoicesForCurrentUser();
@@ -34347,6 +34460,7 @@ window.issueBatch=async function(){
 };
 function renderBatchInvTable(){
   if(!el('bitbody'))return;
+  if(!financeDocumentSourceReady('invoices')){el('bitbody').innerHTML='<tr><td colspan="6">'+financeDeferredDocumentStatusHtml('invoices')+'</td></tr>';return;}
   var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue',pending_receipt_review:'b-purp'};
   var RECVL={paid:'已收款',unpaid:'未收款',partial:'部分收款',pending_receipt_review:'待執行長確認'};
   var visible=visibleInvoicesForCurrentUser(),trusted=approvalRowRuntimeForCurrentUser().trustedTasksVerified===true;
@@ -34662,6 +34776,7 @@ function showConfirmedBillSubmission(result,expectedCount,note,recovered){
 }
 function renderBillList(){
   var root=el('bill-list');if(!root)return;
+  if(!financeDocumentSourceReady('bills')){root.innerHTML=financeDeferredDocumentStatusHtml('bills');return;}
   var source=visibleBillsForCurrentUser();
   var query=incomeManagementSearchState().bill.trim().toLocaleLowerCase('zh-Hant');
   var input=el('bill-manage-search');if(input&&input.value!==incomeManagementSearchState().bill)input.value=incomeManagementSearchState().bill;
@@ -34816,6 +34931,14 @@ function recvCanonicalMonthGroups(rows,data){
 }
 window.buildRecv=function buildRecv(){
   renderFinanceReceiptRecovery();
+  if(!financeDocumentSourceReady('invoices')){
+    if(el('recv-sub'))el('recv-sub').textContent='完整收款紀錄尚待確認';
+    if(el('recv-kpis'))el('recv-kpis').innerHTML='<div style="grid-column:1/-1">'+financeDeferredDocumentStatusHtml('invoices')+'</div>';
+    if(el('recv-rate-pill'))el('recv-rate-pill').textContent='資料待確認';
+    if(el('recv-unpaid-hint'))el('recv-unpaid-hint').textContent='尚未取得完整發票紀錄，未收筆數及金額待確認。';
+    document.querySelectorAll('#pg-recv tbody').forEach(function(body){body.innerHTML='<tr><td colspan="12">收款紀錄尚未完整載入</td></tr>';});
+    return;
+  }
   var all=recvBaseInvoices();
   normalizeRecvEntity(all);
   var rangedAll=recvInvoicesForMonthRange(all);
