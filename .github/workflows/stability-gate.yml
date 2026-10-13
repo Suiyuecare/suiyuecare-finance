@@ -150,6 +150,7 @@ jobs:
           pnpm test:personnel-workspace-browser
           pnpm test:history-search-browser
           pnpm test:deferred-startup-browser
+          pnpm test:notification-paging-browser
           FINANCE_HISTORY_NATIVE_REQUIRED=1 pnpm test:personal-history-identity-once
           pnpm test:org-chart-browser
           node scripts/check_human_accounting_browser_20261002.cjs

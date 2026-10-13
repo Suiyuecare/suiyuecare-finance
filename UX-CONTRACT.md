@@ -23,3 +23,11 @@
 驗收使用隔離的虛構身份與單據，測試允許／禁止角色、系統帳號、執行長、長姓名／信箱、空結果、錯誤／停權、切換身份、輸入競速、快速返回與捲動保留。正式帳號 Google 登入與真人實機試用不由模擬測試冒充。
 
 人員與單據搜尋含私人資訊，條件只存在本次已授權的記憶體畫面，不寫入 URL、analytics 或跨身分持久快取。
+
+## 通知讀取與歷史（2026-10-13）
+
+通知的授權來源仍是 `public.notifications` 既有 tenant／environment 與 SELECT／UPDATE RLS。`loadFinanceNotifications()` 只讀所有未讀通知，每批 400 筆並核對 exact count；不能把失敗或未讀完的集合說成 0。`loadFinanceNotificationHistory()` 使用 created_at／id 游標每頁 40 筆，通知中心的「載入更多通知」保留所有歷史入口，不要求首屏取得全歷史總數。未讀 badge 與歷史列表狀態分開。
+
+沿用 `financeNotificationState()` 身分隔離、既有通知按鈕與 `.finance-notification-status` 回饋；不新增配色或 overlay。「所有可見通知標為已讀」作用於目前後端授權可見的全部未讀通知，成功後回查，不能只更新已載入頁或樂觀清零。跨身分、撤權、登入鎖定立即清除快取；遲到回應不得回填。
+
+驗收：`check_notification_paged_read_20261013.cjs`、既有 `check_employee_auth_notifications.cjs` 與 actual DOM browser 驗收；包含超過 1,000／2,500 筆、游標、篩選、未讀 exact count、錯誤保留、清空、已讀更新、跨帳號及撤權。

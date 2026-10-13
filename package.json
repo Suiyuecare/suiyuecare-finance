@@ -53,7 +53,7 @@
     "test:reporting-integrity": "node scripts/check_tax_source_integrity.cjs && node scripts/check_tax_source_runtime.cjs && node scripts/check_ar_reconciliation_scope.cjs && node scripts/check_ar_export_reconciliation_ui.cjs && node scripts/check_department_statement_export.cjs && node scripts/test_reporting_integrity_release_batch.mjs",
     "test:audit-readiness": "node scripts/check_audit_readiness_engine.cjs && node scripts/check_finance_audit_readiness.cjs && node scripts/check_audit_workspace_runtime.cjs && node scripts/check_compliance_commit.cjs && node scripts/test_audit_readiness_release_batch.mjs",
     "test:audit-readiness-browser": "node scripts/check_audit_workspace_browser.cjs",
-    "test:employee-reliability": "node scripts/check_employee_payment_concerns.cjs && node scripts/check_employee_progress_contacts.cjs && node scripts/check_employee_form_ux.js && node scripts/check_employee_auth_notifications.cjs && node scripts/check_expense_submission_identity.cjs && node scripts/check_expense_posting_reliability.cjs && node scripts/check_expense_revision_reliability.cjs && node scripts/check_expense_revision_export_version.cjs && node scripts/test_employee_reliability_release_batch.mjs",
+    "test:employee-reliability": "node scripts/check_employee_payment_concerns.cjs && node scripts/check_employee_progress_contacts.cjs && node scripts/check_employee_form_ux.js && node scripts/check_employee_auth_notifications.cjs && node scripts/check_notification_paged_read_20261013.cjs && node scripts/check_expense_submission_identity.cjs && node scripts/check_expense_posting_reliability.cjs && node scripts/check_expense_revision_reliability.cjs && node scripts/check_expense_revision_export_version.cjs && node scripts/test_employee_reliability_release_batch.mjs",
     "test:history-performance": "node scripts/check_deferred_document_startup_20261013.cjs && node scripts/check_startup_read_coordination.cjs && node scripts/check_approval_history_loading.cjs && node scripts/check_approval_history_page_first.cjs && node scripts/test_history_performance_release_batch.mjs",
     "test:deferred-startup-browser": "node scripts/check_deferred_document_startup_browser_20261013.cjs",
     "test:approval-performance-browser": "node scripts/check_approval_navigation_browser.cjs && node scripts/check_approval_history_browser.cjs && node scripts/check_startup_read_coordination_browser.cjs && node scripts/check_invoice_table_layout_browser.cjs",
@@ -108,7 +108,8 @@
     "test:portal-projection-postflight": "node scripts/test_portal_employee_projection_postflight.cjs",
     "test:personnel-workspace-browser": "node scripts/check_personnel_workspace_browser_20261012.cjs",
     "test:history-search-browser": "node scripts/check_history_search_continuity_browser_20261012.cjs",
-    "test:personal-history-identity-once": "node scripts/check_finance_personal_history_identity_once_20261012.cjs"
+    "test:personal-history-identity-once": "node scripts/check_finance_personal_history_identity_once_20261012.cjs",
+    "test:notification-paging-browser": "node scripts/check_notification_paging_browser_20261013.cjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
