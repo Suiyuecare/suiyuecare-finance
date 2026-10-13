@@ -54,7 +54,7 @@ jobs:
   candidate:
     name: Build and seal the immutable candidate before DB mutation
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     services:
       history-search-postgres:
         image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
