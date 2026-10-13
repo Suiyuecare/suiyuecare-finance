@@ -206,6 +206,7 @@ supabase/.temp
 !scripts/check_bill_approval_attachment_flow.cjs
 !scripts/check_attachment_experience_20261002.cjs
 !scripts/check_formal_resumable_upload.cjs
+!scripts/check_refund_office_submission.cjs
 !scripts/check_bill_attachment_browser.cjs
 
 # Reporting source integrity and reconciliation protected release

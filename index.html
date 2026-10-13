@@ -4068,6 +4068,25 @@ function formatStorageUploadError(err){
   if(engine&&typeof engine.formatStorageUploadError==='function')return engine.formatStorageUploadError(err);
   return friendlyErrorMessage(err,{area:'attachment-upload',action:'附件上傳'});
 }
+function expenseAttachmentFailureDiagnostic(error,stage,correlationId){
+  var allowedStages={source_read:true,bundle_prepare:true,refund_excel_prepare:true,request_upload:true,passbook_upload:true,upload_preflight:true,draft_promotion_read:true,metadata_write:true,signed_read:true,upload_identity:true};
+  var reasonStages={attachment_read_failed:'source_read',attachment_preflight_failed:'upload_preflight',file_type_not_allowed:'upload_preflight',file_too_large:'upload_preflight',archive_promotion_read_failed:'draft_promotion_read',archive_promotion_empty:'draft_promotion_read',metadata_insert_failed:'metadata_write',metadata_insert_cleanup_failed:'metadata_write',signed_url_failed:'signed_read',signed_url_cleanup_failed:'signed_read',attachment_upload_identity_changed:'upload_identity',resumable_auth_required:'upload_identity'};
+  var allowedNames={NotReadableError:true,NotFoundError:true,SecurityError:true,AbortError:true,InvalidStateError:true,QuotaExceededError:true,EncodingError:true,TypeError:true,NetworkError:true};
+  var diagnostic={stage:allowedStages[stage]?stage:'source_read',errorName:'Error',errorCode:'UNKNOWN_ATTACHMENT_ERROR',correlationId:/^expense_submit_[a-f0-9-]{36}$/i.test(String(correlationId||''))?String(correlationId):'expense_attachment_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10)};
+  var current=error;
+  for(var depth=0;current&&depth<5;depth++){
+    if(reasonStages[current.reason])diagnostic.stage=reasonStages[current.reason];
+    if(allowedNames[current.name])diagnostic.errorName=current.name;
+    var code=String(current.code==null?'':current.code);
+    if(/^\d{1,5}$/.test(code)||['CLIENT_TIMEOUT','CLIENT_CANCELLED'].indexOf(code)>-1)diagnostic.errorCode=code;
+    current=current.sourceError||current.cause;
+  }
+  // Do not serialize an Error or its message: file names, Storage paths,
+  // signed URLs and provider tokens may occur in those untrusted strings.
+  try{recordOpsEvent('expense_attachment_preparation_failed','warn','送件附件準備未完成','階段：'+diagnostic.stage+'；錯誤類型：'+diagnostic.errorName+'；事件識別：'+diagnostic.correlationId,diagnostic);}
+  catch(diagnosticError){console.warn('Attachment failure diagnostic could not be recorded.');}
+  return diagnostic;
+}
 function runtimeHost(){
   return String(location.hostname||'');
 }
@@ -4487,12 +4506,18 @@ function fileToAttachment(file,opts){
     return Promise.resolve({n:file.name||'附件',t:fileExt(file.name||''),mime:file.type||'',size:file.size||0,url:'',uploadedAt:new Date().toISOString(),kind:file.kind||file.category||'',dataEnv:activeDataEnvironment(),uploadBlob:file});
   }
   return new Promise(function(resolve,reject){
+    function readFailure(error){
+      var failure=new Error('附件目前無法從裝置讀取，請先開啟檔案確認已下載完成，再重新選取無法讀取的檔案。');
+      failure.reason='attachment_read_failed';
+      failure.sourceError=error;
+      reject(failure);
+    }
     var reader=new FileReader();
     reader.onload=function(){
       resolve({n:file.name,t:fileExt(file.name),mime:file.type||'',size:file.size||0,url:String(reader.result||''),uploadedAt:new Date().toISOString(),kind:file.kind||file.category||'',dataEnv:activeDataEnvironment()});
     };
-    reader.onerror=function(){reject(reader.error||new Error('file read failed'));};
-    reader.readAsDataURL(file);
+    reader.onerror=function(){readFailure(reader.error);};
+    try{reader.readAsDataURL(file);}catch(error){readFailure(error);}
   });
 }
 function safeStorageName(name){
@@ -25839,6 +25864,7 @@ window.submitNR=async function(){
   var uploadCount=S.nrFiles.length;
   var attachments=[];
   var passbookAttachments=[];
+  var attachmentPreparationStage='source_read';
   try{
     attachments=await Promise.all(S.nrFiles.map(function(file){return fileToAttachment(file,{directUpload:true});}));
     if(S.nrPassbookFile){
@@ -25848,14 +25874,16 @@ window.submitNR=async function(){
       passbookAttachments=[passbookAtt];
     }
   }catch(err){
-    console.error(err);
-    alert('附件讀取失敗，請重新選擇檔案後再送出');
+    var readDiagnostic=expenseAttachmentFailureDiagnostic(err,attachmentPreparationStage,submissionContext.attemptId);
+    console.warn('Expense attachment source read failed.',readDiagnostic);
+    alert('附件讀取失敗，這張單尚未送出。請先在裝置上開啟檔案，確認已下載完成，再重新選取無法讀取的檔案。原表單與其他附件都保留。\n\n事件識別：'+readDiagnostic.correlationId);
     return;
   }
   var sourceRequestAttachments=attachments.map(function(f){return Object.assign({},normalizeFileMeta(f));});
   var sourcePassbookAttachments=passbookAttachments.map(function(f){return Object.assign({},normalizeFileMeta(f));});
   var prepareRequestAttachmentsForNo=async function(targetNo){
     var prepared=sourceRequestAttachments.map(function(f){return Object.assign({},f);});
+    attachmentPreparationStage='bundle_prepare';
     if(isLazyRequestType(S.nrType)){
       var meta={no:targetNo,typeLabel:tL,app:appName,entity:ent.full||ent.s,department:dc+' '+dept.n,date:requestDateIso,amount:amt,expectedPayDate:pay.expectedPayDate,payee:pay.payee,bankText:bank,desc:desc};
       var bundleFile=await withOperationTimeout(receiptBundleAttachment(prepared,meta),'憑據 PDF 彙整',30000);
@@ -25871,6 +25899,7 @@ window.submitNR=async function(){
     }else if(S.nrType==='refund_request'){
       var refundBundle=await withOperationTimeout(receiptBundleAttachment(prepared,{no:targetNo,typeLabel:tL,app:appName}),'退費附件 PDF 彙整',30000);
       if(refundBundle)prepared.unshift(refundBundle);
+      attachmentPreparationStage='refund_excel_prepare';
       prepared.unshift(refundExcelAttachment(refundInfo,{no:targetNo,app:appName,entity:ent.full||ent.s,department:dc+' '+dept.n}));
     }else if(S.nrType==='purchase_request'){
       var purchaseBundle=await withOperationTimeout(receiptBundleAttachment(prepared,{no:targetNo,typeLabel:tL,app:appName}),'採購附件 PDF 彙整',30000);
@@ -25904,7 +25933,9 @@ window.submitNR=async function(){
     try{
       var preparedRequestAttachments=await prepareRequestAttachmentsForNo(targetNo);
       var preparedPassbookAttachments=sourcePassbookAttachments.map(function(f){return Object.assign({},f);});
+      attachmentPreparationStage='request_upload';
       uploadedFiles=await uploadAttachmentsToSupabase(preparedRequestAttachments,{recordType:'expense_requests',recordNo:targetNo,kind:'request_files',date:requestDateIso,entityId:eid,departmentCode:dc,onProgress:onProgress});
+      attachmentPreparationStage='passbook_upload';
       uploadedPassbook=await uploadAttachmentsToSupabase(preparedPassbookAttachments,{recordType:'expense_requests',recordNo:targetNo,kind:'passbook',date:requestDateIso,entityId:eid,departmentCode:dc,onProgress:onProgress});
       return{files:uploadedFiles,passbookFiles:uploadedPassbook};
     }catch(setErr){
@@ -25920,8 +25951,12 @@ window.submitNR=async function(){
     stagedUploads={files:newlyUploadedAttachmentResults(attachments),passbookFiles:newlyUploadedAttachmentResults(passbookAttachments)};
     submissionPhase='uploaded_pre_rpc';
   }catch(uploadErr){
-    console.error(uploadErr);
-    alert('附件上傳失敗：\n\n'+formatStorageUploadError(uploadErr)+'\n\n這張單子尚未送出，主管不會看到缺附件的半套資料。請依上方提示修正後再送出。');
+    var uploadDiagnostic=expenseAttachmentFailureDiagnostic(uploadErr,attachmentPreparationStage,submissionContext.attemptId);
+    console.warn('Expense attachment preparation failed.',uploadDiagnostic);
+    var attachmentFailureHint=['NotReadableError','NotFoundError','SecurityError'].indexOf(uploadDiagnostic.errorName)>-1
+      ?'附件目前無法從裝置讀取。請先開啟檔案確認已下載完成，再重新選取無法讀取的檔案；原表單與其他附件都保留。'
+      :formatStorageUploadError(uploadErr);
+    alert('附件上傳失敗：\n\n'+attachmentFailureHint+'\n\n這張單子尚未送出，主管不會看到缺附件的半套資料。請依上方提示修正後再送出。\n\n事件識別：'+uploadDiagnostic.correlationId);
     return;
   }
   uploadCount=attachments.length+passbookAttachments.length;

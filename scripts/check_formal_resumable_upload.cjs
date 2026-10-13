@@ -491,4 +491,5 @@ async function main() {
   console.log('PASS pinned same-origin TUS bundle loads and matches provenance digest');
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1; });
+module.exports = { officeFile };
+if (require.main === module) main().catch((error) => { console.error(error); process.exitCode = 1; });

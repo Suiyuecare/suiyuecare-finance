@@ -315,6 +315,7 @@ function releaseSourceFiles() {
   'scripts/test_invoice_revenue_result_sql.mjs',
   'scripts/check_income_reconcile_migration.cjs',
   'scripts/check_formal_resumable_upload.cjs',
+  'scripts/check_refund_office_submission.cjs',
   'scripts/check_submission_cashier_preflight.cjs',
   'supabase/migrations/20260927180201_finance_portal_session_logout.sql',
   'supabase/migrations/20260927175827_finance_hr_native_contractor_bridge.sql',
