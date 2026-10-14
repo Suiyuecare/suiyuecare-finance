@@ -48,8 +48,8 @@ const actualSetup = `(async()=>{
   function canonical(u){return{id:u.id,tenant_id:actor.tenantId,name:u.n,email:u.email,org_contact_email:u.contactEmail,job_title:u.jobTitle,extension:u.extension,role:u.role,entity_id:u.eid,department_code:u.dc,active:u.active,member_revision:u.memberRevision||3,auth_user_id:u.authUserId||null,google_link_status:u.googleLinkStatus||'bound',created_at:'2026-10-01T00:00:00Z'};}
   window.__appRows=USERS.map(canonical);
   var authUser={id:actor.authUserId,email:actor.email,email_confirmed_at:'2026-10-01T00:00:00Z',app_metadata:{provider:'google',providers:['google']},identities:[{provider:'google',identity_data:{email:actor.email,email_verified:true}}]};
-  var session={access_token:'fictional-local-token',expires_at:Math.floor(Date.now()/1000)+3600,user:authUser};
-  var client={auth:{getSession:async()=>({data:{session}}),getUser:async()=>({data:{user:authUser}}),signOut:async()=>{__logoutTransport.push('local-signout');return{error:null};}},
+  var session={access_token:'synthetic.'+btoa(JSON.stringify({session_id:'30000000-0000-4000-8000-000000000001'}))+'.only',expires_at:Math.floor(Date.now()/1000)+3600,user:authUser};
+  var client={auth:{getSession:async()=>({data:{session}}),getUser:async()=>({data:{user:authUser}}),signOut:async options=>{if(options.scope!=='local')throw Error('QA requires bounded server revocation plus local-only SDK cleanup');__logoutTransport.push('local-signout');session=null;return{error:null};}},
     from:function(table){var filters=[];var query={select:function(){return query},eq:function(k,v){filters.push([k,v]);return query},limit:function(){return query},order:function(){return query},in:function(){return query},is:function(){return query},neq:function(){return query},then:function(resolve,reject){var rows=table==='finance_users'?__appRows.filter(r=>filters.every(([k,v])=>String(r[k])===String(v))):[];return Promise.resolve({data:rows,error:null,count:rows.length}).then(resolve,reject)},update:function(){throw Error('QA forbids direct table update')},delete:function(){throw Error('QA forbids direct table deletion')},insert:function(){throw Error('QA forbids direct table insert')},upsert:function(){throw Error('QA forbids direct table upsert')}};return query},
     rpc:async function(name,args){__appCalls.push({name,args});
       if(name==='finance_admin_google_account_link_status_v2'){var u=USERS.find(u=>u.id===args.p_finance_user_id);return{data:{status:u.googleLinkStatus||'bound',current_login_email:u.email,finance_user_id:u.id,auth_user_id:u.authUserId||null}};}
@@ -59,7 +59,22 @@ const actualSetup = `(async()=>{
       return{data:[],error:null};}
   };
   getSb=()=>client;isFinanceProductionBuild=()=>true;isProductionRuntime=()=>true;SUPABASE_URL=location.origin;SUPABASE_ANON_KEY='fictional-local-public-key';window.supabase={createClient:()=>client};
-  window.fetch=async function(url,init){if(String(url)==='https://login.suiyuecare.com/api/portal-handoff?action=logout'&&init&&init.method==='POST'){__logoutTransport.push('virtual-portal-logout');return{ok:true,json:async()=>({ok:true,revokedModules:['hr','finance','portal']})};}throw Error('QA forbids actual external requests '+url);};
+  var logoutReceipts=new Map();
+  window.fetch=async function(url,init){
+    if(String(url)!=='https://login.suiyuecare.com/api/portal-handoff?action=logout'||!init||init.method!=='POST')throw Error('QA forbids actual external requests '+url);
+    var payload=JSON.parse(init.body);
+    if(payload.protocol!==2||payload.source!=='finance'||init.credentials!=='omit'||init.cache!=='no-store'||!/^[a-f0-9]{64}$/.test(payload.capability))throw Error('QA rejects non-v2 or unbounded logout request');
+    if(payload.phase==='prepare'){
+      if(!init.headers.Authorization||logoutReceipts.has(payload.operationId))throw Error('QA rejects unauthenticated or duplicate prepare');
+      logoutReceipts.set(payload.operationId,{protocol:2,prepared:true,operationId:payload.operationId,cutoff:new Date().toISOString(),expiresAt:new Date(Date.now()+900000).toISOString(),ok:false,revokedModules:[],pendingModules:['hr','finance','portal','apm']});
+    }else if(payload.phase==='resume'){
+      var receipt=logoutReceipts.get(payload.operationId);
+      if(!receipt||init.headers.Authorization)throw Error('QA requires bounded capability-only resume');
+      logoutReceipts.set(payload.operationId,Object.assign({},receipt,{ok:true,revokedModules:['hr','finance','portal','apm'],pendingModules:[]}));
+    }else throw Error('QA unexpected logout phase '+payload.phase);
+    __logoutTransport.push('virtual-portal-'+payload.phase);
+    return new Response(JSON.stringify(logoutReceipts.get(payload.operationId)),{status:200,headers:{'Content-Type':'application/json'}});
+  };
   el('main-wrap').style.display='flex';el('sidebar').style.display='flex';el('auth-loading').style.display='none';el('login-screen').style.display='none';
   document.querySelectorAll('.pg').forEach(n=>n.classList.remove('on'));el('pg-users').classList.add('on');renderUsers();enhanceLongSelects(el('pg-users'));
   return{canManage:canManageUsers(),tenant:currentTenantId(),visible:visiblePersonnelUsers().length};
@@ -136,7 +151,7 @@ async function testActual(browser, name, width) {
     await click('view', 'qa-user-0');
     await run(`(async()=>{await financeLogout();return true})()`);
     ok(await page.locator('.fpw-dialog').count() === 0 && await page.locator('#finance-module-logout').innerText().then(t => t.includes('已登出')), 'actual coordinated logout clears personnel and completes virtual transport');
-    ok(await page.evaluate(() => __logoutTransport.join(',')) === 'virtual-portal-logout,local-signout', 'logout uses original coordination and local revocation sequence');
+    ok(await page.evaluate(() => __logoutTransport.join(',')) === 'virtual-portal-prepare,virtual-portal-resume,local-signout', 'logout uses original coordination and local revocation sequence');
     ok(errors.length === 0, 'actual app has no browser JavaScript errors');
     results.push({ browser: name, width, mode: 'actual-index-with-local-virtual-RPC', checks, errors });
   } catch (e) {
