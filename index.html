@@ -3480,6 +3480,7 @@ function getSb(){
       global:{fetch:financeSupabaseFetch},
       auth:{
         storageKey:'suiyuecare-finance-auth-v3',
+        storage:window.FinanceModuleLogout&&window.FinanceModuleLogout.authStorage||window.localStorage,
         flowType:'pkce',
         detectSessionInUrl:false,
         persistSession:true,
@@ -16272,6 +16273,7 @@ window.financeLogout=async function(){
       try{var scope=JSON.parse(recoveryOwner);for(var i=sessionStorage.length-1;i>=0;i--){var key=sessionStorage.key(i);if(key&&key.indexOf('finance-member-pending:')===0){var owner=JSON.parse(key.slice('finance-member-pending:'.length)).slice(0,4);if(JSON.stringify(owner)===JSON.stringify(scope))sessionStorage.removeItem(key);}}}catch(_){}
       await stopRealtime();
     },returnToPortal:function(){location.assign(PORTAL_MODULE_URL);},
+    onIdentityChanged:function(){financeLogoutInProgress=false;bootAuthGate();},
     clearPrivate:function(){
       financeLogoutInProgress=true;++financeAuthIdentityEpoch;setFinanceWorkspaceIdentityBlocked(true);
       clearFinanceLoginState();REQS=[];VOUCHERS=[];INVS=[];BILLS=[];LEDGER=[];DRAFTS=[];

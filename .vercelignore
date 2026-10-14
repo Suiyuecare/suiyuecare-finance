@@ -559,3 +559,8 @@ supabase/.temp
 !scripts/fixtures/finance_invoice_batch_fixture_20261014.cjs
 !scripts/fixtures/finance_income_http_scope_20261014.json
 !scripts/check_submission_acceptance_manifest.cjs
+!scripts/finance_bounded_global_logout_preflight.sql
+!scripts/finance_bounded_global_logout_postflight.sql
+!scripts/finance_bounded_global_logout_fingerprint.sql
+!scripts/finance_bounded_global_logout_canary.sql
+!scripts/test_bounded_global_logout_release_batch.mjs
