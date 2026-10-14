@@ -89,6 +89,15 @@ function fixture(options={}){
 }
 async function run(){
  checks=0;
+ {
+  const f=fixture({failReader:true});
+  f.c.invoiceExcelAttachment=()=>({n:'Fictional-invoice-summary.xls',t:'xls',mime:'application/vnd.ms-excel',url:'data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent('<html><table><tr><td>Fictional</td></tr></table></html>'),kind:'invoice_excel'});
+  vm.runInContext(fn('invoiceInitialStepFiles'),f.c);
+  const uploaded=await f.c.invoiceInitialStepFiles(f.originalFiles,[],{recordNo:'FICTIONAL-INVOICE',date:'2026-10-14',eid:'E1',dc:'DAYCARE'});
+  check('invoice native Office originals use same direct Blob path as refund',f.trace.readerCalls===0&&uploaded.length===4&&f.trace.uploads.length===4);
+  for(let i=0;i<f.originalFiles.length;i++)check('invoice original '+i+' bytes preserved',Buffer.from(await f.originalFiles[i].arrayBuffer()).equals(Buffer.from(await f.trace.uploads[i+1].blob.arrayBuffer())));
+ }
+
  for(const options of [{},{emptyMime:true},{savedDraft:true},{savedDraft:true,emptyMime:true},{failReader:true}]){
   const f=fixture(options),selected=f.c.S.nrFiles;await f.c.submitNR();await tick();
   check('actual submit dispatches exactly once after all four attachments',f.trace.dispatches.length===1&&f.trace.uploads.length===4&&f.trace.signed.length===4&&f.trace.metadata.length===4);

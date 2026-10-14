@@ -1,0 +1,199 @@
+{
+  "extraFunctions": [
+    {
+      "signature": "can_update_invoice(invoices)",
+      "name": "can_update_invoice",
+      "source_md5": "334f53ce42d493091b00569d4018f496",
+      "definition": "CREATE OR REPLACE FUNCTION public.can_update_invoice(p_invoice invoices)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n  select\n    nullif(public.current_finance_user_id(), '') is not null\n    and nullif(public.finance_current_verified_google_email_v2(), '') is not null\n    and p_invoice.tenant_id = public.current_tenant_id()\n    and (\n      public.is_finance_accounting()\n      or public.json_steps_include_current_user(p_invoice.steps)\n      or (public.json_steps_role_matches(p_invoice.steps)\n        and public.finance_role_queue_scope_v1(p_invoice.department_code,p_invoice.entity_id))\n      or p_invoice.applicant_id = public.current_finance_user_id()\n    )\n$function$\n",
+      "owner_name": "postgres",
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "signature": "current_finance_user_name()",
+      "name": "current_finance_user_name",
+      "source_md5": "d543f5add4ce94cd12127cf64abcca55",
+      "definition": "CREATE OR REPLACE FUNCTION public.current_finance_user_name()\n RETURNS text\n LANGUAGE sql\n STABLE\n SET search_path TO 'public'\nAS $function$\n  select (public.current_finance_user()).name\n$function$\n",
+      "owner_name": "postgres",
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    }
+  ],
+  "rls": true,
+  "grants": [
+    {
+      "role": "anon",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "anon",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "anon",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "anon",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "anon",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "anon",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "anon",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "authenticated",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "authenticated",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "authenticated",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "authenticated",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "authenticated",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "authenticated",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "authenticated",
+      "privilege": "TRIGGER"
+    },
+    {
+      "role": "service_role",
+      "privilege": "INSERT"
+    },
+    {
+      "role": "service_role",
+      "privilege": "SELECT"
+    },
+    {
+      "role": "service_role",
+      "privilege": "UPDATE"
+    },
+    {
+      "role": "service_role",
+      "privilege": "DELETE"
+    },
+    {
+      "role": "service_role",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "role": "service_role",
+      "privilege": "REFERENCES"
+    },
+    {
+      "role": "service_role",
+      "privilege": "TRIGGER"
+    }
+  ],
+  "policies": [
+    {
+      "name": "invoices_delete_ceo_only",
+      "check": null,
+      "roles": [
+        "authenticated"
+      ],
+      "using": "((tenant_id = current_tenant_id()) AND (NULLIF(current_finance_user_id(), ''::text) IS NOT NULL) AND (NULLIF(finance_current_verified_google_email_v2(), ''::text) IS NOT NULL) AND (current_finance_role() = 'ceo'::text))",
+      "command": "d",
+      "permissive": true
+    },
+    {
+      "name": "invoices_insert_authenticated_requester",
+      "check": "((tenant_id = current_tenant_id()) AND (NULLIF(current_finance_user_id(), ''::text) IS NOT NULL) AND (NULLIF(finance_current_verified_google_email_v2(), ''::text) IS NOT NULL) AND (is_finance_accounting() OR (applicant = current_finance_user_name()) OR (applicant_id = current_finance_user_id())))",
+      "roles": [
+        "authenticated"
+      ],
+      "using": null,
+      "command": "a",
+      "permissive": true
+    },
+    {
+      "name": "invoices_select_scoped",
+      "check": null,
+      "roles": [
+        "authenticated"
+      ],
+      "using": "((tenant_id = ( SELECT current_tenant_id() AS current_tenant_id)) AND\nCASE\n    WHEN ( SELECT is_finance_accounting() AS is_finance_accounting) THEN ( SELECT ((NULLIF(current_finance_user_id(), ''::text) IS NOT NULL) AND (NULLIF(finance_current_verified_google_email_v2(), ''::text) IS NOT NULL)))\n    ELSE can_read_invoice(invoices.*)\nEND)",
+      "command": "r",
+      "permissive": true
+    },
+    {
+      "name": "invoices_update_actor",
+      "check": "((tenant_id = current_tenant_id()) AND can_read_invoice(invoices.*))",
+      "roles": [
+        "authenticated"
+      ],
+      "using": "((tenant_id = current_tenant_id()) AND can_update_invoice(invoices.*))",
+      "command": "w",
+      "permissive": true
+    }
+  ],
+  "reconcile": {
+    "signature": "finance_income_reconcile_submission_v1(text,text,text)",
+    "definition": "CREATE OR REPLACE FUNCTION public.finance_income_reconcile_submission_v1(p_document_type text, p_idempotency_key text, p_data_environment text DEFAULT 'production'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_document_type text := pg_catalog.lower(pg_catalog.btrim(coalesce(p_document_type, '')));\n  v_environment text := pg_catalog.lower(pg_catalog.btrim(coalesce(p_data_environment, 'production')));\n  v_operation_type text;\n  v_tenant_id uuid;\n  v_actor public.finance_users%rowtype;\n  v_operation private.finance_income_document_operations%rowtype;\n  v_cancel_digest text;\nbegin\n  if auth.uid() is null then\n    raise exception '請先登入後再確認送件結果' using errcode = '42501';\n  end if;\n  if v_document_type not in ('invoice', 'bill') then\n    raise exception '只能確認發票或繳費單送件結果' using errcode = '22023';\n  end if;\n  if v_environment not in ('production', 'test') then\n    raise exception '資料環境只允許 production 或 test' using errcode = '22023';\n  end if;\n  if coalesce(p_idempotency_key, '') !~\n    '^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$' then\n    raise exception '送件識別碼格式錯誤' using errcode = '22023';\n  end if;\n  v_operation_type := v_document_type || '_submit';\n  v_tenant_id := public.current_tenant_id();\n  -- Reuse the portal identity boundary: it verifies the live Auth session,\n  -- Google identity link and tenant. An unexpired JWT after logout is not\n  -- sufficient to read a prior result or reserve a canceled operation key.\n  v_actor := public.current_finance_user();\n  if v_actor.id is null or v_actor.tenant_id is distinct from v_tenant_id then\n    raise exception '目前登入帳號沒有此租戶的有效財務人員登入身分'\n      using errcode = '42501';\n  end if;\n\n  -- A legacy inconsistency with document rows but no operation must stay\n  -- unresolved for an administrator; it must never be declared rolled back.\n  if v_document_type = 'invoice' and exists (\n    select 1 from public.invoices document_row\n    where document_row.tenant_id = v_tenant_id\n      and document_row.data_environment = v_environment\n      and document_row.submission_idempotency_key = p_idempotency_key\n      and document_row.submission_item_key is not null\n  ) then\n    if not exists (\n      select 1 from private.finance_income_document_operations operation_row\n      where operation_row.tenant_id = v_tenant_id\n        and operation_row.data_environment = v_environment\n        and operation_row.operation_type = v_operation_type\n        and operation_row.idempotency_key = p_idempotency_key\n    ) then\n      return pg_catalog.jsonb_build_object('ok', true, 'state', 'pending');\n    end if;\n  elsif v_document_type = 'bill' and exists (\n    select 1 from public.bills document_row\n    where document_row.tenant_id = v_tenant_id\n      and document_row.data_environment = v_environment\n      and document_row.submission_idempotency_key = p_idempotency_key\n      and document_row.submission_item_key is not null\n  ) then\n    if not exists (\n      select 1 from private.finance_income_document_operations operation_row\n      where operation_row.tenant_id = v_tenant_id\n        and operation_row.data_environment = v_environment\n        and operation_row.operation_type = v_operation_type\n        and operation_row.idempotency_key = p_idempotency_key\n    ) then\n      return pg_catalog.jsonb_build_object('ok', true, 'state', 'pending');\n    end if;\n  end if;\n\n  v_cancel_digest := private.finance_income_request_digest(\n    pg_catalog.jsonb_build_object(\n      'operation', v_operation_type, 'environment', v_environment,\n      'canceled_key', p_idempotency_key\n    )\n  );\n  insert into private.finance_income_document_operations (\n    tenant_id, data_environment, operation_type, idempotency_key,\n    request_digest, actor_finance_user_id, operation_status, completed_at\n  )\n  values (\n    v_tenant_id, v_environment, v_operation_type, p_idempotency_key,\n    v_cancel_digest, v_actor.id, 'canceled', pg_catalog.now()\n  )\n  on conflict (tenant_id, data_environment, operation_type, idempotency_key)\n  do nothing;\n\n  select operation_row.*\n    into v_operation\n  from private.finance_income_document_operations operation_row\n  where operation_row.tenant_id = v_tenant_id\n    and operation_row.data_environment = v_environment\n    and operation_row.operation_type = v_operation_type\n    and operation_row.idempotency_key = p_idempotency_key\n  for update;\n  if not found then\n    raise exception '無法鎖定送件操作紀錄' using errcode = '55000';\n  end if;\n  if v_operation.actor_finance_user_id is distinct from v_actor.id then\n    raise exception '此送件識別碼屬於另一位使用者' using errcode = '42501';\n  end if;\n\n  if v_operation.operation_status = 'completed'\n    and pg_catalog.jsonb_typeof(v_operation.result) = 'object'\n    and v_operation.result ->> 'ok' = 'true'\n    and v_operation.result ->> 'document_type' = v_document_type\n    and v_operation.result ->> 'idempotency_key' = p_idempotency_key\n    and pg_catalog.jsonb_typeof(v_operation.result -> 'rows') = 'array' then\n    return pg_catalog.jsonb_build_object(\n      'ok', true, 'state', 'committed', 'result', v_operation.result\n    );\n  end if;\n  if v_operation.operation_status = 'canceled' then\n    return pg_catalog.jsonb_build_object('ok', true, 'state', 'confirmed_not_committed');\n  end if;\n  return pg_catalog.jsonb_build_object('ok', true, 'state', 'pending');\nend;\n$function$\n",
+    "source_md5": "daa241c67fe189f12deea6977050a523",
+    "owner_name": "postgres",
+    "acl": [
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      },
+      {
+        "grantee": "authenticated",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      }
+    ]
+  }
+}

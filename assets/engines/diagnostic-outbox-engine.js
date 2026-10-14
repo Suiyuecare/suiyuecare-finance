@@ -9,7 +9,7 @@
     if(!row||!s.owner||!s.tenantId||!s.dataEnv||!Number.isFinite(time)||time<now-TTL||time>now+60000)return null;
     var id=token(row.id,100),type=token(row.type,100);
     if(!id||!type)return null;
-    return Object.assign(s,{id:id,time:new Date(time).toISOString(),type:type,severity:['critical','warn','ok','info'].indexOf(row.severity)>=0?row.severity:'info',page:token(row.page,60),code:token(row.meta&&row.meta.code||row.code,80)});
+    return Object.assign(s,{id:id,time:new Date(time).toISOString(),type:type,severity:['critical','warn','ok','info'].indexOf(row.severity)>=0?row.severity:'info',page:token(row.page,60),code:token(row.meta&&(row.meta.code||row.meta.errorCode)||row.code,80),stage:token(row.meta&&row.meta.stage||row.stage,60),correlationId:token(row.meta&&(row.meta.correlationId||row.meta.idempotencyKey)||row.correlationId,100),releaseSha:token(row.meta&&row.meta.releaseSha||row.releaseSha,64),releaseContract:token(row.meta&&row.meta.releaseContract||row.releaseContract,100),assetVersion:token(row.meta&&row.meta.assetVersion||row.assetVersion,80),outcome:token(row.meta&&row.meta.outcome||row.outcome,40),durationMs:Math.max(0,Math.min(86400000,Number(row.meta&&row.meta.durationMs||row.durationMs)||0))});
   }
   function create(storage,clock){
     clock=clock||Date.now;

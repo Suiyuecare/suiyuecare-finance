@@ -74,7 +74,7 @@ jobs:
   interaction-gate:
     name: Verify actual form and management actions
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     services:
       history-search-postgres:
         image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
@@ -135,9 +135,24 @@ jobs:
             }
           } finally {await client.end();}})().catch(error=>{console.error(error.message);process.exitCode=1;});
           NODE
+      - name: Install verified PostgREST for isolated HTTP transaction acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          POSTGREST_DIR="$RUNNER_TEMP/finance-postgrest"
+          mkdir -p "$POSTGREST_DIR"
+          curl --fail --location --silent --show-error --retry 3 \
+            https://github.com/PostgREST/postgrest/releases/download/v13.0.7/postgrest-v13.0.7-linux-static-x86-64.tar.xz \
+            --output "$POSTGREST_DIR/postgrest.tar.xz"
+          printf '%s  %s\n' 4153f81ccc40e7b735edc89cd84b49da25ba27eb37d57c7f6a82c9005a0b762b "$POSTGREST_DIR/postgrest.tar.xz" | sha256sum --check --strict
+          tar -xJf "$POSTGREST_DIR/postgrest.tar.xz" -C "$POSTGREST_DIR" postgrest
+          test -x "$POSTGREST_DIR/postgrest"
+          "$POSTGREST_DIR/postgrest" --version
+
       - name: Verify real DOM actions with isolated fictional data
         env:
           FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json
+          FINANCE_POSTGREST_BIN: ${{ runner.temp }}/finance-postgrest/postgrest
         run: |
           node scripts/check_formal_tus_browser_integration.cjs
           node scripts/check_admin_action_browser.cjs
@@ -157,6 +172,9 @@ jobs:
           pnpm test:finance-oauth-account-guard-browser
           FINANCE_HISTORY_NATIVE_REQUIRED=1 pnpm test:personal-bill-batch-history
           FINANCE_HISTORY_NATIVE_REQUIRED=1 pnpm test:personal-history-identity-once
+          FINANCE_INVOICE_NATIVE_REQUIRED=1 pnpm test:invoice-batch-bulk
+          pnpm test:income-rpc-http
+          pnpm test:income-recovery-storage-browser
           pnpm test:org-chart-browser
           node scripts/check_human_accounting_browser_20261002.cjs
           FINANCE_BROWSER_CHANNEL=chromium node scripts/check_invoice_table_layout_browser.cjs --review-only
@@ -170,6 +188,22 @@ jobs:
           pnpm test:hr-contractor-native
           pnpm test:portal-session
           pnpm test:external-labor-browser
+
+      - name: Verify measured submission acceptance manifest
+        run: node scripts/check_submission_acceptance_manifest.cjs
+
+      - name: Retain isolated invoice batch reliability evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: finance-invoice-batch-reliability-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            /tmp/finance-invoice-batch-bulk-20261014
+            /tmp/finance-income-rpc-http-20261014
+            /tmp/finance-income-recovery-storage-browser
+            /tmp/finance-submission-acceptance-20261014
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Retain fictional personnel and history continuity evidence even on failure
         if: always()

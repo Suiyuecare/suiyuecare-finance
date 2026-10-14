@@ -139,11 +139,25 @@ function applyBuildEnvironment(source, config) {
   return html;
 }
 
+// The SHA is injected only by the deterministic build, never inferred from a
+// mutable browser cache. Diagnostics can correlate a failure to the artifact.
+function applyReleaseIdentity(source, sourceCommit) {
+  if (!/^[0-9a-f]{40}$/.test(String(sourceCommit || ''))) throw new Error('release identity requires an exact source commit');
+  const html = String(source || '');
+  const headEnd = html.indexOf('</head>');
+  const head = headEnd < 0 ? '' : html.slice(0, headEnd);
+  if ((head.match(/<head(?:\s[^>]*)?>/gi) || []).length !== 1 || /<meta\b[^>]*name=["']finance-release-sha["']/i.test(head)) {
+    throw new Error('release identity requires one head and no preexisting release SHA');
+  }
+  return html.replace(/<head(?:\s[^>]*)?>/i, tag => tag + '\n<meta name="finance-release-sha" content="' + sourceCommit + '">');
+}
+
 module.exports = {
   BUILD_TARGET_PLACEHOLDER,
   SUPABASE_URL_PLACEHOLDER,
   SUPABASE_ANON_KEY_PLACEHOLDER,
   applyBuildEnvironment,
+  applyReleaseIdentity,
   resolveBuildConfig,
   resolveBuildTarget,
   validateProductionSupabaseConfig

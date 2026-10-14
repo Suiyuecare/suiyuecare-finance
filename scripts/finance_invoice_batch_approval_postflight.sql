@@ -5,6 +5,8 @@
 do $postflight$
 declare
   v_enqueue oid := pg_catalog.to_regprocedure('private.finance_enqueue_current_approval_email()')::oid;
+  v_bulk_installed boolean := exists(select 1 from supabase_migrations.schema_migrations where version='20261014123427' and name='finance_invoice_batch_bulk_insert_v2');
+  v_statement_refresh oid := pg_catalog.to_regprocedure('private.finance_refresh_invoice_batch_approval_notification_statement_v2()')::oid;
   v_refresh oid := pg_catalog.to_regprocedure('private.finance_refresh_invoice_batch_approval_notification_v1()')::oid;
   v_history_summary oid := pg_catalog.to_regprocedure('public.finance_personal_document_summary_v1(text,integer,integer,text,text)')::oid;
   v_history_detail oid := pg_catalog.to_regprocedure('public.finance_personal_document_detail_v1(text,text)')::oid;
@@ -71,12 +73,31 @@ begin
         and t.tgname = 'trg_invoices_enqueue_approval_email'
         and t.tgenabled = 'O' and t.tgtype = 21 and t.tgfoid = v_enqueue
     )
-    or not exists (
-      select 1 from pg_catalog.pg_trigger t
-      where t.tgrelid = 'public.invoices'::pg_catalog.regclass
-        and t.tgname = 'trg_zz_invoices_refresh_batch_approval_notification_v1'
-        and t.tgenabled = 'O' and t.tgtype = 21 and t.tgfoid = v_refresh
-    )
+    or (not v_bulk_installed and not exists (
+       select 1 from pg_catalog.pg_trigger t
+       where t.tgrelid = 'public.invoices'::pg_catalog.regclass
+         and t.tgname = 'trg_zz_invoices_refresh_batch_approval_notification_v1'
+         and t.tgenabled = 'O' and t.tgtype = 21 and t.tgfoid = v_refresh
+     ))
+     or (v_bulk_installed and (
+       v_statement_refresh is null
+       or not exists(select 1 from pg_catalog.pg_proc p where p.oid=v_statement_refresh
+         and pg_catalog.md5(p.prosrc)='b72cc4fb038e98fb9517ca2398a40dcc'
+         and pg_catalog.pg_get_userbyid(p.proowner)='postgres' and p.prosecdef
+         and p.proconfig=array['search_path=""']::text[])
+       or pg_catalog.has_function_privilege('anon',v_statement_refresh,'EXECUTE')
+       or pg_catalog.has_function_privilege('authenticated',v_statement_refresh,'EXECUTE')
+       or pg_catalog.has_function_privilege('service_role',v_statement_refresh,'EXECUTE')
+       or exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='public.invoices'::pg_catalog.regclass
+         and t.tgname='trg_zz_invoices_refresh_batch_approval_notification_v1')
+       or not exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='public.invoices'::pg_catalog.regclass
+         and t.tgname='trg_zz_invoices_refresh_batch_approval_notification_insert_v2'
+         and t.tgenabled='O' and t.tgtype=4 and t.tgnewtable='invoice_batch_new' and t.tgfoid=v_statement_refresh)
+       or not exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='public.invoices'::pg_catalog.regclass
+         and t.tgname='trg_zz_invoices_refresh_batch_approval_notification_update_v2'
+         and t.tgenabled='O' and t.tgtype=16 and t.tgnewtable='invoice_batch_new'
+         and t.tgoldtable='invoice_batch_old' and t.tgfoid=v_statement_refresh)
+     ))
     or pg_catalog.has_function_privilege('anon', v_refresh, 'EXECUTE')
     or pg_catalog.has_function_privilege('authenticated', v_refresh, 'EXECUTE')
     or pg_catalog.has_function_privilege('service_role', v_refresh, 'EXECUTE')

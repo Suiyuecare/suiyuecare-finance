@@ -1,9 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const childProcess = require('node:child_process');
 const { createStartupBundle, createAppBundle } = require('./finance_startup_bundle');
 const {
   applyBuildEnvironment,
+  applyReleaseIdentity,
   resolveBuildConfig
 } = require('./finance_build_environment');
 
@@ -48,6 +50,12 @@ const assetVersion = versionedAssets
   .slice(0, 16);
 html = html.replace(/__FINANCE_ASSET_VERSION__/g, assetVersion);
 html = applyBuildEnvironment(html, buildConfig);
+let sourceCommit;
+try {
+  sourceCommit = childProcess.execFileSync('git', ['rev-parse', 'HEAD'], {cwd: root, encoding: 'utf8', timeout: 10000, stdio: ['ignore','pipe','pipe']}).trim();
+} catch (_) { sourceCommit = String(process.env.VERCEL_GIT_COMMIT_SHA || '').trim(); }
+if (process.env.VERCEL_GIT_COMMIT_SHA && process.env.VERCEL_GIT_COMMIT_SHA !== sourceCommit) throw new Error('build source commit does not match Vercel candidate');
+html = applyReleaseIdentity(html, sourceCommit);
 const startupBundle = createStartupBundle(html, root);
 const appBundle = createAppBundle(startupBundle.html);
 html = appBundle.html;

@@ -545,3 +545,17 @@ supabase/.temp
 !scripts/check_deferred_document_startup_20261013.cjs
 !scripts/check_deferred_document_startup_browser_20261013.cjs
 !docs/finance-deferred-document-startup-20261013.md
+
+# Invoice batch transactions and real browser recovery persistence.
+!scripts/check_invoice_batch_bulk_insert_20261014.cjs
+!scripts/check_income_recovery_storage_browser.cjs
+!scripts/finance_invoice_batch_bulk_preflight.sql
+!scripts/finance_invoice_batch_bulk_postflight.sql
+!scripts/finance_invoice_batch_bulk_fingerprint.sql
+!scripts/finance_invoice_batch_bulk_canary.sql
+!scripts/check_income_rpc_http_20261014.cjs
+
+!scripts/fixtures/finance_invoice_batch_live_catalog_20261014.json
+!scripts/fixtures/finance_invoice_batch_fixture_20261014.cjs
+!scripts/fixtures/finance_income_http_scope_20261014.json
+!scripts/check_submission_acceptance_manifest.cjs

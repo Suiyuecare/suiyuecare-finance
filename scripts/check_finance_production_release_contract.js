@@ -16,7 +16,7 @@ assert.deepEqual(guard.PRODUCTION_CATALOG, {
   productionDomain: 'finance.suiyuecare.com'
 });
 assert.deepEqual(guard.SUPPORTED_GATE_PHASES, [
-  [], ['20260826070814'], ['20260826155840'], ['20260827052447'], ['20260902054834'], guard.AUDIT_MIGRATIONS, guard.CASE_MIGRATIONS, guard.UTILITY_MIGRATIONS, guard.REPORT_MIGRATIONS, guard.AMOUNT_SEARCH_MIGRATIONS, guard.REPORTING_INTEGRITY_MIGRATIONS, guard.AUDIT_READINESS_MIGRATIONS, guard.EMPLOYEE_RELIABILITY_MIGRATIONS, guard.HISTORY_PERFORMANCE_MIGRATIONS, guard.READ_LATENCY_MIGRATIONS, guard.AR_MAPPING_MIGRATIONS, guard.AUDIT_REMEDIATION_MIGRATIONS, guard.APPROVAL_SEARCH_BATCH, guard.HISTORY_SUMMARY_MIGRATIONS, guard.INVOICE_READ_SCOPE_MIGRATIONS, guard.AR_READ_SCOPE_MIGRATIONS, guard.HR_BRIDGE_MIGRATIONS, guard.AUDIT_SECURITY_MIGRATIONS, guard.REVENUE_REPAIR_MIGRATIONS, guard.OPERATIONAL_STABILITY_MIGRATIONS, guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, guard.AUDIT_CONTROLS_20260927_MIGRATIONS, guard.HR_CONTRACTOR_MIGRATIONS, guard.PORTAL_SESSION_MIGRATIONS, guard.EXTERNAL_LABOR_MIGRATIONS, guard.ATTACHMENT_CLAIM_MIGRATIONS, guard.HUMAN_FLOAT_MIGRATIONS, guard.INCOME_RECONCILE_MIGRATIONS, guard.INVOICE_REVENUE_RESULT_MIGRATIONS, guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS, guard.INVOICE_ITEM_BIND_MIGRATIONS, guard.PERSONAL_HISTORY_MIGRATIONS, guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS, guard.BILL_BATCH_BULK_MIGRATIONS, guard.INVOICE_BATCH_APPROVAL_MIGRATIONS, guard.PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS, guard.PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS
+  [], ['20260826070814'], ['20260826155840'], ['20260827052447'], ['20260902054834'], guard.AUDIT_MIGRATIONS, guard.CASE_MIGRATIONS, guard.UTILITY_MIGRATIONS, guard.REPORT_MIGRATIONS, guard.AMOUNT_SEARCH_MIGRATIONS, guard.REPORTING_INTEGRITY_MIGRATIONS, guard.AUDIT_READINESS_MIGRATIONS, guard.EMPLOYEE_RELIABILITY_MIGRATIONS, guard.HISTORY_PERFORMANCE_MIGRATIONS, guard.READ_LATENCY_MIGRATIONS, guard.AR_MAPPING_MIGRATIONS, guard.AUDIT_REMEDIATION_MIGRATIONS, guard.APPROVAL_SEARCH_BATCH, guard.HISTORY_SUMMARY_MIGRATIONS, guard.INVOICE_READ_SCOPE_MIGRATIONS, guard.AR_READ_SCOPE_MIGRATIONS, guard.HR_BRIDGE_MIGRATIONS, guard.AUDIT_SECURITY_MIGRATIONS, guard.REVENUE_REPAIR_MIGRATIONS, guard.OPERATIONAL_STABILITY_MIGRATIONS, guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, guard.AUDIT_CONTROLS_20260927_MIGRATIONS, guard.HR_CONTRACTOR_MIGRATIONS, guard.PORTAL_SESSION_MIGRATIONS, guard.EXTERNAL_LABOR_MIGRATIONS, guard.ATTACHMENT_CLAIM_MIGRATIONS, guard.HUMAN_FLOAT_MIGRATIONS, guard.INCOME_RECONCILE_MIGRATIONS, guard.INVOICE_REVENUE_RESULT_MIGRATIONS, guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS, guard.INVOICE_ITEM_BIND_MIGRATIONS, guard.PERSONAL_HISTORY_MIGRATIONS, guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS, guard.BILL_BATCH_BULK_MIGRATIONS, guard.INVOICE_BATCH_APPROVAL_MIGRATIONS, guard.PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS, guard.PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS, guard.INVOICE_BATCH_BULK_MIGRATIONS
 ]);
 assert.deepEqual(guard.HR_BRIDGE_MIGRATIONS,['20260922072109','20260922072737','20260922075604']);
 assert.deepEqual(guard.AR_READ_SCOPE_MIGRATIONS,['20260922072737']);
@@ -35,7 +35,7 @@ assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
   '20260826070814', '20260826155840', '20260827052447', '20260828015718',
   '20260831042040', '20260831043517', '20260901024020', '20260901073241',
-  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS, ...guard.OPERATIONAL_STABILITY_MIGRATIONS, ...guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, ...guard.AUDIT_CONTROLS_20260927_MIGRATIONS, ...guard.HR_CONTRACTOR_MIGRATIONS, ...guard.PORTAL_SESSION_MIGRATIONS, ...guard.EXTERNAL_LABOR_MIGRATIONS, ...guard.ATTACHMENT_CLAIM_MIGRATIONS, ...guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS, ...guard.HUMAN_FLOAT_MIGRATIONS, ...guard.INCOME_RECONCILE_MIGRATIONS, ...guard.INVOICE_REVENUE_RESULT_MIGRATIONS, ...guard.PERSONNEL_CONFLICT_MIGRATIONS, ...guard.PERSONNEL_RECEIPT_MIGRATIONS, ...guard.PROCUREMENT_ACTION_MIGRATIONS, ...guard.APPLICANT_WITHDRAW_MIGRATIONS, ...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS, ...guard.INVOICE_ITEM_BIND_MIGRATIONS, ...guard.PERSONAL_HISTORY_MIGRATIONS, ...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS, ...guard.BILL_BATCH_BULK_MIGRATIONS, ...guard.INVOICE_BATCH_APPROVAL_MIGRATIONS, ...guard.PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS, ...guard.PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS
+  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS, ...guard.OPERATIONAL_STABILITY_MIGRATIONS, ...guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, ...guard.AUDIT_CONTROLS_20260927_MIGRATIONS, ...guard.HR_CONTRACTOR_MIGRATIONS, ...guard.PORTAL_SESSION_MIGRATIONS, ...guard.EXTERNAL_LABOR_MIGRATIONS, ...guard.ATTACHMENT_CLAIM_MIGRATIONS, ...guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS, ...guard.HUMAN_FLOAT_MIGRATIONS, ...guard.INCOME_RECONCILE_MIGRATIONS, ...guard.INVOICE_REVENUE_RESULT_MIGRATIONS, ...guard.PERSONNEL_CONFLICT_MIGRATIONS, ...guard.PERSONNEL_RECEIPT_MIGRATIONS, ...guard.PROCUREMENT_ACTION_MIGRATIONS, ...guard.APPLICANT_WITHDRAW_MIGRATIONS, ...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS, ...guard.INVOICE_ITEM_BIND_MIGRATIONS, ...guard.PERSONAL_HISTORY_MIGRATIONS, ...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS, ...guard.BILL_BATCH_BULK_MIGRATIONS, ...guard.INVOICE_BATCH_APPROVAL_MIGRATIONS, ...guard.PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS, ...guard.PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS, ...guard.INVOICE_BATCH_BULK_MIGRATIONS
 ]);
 assert.deepEqual(guard.APPLICANT_WITHDRAW_SOURCE_SHA256,{
   '20261005173534':'aa3ebaf3a098c83709de7e04c4a048c9cfb0881e42a4f8bb586caebe66e14b9f'
@@ -107,7 +107,8 @@ assert.deepEqual(guard.RELEASE_PHASES, {
   database_bill_batch_bulk_20261008:'20261008100000',
   database_invoice_batch_approval_20261010:'20261010120000,20261010130000',
   database_personal_history_identity_once_20261012:'20261012112652',
-  database_personal_bill_batch_history_20261013:'20261013091000'
+  database_personal_bill_batch_history_20261013:'20261013091000',
+  database_invoice_batch_bulk_20261014:'20261014123427'
 });
 assert.deepEqual(guard.migrationVersions('none'), []);
 assert.throws(() => guard.migrationVersions('20260826070814,20260826070814'), /unique/);
@@ -270,10 +271,12 @@ try {
   fs.appendFileSync(ledger,guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/personal bill batch history read model/);
   fs.appendFileSync(ledger,[...guard.BILL_BATCH_BULK_MIGRATIONS,...guard.INVOICE_BATCH_APPROVAL_MIGRATIONS,...guard.PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS,...guard.PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS].join('\n')+'\n');
+  assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/invoice batch bulk transaction/);
+  fs.appendFileSync(ledger,guard.INVOICE_BATCH_BULK_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
   const pinnedPersonnelDir=path.join(attachmentClaimTemp,'personnel-source-pin');
   fs.mkdirSync(pinnedPersonnelDir);
-  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS,...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS]){
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS,...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS,...guard.INVOICE_BATCH_BULK_MIGRATIONS]){
     const filename=fs.readdirSync(migrationDir).find(name=>name.startsWith(version+'_'));
     fs.copyFileSync(path.join(migrationDir,filename),path.join(pinnedPersonnelDir,filename));
   }
@@ -806,7 +809,7 @@ for(const name of ['finance_purchase_final_amount_preflight.sql','finance_purcha
   assert.ok(workflow.includes('scripts/'+name), 'purchase final amount SQL gate must be in the verified bundle: '+name);
 assert.deepEqual(guard.REPORT_POSTFLIGHT_FILES,['finance_production_db_postflight.sql','finance_audit_20260907_postflight.sql','finance_finalize_accounting_lines_postflight.sql','finance_utility_tax_postflight.sql','finance_production_human_accounting_canary.sql','finance_canonical_receivables_postflight.sql','finance_reporting_profiles_postflight.sql'],'Reports must retain every inherited/new postflight in its transaction');
 for(const name of guard.REPORT_POSTFLIGHT_FILES){assert.ok(workflow.includes('cp scripts/'+name+' "$BUNDLE/release-tools/scripts/"'),'Every reports transaction check must be sealed: '+name);for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert.ok(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'scripts/"+name+"'"),'Reports postflight must be source-pinned: '+name);}
-assert.deepEqual([...workflow.matchAll(/^          - (frontend_compat|database_\S+)$/gm)].map(match=>match[1]), ['frontend_compat','database_audit_security_20260922','database_revenue_repair_20260924','database_operational_stability_20260924','database_demo_password_retirement_20260925','database_audit_controls_20260927','database_hr_contractor_20260928','database_portal_session_20260928','database_external_labor_20260928','database_attachment_claim_20261001','database_human_float_20261002','database_income_reconcile_20261002','database_invoice_revenue_result_20261002','database_purchase_final_amount_20261006','database_invoice_item_bind_20261008','database_personal_history_20261008','database_personal_history_permission_20261008','database_bill_batch_bulk_20261008','database_invoice_batch_approval_20261010','database_personal_history_identity_once_20261012','database_personal_bill_batch_history_20261013'], 'Only reviewed current phases may be dispatched');
+assert.deepEqual([...workflow.matchAll(/^          - (frontend_compat|database_\S+)$/gm)].map(match=>match[1]), ['frontend_compat','database_audit_security_20260922','database_revenue_repair_20260924','database_operational_stability_20260924','database_demo_password_retirement_20260925','database_audit_controls_20260927','database_hr_contractor_20260928','database_portal_session_20260928','database_external_labor_20260928','database_attachment_claim_20261001','database_human_float_20261002','database_income_reconcile_20261002','database_invoice_revenue_result_20261002','database_purchase_final_amount_20261006','database_invoice_item_bind_20261008','database_personal_history_20261008','database_personal_history_permission_20261008','database_bill_batch_bulk_20261008','database_invoice_batch_approval_20261010','database_personal_history_identity_once_20261012','database_personal_bill_batch_history_20261013','database_invoice_batch_bulk_20261014'], 'Only reviewed current phases may be dispatched');
 const releaseGuide = fs.readFileSync(path.join(root, 'docs/FINANCE_PRODUCTION_RELEASE.md'), 'utf8');
 const required = [
   'actions: read',
@@ -860,7 +863,7 @@ const required = [
   'PHASE_STATE="$(node "$GUARD" classify-ledger',
   'if test "$PHASE_STATE" = "compat" && test "$RELEASE_PHASE" = "frontend_compat"; then',
   'elif test "$PHASE_STATE" = "pending" && { test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting"; }; then',
-  'elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_personal_history_permission_20261008" || test "$RELEASE_PHASE" = "database_personal_history_20261008" || test "$RELEASE_PHASE" = "database_invoice_item_bind_20261008" || test "$RELEASE_PHASE" = "database_purchase_final_amount_20261006" || test "$RELEASE_PHASE" = "database_invoice_revenue_result_20261002" || test "$RELEASE_PHASE" = "database_income_reconcile_20261002" || test "$RELEASE_PHASE" = "database_human_float_20261002" || test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912" || test "$RELEASE_PHASE" = "database_history_performance_20260913" || test "$RELEASE_PHASE" = "database_read_latency_20260913" || test "$RELEASE_PHASE" = "database_ar_mapping_20260913" || test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_demo_password_retirement_20260925" || test "$RELEASE_PHASE" = "database_hr_contractor_20260928" || test "$RELEASE_PHASE" = "database_portal_session_20260928" || test "$RELEASE_PHASE" = "database_external_labor_20260928" || test "$RELEASE_PHASE" = "database_attachment_claim_20261001" || test "$RELEASE_PHASE" = "database_audit_controls_20260927" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "database_bill_batch_bulk_20261008" || test "$RELEASE_PHASE" = "database_invoice_batch_approval_20261010" || test "$RELEASE_PHASE" = "database_personal_history_identity_once_20261012" || test "$RELEASE_PHASE" = "database_personal_bill_batch_history_20261013"; }; then',
+  'elif test "$PHASE_STATE" = "applied" && { test "$RELEASE_PHASE" = "database_personal_history_permission_20261008" || test "$RELEASE_PHASE" = "database_personal_history_20261008" || test "$RELEASE_PHASE" = "database_invoice_item_bind_20261008" || test "$RELEASE_PHASE" = "database_purchase_final_amount_20261006" || test "$RELEASE_PHASE" = "database_invoice_revenue_result_20261002" || test "$RELEASE_PHASE" = "database_income_reconcile_20261002" || test "$RELEASE_PHASE" = "database_human_float_20261002" || test "$RELEASE_PHASE" = "database_v3" || test "$RELEASE_PHASE" = "database_human_accounting" || test "$RELEASE_PHASE" = "database_audit_20260907" || test "$RELEASE_PHASE" = "database_cases_20260908" || test "$RELEASE_PHASE" = "database_utility_tax_20260909" || test "$RELEASE_PHASE" = "database_reports_20260910" || test "$RELEASE_PHASE" = "database_amount_search_20260910" || test "$RELEASE_PHASE" = "database_reporting_integrity_20260911" || test "$RELEASE_PHASE" = "database_audit_readiness_20260911" || test "$RELEASE_PHASE" = "database_employee_reliability_20260912" || test "$RELEASE_PHASE" = "database_history_performance_20260913" || test "$RELEASE_PHASE" = "database_read_latency_20260913" || test "$RELEASE_PHASE" = "database_ar_mapping_20260913" || test "$RELEASE_PHASE" = "database_audit_remediation_20260914" || test "$RELEASE_PHASE" = "database_approval_search_20260914" || test "$RELEASE_PHASE" = "database_history_summary_20260915" || test "$RELEASE_PHASE" = "database_invoice_read_scope_20260915" || test "$RELEASE_PHASE" = "database_audit_security_20260922" || test "$RELEASE_PHASE" = "database_revenue_repair_20260924" || test "$RELEASE_PHASE" = "database_operational_stability_20260924" || test "$RELEASE_PHASE" = "database_demo_password_retirement_20260925" || test "$RELEASE_PHASE" = "database_hr_contractor_20260928" || test "$RELEASE_PHASE" = "database_portal_session_20260928" || test "$RELEASE_PHASE" = "database_external_labor_20260928" || test "$RELEASE_PHASE" = "database_attachment_claim_20261001" || test "$RELEASE_PHASE" = "database_audit_controls_20260927" || test "$RELEASE_PHASE" = "database_hr_bridge_20260922" || test "$RELEASE_PHASE" = "database_ar_read_scope_20260922" || test "$RELEASE_PHASE" = "database_bill_batch_bulk_20261008" || test "$RELEASE_PHASE" = "database_invoice_batch_approval_20261010" || test "$RELEASE_PHASE" = "database_personal_history_identity_once_20261012" || test "$RELEASE_PHASE" = "database_personal_bill_batch_history_20261013" || test "$RELEASE_PHASE" = "database_invoice_batch_bulk_20261014"; }; then',
   '--allow-production-alias true',
   'for ATTEMPT in 1 2 3',
   'promote "$DEPLOYMENT_URL" --yes',
@@ -975,7 +978,7 @@ assert.doesNotMatch(promoteJob,/prepare-read-latency-(?:apply|rehearsal)/);
 assert.equal((workflow.match(/verify-reports-canary --domain statement_source/g)||[]).length,2);
 assert.match(databaseJob,/name: Prove authenticated submit[^\n]+\n\s+if: inputs\.release_phase != 'database_read_latency_20260913' && inputs\.release_phase != 'database_ar_mapping_20260913'/);
 for(const job of [databaseJob,promoteJob]) {
-  const guarded=job.indexOf('if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"' + (job === databaseJob ? ' && test "$RELEASE_PHASE" != "database_human_float_20261002" && test "$RELEASE_PHASE" != "database_income_reconcile_20261002" && test "$RELEASE_PHASE" != "database_invoice_revenue_result_20261002" && test "$RELEASE_PHASE" != "database_purchase_final_amount_20261006" && test "$RELEASE_PHASE" != "database_invoice_item_bind_20261008" && test "$RELEASE_PHASE" != "database_personal_history_20261008" && test "$RELEASE_PHASE" != "database_personal_history_permission_20261008" && test \"$RELEASE_PHASE\" != \"database_bill_batch_bulk_20261008\" && test \"$RELEASE_PHASE\" != \"database_invoice_batch_approval_20261010\" && test \"$RELEASE_PHASE\" != \"database_personal_history_identity_once_20261012\"' : ' && test "$RELEASE_PHASE" != "database_invoice_batch_approval_20261010" && test "$RELEASE_PHASE" != "database_personal_history_identity_once_20261012"') + ' && test "$RELEASE_PHASE" != "database_personal_bill_batch_history_20261013"; then');
+  const guarded=job.indexOf('if test "$RELEASE_PHASE" != "database_read_latency_20260913" && test "$RELEASE_PHASE" != "database_ar_mapping_20260913" && test "$RELEASE_PHASE" != "database_audit_remediation_20260914" && test "$RELEASE_PHASE" != "database_approval_search_20260914" && test "$RELEASE_PHASE" != "database_history_summary_20260915" && test "$RELEASE_PHASE" != "database_invoice_read_scope_20260915" && test "$RELEASE_PHASE" != "frontend_compat" && test "$RELEASE_PHASE" != "database_audit_security_20260922" && test "$RELEASE_PHASE" != "database_revenue_repair_20260924" && test "$RELEASE_PHASE" != "database_operational_stability_20260924" && test "$RELEASE_PHASE" != "database_hr_bridge_20260922" && test "$RELEASE_PHASE" != "database_ar_read_scope_20260922"' + (job === databaseJob ? ' && test "$RELEASE_PHASE" != "database_human_float_20261002" && test "$RELEASE_PHASE" != "database_income_reconcile_20261002" && test "$RELEASE_PHASE" != "database_invoice_revenue_result_20261002" && test "$RELEASE_PHASE" != "database_purchase_final_amount_20261006" && test "$RELEASE_PHASE" != "database_invoice_item_bind_20261008" && test "$RELEASE_PHASE" != "database_personal_history_20261008" && test "$RELEASE_PHASE" != "database_personal_history_permission_20261008" && test \"$RELEASE_PHASE\" != \"database_bill_batch_bulk_20261008\" && test \"$RELEASE_PHASE\" != \"database_invoice_batch_bulk_20261014\" && test \"$RELEASE_PHASE\" != \"database_invoice_batch_approval_20261010\" && test \"$RELEASE_PHASE\" != \"database_personal_history_identity_once_20261012\"' : ' && test "$RELEASE_PHASE" != "database_invoice_batch_approval_20261010" && test "$RELEASE_PHASE" != "database_personal_history_identity_once_20261012"') + ' && test "$RELEASE_PHASE" != "database_personal_bill_batch_history_20261013"; then');
   assert.ok(guarded>=0);
   assert.match(job.slice(guarded,job.indexOf('\n          fi',guarded)),/finance_production_authenticated_canary\.sql[\s\S]+verify-authenticated-canary/);
   assert.match(job,/if test "\$RELEASE_PHASE" = "database_read_latency_20260913"; then[\s\S]+finance_statement_source_canary\.sql[\s\S]+verify-reports-canary --domain statement_source/);
@@ -1347,7 +1350,7 @@ assert.match(databaseJob,/prepare-invoice-item-bind-rehearsal[\s\S]+prepare-invo
   'invoice item binding phase must rehearse, apply atomically, and verify independently');
 assert.match(databaseJob,/prepare-personal-history-rehearsal[\s\S]+prepare-personal-history-apply[\s\S]+finance_personal_history_postflight\.sql[\s\S]+finance_personal_history_canary\.sql/,
   'personal document history phase must rehearse, apply atomically, and verify independently');
-assert.equal((databaseJob.match(/if test "\$RELEASE_PHASE" = "database_human_float_20261002"[^\n]*test "\$RELEASE_PHASE" = "database_personal_history_permission_20261008" \|\| test "\$RELEASE_PHASE" = "database_bill_batch_bulk_20261008"; then/g)||[]).length,2,
+assert.equal((databaseJob.match(/if test "\$RELEASE_PHASE" = "database_human_float_20261002"[^\n]*test "\$RELEASE_PHASE" = "database_personal_history_permission_20261008" \|\| test "\$RELEASE_PHASE" = "database_bill_batch_bulk_20261008" \|\| test "\$RELEASE_PHASE" = "database_invoice_batch_bulk_20261014"; then/g)||[]).length,2,
   'both DB-only alias checks must cover personal history permission');
 assert.match(databaseJob,/prepare-personal-history-permission-rehearsal[\s\S]+prepare-personal-history-permission-apply[\s\S]+finance_personal_history_permission_postflight\.sql[\s\S]+finance_personal_history_permission_canary\.sql/,
   'personal history permission phase must rehearse, apply atomically, and verify independently');
@@ -1398,7 +1401,7 @@ assert.match(promoteJob,/if: \$\{\{[^\n]+\}\}/,
   'the frontend candidate must still be promoted by the reviewed phase');
 assert.doesNotMatch(promoteJob.match(/^    if: \$\{\{[^\n]+/m)?.[0]||'',/database_invoice_batch_approval_20261010/,
   'the invoice batch approval phase must not be treated as DB-only');
-assert.equal((databaseJob.match(/if test "\$RELEASE_PHASE" = "database_human_float_20261002" \|\| test "\$RELEASE_PHASE" = "database_income_reconcile_20261002" \|\| test "\$RELEASE_PHASE" = "database_invoice_revenue_result_20261002" \|\| test "\$RELEASE_PHASE" = "database_purchase_final_amount_20261006" \|\| test "\$RELEASE_PHASE" = "database_invoice_item_bind_20261008" \|\| test "\$RELEASE_PHASE" = "database_personal_history_20261008" \|\| test "\$RELEASE_PHASE" = "database_personal_history_permission_20261008" \|\| test "\$RELEASE_PHASE" = "database_bill_batch_bulk_20261008"; then/g)||[]).length,2,
+assert.equal((databaseJob.match(/if test "\$RELEASE_PHASE" = "database_human_float_20261002" \|\| test "\$RELEASE_PHASE" = "database_income_reconcile_20261002" \|\| test "\$RELEASE_PHASE" = "database_invoice_revenue_result_20261002" \|\| test "\$RELEASE_PHASE" = "database_purchase_final_amount_20261006" \|\| test "\$RELEASE_PHASE" = "database_invoice_item_bind_20261008" \|\| test "\$RELEASE_PHASE" = "database_personal_history_20261008" \|\| test "\$RELEASE_PHASE" = "database_personal_history_permission_20261008" \|\| test "\$RELEASE_PHASE" = "database_bill_batch_bulk_20261008" \|\| test "\$RELEASE_PHASE" = "database_invoice_batch_bulk_20261014"; then/g)||[]).length,2,
   'both DB-only alias checks must cover invoice item binding, permission, and bill batch bulk');
 assert.match(promoteJob,/inputs\.release_phase != 'database_income_reconcile_20261002'/,
   'income reconciliation DB-only phase must not promote a frontend candidate');
@@ -1592,10 +1595,12 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/personal history permission guard/);
   fs.appendFileSync(ledger,guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/personnel migration file is missing/);
-  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS,...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS]){
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS,...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS,...guard.INVOICE_BATCH_BULK_MIGRATIONS]){
     const filename=fs.readdirSync(path.join(root,'supabase/migrations')).find(name=>name.startsWith(version+'_'));
     fs.copyFileSync(path.join(root,'supabase/migrations',filename),path.join(migrations,filename));
   }
+  assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/invoice batch bulk transaction/);
+  fs.appendFileSync(ledger,guard.INVOICE_BATCH_BULK_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), 'compat');
   guard.verifyLedger('pre', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
   guard.verifyLedger('post', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
@@ -1776,11 +1781,15 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   const remoteManifest = path.join(temp, 'remote.json');
   const candidateIndex = path.join(temp, 'candidate-index.html');
   const productionIndex = path.join(temp, 'production-index.html');
-  const validIndex = '<!doctype html><html><head><meta name="finance-release-contract" content="expense-submit-resilience-v3-20260827"></head><body><script>const submissionAttemptId = "test";</script></body></html>';
+  const validIndex = '<!doctype html><html><head><meta name="finance-release-sha" content="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"><meta name="finance-release-contract" content="expense-submit-resilience-v3-20260827"></head><body><script>const submissionAttemptId = "test";</script></body></html>';
   fs.writeFileSync(localManifest, JSON.stringify(manifest)); fs.writeFileSync(remoteManifest, JSON.stringify(manifest));
   fs.writeFileSync(candidateIndex, validIndex); fs.writeFileSync(productionIndex, validIndex);
   guard.verifyCandidate(localManifest, remoteManifest, 'a'.repeat(40), 'https://candidate.vercel.app/');
   guard.verifyFrontendContract(candidateIndex, localManifest, 'a'.repeat(40));
+  for (const bad of [validIndex.replace('name="finance-release-sha"','name="missing-release-sha"'),validIndex.replace('content="'+ 'a'.repeat(40)+'"','content="'+'b'.repeat(40)+'"'),validIndex+'<meta name="finance-release-sha" content="'+'a'.repeat(40)+'">']) {
+    const badPath=path.join(temp,'bad-sha-index.html');fs.writeFileSync(badPath,bad);
+    assert.throws(()=>guard.verifyFrontendContract(badPath,localManifest,'a'.repeat(40)),/release SHA must exactly match/);
+  }
   const externalIndex = path.join(temp, 'external-app-index.html');
   const appPath = 'assets/finance-app-' + 'c'.repeat(16) + '.js';
   fs.writeFileSync(externalIndex, validIndex.replace('<script>const submissionAttemptId = "test";</script>', `<script src="${appPath}"></script>`));
@@ -1798,7 +1807,7 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   );
   fs.writeFileSync(productionIndex, validIndex);
   const missingAttemptIndex = path.join(temp, 'missing-attempt-index.html');
-  fs.writeFileSync(missingAttemptIndex, '<meta name="finance-release-contract" content="expense-submit-resilience-v3-20260827">');
+  fs.writeFileSync(missingAttemptIndex, '<meta name="finance-release-sha" content="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"><meta name="finance-release-contract" content="expense-submit-resilience-v3-20260827">');
   assert.throws(() => guard.verifyFrontendContract(missingAttemptIndex, localManifest, 'a'.repeat(40)), /submissionAttemptId/);
   const duplicateMetaIndex = path.join(temp, 'duplicate-meta-index.html');
   fs.writeFileSync(duplicateMetaIndex, `${validIndex}<meta name="finance-release-contract" content="expense-submit-resilience-v3-20260827">`);
@@ -2030,4 +2039,68 @@ for(const filename of ['finance_personal_bill_batch_history_preflight.sql','fina
   assert(workflow.includes('scripts/'+filename),'bill history release tool must be sealed: '+filename);
   for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'scripts/"+filename+"'"));
 }
+
+const invoiceBulkPhase=guard.RELEASE_PHASE_DATABASE_INVOICE_BATCH_BULK;
+const invoiceBulkVersion=guard.INVOICE_BATCH_BULK_MIGRATIONS.join(',');
+assert.equal(invoiceBulkVersion,'20261014123427');
+assert.deepEqual(guard.releasePlan(invoiceBulkPhase,invoiceBulkVersion),{releasePhase:invoiceBulkPhase,migrationVersions:invoiceBulkVersion});
+guard.validateTarget(exactEnvironment,'a'.repeat(40),invoiceBulkPhase,invoiceBulkVersion,catalog.supabaseProjectRef);
+for(const wrong of ['none','20261008100000','20261014123427,20261014123428'])
+  assert.throws(()=>guard.releasePlan(invoiceBulkPhase,wrong));
+const invoiceBulkTemp=fs.mkdtempSync(path.join(os.tmpdir(),'finance-invoice-bulk-release-contract-'));
+try {
+  const directory=path.join(root,'supabase/migrations');
+  const ledger=path.join(invoiceBulkTemp,'ledger.txt');
+  const prior=['00000000000001',...guard.REVIEWED_MIGRATION_CATALOG.filter(version=>version<invoiceBulkVersion)];
+  const baseline={count:1,lastVersion:prior[0],sha256:guard.ledgerSha256([prior[0]])};
+  const writeLedger=rows=>fs.writeFileSync(ledger,rows.join('\n')+'\n');
+  writeLedger(prior);
+  assert.equal(guard.classifyLedger(ledger,directory,invoiceBulkPhase,invoiceBulkVersion,baseline),'pending');
+  assert.throws(()=>guard.classifyLedger(ledger,directory,'frontend_compat','none',baseline),/invoice batch bulk transaction/);
+  for(const missing of prior.slice(1)) {
+    writeLedger(prior.filter(version=>version!==missing));
+    assert.throws(()=>guard.classifyLedger(ledger,directory,invoiceBulkPhase,invoiceBulkVersion,baseline),/every reviewed prerequisite migration/);
+  }
+  writeLedger([...prior,invoiceBulkVersion]);
+  assert.equal(guard.classifyLedger(ledger,directory,invoiceBulkPhase,invoiceBulkVersion,baseline),'applied');
+  const tampered=path.join(invoiceBulkTemp,'tampered'); fs.mkdirSync(tampered);
+  const filename=fs.readdirSync(directory).find(name=>name.startsWith(invoiceBulkVersion+'_'));
+  const source=fs.readFileSync(path.join(directory,filename),'utf8');
+  assert.equal(crypto.createHash('sha256').update(source).digest('hex'),guard.INVOICE_BATCH_BULK_SOURCE_SHA256[invoiceBulkVersion]);
+  fs.writeFileSync(path.join(tampered,filename),source+'\n-- unreviewed alteration\n');
+  assert.throws(()=>guard.classifyLedger(ledger,tampered,invoiceBulkPhase,invoiceBulkVersion,baseline),/sealed SHA256/);
+  assert.throws(()=>guard.readAuditBatch(tampered,invoiceBulkVersion,invoiceBulkPhase),/sealed SHA256/);
+  assert.throws(()=>guard.preparePhaseQuery(path.join(root,'scripts/finance_bill_batch_bulk_postflight.sql'),path.join(invoiceBulkTemp,'wrong.sql'),invoiceBulkPhase,invoiceBulkVersion),/exact sealed postflight/);
+  guard.preparePhaseQuery(path.join(root,'scripts/finance_invoice_batch_bulk_postflight.sql'),path.join(invoiceBulkTemp,'readonly.sql'),invoiceBulkPhase,invoiceBulkVersion);
+  assert.match(fs.readFileSync(path.join(invoiceBulkTemp,'readonly.sql'),'utf8'),/^begin read only;[\s\S]+rollback;\n$/);
+  writeLedger(prior);
+  const scripts=n=>path.join(root,'scripts',n);
+  const rehearsal=path.join(invoiceBulkTemp,'rehearsal.sql');
+  guard.prepareInvoiceBatchBulkRehearsal(directory,rehearsal,invoiceBulkVersion,ledger,
+    scripts('finance_invoice_batch_bulk_fingerprint.sql'),scripts('finance_invoice_batch_bulk_canary.sql'),
+    scripts('finance_invoice_batch_bulk_preflight.sql'),scripts('finance_invoice_batch_bulk_postflight.sql'),baseline);
+  assert.match(fs.readFileSync(rehearsal,'utf8'),/savepoint finance_release_migration;[\s\S]+insert into supabase_migrations\.schema_migrations[\s\S]+rollback to savepoint finance_release_migration;[\s\S]+invoice batch bulk rollback rehearsal changed schema fingerprints/);
+  const apply=path.join(invoiceBulkTemp,'apply.sql');
+  guard.prepareAuditBatchApply(directory,apply,invoiceBulkVersion,ledger,scripts('finance_invoice_batch_bulk_postflight.sql'),baseline,invoiceBulkPhase);
+  assert.match(fs.readFileSync(apply,'utf8'),/^begin;[\s\S]+finance_submit_invoice_batch[\s\S]+insert into supabase_migrations\.schema_migrations[\s\S]+commit;/);
+  const canaryPath=path.join(invoiceBulkTemp,'canary.json');
+  const result={canary:'readonly_invoice_batch_bulk_v1',ok:true,rolled_back:true,identity_scope_preserved:true,live_latency_proven:false};
+  const writeCanary=value=>fs.writeFileSync(canaryPath,JSON.stringify({rows:[{invoice_batch_bulk_canary_result:value}]}));
+  writeCanary(result);guard.verifyReportsCanary(canaryPath,'invoice_batch_bulk');
+  for(const [key,value] of [['canary','different'],['ok',false],['rolled_back',false],['identity_scope_preserved',false],['live_latency_proven',true]]) {
+    writeCanary({...result,[key]:value});
+    assert.throws(()=>guard.verifyReportsCanary(canaryPath,'invoice_batch_bulk'),/did not complete safely/);
+  }
+} finally {fs.rmSync(invoiceBulkTemp,{recursive:true,force:true});}
+assert.match(promoteJob,/inputs\.release_phase != 'database_invoice_batch_bulk_20261014'/,'bulk DB phase cannot promote before exact separate frontend gate');
+assert.equal((workflow.match(/verify-reports-canary --domain invoice_batch_bulk/g)||[]).length,3,'DB apply and both frontend gates require exact installed bulk contract');
+for(const text of ['FINANCE_INVOICE_NATIVE_REQUIRED=1 pnpm test:invoice-batch-bulk','pnpm test:income-recovery-storage-browser','pnpm test:income-rpc-http','node scripts/check_submission_acceptance_manifest.cjs']) {
+  assert(workflow.includes(text),'production candidate misses reliability gate: '+text);
+  assert(fs.readFileSync(path.join(root,'.github/workflows/stability-gate.yml'),'utf8').includes(text),'PR gate misses reliability case: '+text);
+}
+for(const filename of ['finance_invoice_batch_bulk_preflight.sql','finance_invoice_batch_bulk_postflight.sql','finance_invoice_batch_bulk_fingerprint.sql','finance_invoice_batch_bulk_canary.sql','check_invoice_batch_bulk_insert_20261014.cjs','check_income_recovery_storage_browser.cjs','check_income_rpc_http_20261014.cjs','check_submission_acceptance_manifest.cjs','fixtures/finance_invoice_batch_live_catalog_20261014.json','fixtures/finance_invoice_batch_fixture_20261014.cjs','fixtures/finance_income_http_scope_20261014.json']) {
+  assert(workflow.includes('scripts/'+filename),'invoice reliability tool must be sealed: '+filename);
+  for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'scripts/"+filename+"'"));
+}
+
 console.log('PASS protected production release workflow contract');

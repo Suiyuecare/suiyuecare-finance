@@ -12,6 +12,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   applyBuildEnvironment,
+  applyReleaseIdentity,
   resolveBuildConfig
 } = require('./finance_build_environment');
 
@@ -108,6 +109,18 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+    'supabase/migrations/20261014123427_finance_invoice_batch_bulk_insert_v2.sql',
+    'scripts/check_income_rpc_http_20261014.cjs',
+    'scripts/check_submission_acceptance_manifest.cjs',
+    'scripts/fixtures/finance_invoice_batch_live_catalog_20261014.json',
+    'scripts/fixtures/finance_invoice_batch_fixture_20261014.cjs',
+    'scripts/fixtures/finance_income_http_scope_20261014.json',
+    'scripts/check_invoice_batch_bulk_insert_20261014.cjs',
+    'scripts/check_income_recovery_storage_browser.cjs',
+    'scripts/finance_invoice_batch_bulk_preflight.sql',
+    'scripts/finance_invoice_batch_bulk_postflight.sql',
+    'scripts/finance_invoice_batch_bulk_fingerprint.sql',
+    'scripts/finance_invoice_batch_bulk_canary.sql',
     'supabase/migrations/20261013091000_finance_personal_bill_batch_history_v1.sql',
     'scripts/check_finance_personal_bill_batch_history.cjs',
     'scripts/check_personal_bill_batch_browser_20261013.cjs',
@@ -606,7 +619,7 @@ function expectedBuiltIndex() {
   for (const asset of versionedAssets) hash.update(asset.key).update(fs.readFileSync(asset.file));
   html = html.replace(/__FINANCE_ASSET_VERSION__/g, hash.digest('hex').slice(0, 16));
   const { createStartupBundle, createAppBundle } = require('./finance_startup_bundle');
-  const bundle = createStartupBundle(applyBuildEnvironment(html, buildConfig), ROOT);
+  const bundle = createStartupBundle(applyReleaseIdentity(applyBuildEnvironment(html, buildConfig), gitHead()), ROOT);
   if (fs.readFileSync(path.join(OUTPUT, bundle.file), 'utf8') !== bundle.code) fail('startup bundle is not the deterministic concatenation of source engines');
   if (!fs.readFileSync(path.join(OUTPUT, bundle.sdk.file)).equals(bundle.sdk.code)) fail('built Supabase SDK differs from the fixed official UMD');
   for (const file of ['assets/vendor/supabase-js-2.111.0.LICENSE', 'assets/vendor/supabase-js-2.111.0.provenance.json', 'assets/vendor/tus-4.3.1.min.js', 'assets/vendor/tus-4.3.1-LICENSE', 'assets/vendor/tus-4.3.1.provenance.json']) {

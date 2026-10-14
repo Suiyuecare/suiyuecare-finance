@@ -127,7 +127,7 @@ function fixture(options={}){
     }
   };
   state.window=state;
-  state.sessionStorage={getItem:()=>null,setItem:()=>{},removeItem:()=>{}};
+  const localReceipts=new Map();state.sessionStorage={getItem:key=>localReceipts.get(key)||null,setItem:(key,value)=>localReceipts.set(key,value),removeItem:key=>localReceipts.delete(key)};state.financeSubmissionDiagnostic=()=>{};
   state.USER_EDIT_SNAPSHOT=state.USER_EDIT_ID?{...state.USERS[0]}:null;
   vm.createContext(state);
   for(const name of names){
@@ -139,6 +139,13 @@ function fixture(options={}){
 }
 async function check(name,run){await run();console.log('PASS '+name);}
 (async()=>{
+  await check('quota failure preserves personnel form and never dispatches create/edit/activation',async()=>{
+    for(const options of [{},{create:true},{inactive:true}]){
+      const f=fixture(options);f.state.sessionStorage.setItem=()=>{throw Object.assign(new Error('quota'),{name:'QuotaExceededError'});};
+      if(options.inactive)await f.state.window.toggleU('staff-1');else await f.state.window.submitAddUser();
+      assert.equal(f.calls.length,0);assert.equal(f.closed.length,0);assert.equal(f.fields.un.value,'測試人員');
+    }
+  });
   await check('existing member sends the authoritative positive revision and confirms without broad reload',async()=>{
     const f=fixture();await f.state.window.submitAddUser();
     assert.equal(f.calls.length,1);assert.equal(f.calls[0].p_expected_revision,4);
