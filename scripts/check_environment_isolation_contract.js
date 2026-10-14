@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+const assert = require('node:assert/strict');
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -104,6 +105,14 @@ const production = applyBuildEnvironment(source, productionConfig);
 check('production build injects explicit public URL', production.includes('var SUPABASE_URL="https://finance-contract.supabase.co";'));
 check('production build injects only a publishable key', production.includes('var SUPABASE_ANON_KEY="sb_publishable_contract_test_only";'));
 check('production build removes demo login controls', !production.includes('DEMO_LOGIN_START') && !production.includes('<div id="demo-login-panel"'));
+
+const {applyReleaseIdentity} = require('./finance_build_environment');
+const releaseSha = 'a'.repeat(40);
+check('built page exposes the exact release SHA for diagnostics', applyReleaseIdentity(production, releaseSha).includes('<meta name="finance-release-sha" content="'+releaseSha+'">'));
+for (const invalid of ['', 'main', '<script>', 'A'.repeat(40), 'a'.repeat(39)]) {
+  assert.throws(()=>applyReleaseIdentity(production,invalid),/exact source commit/);
+}
+assert.throws(()=>applyReleaseIdentity(applyReleaseIdentity(production,releaseSha),releaseSha),/preexisting release SHA/);
 
 process.stdout.write(`\nEnvironment isolation contract: ${passed} checks passed, ${failures.length} failed.\n`);
 if (failures.length) process.exit(1);

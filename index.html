@@ -35,6 +35,7 @@
 <link rel="icon" type="image/png" href="assets/suiyue-logo-transparent.png">
 <script src="assets/engines/finance-v4-engine-registry.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/diagnostic-outbox-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/income-recovery-store.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/data-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/form-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/employee-form-ux.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -11804,7 +11805,7 @@ window.restoreFinanceDiagnosticOutbox=function(){
   var scope=financeDiagnosticScope(),box=financeDiagnosticOutbox();if(!box||!scope.owner)return false;
   box.pending(scope).forEach(function(item){
     var row=OPS_EVENTS.find(function(e){return e.id===item.id;});
-    if(!row){row=Object.assign({},item,{diagnosticOwner:scope.owner,title:'離線診斷：'+item.type,detail:'重新連線後補送；本機僅保留事件類型與錯誤碼。',user:'系統診斷',role:'system',meta:{code:item.code},remoteAuditStatus:'queued'});OPS_EVENTS.unshift(row);}
+    if(!row){row=Object.assign({},item,{diagnosticOwner:scope.owner,title:'離線診斷：'+item.type,detail:'重新連線後補送；本機僅保留事件類型與錯誤碼。',user:'系統診斷',role:'system',meta:{code:item.code,stage:item.stage,correlationId:item.correlationId,releaseSha:item.releaseSha,releaseContract:item.releaseContract,assetVersion:item.assetVersion,durationMs:item.durationMs,outcome:item.outcome},remoteAuditStatus:'queued'});OPS_EVENTS.unshift(row);}
     if(row.remoteAuditStatus!=='synced'&&row.remoteAuditStatus!=='syncing'){row.remoteAuditQueued=false;queueOpsEventRemoteSync(row);}
   });
   return true;
@@ -11823,7 +11824,7 @@ function opsEventRemoteAuditDetail(row){
     'tenant：'+(row.tenantId||currentTenantId()),
     '內容：'+(row.detail||'')
   ];
-  ['fail','warn','ok','failCount','warnCount','status','defaultCustomerProfileId','defaultCustomerProfileName','applyStrategy','stage','code','reason','retryable','online','sessionPresent','expiresAt','insertedCount','totalCount','batchLimit','recordId','recordNo','recordType','invoiceId','invoiceNo','billId','billNo','batchId','action','error','idempotencyKey'].forEach(function(k){
+  ['fail','warn','ok','failCount','warnCount','status','defaultCustomerProfileId','defaultCustomerProfileName','applyStrategy','stage','code','errorCode','errorName','correlationId','releaseContract','releaseSha','assetVersion','durationMs','outcome','kind','reason','retryable','online','sessionPresent','expiresAt','insertedCount','totalCount','batchLimit','recordId','recordNo','recordType','invoiceId','invoiceNo','billId','billNo','batchId','action','error','idempotencyKey'].forEach(function(k){
     if(meta[k]!=null&&meta[k]!=='')parts.push(k+'：'+(typeof meta[k]==='object'?JSON.stringify(meta[k]).slice(0,180):String(meta[k])));
   });
   return parts.filter(Boolean).join('；').slice(0,1800);
@@ -11919,7 +11920,7 @@ window.runOpsEventRemoteAuditSelfCheck=function(){
   return {ok:payload.action.indexOf('維運事件：')===0&&payload.target==='客製化設定儲存前預檢'&&payload.detail.indexOf('self-check')>-1&&Object.keys(payload).every(function(key){return allowed.indexOf(key)>-1;})&&!!healthItem&&healthItem.required===true&&typeof window.retryOpsRemoteAuditEvents==='function'&&typeof window.retryOpsEventRemoteAudit==='function',payload:payload,healthItem:healthItem,canRetry:typeof window.retryOpsRemoteAuditEvents==='function'};
 };
 function recordOpsEvent(type,severity,title,detail,meta){
-  meta=meta||{};
+  meta=Object.assign({releaseContract:typeof currentFinanceReleaseContract==='function'?currentFinanceReleaseContract():'',releaseSha:typeof document!=='undefined'&&document.querySelector?String((document.querySelector('meta[name="finance-release-sha"]')||{getAttribute:function(){return '';}}).getAttribute('content')||''):'',assetVersion:'__FINANCE_ASSET_VERSION__'},meta||{});
   var row={id:'ops_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),time:new Date().toISOString(),type:type||'system',severity:severity||'info',title:title||'系統事件',detail:detail||'',user:S.user?(S.user.email||S.user.n||''):'',role:S.user?currentRoleKey():'',page:S.page||'',dataEnv:activeDataEnvironment(),tenantId:currentTenantId(),meta:meta};
   row.diagnosticOwner=S.user&&S.user.authUserId||'';
   OPS_EVENTS.unshift(row);
@@ -16234,6 +16235,7 @@ window.returnToPortalModules=function(){
   location.href=url.toString();
 };
 function clearFinanceLoginState(){
+  INCOME_SUBMISSION_PENDING={};INCOME_SUBMISSION_RUNNING={};INCOME_RECOVERED_DRAFTS={};FINANCE_MEMBER_PENDING_CONFIRMATIONS=Object.create(null);
   clearDocumentArchiveRetryForCurrentIdentity();
   if(window.FinanceHrBridge)window.FinanceHrBridge.dispose();
   clearApprovalFastBootstrapState();
@@ -16261,9 +16263,15 @@ function redirectFinanceLogoutToPortalLogin(){
   location.assign(PORTAL_LOGOUT_URL);
 }
 window.financeLogout=async function(){
+  var recoveryOwner=incomeSubmissionOwner();
   if(S.nrRevisionConfirmationPending){alert('補件處理結果尚待確認，現在不能登出。請勿離開目前畫面。');return;}
   return window.FinanceModuleLogout.start({
-    client:getSb,stopRealtime:stopRealtime,returnToPortal:function(){location.assign(PORTAL_MODULE_URL);},
+    client:getSb,stopRealtime:async function(){
+      if(window.FinanceIncomeRecoveryStore){try{await withOperationTimeout(window.FinanceIncomeRecoveryStore.clearOwner(recoveryOwner),'清除本機送件草稿',8000);}catch(error){financeSubmissionDiagnostic('income',null,'logout_cleanup','unavailable',error);}}
+      ['invoice','bill'].forEach(function(kind){sessionRemoveItem('finance_income_submission_pending_v2:'+recoveryOwner+':'+kind);});
+      try{var scope=JSON.parse(recoveryOwner);for(var i=sessionStorage.length-1;i>=0;i--){var key=sessionStorage.key(i);if(key&&key.indexOf('finance-member-pending:')===0){var owner=JSON.parse(key.slice('finance-member-pending:'.length)).slice(0,4);if(JSON.stringify(owner)===JSON.stringify(scope))sessionStorage.removeItem(key);}}}catch(_){}
+      await stopRealtime();
+    },returnToPortal:function(){location.assign(PORTAL_MODULE_URL);},
     clearPrivate:function(){
       financeLogoutInProgress=true;++financeAuthIdentityEpoch;setFinanceWorkspaceIdentityBlocked(true);
       clearFinanceLoginState();REQS=[];VOUCHERS=[];INVS=[];BILLS=[];LEDGER=[];DRAFTS=[];
@@ -24747,11 +24755,14 @@ async function readExpenseSubmissionCommit(expected,alternates,recoveryAttemptId
 async function callExpenseSubmissionOnce(record,label){
   var identity=expenseSubmissionOperationIdentity();
   if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
+  var payload=record.formPayload||{},diagnostic={createdAt:new Date().toISOString(),args:{p_idempotency_key:payload.submissionAttemptId||'',p_items:[{}]}};
+  if(typeof financeSubmissionDiagnostic==='function')financeSubmissionDiagnostic('expense',diagnostic,'rpc_dispatch','started');
   try{
     var result=await withOperationTimeout(insertMembershipOrgSubmittedRecord('expense','expense_requests',record,reqDbRow(record)),label||'申請單保存',45000);
     if(!expenseSubmissionOperationCurrent(identity,record))return expenseSubmissionIdentityChanged();
+    if(typeof financeSubmissionDiagnostic==='function')financeSubmissionDiagnostic('expense',diagnostic,'rpc_result',result&&result.ok?'committed':'unconfirmed',result&&result.error);
     return result&&typeof result==='object'?result:{ok:false,error:new Error('申請單交易沒有回傳結果')};
-  }catch(error){return{ok:false,error:error};}
+  }catch(error){if(typeof financeSubmissionDiagnostic==='function')financeSubmissionDiagnostic('expense',diagnostic,'rpc_result','unknown',error);return{ok:false,error:error};}
 }
 async function readExpenseSubmissionCommitWithDelays(record,delays,alternates,recoveryAttemptIds){
   var identity=expenseSubmissionOperationIdentity();
@@ -30308,11 +30319,15 @@ function clearIncomeActionContext(state){
   if(state&&S.incomeApprovalReconcileContext&&S.incomeApprovalReconcileContext.key===state.key)S.incomeApprovalReconcileContext=null;
 }
 async function callFinanceMutationRpcOnce(functionName,rpcArgs,rpcCall){
+  var diagnostic={createdAt:new Date().toISOString(),args:{p_idempotency_key:rpcArgs&&rpcArgs.p_idempotency_key||'',p_items:[]}};
+  if(typeof financeSubmissionDiagnostic==='function')financeSubmissionDiagnostic('approval',diagnostic,'rpc_dispatch','started');
   try{
     var pending=rpcCall?rpcCall():getSb().rpc(functionName,rpcArgs);
-    return await withOperationTimeout(pending,'確認簽核交易',45000);
+    var response=await withOperationTimeout(pending,'確認簽核交易',45000);
+    if(typeof financeSubmissionDiagnostic==='function')financeSubmissionDiagnostic('approval',diagnostic,'rpc_result',response&&response.data&&response.data.ok&&!response.error?'committed':'unconfirmed',response&&response.error);
+    return response;
   }
-  catch(error){return{data:null,error:error};}
+  catch(error){if(typeof financeSubmissionDiagnostic==='function')financeSubmissionDiagnostic('approval',diagnostic,'rpc_result','unknown',error);return{data:null,error:error};}
 }
 function financeMutationPayloadMatches(response,expectedCount){
   if(!response||response.error)return false;
@@ -34068,9 +34083,9 @@ async function invoiceInitialStepFiles(rawFiles,rows,ctx){
   var source=[];
   for(var i=0;i<(rawFiles||[]).length;i++){
     if(!rawFiles[i])continue;
-    // Preserve a large original as a Blob. Encoding it as a data URL before
-    // TUS would allocate another full-size copy and stall the invoice form.
-    var att=await fileToAttachment(rawFiles[i],{directLarge:true});
+    // Retain native files at every size. Office files must not depend on a
+    // FileReader/base64 conversion before the shared upload pipeline.
+    var att=await fileToAttachment(rawFiles[i],{directUpload:true});
     att.kind='invoice_source';
     source.push(att);
   }
@@ -34165,7 +34180,7 @@ async function issueInvCore(){
   var insert=await insertMembershipOrgSubmittedRecord('invoice','invoices',inv,invoiceDbRow(inv));
   if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!settingsWriteResultOk(insert)){
-    if(!insert.unknown)await cleanupUploadedSupabaseAttachments([initFiles||[]],'發票主表寫入失敗清理');
+    if(!insert.unknown)await cleanupUploadedSupabaseAttachments([newlyUploadedAttachmentResults(initFiles||[])],'發票主表寫入失敗清理');
     if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
     if(insert.unknown){alert(insert.error.message);return;}
     return recordInvoiceWriteFailure('建立發票申請',inv,insert,{insertedCount:0,totalCount:1});
@@ -34633,7 +34648,7 @@ async function issueBatchCore(){
   );
   if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
   if(!settingsWriteResultOk(batchWrite)){
-    if(!batchWrite.unknown)await cleanupUploadedSupabaseAttachments([initFiles||[]],'批次發票主表寫入失敗清理');
+    if(!batchWrite.unknown)await cleanupUploadedSupabaseAttachments([newlyUploadedAttachmentResults(initFiles||[])],'批次發票主表寫入失敗清理');
     if(!incomeSubmissionIdentityCurrent(submissionIdentity))return false;
     if(batchWrite.unknown){alert(batchWrite.error.message);return;}
     return recordInvoiceWriteFailure('建立批次發票申請',runtimeInvoiceSource,batchWrite,{insertedCount:0,totalCount:rows.length});
@@ -41773,8 +41788,9 @@ function financeMemberAttemptBlocked(key){
   return !!financeMemberPendingAttempt(key);
 }
 function financeMemberMarkAttempt(key,attempt){
+  try{var serialized=JSON.stringify(attempt);sessionStorage.setItem(key,serialized);if(sessionStorage.getItem(key)!==serialized)throw new Error('Personnel receipt readback failed');}
+  catch(error){financeSubmissionDiagnostic('personnel',null,'receipt_write','blocked',error);var failure=new Error('無法安全保存人員儲存識別碼，尚未送出變更；請保留本頁並確認瀏覽器儲存空間。');failure.code='MEMBER_RECEIPT_STORAGE_FAILED';throw failure;}
   FINANCE_MEMBER_PENDING_CONFIRMATIONS[key]=attempt;
-  try{sessionStorage.setItem(key,JSON.stringify(attempt));}catch(error){}
 }
 function financeMemberClearAttempt(key){
   delete FINANCE_MEMBER_PENDING_CONFIRMATIONS[key];
@@ -42047,8 +42063,8 @@ window.submitAddUser=async function(){
     var requestArgs={p_member:member,p_expected_revision:expectedRevision,p_request_id:financeMemberRequestId()};
     var response;
     try{
-      sent=true;
       financeMemberMarkAttempt(attemptKey,{rpc:'finance_admin_upsert_member_reliable_v1',kind:user?'edit':'create',args:requestArgs,startedAt:startedAt});
+      sent=true;
       response=await withOperationTimeout(client.rpc('finance_admin_upsert_member_reliable_v1',requestArgs),'儲存人員資料',45000);
     }catch(rpcError){response={error:rpcError};}
     if(response&&response.error&&response.status&&!response.error.status)response.error.status=response.status;
@@ -43023,10 +43039,45 @@ function incomeSubmissionFingerprint(formType,records){
 // operation key across retry/reload; only verified completion unlocks a new form.
 var INCOME_SUBMISSION_PENDING={};
 var INCOME_SUBMISSION_RUNNING={};
-// sessionStorage carries the frozen request for retry in the same tab. A
-// minimal localStorage receipt survives a closed tab without storing invoice
-// details, payers, attachment paths, or a replayable request payload.
+// Only opaque receipts use Web Storage. An encrypted IndexedDB form snapshot
+// supports closed-tab recovery without duplicating the batch payload in the
+// limited sessionStorage quota. Legacy v2 snapshots remain readable.
 var INCOME_SUBMISSION_RECOVERY_MARKER_PREFIX='finance_income_submission_recovery_v1:';
+function financeSubmissionDiagnostic(kind,entry,stage,outcome,error){
+  var operation=entry&&entry.args&&entry.args.p_idempotency_key||'',started=Date.parse(entry&&entry.createdAt||'');
+  var meta={kind:kind,stage:stage,outcome:outcome,idempotencyKey:operation,correlationId:operation,
+    releaseContract:typeof currentFinanceReleaseContract==='function'?currentFinanceReleaseContract():'',
+    releaseSha:typeof document!=='undefined'&&document.querySelector?String((document.querySelector('meta[name="finance-release-sha"]')||{getAttribute:function(){return '';}}).getAttribute('content')||''):'',assetVersion:'__FINANCE_ASSET_VERSION__',
+    durationMs:Number.isFinite(started)?Math.max(0,Date.now()-started):0,totalCount:entry&&entry.args&&entry.args.p_items?entry.args.p_items.length:0,
+    code:String(error&&error.code||error&&error.name||'').slice(0,80),errorName:String(error&&error.name||'').slice(0,80)};
+  try{recordOpsEvent('finance_submission_lifecycle',outcome==='blocked'||outcome==='unknown'?'warn':'info','送件階段紀錄','',meta);}catch(_){}
+}
+function incomeSubmissionSourceFiles(entry){
+  var files=[],seen=new Set();
+  ((entry.args.p_items[0]||{}).steps||[]).forEach(function(step){(step.files||[]).forEach(function(file){
+    var key=file.storagePath||file.path||file.id;
+    if(key&&!seen.has(key)&&['invoice_excel','invoice_receipt_bundle'].indexOf(file.kind)<0){seen.add(key);files.push(file);}
+  });});return files;
+}
+var INCOME_RECOVERED_DRAFTS={};
+function applyIncomeRecoveredDraft(formType,force){
+  var draft=INCOME_RECOVERED_DRAFTS[formType],page=formType==='bill'?'bills':'invoices';if(!draft||draft.owner!==incomeSubmissionOwner())return false;
+  if(!force&&typeof hasUnsavedIncomeDocChanges==='function'&&hasUnsavedIncomeDocChanges(page))return false;
+  var ui=draft.formUi,snapshot;try{snapshot=JSON.parse(ui&&ui.snapshot||'null');}catch(_){return false;}if(!snapshot)return false;
+  Object.keys(snapshot.fields||{}).forEach(function(id){var node=el(id);if(node)node.value=snapshot.fields[id];});
+  if(formType==='bill'){BILL_ROWS=snapshot.billRows||[];S.billFiles=draft.files||[];S.billAttachmentOwner=incomeSubmissionOwner();renderBillEntryTable();if(typeof renderBillAttachments==='function')renderBillAttachments();}
+  else{S.bRows=snapshot.batchRows||[];if(ui.mode==='single')S.invOcrFile=(draft.files||[])[0]||null;else{S.bUploadFiles=draft.files||[];S.bUploadFile=S.bUploadFiles[0]||null;}renderBatchTable();}
+  delete INCOME_RECOVERED_DRAFTS[formType];return true;
+}
+window.restoreIncomeRecoveredDraft=function(formType){
+  if(!confirm('恢復前次送件內容會取代目前這個表單尚未送出的內容，確定恢復？'))return;
+  var draft=INCOME_RECOVERED_DRAFTS[formType];
+  if(applyIncomeRecoveredDraft(formType,true)){
+    clearIncomeSubmissionRecoveryMarker(formType,draft.operationKey);
+    if(window.FinanceIncomeRecoveryStore)window.FinanceIncomeRecoveryStore.remove(draft.owner,formType,draft.operationKey).catch(function(){});
+    renderIncomeSubmissionRecovery(formType);
+  }
+};
 function incomeSubmissionOwner(){
   return JSON.stringify([currentFinanceAuthUserId(),S.user&&S.user.id||'',currentTenantId(),activeDataEnvironment()]);
 }
@@ -43039,7 +43090,7 @@ function incomeSubmissionIdentityCurrent(identity){return !!identity&&identity==
 function incomeSubmissionStorageKey(formType){return 'finance_income_submission_pending_v2:'+incomeSubmissionOwner()+':'+formType;}
 function incomeSubmissionRecoveryMarkerKey(formType){return INCOME_SUBMISSION_RECOVERY_MARKER_PREFIX+incomeSubmissionOwner()+':'+formType;}
 function incomeSubmissionRecoveryMarker(formType){
-  var raw=safeGetItem(incomeSubmissionRecoveryMarkerKey(formType));if(!raw)return null;
+  var raw;try{raw=localStorage.getItem(incomeSubmissionRecoveryMarkerKey(formType));}catch(error){financeSubmissionDiagnostic('income',null,'receipt_read','blocked',error);throw new Error('前次送件識別碼無法讀取；尚未送出任何交易，請允許網站儲存空間後再試。');}if(!raw)return null;
   var marker;
   try{marker=JSON.parse(raw);}catch(_){throw new Error('前次送件識別碼無法讀取；為避免重複建立，請聯絡系統管理員查核正式資料。');}
   var itemLimit=formType==='invoice'?INVOICE_BATCH_MAX_ITEMS:formType==='bill'?BILL_BATCH_MAX_ITEMS:0;
@@ -43073,7 +43124,7 @@ function clearIncomeSubmissionFormIfUnchanged(entry){
 
 function loadIncomeSubmissionPending(formType){
   var key=incomeSubmissionStorageKey(formType),entry=INCOME_SUBMISSION_PENDING[key];
-  if(!entry){try{entry=JSON.parse(sessionGetItem(key)||'null');}catch(_){throw new Error('原送單記錄無法讀取，為避免重複送單，請保留表單並聯絡系統管理員。');}}
+  if(!entry){try{entry=JSON.parse(sessionGetItem(key)||'null');if(entry){entry.legacySession=true;entry.unknown=true;}}catch(_){throw new Error('原送單記錄無法讀取，為避免重複送單，請保留表單並聯絡系統管理員。');}}
   if(!entry)return null;
   if(entry.owner!==incomeSubmissionOwner()||entry.formType!==formType||!entry.args||!Array.isArray(entry.args.p_items)||!entry.args.p_items.length||!entry.args.p_idempotency_key||!Array.isArray(entry.records)||entry.records.length!==entry.args.p_items.length)throw new Error('原送單記錄不完整，請保留表單並聯絡系統管理員，勿另行重送。');
   INCOME_SUBMISSION_PENDING[key]=entry;return entry;
@@ -43083,14 +43134,20 @@ function saveIncomeSubmissionPending(entry){
   var key=incomeSubmissionStorageKey(entry.formType);
   var previous=incomeSubmissionRecoveryMarker(entry.formType);
   if(previous&&(previous.operationKey!==entry.args.p_idempotency_key||JSON.stringify(previous.itemKeys)!==JSON.stringify(entry.args.p_items.map(function(item){return item.client_item_key;}))))return false;
-  if(!safeJsonSet(incomeSubmissionRecoveryMarkerKey(entry.formType),incomeSubmissionMarkerFromEntry(entry)))return false;
-  if(!sessionSetItem(key,JSON.stringify(entry))){if(!previous)clearIncomeSubmissionRecoveryMarker(entry.formType,entry.args.p_idempotency_key);return false;}
+  var markerKey=incomeSubmissionRecoveryMarkerKey(entry.formType),serialized=JSON.stringify(incomeSubmissionMarkerFromEntry(entry));
+  try{localStorage.setItem(markerKey,serialized);if(localStorage.getItem(markerKey)!==serialized)throw new Error('Receipt readback failed');}
+  catch(error){financeSubmissionDiagnostic(entry.formType,entry,'receipt_write','blocked',error);return false;}
+  // Full payload is already saved in encrypted IndexedDB. A full/quota-denied
+  // sessionStorage must not prevent a durable, reconciliable submission.
+  if(!entry.legacySession)sessionRemoveItem(key);
   INCOME_SUBMISSION_PENDING[key]=entry;return true;
 }
 function clearIncomeSubmissionPending(entry){
   if(!entry||entry.owner!==incomeSubmissionOwner())return;
   var key=incomeSubmissionStorageKey(entry.formType),current=loadIncomeSubmissionPending(entry.formType);
-  if(current&&current.args.p_idempotency_key===entry.args.p_idempotency_key){sessionRemoveItem(key);delete INCOME_SUBMISSION_PENDING[key];delete INCOME_SUBMISSION_RETRY_STATE[entry.formType];clearIncomeSubmissionRecoveryMarker(entry.formType,entry.args.p_idempotency_key);}
+  if(current&&current.args.p_idempotency_key===entry.args.p_idempotency_key){sessionRemoveItem(key);delete INCOME_SUBMISSION_PENDING[key];delete INCOME_SUBMISSION_RETRY_STATE[entry.formType];if(!INCOME_RECOVERED_DRAFTS[entry.formType])clearIncomeSubmissionRecoveryMarker(entry.formType,entry.args.p_idempotency_key);
+    if(!INCOME_RECOVERED_DRAFTS[entry.formType]&&window.FinanceIncomeRecoveryStore)window.FinanceIncomeRecoveryStore.remove(entry.owner,entry.formType,entry.args.p_idempotency_key).catch(function(error){financeSubmissionDiagnostic(entry.formType,entry,'draft_cleanup','unavailable',error);});
+  }
   renderIncomeSubmissionRecovery(entry.formType);
 }
 function incomeSubmissionUnknown(message,identityChanged){
@@ -43112,7 +43169,7 @@ function incomeSubmissionPayloadMatches(payload,entry){
 async function reconcileIncomeSubmission(entry,identity){
   if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
   var preserved=entry.owner?'原內容與附件已保留':'前次送件識別碼已保留；原分頁已關閉';
-  var response;
+  var response;financeSubmissionDiagnostic(entry.formType,entry,'reconcile','started');
   try{
     response=await withOperationTimeout(getSb().rpc('finance_income_reconcile_submission_v1',{
       p_document_type:entry.formType,
@@ -43122,7 +43179,8 @@ async function reconcileIncomeSubmission(entry,identity){
   }catch(error){response={error:error};}
   if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
   var data=response&&response.data;
-  if(response&&response.error||!data||data.ok!==true)return incomeSubmissionUnknown('暫時無法確認原送單結果；'+preserved+'。請稍後再按「確認原送單結果」，不要另開新單。');
+  if(response&&response.error||!data||data.ok!==true){financeSubmissionDiagnostic(entry.formType,entry,'reconcile','unknown',response&&response.error);return incomeSubmissionUnknown('暫時無法確認原送單結果；'+preserved+'。請稍後再按「確認原送單結果」，不要另開新單。');}
+  financeSubmissionDiagnostic(entry.formType,entry,'reconcile',data.state||'unknown');
   if(data.state==='committed'){
     if(incomeSubmissionPayloadMatches(data.result,entry))return {available:true,ok:true,data:cloneSettingValue(data.result),attempt:entry};
     return incomeSubmissionUnknown('原送單結果與保存的識別碼不一致；為避免重複建立，請聯絡系統管理員查核。');
@@ -43145,14 +43203,16 @@ async function runIncomeSubmissionAttempt(entry,identity){
     if(hadUnknown){
       var previous=await reconcileIncomeSubmission(entry,identity);
       if(previous.ok){entry.response=previous.data;saveIncomeSubmissionPending(entry);return previous;}
-      if(previous.confirmedRollback&&incomeSubmissionIdentityCurrent(identity))clearIncomeSubmissionPending(entry);
+      // The recovery caller decides whether a persisted draft must first be
+      // restored or offered to the user before removing its receipt.
       return previous;
     }
-    var response;
+    var response;financeSubmissionDiagnostic(entry.formType,entry,'rpc_dispatch','started');
     try{response=await withOperationTimeout(getSb().rpc(entry.rpcName,cloneSettingValue(entry.args)),'確認原送單交易',15000);}
     catch(error){response={error:error};}
     if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，請以原身分確認送單結果。',true);
     if(response&&!response.error&&incomeSubmissionPayloadMatches(response.data,entry)){
+      financeSubmissionDiagnostic(entry.formType,entry,'rpc_result','committed');
       entry.response=cloneSettingValue(response.data);saveIncomeSubmissionPending(entry);
       return {available:true,ok:true,data:entry.response,attempt:entry};
     }
@@ -43160,6 +43220,7 @@ async function runIncomeSubmissionAttempt(entry,identity){
       // The first PostgreSQL 57014 is a definite rollback because this key
       // has never been dispatched before this request.
       if(incomeSubmissionStatementCanceled(response.error)){
+        financeSubmissionDiagnostic(entry.formType,entry,'rpc_result','rolled_back',response.error);
         clearIncomeSubmissionPending(entry);
         return {available:true,ok:false,confirmedRollback:true,error:response.error};
       }
@@ -43180,9 +43241,21 @@ function applyIncomeSubmissionResponse(records,result){
   result.approvalRuntime={ok:true,runtime:'income_transaction_rpc'};return result;
 }
 async function recoverPendingIncomeSubmission(formType){
-  var identity=incomeSubmissionIdentity(),entry=loadIncomeSubmissionPending(formType);
+  var identity=incomeSubmissionIdentity(),entry=loadIncomeSubmissionPending(formType),draftReadUnavailable=false;
   var marker=entry?null:incomeSubmissionRecoveryMarker(formType);
   if(!entry&&!marker)return false;
+  if(entry&&entry.legacySession&&window.FinanceIncomeRecoveryStore){
+    try{await withOperationTimeout(window.FinanceIncomeRecoveryStore.save(entry.owner,formType,entry.args.p_idempotency_key,{formUi:entry.formUi,files:incomeSubmissionSourceFiles(entry)}),'更新送件恢復資料',15000);entry.legacySession=false;}
+    catch(error){financeSubmissionDiagnostic(formType,entry,'legacy_draft_migrate','unavailable',error);}
+    if(!incomeSubmissionIdentityCurrent(identity))return true;
+  }
+  if(!entry&&marker&&window.FinanceIncomeRecoveryStore){
+    try{
+      var snapshot=await withOperationTimeout(window.FinanceIncomeRecoveryStore.load(marker.owner,formType,marker.operationKey),'讀取送件恢復資料',15000);
+      if(!incomeSubmissionIdentityCurrent(identity))return true;
+      if(snapshot){entry={owner:marker.owner,formType:formType,unknown:true,createdAt:marker.createdAt,formUi:snapshot.formUi,recoveryFiles:snapshot.files||[],restoredFromStore:true,records:marker.itemKeys,args:{p_idempotency_key:marker.operationKey,p_data_environment:marker.dataEnvironment,p_items:marker.itemKeys.map(function(key){return {client_item_key:key};})}};INCOME_SUBMISSION_PENDING[incomeSubmissionStorageKey(formType)]=entry;}
+    }catch(error){draftReadUnavailable=true;financeSubmissionDiagnostic(formType,null,'draft_restore','unavailable',error);}
+  }
   var result;
   if(entry)result=await runIncomeSubmissionAttempt(entry,identity);
   else{
@@ -43194,8 +43267,17 @@ async function recoverPendingIncomeSubmission(formType){
   }
   if(!incomeSubmissionIdentityCurrent(identity))return true;
   if(result.confirmedRollback){
+    if(!entry&&draftReadUnavailable){
+      // An unavailable local store is not proof that the original draft is gone.
+      // Retain its receipt so a later retry can recover the encrypted snapshot.
+      renderIncomeSubmissionRecovery(formType);
+      alert('已確認原送件未成立，但原表單草稿暫時無法讀取。恢復識別碼已保留，請稍後再按「確認原送單結果」以恢復原表單與附件。');
+      return true;
+    }
+    var restored=false;
+    if(entry&&entry.restoredFromStore&&entry.formUi){INCOME_RECOVERED_DRAFTS[formType]={owner:entry.owner,operationKey:entry.args.p_idempotency_key,formUi:entry.formUi,files:entry.recoveryFiles||[]};restored=applyIncomeRecoveredDraft(formType,false);}
     if(entry)clearIncomeSubmissionPending(entry);else{clearIncomeSubmissionRecoveryMarker(formType,marker.operationKey);renderIncomeSubmissionRecovery(formType);}
-    alert(result.error.message+(entry?'請檢查目前表單與附件，確認完整後再重新送出。':'原分頁已關閉，請重新填寫表單並選取附件。'));
+    alert(result.error.message+(restored?'原表單與附件已恢復，請核對後重新送出。':INCOME_RECOVERED_DRAFTS[formType]?'原表單已保留，請按「恢復前次表單」；目前新填內容不會被自動覆蓋。':entry?'請檢查目前表單與附件，確認完整後再重新送出。':'原分頁已關閉且沒有可恢復的草稿，請重新填寫表單並選取附件。'));
     return true;
   }
   if(!result.ok){alert(result.error&&result.error.message||'原送單結果待確認');return true;}
@@ -43225,6 +43307,11 @@ function renderIncomeSubmissionRecovery(formType){
   var root=el(formType==='invoice'?'pg-invoices':'pg-bills');if(!root||!root.insertBefore)return;
   var id='income-submission-recovery-'+formType,box=el(id),entry=null,marker=null,readError=null;
   try{entry=loadIncomeSubmissionPending(formType);if(!entry)marker=incomeSubmissionRecoveryMarker(formType);}catch(error){readError=error;}
+  var recovered=INCOME_RECOVERED_DRAFTS[formType];
+  if(!entry&&!readError&&recovered&&recovered.owner===incomeSubmissionOwner()){
+    if(!box){box=document.createElement('div');box.id=id;box.className='card';box.style.padding='14px';root.insertBefore(box,root.firstChild);}
+    box.textContent='前次送件確認未建立；原表單與附件仍可恢復。';var restore=document.createElement('button');restore.className='btn-s';restore.type='button';restore.textContent='恢復前次表單';restore.onclick=function(){window.restoreIncomeRecoveredDraft(formType);};box.appendChild(restore);return;
+  }
   if(!entry&&!marker&&!readError){if(box)box.remove();return;}
   if(!box){box=document.createElement('div');box.id=id;box.className='card';box.style.padding='14px';root.insertBefore(box,root.firstChild);}
   if(readError){box.textContent=readError.message;return;}
@@ -43246,15 +43333,28 @@ async function submitIncomeDocumentTransaction(formType,records){
     return {available:true,ok:false,error:new Error('瀏覽器無法安全鎖定跨分頁送單，尚未送出任何交易；請使用支援的瀏覽器並保留表單。')};
   var entry=null,reservation;
   try{
-    reservation=await navigator.locks.request('finance-income-submit:'+incomeSubmissionOwner()+':'+formType,{mode:'exclusive'},function(){
+    reservation=await navigator.locks.request('finance-income-submit:'+incomeSubmissionOwner()+':'+formType,{mode:'exclusive'},async function(){
       if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，尚未送出任何交易。',true);
+      if(INCOME_RECOVERED_DRAFTS[formType]&&INCOME_RECOVERED_DRAFTS[formType].owner===incomeSubmissionOwner())return {available:true,ok:false,error:new Error('請先恢復並核對前次未送出的表單，避免遺失原內容。')};
       var existing=loadIncomeSubmissionPending(formType);
       if(existing)return incomeSubmissionUnknown('先前送單結果尚未完成核對，請先按「確認原送單結果」。目前變更的內容尚未另行送出。');
       if(incomeSubmissionRecoveryMarker(formType))return incomeSubmissionUnknown('前次送件的原分頁已關閉；請先按「確認原送單結果」查核正式資料。目前不會建立新單。');
+      var releaseGate=await verifyProductionReleaseContractForSubmission();
+      if(!releaseGate.ok){
+        financeSubmissionDiagnostic(formType,null,'release_check','blocked',{code:releaseGate.stale?'CLIENT_RELEASE_STALE':'CLIENT_RELEASE_UNAVAILABLE'});
+        return {available:true,ok:false,error:new Error(releaseGate.stale?'目前頁面版本與正式系統不一致，尚未建立單據。請保留原表單與附件，保存草稿後重新整理再送出。':'目前無法確認正式系統版本，尚未建立單據。請保留原表單與附件，確認網路後再試。')};
+      }
+      if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，尚未送出任何交易。',true);
       var operationKey=formType+'_submit_'+crypto.randomUUID();
       records.forEach(function(record,index){record.submissionIdempotencyKey=operationKey;record.submissionClientItemKey=formType+'_item_'+index+'_'+crypto.randomUUID();});
       entry={owner:incomeSubmissionOwner(),formType:formType,rpcName:formType==='invoice'?'finance_submit_invoice_batch':'finance_submit_bill_batch',records:cloneSettingValue(records),formUi:cloneSettingValue(records[0].submissionFormUi||null),unknown:false,createdAt:new Date().toISOString(),args:{p_idempotency_key:operationKey,p_items:records.map(function(record,index){return incomeSubmissionRpcItem(formType,record,index);}),p_data_environment:activeDataEnvironment()}};
+      try{
+        if(!window.FinanceIncomeRecoveryStore)throw new Error('Recovery storage engine unavailable');
+        await withOperationTimeout(window.FinanceIncomeRecoveryStore.save(entry.owner,formType,operationKey,{formUi:entry.formUi,files:incomeSubmissionSourceFiles(entry)}),'保存送件恢復資料',15000);
+      }catch(error){financeSubmissionDiagnostic(formType,entry,'draft_persist','blocked',error);return {available:true,ok:false,error:new Error('無法安全保存本次表單與附件恢復資料，尚未送出任何交易；請保留本頁並確認瀏覽器儲存空間。')};}
+      if(!incomeSubmissionIdentityCurrent(identity))return incomeSubmissionUnknown('登入身分已變更，尚未送出任何交易。',true);
       if(!saveIncomeSubmissionPending(entry))return {available:true,ok:false,error:new Error('無法安全保存本次送單識別碼，尚未送出任何交易；請保留表單並確認瀏覽器儲存空間。')};
+      financeSubmissionDiagnostic(formType,entry,'reserved','ready');
       return {available:true,ok:true};
     });
   }catch(error){

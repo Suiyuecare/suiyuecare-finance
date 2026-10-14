@@ -1,8 +1,10 @@
+const crypto = require('node:crypto');
+const childProcess = require('node:child_process');
 const fs=require('fs');
 const path=require('path');
 const vm=require('vm');
 const {createStartupBundle,createAppBundle}=require('./finance_startup_bundle');
-const {applyBuildEnvironment,resolveBuildConfig}=require('./finance_build_environment');
+const {applyBuildEnvironment,applyReleaseIdentity,resolveBuildConfig}=require('./finance_build_environment');
 
 const root=process.env.FINANCE_TEST_ROOT
   ?path.resolve(process.env.FINANCE_TEST_ROOT)
@@ -13,10 +15,27 @@ const builtRoot=process.env.FINANCE_BUILT_ROOT
 const registrySource=fs.readFileSync(path.join(root,'assets/engines/finance-v4-engine-registry.js'),'utf8');
 const attachmentSource=fs.readFileSync(path.join(root,'assets/engines/attachment-engine.js'),'utf8');
 const indexSource=fs.readFileSync(path.join(root,'index.html'),'utf8');
+// Compute expected build identity from source files, never from the artifact.
+const versionedAssets = ['engines', 'styles'].flatMap(directory =>
+  fs.readdirSync(path.join(root, 'assets', directory))
+    .filter(file => file.endsWith(directory === 'engines' ? '.js' : '.css'))
+    .map(file => ({ key: directory + '/' + file, file: path.join(root, 'assets', directory, file) }))
+).sort((a, b) => a.key.localeCompare(b.key));
+const assetHash = crypto.createHash('sha256');
+for (const asset of versionedAssets) assetHash.update(asset.key).update(fs.readFileSync(asset.file));
+const assetVersion = assetHash.digest('hex').slice(0, 16);
+let sourceCommit;
+try {
+  sourceCommit = childProcess.execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+} catch (_) { sourceCommit = String(process.env.VERCEL_GIT_COMMIT_SHA || '').trim(); }
+if (!/^[0-9a-f]{40}$/.test(sourceCommit) || (process.env.VERCEL_GIT_COMMIT_SHA && process.env.VERCEL_GIT_COMMIT_SHA !== sourceCommit)) {
+  throw new Error('Expected build identity must match the exact source commit');
+}
 const builtIndexSource=fs.readFileSync(path.join(builtRoot,'index.html'),'utf8');
 const builtAppPath=builtIndexSource.match(/<script src="(assets\/finance-app-[a-f0-9]{16}\.js)"><\/script>/)?.[1];
 const builtAppSource=builtAppPath?fs.readFileSync(path.join(builtRoot,builtAppPath),'utf8'):builtIndexSource;
-const expectedApp=createAppBundle(createStartupBundle(applyBuildEnvironment(indexSource,resolveBuildConfig(process.env)),root).html);
+const expectedApp=createAppBundle(createStartupBundle(applyReleaseIdentity(applyBuildEnvironment(indexSource.replace(/__FINANCE_ASSET_VERSION__/g, assetVersion),resolveBuildConfig(process.env)), sourceCommit),root).html);
+if (!builtIndexSource.includes('<meta name="finance-release-sha" content="' + sourceCommit + '">') || builtAppSource.includes('__FINANCE_ASSET_VERSION__')) throw new Error('Built release identity differs from the actual source');
 const builtAttachmentSource=fs.readFileSync(path.join(builtRoot,'assets/engines/attachment-engine.js'),'utf8');
 const context={window:{},console};
 context.window.window=context.window;

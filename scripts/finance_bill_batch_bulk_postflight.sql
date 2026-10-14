@@ -16,7 +16,7 @@ begin
       select 1 from pg_catalog.pg_proc p where p.oid=v_rpc
         and pg_catalog.pg_get_userbyid(p.proowner)='postgres'
         and p.prosecdef and p.proconfig=array['search_path=""']::text[]
-        and pg_catalog.md5(p.prosrc)='cb5815484b3f90c0f4a73bf4461021d5'
+        and pg_catalog.md5(p.prosrc)=case when exists(select 1 from supabase_migrations.schema_migrations where version='20261014123427' and name='finance_invoice_batch_bulk_insert_v2') then '6ca77f1de6fde7edf8e6483b36760fff' else 'cb5815484b3f90c0f4a73bf4461021d5' end
     )
     or not exists (
       select 1 from pg_catalog.pg_proc p where p.oid=v_history

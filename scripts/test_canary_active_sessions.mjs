@@ -134,6 +134,15 @@ try {
       identity_scope_preserved:true,permission_guard_preserved:true,live_latency_proven:false}
   });
   assert.equal(domains.get(billHistoryContract.result.canary),billHistoryContract.domain);
+  const invoiceBulkContract=Object.freeze({
+    filename:'finance_invoice_batch_bulk_canary.sql',
+    marker:'invoice_batch_bulk_canary_result',
+    domain:'invoice_batch_bulk',
+    result:{canary:'readonly_invoice_batch_bulk_v1',ok:true,rolled_back:true,
+      identity_scope_preserved:true,live_latency_proven:false}
+  });
+  assert.equal(domains.get(invoiceBulkContract.result.canary),invoiceBulkContract.domain);
+  let invoiceBulkVerified=0;
   let verified = 0;
   let identityOnceVerified = 0;
   let billHistoryVerified=0;
@@ -197,12 +206,32 @@ try {
       billHistoryVerified++;
       pass('bill batch actual final SQL has its exact reviewed marker/domain and rejects five altered flags, wrong canary, wrong marker and duplicate results');
     }
+    if(name===invoiceBulkContract.filename){
+      const rows=actualResults.flatMap(result=>result.rows||[]);
+      assert.equal(rows.length,1,'invoice bulk final SQL must emit exactly one result row');
+      assert.equal(rows[0].marker,'FINANCE_INVOICE_BATCH_BULK_CANARY_ROLLED_BACK');
+      assert.deepEqual(rows[0][invoiceBulkContract.marker],invoiceBulkContract.result,
+        'actual invoice bulk SQL must preserve exact identity, rollback and unproven-live-latency flags');
+      const negative=join(outputDir,'invoice-bulk-negative.json');
+      const verifyNegative=payload=>{
+        fs.writeFileSync(negative,JSON.stringify(payload));
+        assert.throws(()=>guard.verifyReportsCanary(negative,invoiceBulkContract.domain));
+      };
+      for(const flag of ['ok','rolled_back','identity_scope_preserved','live_latency_proven'])
+        verifyNegative([{[invoiceBulkContract.marker]:{...invoiceBulkContract.result,[flag]:!invoiceBulkContract.result[flag]}}]);
+      verifyNegative([{[invoiceBulkContract.marker]:{...invoiceBulkContract.result,canary:'wrong-canary'}}]);
+      verifyNegative([{wrong_marker:invoiceBulkContract.result}]);
+      verifyNegative([{[invoiceBulkContract.marker]:invoiceBulkContract.result},{[invoiceBulkContract.marker]:invoiceBulkContract.result}]);
+      invoiceBulkVerified++;
+      pass('invoice bulk actual final SQL has its exact reviewed marker/domain and rejects altered flags, wrong canary, wrong marker and duplicate results');
+    }
     verified++;
   }
   assert.equal(identityOnceVerified, 1, 'the reviewed identity-once file must be explicitly covered exactly once');
   assert.equal(billHistoryVerified,1,'the reviewed bill batch file must be explicitly covered exactly once');
-  assert.equal(verified-identityOnceVerified-billHistoryVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
-  assert.equal(verified,41,'the 39 original results plus the exact reviewed identity-once and bill batch results are covered');
-  pass('all 39 original final SQL results and both reviewed identity-once and bill batch results satisfy their protected release parsers');
+  assert.equal(invoiceBulkVerified,1,'the reviewed invoice bulk file must be explicitly covered exactly once');
+  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
+  assert.equal(verified,42,'the 39 original results plus the exact reviewed identity-once, bill batch and invoice bulk results are covered');
+  pass('all 39 original final SQL results and reviewed identity-once, bill batch and invoice bulk results satisfy their protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);

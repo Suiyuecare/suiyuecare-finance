@@ -1,8 +1,10 @@
+const crypto = require('node:crypto');
+const childProcess = require('node:child_process');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { createStartupBundle, createAppBundle } = require('./finance_startup_bundle');
-const { applyBuildEnvironment, resolveBuildConfig } = require('./finance_build_environment');
+const { applyBuildEnvironment, applyReleaseIdentity, resolveBuildConfig } = require('./finance_build_environment');
 
 const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'index.html');
@@ -12,6 +14,22 @@ const builtCssPath = path.join(root, 'www', 'assets', 'styles', 'finance-core.cs
 const packagePath = path.join(root, 'package.json');
 
 const source = fs.readFileSync(sourcePath, 'utf8');
+// Compute expected build identity from source files, never from the artifact.
+const versionedAssets = ['engines', 'styles'].flatMap(directory =>
+  fs.readdirSync(path.join(root, 'assets', directory))
+    .filter(file => file.endsWith(directory === 'engines' ? '.js' : '.css'))
+    .map(file => ({ key: directory + '/' + file, file: path.join(root, 'assets', directory, file) }))
+).sort((a, b) => a.key.localeCompare(b.key));
+const assetHash = crypto.createHash('sha256');
+for (const asset of versionedAssets) assetHash.update(asset.key).update(fs.readFileSync(asset.file));
+const assetVersion = assetHash.digest('hex').slice(0, 16);
+let sourceCommit;
+try {
+  sourceCommit = childProcess.execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+} catch (_) { sourceCommit = String(process.env.VERCEL_GIT_COMMIT_SHA || '').trim(); }
+if (!/^[0-9a-f]{40}$/.test(sourceCommit) || (process.env.VERCEL_GIT_COMMIT_SHA && process.env.VERCEL_GIT_COMMIT_SHA !== sourceCommit)) {
+  throw new Error('Expected build identity must match the exact source commit');
+}
 const css = fs.readFileSync(cssPath, 'utf8');
 const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 let passed = 0;
@@ -257,10 +275,12 @@ if (fs.existsSync(builtPath) && fs.existsSync(builtCssPath)) {
   const appPath = built.match(/<script src="(assets\/finance-app-[a-f0-9]{16}\.js)"><\/script>/)?.[1];
   const builtRuntime = appPath ? fs.readFileSync(path.join(root, 'www', appPath), 'utf8') : built;
   const builtCss = fs.readFileSync(builtCssPath, 'utf8');
-  const expectedApp = createAppBundle(createStartupBundle(applyBuildEnvironment(source, resolveBuildConfig(process.env)), root).html);
+  const expectedApp = createAppBundle(createStartupBundle(applyReleaseIdentity(applyBuildEnvironment(source.replace(/__FINANCE_ASSET_VERSION__/g, assetVersion), resolveBuildConfig(process.env)), sourceCommit), root).html);
   check(
     'production artifact contains the same login safeguards',
     built.includes('id="login-account-guide"') &&
+      built.includes('<meta name="finance-release-sha" content="' + sourceCommit + '">') &&
+      !builtRuntime.includes('__FINANCE_ASSET_VERSION__') &&
       appPath === expectedApp.file && builtRuntime === expectedApp.code &&
       expectedApp.sourceCode.includes('window.switchFinanceGoogleAccount=async function()') &&
       expectedApp.sourceCode.includes('queryParams.login_hint=expectedEmail') &&

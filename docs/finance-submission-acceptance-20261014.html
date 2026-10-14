@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Finance 送件可靠性驗收契約 · 2026-10-14</title><style>body{font:16px/1.65 system-ui,-apple-system,"Noto Sans TC",sans-serif;color:#302b26;background:#fffaf4;margin:0}main{max-width:1120px;margin:auto;padding:32px}h1{font-size:28px}h2{margin-top:32px;font-size:21px}table{border-collapse:collapse;background:white;width:100%}th,td{padding:12px;text-align:left;vertical-align:top;border:1px solid #e5d7c7}th{background:#fff0da}code{overflow-wrap:anywhere}p{max-width:90ch}.notice{padding:16px;border-left:4px solid #ed8700;background:#fff0da}ul{padding-left:24px}@media(max-width:720px){main{padding:16px}.scroll{overflow:auto}table{min-width:680px}}</style></head><body><main>
+<h1>Finance 送件可靠性驗收契約</h1>
+<p>2026-10-14 · 本文件定義本次修正的上線條件及證據範圍。這是驗收契約，不是已完成證明；實際結果以同一來源 SHA 的工作流程紀錄、測試輸出及正式部署 manifest 為準。</p>
+<div class="notice">不把畫面測試、模擬 HTTP、資料庫目錄檢查、正式服務全流程混為一談。每一層都需註明實際覆蓋範圍。未取得實機或正式外部服務證據時，不得宣稱所有帳號與所有設備均已通過。</div>
+<h2>本次必須阻擋發布的案例</h2><div class="scroll"><table><thead><tr><th>案例</th><th>驗收條件</th><th>證據層級</th></tr></thead><tbody>
+<tr><td>大量發票逾時</td><td>1、33、95、190、500 張完整建立；一個批次、一筆可追溯操作；金額、品項、簽核及歷史一致；量測執行時間並保留實際引擎版本。資料庫回歸須走實際內部觸發器，列出外部網路替代部分。</td><td>隔離原生 PostgreSQL；PGlite 為快速回歸補充，不能取代原生容量門檻。</td></tr>
+<tr><td>部分寫入及重複</td><td>最後一筆驗證失敗時全批回滾；相同識別重試回原結果；不同內容沿用識別必須拒絕；並行重試不能產生第二批。</td><td>資料庫交易與並行測試。</td></tr>
+<tr><td>真 HTTP 呼叫</td><td>經固定版 PostgREST、簽章測試 JWT、權限判定及資料庫寫入，驗證公開 RPC 參數、結果回查與拒絕未授權呼叫；已撤銷或不存在的登入 session、停權與錯誤 Google 綁定必須拒絕。全部資料與憑證均為隔離測試用。</td><td>真 HTTP + 隔離 PostgreSQL；不等同公司 Google 正式登入。</td></tr>
+<tr><td>190 張瀏覽器保存失敗</td><td>Chromium/WebKit 實際 localStorage、sessionStorage、IndexedDB；大筆資料保存、配額不足、單一儲存失效、重開頁面復原及結果未知情境；不得因保存一份重複大型 payload 而無法送件。</td><td>真瀏覽器與真本機儲存；外部 HTTP 可由 fixture 模擬並明列。</td></tr>
+<tr><td>Office 檔讀取</td><td>兩份 DOCX 與 XLSX 事件規格、空 MIME、中文檔名、有效 OOXML、草稿轉正、發票附件共用直接上傳路徑；真 TUS 對 loopback 測重試、續傳、取消。</td><td>有效檔案內容 + 傳輸 fixture；正式 Storage 權限另由正式只讀 canary 驗證。</td></tr>
+<tr><td>既有簽核及人員規則</td><td>採購第八關金額加憑據、會計最終金額、浮點尾差、合法會計／出納身分、組織版本競態、抽單、歷史完整性既有測試持續必跑。</td><td><code>release:preflight</code> 既有回歸與互動測試；角色測試不代表代登入真實員工帳號。</td></tr>
+<tr><td>可追查性</td><td>建置頁面含真實來源 SHA；送件識別、階段、結果、耗時、錯誤碼在允許欄位內保存，離線暫存不掉欄位。不得紀錄檔案內容、完整敏感表單或憑證。</td><td>建置精確內容驗證 + 診斷離線佇列回歸。</td></tr>
+</tbody></table></div>
+<h2>發布順序</h2><ol><li>PR 的 <code>release-gate</code> 與 <code>interaction-gate</code> 通過，包含原生批次、HTTP 及瀏覽器保存回歸。</li><li>合併後固定 protected-main 40 碼 SHA；從該 SHA 重新測試及封裝不可變產物。</li><li>執行 <code>database_invoice_batch_bulk_20261014</code>，只允許 <code>20261014123427</code> 及封存 SHA-256。先驗舊函式、權限與觸發器，再演練回滾並比對指紋，最後原子套用及後驗。</li><li>此資料庫階段不得改正式前台 alias。保留原 alias、manifest 的前後一致證據。</li><li>再執行同一來源 SHA 的 <code>frontend_compat</code>。未安裝新批次交易或函式指紋不符時，一律停止；正式推送前再次驗證。</li><li>檢查正式網域 manifest 的 source_commit、HTML／JS bytes、版本欄位及正式錯誤紀錄。只讀後驗不能作為真實成功送出 500 張的證據。</li></ol>
+<h2>驗收紀錄</h2><p>工作流程產生 <code>finance-submission-acceptance-20261014/manifest.json</code>，保留測試案例數、容量各次耗時、證據檔案雜湊與來源 SHA。瀏覽器與 migration 的證據必須符合當前原始碼；正式上線、全員 Google 登入、外部 Storage 可用性與所有實機均另列未證明項目，不能把隔離測試當作正式完成。</p><h2>每次更新都必跑</h2><p>容量及保存測試不是僅此一版的手動工作；PR 互動 gate 與 protected production candidate 都強制執行，包含 <code>frontend_compat</code>。舊缺陷修正不能透過移除測試、放寬權限、抬高逾時或忽略未知結果取得表面通過。</p>
+<h2>成效統計口徑</h2><p>應區分操作數、重試數、失敗事件數及最終成功數。依來源 SHA、操作識別、階段及結果去重，才可算送件失敗率、逾時率及恢復成功率。沒有完整分母時，只報事件數；不能把同批 12 次重試稱作 12 個獨立事故，也不能把讀取變慢稱作資料遺失。</p>
+</main></body></html>

@@ -3,8 +3,26 @@
 // network request is allowed. Mutations apply only to a temporary source fixture.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {createStartupBundle,createAppBundle,pinnedSupabaseSdk,SDK}=require('./finance_startup_bundle');
-const {applyBuildEnvironment}=require('./finance_build_environment');
+const {applyBuildEnvironment,applyReleaseIdentity}=require('./finance_build_environment');
+const childProcess=require('node:child_process');
 const root=path.resolve(__dirname,'..'),html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+// Compute expected build identity from source files, never from the artifact.
+const versionedAssets = ['engines', 'styles'].flatMap(directory =>
+  fs.readdirSync(path.join(root, 'assets', directory))
+    .filter(file => file.endsWith(directory === 'engines' ? '.js' : '.css'))
+    .map(file => ({ key: directory + '/' + file, file: path.join(root, 'assets', directory, file) }))
+).sort((a, b) => a.key.localeCompare(b.key));
+const assetHash = crypto.createHash('sha256');
+for (const asset of versionedAssets) assetHash.update(asset.key).update(fs.readFileSync(asset.file));
+const assetVersion = assetHash.digest('hex').slice(0, 16);
+let sourceCommit;
+try {
+  sourceCommit = childProcess.execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+} catch (_) { sourceCommit = String(process.env.VERCEL_GIT_COMMIT_SHA || '').trim(); }
+if (!/^[0-9a-f]{40}$/.test(sourceCommit) || (process.env.VERCEL_GIT_COMMIT_SHA && process.env.VERCEL_GIT_COMMIT_SHA !== sourceCommit)) {
+  throw new Error('Expected build identity must match the exact source commit');
+}
+const versionedHtml=html.replace(/__FINANCE_ASSET_VERSION__/g,assetVersion);
 let count=0;function check(name,fn){fn();count++;console.log('PASS '+name);}
 (async()=>{
  const sdk=pinnedSupabaseSdk(root);
@@ -17,7 +35,7 @@ let count=0;function check(name,fn){fn();count++;console.log('PASS '+name);}
   assert(!headers.some(h=>h.source.includes('release-manifest')&&h.headers.some(v=>/immutable/.test(v.value))));
  });
  for(const target of ['local','preview','production']){
-  const source=applyBuildEnvironment(html,{target,runtimeMode:target==='production'?'production-supabase':'local-test',supabaseUrl:target==='production'?'https://fixture.supabase.co':'',supabaseAnonKey:target==='production'?'fictional-public-key':''});
+  const source=applyReleaseIdentity(applyBuildEnvironment(versionedHtml,{target,runtimeMode:target==='production'?'production-supabase':'local-test',supabaseUrl:target==='production'?'https://fixture.supabase.co':'',supabaseAnonKey:target==='production'?'fictional-public-key':''}),sourceCommit);
   const first=createStartupBundle(source,root),second=createStartupBundle(source,root);
   check(target+' uses deterministic same-origin preload and one synchronous SDK before app',()=>{
    assert.equal(first.html,second.html);assert.equal(first.file,second.file);assert.equal(first.code,second.code);assert(first.sdk.code.equals(second.sdk.code));
@@ -28,6 +46,9 @@ let count=0;function check(name,fn){fn();count++;console.log('PASS '+name);}
   const app=createAppBundle(first.html),again=createAppBundle(first.html);
   check(target+' seals one minified main IIFE as a preloaded, hashed app asset',()=>{
    assert.equal(app.html,again.html);assert.equal(app.file,again.file);assert.equal(app.code,again.code);
+   assert(app.html.includes('<meta name="finance-release-sha" content="'+sourceCommit+'">'));
+   assert(!app.code.includes('__FINANCE_ASSET_VERSION__'));
+   assert(app.sourceCode.includes('assetVersion: "'+assetVersion+'"') || app.sourceCode.includes("assetVersion:'"+assetVersion+"'"), 'diagnostics must contain the computed source asset version');
    assert.match(app.file,/^assets\/finance-app-[a-f0-9]{16}\.js$/);
    assert.equal(app.file.match(/finance-app-([a-f0-9]{16})\.js/)[1],crypto.createHash('sha256').update(app.code).digest('hex').slice(0,16));
    assert(app.sourceCode.startsWith("\n(function(){\n'use strict';"));assert(app.sourceCode.endsWith('\n})();\n'));

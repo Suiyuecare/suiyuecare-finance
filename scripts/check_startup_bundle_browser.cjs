@@ -5,9 +5,10 @@ const path = require('node:path');
 const http = require('node:http');
 const zlib = require('node:zlib');
 const crypto = require('node:crypto');
+const childProcess = require('node:child_process');
 const { chromium } = require('playwright');
 const { createStartupBundle, createAppBundle, pinnedSupabaseSdk, SDK } = require('./finance_startup_bundle');
-const { applyBuildEnvironment } = require('./finance_build_environment');
+const { applyBuildEnvironment, applyReleaseIdentity } = require('./finance_build_environment');
 const root = path.resolve(__dirname, '../www');
 const sdk = pinnedSupabaseSdk(path.resolve(__dirname, '..'));
 const out = path.resolve(process.env.FINANCE_STARTUP_EVIDENCE_DIR || '/tmp/finance-startup-bundle-browser');
@@ -22,8 +23,23 @@ const appTags = [...html.matchAll(/<script src="(assets\/finance-app-[a-f0-9]{16
 assert.equal(appTags.length, 1, 'Built HTML must load one content-addressed app');
 const appFile = appTags[0][1];
 const appSource = fs.readFileSync(path.join(root, appFile), 'utf8');
-const sourceHtml = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
-const configuredHtml = applyBuildEnvironment(sourceHtml, { target: 'local', runtimeMode: 'offline-demo', supabaseUrl: '', supabaseAnonKey: '' });
+const sourceRoot = path.resolve(__dirname, '..');
+const sourceHtml = fs.readFileSync(path.join(sourceRoot, 'index.html'), 'utf8');
+// Independently derive the same source identity as build_www. Do not take the
+// expected version from the generated artifact being tested: it could be stale.
+const versionedAssets = ['engines', 'styles'].flatMap(directory =>
+  fs.readdirSync(path.join(sourceRoot, 'assets', directory))
+    .filter(file => file.endsWith(directory === 'engines' ? '.js' : '.css'))
+    .map(file => ({key: directory + '/' + file, file: path.join(sourceRoot, 'assets', directory, file)}))
+).sort((a, b) => a.key.localeCompare(b.key));
+const assetHash = crypto.createHash('sha256');
+for (const asset of versionedAssets) assetHash.update(asset.key).update(fs.readFileSync(asset.file));
+const assetVersion = assetHash.digest('hex').slice(0, 16);
+const sourceCommit = childProcess.execFileSync('git', ['rev-parse', 'HEAD'], {cwd: sourceRoot, encoding: 'utf8'}).trim();
+const configuredHtml = applyReleaseIdentity(applyBuildEnvironment(sourceHtml.replace(/__FINANCE_ASSET_VERSION__/g, assetVersion),
+  { target: 'local', runtimeMode: 'offline-demo', supabaseUrl: '', supabaseAnonKey: '' }), sourceCommit);
+assert(html.includes('<meta name="finance-release-sha" content="' + sourceCommit + '">'), 'Built release SHA must equal the actual source commit');
+assert(!appSource.includes('__FINANCE_ASSET_VERSION__'), 'Built diagnostics cannot retain an unresolved asset version');
 const expectedApp = createAppBundle(createStartupBundle(configuredHtml, path.resolve(__dirname, '..')).html);
 assert.equal(appSource, expectedApp.code, 'Built app must be the deterministic minification of local source');
 assert(expectedApp.sourceCode.includes('var FINANCE_BUILD_TARGET="local";'), 'Browser fixture requires an offline local build');
