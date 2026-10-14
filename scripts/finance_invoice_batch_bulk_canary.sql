@@ -51,7 +51,7 @@ do $rolled_back$ begin
  if current_setting('transaction_read_only')='on' then raise exception 'Invoice bulk canary remains open';end if;
 end; $rolled_back$;
 -- FINANCE_AUTHENTICATED_CANARY_ROLLBACK_CHECK_END
-select 'FINANCE_INVOICE_BATCH_BULK_CANARY_ROLLED_BACK' marker,
+select 'FINANCE_INVOICE_BATCH_BULK_CANARY_ROLLED_BACK' as marker,
  jsonb_build_object('canary','readonly_invoice_batch_bulk_v1','ok',true,'rolled_back',true,
- 'identity_scope_preserved',true,'live_latency_proven',false) invoice_batch_bulk_canary_result;
+ 'identity_scope_preserved',true,'live_latency_proven',false) as invoice_batch_bulk_canary_result;
 
