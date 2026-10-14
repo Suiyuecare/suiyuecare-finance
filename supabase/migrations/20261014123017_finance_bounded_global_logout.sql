@@ -1,4 +1,3 @@
-begin;
 -- Service-only, immutable logout operation; retries never widen the time boundary.
 create schema if not exists logout_private;
 revoke all on schema logout_private from public, anon, authenticated;
@@ -43,4 +42,3 @@ end $body$;
 revoke all on function public.portal_revoke_google_sessions_v2(uuid,text,text,timestamptz,timestamptz) from public,anon,authenticated;
 grant execute on function public.portal_revoke_google_sessions_v2(uuid,text,text,timestamptz,timestamptz) to service_role;
 notify pgrst,'reload schema';
-commit;

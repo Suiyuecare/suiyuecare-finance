@@ -159,7 +159,7 @@ const RELEASE_PHASE_DATABASE_INVOICE_BATCH_APPROVAL='database_invoice_batch_appr
 const PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS=Object.freeze(['20261012112652']);
 const PERSONAL_HISTORY_IDENTITY_ONCE_SOURCE_SHA256=Object.freeze({'20261012112652':'168b2e3fc604f3193450cefdb59412567f061801f747441dc071f00a9f264e2d'});
 const BOUNDED_LOGOUT_MIGRATIONS=Object.freeze(['20261014123017']);
-const BOUNDED_LOGOUT_SOURCE_SHA256=Object.freeze({'20261014123017':'cf95d0a6a6337fe12141000cffca2308beab0750db00118eda71529025f3f2d0'});
+const BOUNDED_LOGOUT_SOURCE_SHA256=Object.freeze({'20261014123017':'dd3f28fe3ac5385d227a75f71ab7c7bc27673ac61ccc574915ae92a4e0c424fc'});
 const PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS=Object.freeze(['20261013091000']);
 const PERSONAL_BILL_BATCH_HISTORY_SOURCE_SHA256=Object.freeze({'20261013091000':'209cf3bfd6e3bfd3a163322b2138d36ca4e120f99fbd28e2decd3cc707495575'});
 const RELEASE_PHASE_DATABASE_PERSONAL_BILL_BATCH_HISTORY='database_personal_bill_batch_history_20261013';
@@ -853,12 +853,6 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     if(INVOICE_ITEM_BIND_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the durable historical invoice item binding RPC');
     if(PERSONAL_HISTORY_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the personal document history RPC');
     if(PERSONAL_HISTORY_PERMISSION_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the personal history permission guard');
-    if(local.some(name=>name.startsWith(BOUNDED_LOGOUT_MIGRATIONS[0]+'_'))){
-      const version=BOUNDED_LOGOUT_MIGRATIONS[0];
-      if(!remote.includes(version))fail('frontend_compat requires the bounded logout receipt migration');
-      const filename=local.find(name=>name.startsWith(version+'_'));
-      if(sha256File(path.join(directory,filename))!==BOUNDED_LOGOUT_SOURCE_SHA256[version])fail('Bounded logout migration source differs from sealed SHA256: '+version);
-    }
     if(local.some(name=>name.startsWith(PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS[0]+'_'))){
       if(PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires the personal bill batch history read model');
       const version=PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS[0];
@@ -906,6 +900,12 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     for(const [version,expected] of Object.entries(INVOICE_BATCH_BULK_SOURCE_SHA256)){
       const filename=local.find(name=>name.startsWith(version+'_'));
       if(!filename||sha256File(path.join(directory,filename))!==expected)fail('frontend_compat invoice batch bulk migration source differs from sealed SHA256: '+version);
+    }
+    if(local.some(name=>name.startsWith(BOUNDED_LOGOUT_MIGRATIONS[0]+'_'))){
+      const version=BOUNDED_LOGOUT_MIGRATIONS[0];
+      if(!remote.includes(version))fail('frontend_compat requires the bounded logout receipt migration');
+      const filename=local.find(name=>name.startsWith(version+'_'));
+      if(sha256File(path.join(directory,filename))!==BOUNDED_LOGOUT_SOURCE_SHA256[version])fail('Bounded logout migration source differs from sealed SHA256: '+version);
     }
     return 'compat';
   }
