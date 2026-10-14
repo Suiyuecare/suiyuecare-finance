@@ -143,7 +143,7 @@ try {
   });
   assert.equal(domains.get(invoiceBulkContract.result.canary),invoiceBulkContract.domain);
   let invoiceBulkVerified=0;
-  let verified = 0;
+  let verified = 0,boundedVerified=0;
   let identityOnceVerified = 0;
   let billHistoryVerified=0;
   for (const name of fs.readdirSync(scripts).filter(name => /^finance_.*canary\.sql$/.test(name))) {
@@ -225,13 +225,21 @@ try {
       invoiceBulkVerified++;
       pass('invoice bulk actual final SQL has its exact reviewed marker/domain and rejects altered flags, wrong canary, wrong marker and duplicate results');
     }
+    if(name==='finance_bounded_global_logout_canary.sql'){
+      const rows=actualResults.flatMap(result=>result.rows||[]);
+      assert.equal(rows.length,1,'bounded logout canary must emit exactly one complete marker');
+      assert.deepEqual(rows[0].bounded_global_logout_canary_result,{canary:'readonly_bounded_global_logout_v2',ok:true,rolled_back:true,privacy_preserved:true,real_sessions_revoked:false});
+      boundedVerified++;
+      pass('bounded logout exact final SQL preserves rollback/privacy and never claims real session revocation');
+    }
     verified++;
   }
   assert.equal(identityOnceVerified, 1, 'the reviewed identity-once file must be explicitly covered exactly once');
   assert.equal(billHistoryVerified,1,'the reviewed bill batch file must be explicitly covered exactly once');
   assert.equal(invoiceBulkVerified,1,'the reviewed invoice bulk file must be explicitly covered exactly once');
-  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
-  assert.equal(verified,42,'the 39 original results plus the exact reviewed identity-once, bill batch and invoice bulk results are covered');
+  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-1,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
+  assert.equal(boundedVerified,1,'bounded logout exact final SQL is covered once');
+  assert.equal(verified,43,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk and bounded logout results are covered');
   pass('all 39 original final SQL results and reviewed identity-once, bill batch and invoice bulk results satisfy their protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);
