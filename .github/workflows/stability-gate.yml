@@ -167,6 +167,7 @@ jobs:
           pnpm test:deferred-startup-browser
           pnpm test:notification-paging-browser
           pnpm test:personal-bill-batch-history-browser
+          pnpm test:short-batch-numbers-browser
           pnpm test:bill-form-attachments-browser
           pnpm test:applicant-history-withdraw-browser
           pnpm test:finance-oauth-account-guard-browser

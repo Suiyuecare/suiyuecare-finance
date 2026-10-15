@@ -9798,7 +9798,7 @@ function loadApprovalHistoryPage(options){
     if(!current())return null;
     var client=getSb();if(!client||typeof client.rpc!=='function')throw new Error('個人單據服務尚未連線，請重新載入。');
     runtime.timing.dispatchedAt=approvalHistoryClock();
-    var operation=client.rpc('finance_personal_document_summary_v1',{p_scope:scope,p_limit:limit,p_offset:(page-1)*limit,p_search:query||null,p_data_environment:environment});
+    var operation=client.rpc('finance_personal_document_summary_v1',{p_scope:scope,p_limit:limit,p_offset:(page-1)*limit,p_search:financeBatchNumberSearchQuery(query)||null,p_data_environment:environment});
     if(controller&&operation&&typeof operation.abortSignal==='function')operation=operation.abortSignal(controller.signal);
     return withOperationTimeout(operation,'個人單據紀錄',12000);
   }).then(function(result){
@@ -14617,6 +14617,32 @@ function invoiceGroupTotal(i){
 }
 function invoiceGroupCount(i){return invoiceGroupRows(i).length||1;}
 function invoiceGroupTitle(i){return invoiceGroupCount(i)>1?'整批發票':'發票';}
+// Presentation aliases only. Canonical IDs remain the authority for writes,
+// attachments, grouping and audit references; never pass a label to those APIs.
+function financeBatchNumberParts(value){
+  var raw=String(value==null?'':value).trim();
+  var canonical=raw.replace(/^(?:整批\s+|batch:)/,'');
+  var match=/^(TEST-)?(BILLB|INVB)-(20\d{2})(0[1-9]|1[0-2])-([0-9A-Fa-f]{8})-(\d{6})$/.exec(canonical);
+  if(!match||Number(match[6])<1)return null;
+  return {canonical:canonical,label:(match[1]||'')+(match[2]==='BILLB'?'B':'I')+match[3].slice(2)+match[4]+'-'+String(Number(match[6])).padStart(3,'0')};
+}
+function financeBatchNumberLabel(value){
+  var parts=financeBatchNumberParts(value);
+  return parts?parts.label:String(value==null?'':value);
+}
+function financeBatchNumberHtml(value,detail){
+  var parts=financeBatchNumberParts(value);
+  if(!parts)return escAttr(value==null?'':value);
+  return '<span class="finance-batch-reference"><button type="button" class="finance-batch-number" data-finance-batch-number="'+escAttr(parts.canonical)+'" data-invoice-number="'+escAttr(parts.canonical)+'" data-copy-label="'+escAttr(parts.label)+'" aria-label="'+escAttr(parts.label+'，複製完整編號 '+parts.canonical)+'" title="'+escAttr('完整編號 '+parts.canonical+'；點擊複製')+'" onclick="event.stopPropagation();copyExpenseInvoiceNumber(this)">'+escAttr(parts.label)+'</button><span class="invoice-accounting-copy-status" role="status" aria-live="polite"></span>'+(detail?'<span class="finance-batch-full-number">完整編號 '+escAttr(parts.canonical)+'</span>':'')+'</span>';
+}
+function financeBatchNumberSearchQuery(query){
+  var text=String(query==null?'':query);
+  var match=/^(TEST-)?([BI])(\d{2})(0[1-9]|1[0-2])-(\d{3,6})$/i.exec(text.trim());
+  if(!match||Number(match[5])<1)return text;
+  var tenant=String(currentTenantId()||'');
+  if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(tenant))return text;
+  return (match[1]?'TEST-':'')+(match[2].toUpperCase()==='B'?'BILLB':'INVB')+'-20'+match[3]+match[4]+'-'+tenant.slice(0,8).toUpperCase()+'-'+String(Number(match[5])).padStart(6,'0');
+}
 function invoiceGroupNo(i){
   if(!i)return'';
   if(i.batchId)return String(i.batchId).replace('batch_','整批 ');
@@ -18914,6 +18940,7 @@ window.toggleExpenseInvoiceDetailRow=function(id){
 window.copyExpenseInvoiceNumber=async function(button){
   var number=String(button&&button.dataset.invoiceNumber||'').trim();
   if(!number)return false;
+  var batchNumber=button.hasAttribute('data-finance-batch-number'),copyLabel=button.dataset.copyLabel||'複製';
   var copied=false;
   try{
     if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(number);copied=true;}
@@ -18930,10 +18957,13 @@ window.copyExpenseInvoiceNumber=async function(button){
     button.focus({preventScroll:true});
   }
   var status=button.nextElementSibling;
-  if(status&&status.classList.contains('invoice-accounting-copy-status'))status.textContent=copied?'已複製發票號碼':'複製失敗，請手動選取發票號碼';
-  button.textContent=copied?'已複製':'未複製';
+  if(status&&status.classList.contains('invoice-accounting-copy-status')){
+    status.textContent=copied?(batchNumber?'已複製完整編號':'已複製發票號碼'):(batchNumber?'複製失敗，請手動複製：'+number:'複製失敗，請手動選取發票號碼');
+    if(batchNumber)status.classList.toggle('finance-batch-copy-error',!copied);
+  }
+  button.textContent=batchNumber?copyLabel:(copied?'已複製':'未複製');
   clearTimeout(button._invoiceCopyTimer);
-  button._invoiceCopyTimer=setTimeout(function(){if(button.isConnected)button.textContent='複製';},2200);
+  button._invoiceCopyTimer=setTimeout(function(){if(button.isConnected)button.textContent=copyLabel;},2200);
   return copied;
 };
 function expenseInvoiceReviewHtml(r,embedded){
@@ -29336,7 +29366,7 @@ function approvalSearchRowText(row,kind){
   if(!row)return'';
   var dept=row.dc?gD(row.dc):null,entity=row.eid?gE(row.eid):null;
   var fields=kind==='draft'&&row.state?row.state.fields||{}:{};
-  var values=[row.no,row.id,row.batchNo,row.app,row.applicant,row.applicantEmail,
+  var values=[row.no,row.id,row.batchNo,row.batchId,financeBatchNumberLabel(row.batchNo||row.batchId),row.app,row.applicant,row.applicantEmail,
     row.dc,dept&&dept.n,row.eid,entity&&entity.s,entity&&entity.full,
     row.desc,row.description,row.title,row.note,row.buyer,row.payer,row.item,
     row.period,row.servicePeriod,row.contractNo,row.taxId,row.receiptNote,
@@ -29354,7 +29384,7 @@ function approvalSearchText(item,rows){
     else if(item.kind==='inv'||item.kind==='recv')rows=invoiceGroupApprovalRows(item);
   }
   return [
-    approvalRowFormNo(item),d.code,d.name,approvalRowApplicant(item),type.label,
+    approvalRowFormNo(item),financeBatchNumberLabel(approvalRowFormNo(item)),d.code,d.name,approvalRowApplicant(item),type.label,
     rows.map(function(row){return approvalSearchRowText(row,item.kind);}).join(' '),approvalRowApplyDate(item),
     approvalRowExpectedPayDate(item),status.label
   ].join(' ').toLowerCase();
@@ -29622,7 +29652,7 @@ function renderApprovalHistorySummaries(runtime){
     return '<tr data-appr-key="'+escAttr(key)+'" data-history-key="'+escAttr(key)+'">'
       +'<td class="appr-col-select"><div style="display:grid;gap:6px"><button type="button" class="btn-g" style="min-height:44px!important;white-space:nowrap" data-history-open="'+escAttr(key)+'" onclick="openApprovalItem(this.getAttribute(\'data-history-open\'))">查看明細</button>'
       +(item.historyPersonallyApplied?'<button type="button" class="btn-s" style="min-height:44px!important;justify-content:center;white-space:nowrap" data-history-withdraw="'+escAttr(key)+'" onclick="openApprovalHistoryWithdrawal(this.getAttribute(\'data-history-withdraw\'))">抽單</button>':'')+'</div></td>'
-      +'<td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">'+escAttr(recordNo)+'</span><span class="approval-form-badges"><span class="badge b-gray">'+escAttr(type)+'</span>'+(batch?'<span class="badge b-blue">整批 '+item.historySourceCount+' 張</span>':'')+'<span class="badge '+participationClass+'">'+escAttr(item.historyParticipationLabel)+'</span><span class="badge '+(state==='rejected'?'b-rej':state==='completed'?'b-ok':'b-wait')+'">'+escAttr(stateLabel)+'</span>'+(s.has_attachments?'<span class="badge b-gray">附有憑證</span>':'')+'</span></div></td>'
+      +'<td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">'+financeBatchNumberHtml(recordNo)+'</span><span class="approval-form-badges"><span class="badge b-gray">'+escAttr(type)+'</span>'+(batch?'<span class="badge b-blue">整批 '+item.historySourceCount+' 張</span>':'')+'<span class="badge '+participationClass+'">'+escAttr(item.historyParticipationLabel)+'</span><span class="badge '+(state==='rejected'?'b-rej':state==='completed'?'b-ok':'b-wait')+'">'+escAttr(stateLabel)+'</span>'+(s.has_attachments?'<span class="badge b-gray">附有憑證</span>':'')+'</span></div></td>'
       +'<td class="appr-col-dept">'+escAttr(s.department_name||s.department_code||'—')+'</td>'
       +'<td class="appr-col-applicant">'+escAttr(s.applicant||'—')+'</td>'
       +'<td class="appr-col-purpose"><div class="summary-cell">'+escAttr(s.description||'—')+'</div><small class="muted">'+escAttr(s.entity_name||s.entity_id||'')+'</small><div role="status" data-history-detail-message="'+escAttr(key)+'" style="color:#991b1b;white-space:normal"></div></td>'
@@ -29677,7 +29707,7 @@ function renderApprList(data){
       var loadingKey=approvalItemKey(item);
       S.apprItemMap[loadingKey]=item;
       return '<tr data-appr-key="'+escAttr(loadingKey)+'" class="approval-row-unavailable" aria-disabled="true" aria-busy="true" style="opacity:.68">'
-        +'<td class="appr-col-select">—</td><td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">'+escAttr(approvalRowFormNo(item))+'</span><span class="approval-form-badges"><span class="badge b-teal">整批開立發票</span><span class="badge b-blue">整批 '+escAttr(item.approvalExpectedRowCount||'—')+' 張</span><span class="badge b-gray">整批載入中</span></span></div></td>'
+        +'<td class="appr-col-select">—</td><td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">'+financeBatchNumberHtml(approvalRowFormNo(item))+'</span><span class="approval-form-badges"><span class="badge b-teal">整批開立發票</span><span class="badge b-blue">整批 '+escAttr(item.approvalExpectedRowCount||'—')+' 張</span><span class="badge b-gray">整批載入中</span></span></div></td>'
         +'<td class="appr-col-dept">—</td><td class="appr-col-applicant">—</td><td class="appr-col-purpose">整批載入中，完成核對後才能查看與簽核</td><td class="appr-col-amount">—</td><td class="appr-col-applyDate">—</td><td class="appr-col-payDate">—</td>'
         +(approvalWaitColumnVisible()?'<td class="appr-col-waitTime">—</td>':'')+'</tr>';
     }
@@ -29715,7 +29745,7 @@ function renderApprList(data){
     var availabilityBadge=rowUnavailable?'<span class="badge b-gray" style="font-size:9px;margin-left:4px">'+(availability.pending?'更新中':'暫時無法載入')+'</span>':'';
     return'<tr data-appr-key="'+escAttr(key)+'" class="'+rowClasses+'"'+rowClick+(rowUnavailable?' aria-disabled="true" title="'+escAttr(availability.message)+'" style="opacity:.68;cursor:not-allowed"':'')+'>'
       +'<td class="appr-col-select">'+pick+'</td>'
-      +'<td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">'+escAttr(approvalRowFormNo(item))+'</span><span class="approval-form-badges"><span class="badge '+type.cls+'">'+escAttr(type.label)+'</span>'+rejectBadge+histBadge+historyOutcomeBadge+batchBadge+riskBadge+availabilityBadge+'</span></div>'+employeeRequestProgressHtml(item,status)+'</td>'
+      +'<td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">'+financeBatchNumberHtml(approvalRowFormNo(item))+'</span><span class="approval-form-badges"><span class="badge '+type.cls+'">'+escAttr(type.label)+'</span>'+rejectBadge+histBadge+historyOutcomeBadge+batchBadge+riskBadge+availabilityBadge+'</span></div>'+employeeRequestProgressHtml(item,status)+'</td>'
       +'<td class="appr-col-dept" style="font-weight:650;color:#334155">'+escAttr(dept.name||'—')+'</td>'
       +'<td class="appr-col-applicant" style="font-weight:650;color:#334155">'+escAttr(approvalRowApplicant(item))+'</td>'
       +'<td class="appr-col-purpose"><div class="summary-cell" style="font-size:12px;color:#334155">'+approvalRowSummary(item)+'</div></td>'
@@ -31324,7 +31354,7 @@ function showBillApprD(b){
   var actH=canAct?'<div style="border-top:1px solid #f0e6d6;padding:11px">'+accountantHint+fieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApproveBill('+idArg+')">'+btnText+'</button>'+returnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprRejectBill('+idArg+')">不通過</button></div>':'';
   actH=approvalActionSectionHtml(actH)+incomeApplicantWithdrawButtonHtml('bill',b,true);
   el('appr-inner').innerHTML=
-    '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:var(--font-sans);font-size:10px;color:#c0a080">'+escAttr(billGroupNo(b))+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+billGroupTitle(b)+'簽核 · '+escAttr(e.s||'')+(groupCount>1?' · '+groupCount+' 張':'')+'</div></div></div>'
+    '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:var(--font-sans);font-size:10px;color:#c0a080">'+financeBatchNumberHtml(billGroupNo(b),true)+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+billGroupTitle(b)+'簽核 · '+escAttr(e.s||'')+(groupCount>1?' · '+groupCount+' 張':'')+'</div></div></div>'
     +rejectBanner
     +(historyBatchReadOnly?'':entityDeptEditorHtml('bill',b.id,b.eid,b.dc))
     +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+escAttr(e.s||'')+'</span>'],['部門',escAttr((b.dc||'—')+' '+(d.n||''))],['申請人',escAttr(b.applicant||'—')],['繳費人',escAttr(groupCount>1?billGroupPayerSummary(b):(b.payer||'—'))],['項目',escAttr(billGroupItemSummary(b))],['服務月份 / 費用期間',escAttr(groupCount>1?'依各張明細':(b.period||'—'))],['應收金額','<strong>'+fmt(groupTotal)+'</strong>'],['簽核狀態','<span class="badge '+(String(b.approvalStatus||'').toLowerCase()==='cancelled'?'b-gray':requestIsRejected(b)?'b-rej':(groupRows.every(billApprovalCompleted)?'b-ok':'b-wait'))+'">'+escAttr(billApprovalLabel(b))+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
@@ -31368,7 +31398,7 @@ function showInvApprD(i,item){
   var actH=canAct?'<div style="border-top:1px solid #f0e6d6;padding:11px">'+(canEditIncomeCategory?incomeCategoryH:'')+invFieldsH+'<button class="btn-p" style="width:100%;justify-content:center;margin-bottom:5px" onclick="apprApproveInv('+idArg+')">'+invBtn+'</button>'+invReturnBtn+'<button class="btn-s" style="width:100%;justify-content:center;color:#8a1010" onclick="apprRejectInv('+idArg+')">不通過</button></div>':'';
   actH=approvalActionSectionHtml(actH)+incomeApplicantWithdrawButtonHtml('invoice',i,true);
   el('appr-inner').innerHTML=
-    '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:var(--font-sans);font-size:10px;color:#c0a080">'+escAttr(invoiceGroupNo(i))+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+invoiceGroupTitle(i)+'簽核 · '+escAttr(e.s||'')+(groupCount>1?' · '+groupCount+' 張':'')+'</div></div></div>'
+    '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:var(--font-sans);font-size:10px;color:#c0a080">'+financeBatchNumberHtml(invoiceGroupNo(i),true)+'</div><div style="font-size:12px;font-weight:500;color:#334155">'+invoiceGroupTitle(i)+'簽核 · '+escAttr(e.s||'')+(groupCount>1?' · '+groupCount+' 張':'')+'</div></div></div>'
     +rejectBanner
     +(historyBatchReadOnly?'':entityDeptEditorHtml('invoice',i.id,i.eid,i.dc))
     +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['法人','<span class="ep" style="font-size:9px">'+escAttr(e.s||'')+'</span>'],['申請人',escAttr(i.applicant||'—')],['組別 / 部門',escAttr((i.dc||'—')+' '+(gD(i.dc).n||''))],['買受人',escAttr(groupCount>1?'整批 '+groupCount+' 張，請展開明細':(i.buyer||'—'))],['開立方式',escAttr(groupCount>1?'依各張明細':invoiceIdentifierType(i.identifierType))],['收入類別 / 科目',invoiceIncomeCategorySummaryHtml(i)],['金額','<strong>'+fmt(groupTotal)+'</strong>'],['狀態','<span class="badge '+(String(i.approvalStatus||'').toLowerCase()==='cancelled'?'b-gray':'b-wait')+'">'+escAttr(invApprovalLabel(i))+'</span>']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
@@ -31403,7 +31433,7 @@ function showReceiptTaskD(i){
   actH+=incomeApplicantWithdrawButtonHtml('invoice',i,true);
   actH=approvalActionSectionHtml(actH);
   el('appr-inner').innerHTML=
-    '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:var(--font-sans);font-size:10px;color:#c0a080">'+escAttr(invoiceGroupNo(i))+'</div><div style="font-size:12px;font-weight:500;color:#334155">收款待辦 · '+escAttr(e.s||'')+(groupCount>1?' · 整批 '+groupCount+' 張':'')+'</div></div></div>'
+    '<div style="padding:9px 12px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;gap:7px;background:var(--brxxl)"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:12px">←</button><div><div style="font-family:var(--font-sans);font-size:10px;color:#c0a080">'+financeBatchNumberHtml(invoiceGroupNo(i),true)+'</div><div style="font-size:12px;font-weight:500;color:#334155">收款待辦 · '+escAttr(e.s||'')+(groupCount>1?' · 整批 '+groupCount+' 張':'')+'</div></div></div>'
     +'<div style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;border-bottom:1px solid #f0e6d6">'+[['買受人',escAttr(groupCount>1?'整批 '+groupCount+' 張，請看下方明細':(i.buyer||'—'))],['金額','<strong>'+fmt(groupTotal)+'</strong>'],['狀態','<span class="badge b-wait">'+escAttr(receiptStatusLabel(i))+'</span>'],['未收張數','<strong>'+receiptCounts.unpaid+' / '+receiptCounts.total+' 張</strong>'],['收款證明',proof+' 份'],['流程來源','會計開立發票通過後自動進入收款情形']].map(function(x){return'<div style="background:var(--warm);border-radius:7px;padding:6px"><div style="font-size:10px;color:#a08060">'+x[0]+'</div><div style="font-size:11px;margin-top:1px">'+x[1]+'</div></div>';}).join('')+'</div>'
     +invoiceReviewDetailHtml(i,{title:groupCount>1?'整批發票核對表':'發票核對表'})
     +'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">發票簽核紀錄</div>'+shRuntime.html+'</div>'
@@ -34223,7 +34253,7 @@ function renderInvTable(){
     var can=group.item?approvalItemActionAvailability(group.item).ok:(!trusted&&rows.some(canActInvoice)&&approvalRecordsActionAvailability('invoices',rows,{kind:'inv'}).ok);
     var total=loading?null:rows.reduce(function(sum,row){return sum+num(row.total);},0);
     var cancelled=String(i.status||'').toLowerCase()==='cancelled'||String(i.approvalStatus||'').toLowerCase()==='cancelled';
-    return'<tr><td style="font-size:11px;color:var(--brtxt)">'+escAttr(group.item?approvalRowFormNo(group.item):(count>1?invoiceGroupNo(i):i.no||''))+'</td><td>'+escAttr(loading?'整批載入中':(count>1?'整批 '+count+' 張發票':i.buyer||''))+'<div style="font-size:10px;color:#94a3b8">'+(loading?'完成核對後才能查看與簽核':('申請人：'+escAttr(i.applicant||'—')+' · 部門：'+escAttr(i.dc||'—')))+'</div></td><td style="font-weight:500">'+(total===null?'—':fmt(total))+'</td><td><span class="badge '+(loading?'b-gray':cancelled?'b-gray':invoiceIsReceivable(i)?(RECV[i.status]||'b-gray'):'b-wait')+'">'+escAttr(loading?'整批載入中':cancelled?'已抽單取消':invoiceIsReceivable(i)?(RECVL[i.status]||i.status):invApprovalLabel(i))+'</span>'+(can?'<button class="btn-g" style="margin-left:5px;font-size:10px" onclick="approveInv('+financeInlineJsString(i.id)+')">'+(count>1?'查看整批簽核':'核准')+'</button>':'')+'</td></tr>';
+    return'<tr><td style="font-size:11px;color:var(--brtxt)">'+financeBatchNumberHtml(group.item?approvalRowFormNo(group.item):(count>1?invoiceGroupNo(i):i.no||''))+'</td><td>'+escAttr(loading?'整批載入中':(count>1?'整批 '+count+' 張發票':i.buyer||''))+'<div style="font-size:10px;color:#94a3b8">'+(loading?'完成核對後才能查看與簽核':('申請人：'+escAttr(i.applicant||'—')+' · 部門：'+escAttr(i.dc||'—')))+'</div></td><td style="font-weight:500">'+(total===null?'—':fmt(total))+'</td><td><span class="badge '+(loading?'b-gray':cancelled?'b-gray':invoiceIsReceivable(i)?(RECV[i.status]||'b-gray'):'b-wait')+'">'+escAttr(loading?'整批載入中':cancelled?'已抽單取消':invoiceIsReceivable(i)?(RECVL[i.status]||i.status):invApprovalLabel(i))+'</span>'+(can?'<button class="btn-g" style="margin-left:5px;font-size:10px" onclick="approveInv('+financeInlineJsString(i.id)+')">'+(count>1?'查看整批簽核':'核准')+'</button>':'')+'</td></tr>';
   }).join('');
 }
 function renderInvoiceManagementList(){
@@ -34233,7 +34263,7 @@ function renderInvoiceManagementList(){
   var input=el('invoice-manage-search');if(input&&input.value!==incomeManagementSearchState().invoice)input.value=incomeManagementSearchState().invoice;
   var visible=visibleInvoicesForCurrentUser();
   var rows=visible.filter(function(i){
-    return !query||[i.no,i.id,i.buyer,i.batchId].some(function(value){return String(value||'').toLocaleLowerCase('zh-Hant').indexOf(query)>-1;});
+    return !query||[i.no,i.id,i.buyer,i.batchId,financeBatchNumberLabel(i.batchId)].some(function(value){return String(value||'').toLocaleLowerCase('zh-Hant').indexOf(query)>-1;});
   });
   var shown=rows.slice(0,25);
   var pending=typeof approvalRowRuntimeForCurrentUser==='function'&&approvalRowRuntimeForCurrentUser().trustedTasksVerified===true
@@ -34244,7 +34274,7 @@ function renderInvoiceManagementList(){
     var total=item&&item.approvalBatchLoading?null:(item?item.rows:groupRows).reduce(function(sum,row){return sum+num(row.total);},0);
     var canOpen=!!(item&&approvalItemActionAvailability(item).ok);
     return '<div data-invoice-batch="'+escAttr(i.batchId)+'" style="padding:9px 11px;border:1px solid #d6e4f0;border-radius:8px;background:#f4f9fd;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'
-      +'<span style="font-size:11px;color:#334155"><strong>'+escAttr(invoiceGroupNo(i))+'</strong> · 整批 '+count+' 張 · '+(total===null?'整批載入中':fmt(total))+'</span>'
+      +'<span style="font-size:11px;color:#334155"><strong>'+financeBatchNumberHtml(invoiceGroupNo(i))+'</strong> · 整批 '+count+' 張 · '+(total===null?'整批載入中':fmt(total))+'</span>'
       +(canOpen?'<button type="button" class="btn-g" onclick="approveInv('+financeInlineJsString(i.id)+')">查看整批簽核</button>':'')+'</div>';
   }).join('');
   root.innerHTML='<div style="font-size:11px;color:#64748b;margin-bottom:6px">'+(query?'符合目前載入資料 '+rows.length+' 張':'最近載入 '+rows.length+' 張')+(rows.length>shown.length?'，先顯示 '+shown.length+' 張；請輸入單號縮小範圍':'')+'。完整過往紀錄可到「我的申請」查詢。</div>'
@@ -34690,7 +34720,7 @@ function renderBatchInvTable(){
     var i=group.row,rows=group.rows,count=group.item?group.item.approvalExpectedRowCount:rows.length;
     var loading=!!(group.item&&group.item.approvalBatchLoading),total=loading?null:rows.reduce(function(sum,row){return sum+num(row.total);},0);
     var approved=!loading&&invoiceIsReceivable(i);
-    return'<tr><td style="font-size:11px;color:var(--brtxt)">'+escAttr(group.item?approvalRowFormNo(group.item):(count>1?invoiceGroupNo(i):i.no||''))+'</td><td><span class="ep" style="font-size:9px">'+escAttr(i.en||'')+'</span></td><td>'+escAttr(loading?'整批載入中':(count>1?'整批 '+count+' 張發票':i.buyer||''))+'<div style="font-size:10px;color:#94a3b8">'+escAttr(i.applicant||'—')+' · '+escAttr(i.dc||'—')+'</div></td><td style="font-weight:500">'+(total===null?'—':fmt(total))+'</td><td><span class="badge '+(loading?'b-gray':approved?(RECV[i.status]||'b-gray'):'b-wait')+'">'+escAttr(loading?'整批載入中':approved?(RECVL[i.status]||i.status):invApprovalLabel(i))+'</span></td></tr>';
+    return'<tr><td style="font-size:11px;color:var(--brtxt)">'+financeBatchNumberHtml(group.item?approvalRowFormNo(group.item):(count>1?invoiceGroupNo(i):i.no||''))+'</td><td><span class="ep" style="font-size:9px">'+escAttr(i.en||'')+'</span></td><td>'+escAttr(loading?'整批載入中':(count>1?'整批 '+count+' 張發票':i.buyer||''))+'<div style="font-size:10px;color:#94a3b8">'+escAttr(i.applicant||'—')+' · '+escAttr(i.dc||'—')+'</div></td><td style="font-weight:500">'+(total===null?'—':fmt(total))+'</td><td><span class="badge '+(loading?'b-gray':approved?(RECV[i.status]||'b-gray'):'b-wait')+'">'+escAttr(loading?'整批載入中':approved?(RECVL[i.status]||i.status):invApprovalLabel(i))+'</span></td></tr>';
   }).join('');
 }
 
@@ -35000,7 +35030,7 @@ function renderBillList(){
   var data=S.bF==='all'?source:source.filter(function(b){
     return S.bF==='unpaid'?b.status==='unpaid'&&String(b.approvalStatus||'').toLowerCase()!=='cancelled':b.status===S.bF;
   });
-  if(query)data=data.filter(function(b){return [b.no,b.id,b.payer,b.batchNo,b.batchId].some(function(value){return String(value||'').toLocaleLowerCase('zh-Hant').indexOf(query)>-1;});});
+  if(query)data=data.filter(function(b){return [b.no,b.id,b.payer,b.batchNo,b.batchId,financeBatchNumberLabel(b.batchNo||b.batchId)].some(function(value){return String(value||'').toLocaleLowerCase('zh-Hant').indexOf(query)>-1;});});
   var itemColors={home_care:'b-blue',course:'b-purp',meal:'b-teal',supplies:'b-wait',other:'b-gray',labor:'b-purp',health:'b-blue',pension:'b-teal',tax:'b-rej',rent:'b-gray'};
   root.innerHTML=data.map(function(b){
     var paid=b.status==='paid',cancelled=b.status==='cancelled'||String(b.approvalStatus||'').toLowerCase()==='cancelled';
@@ -35464,7 +35494,7 @@ function recvInvoiceRowHtml(i,RECV){
   var proofText=proof?'收款證明 '+proof+' 份':'尚無收款證明';
   var receiptCounts=invoiceGroupReceiptCounts(leader);
   var paidCount=receiptCounts.paid;
-  var follow='公司行號：'+(gE(leader.eid).s||leader.en||'—')+' · '+(groupCount>1?(invoiceGroupNo(leader)+' · '+groupCount+' 張'):'單張')+' · 申請人：'+(leader.applicant||'—');
+  var follow='公司行號：'+(gE(leader.eid).s||leader.en||'—')+' · '+(groupCount>1?(financeBatchNumberLabel(invoiceGroupNo(leader))+' · '+groupCount+' 張'):'單張')+' · 申請人：'+(leader.applicant||'—');
   var k=recvGroupStatusKey(leader),cls=RECV[k]||'b-gray';
   var title=groupCount>1?invoiceGroupNo(leader):(leader.no||'');
   var buyer=groupCount>1?'整批 '+groupCount+' 張，點開查看每張繳費狀況':(leader.buyer||'—');
@@ -35474,7 +35504,7 @@ function recvInvoiceRowHtml(i,RECV){
   var receiptTarget=rows.find(function(row){return canActReceipt(row)&&['unpaid','partial'].includes(recvStatusKey(row));});
   var canUploadReceipt=!!receiptTarget&&S.user&&currentRoleKey()==='accountant';
   var canReviewReceipt=canActReceipt(leader)&&k==='pending_receipt_review'&&S.user&&currentRoleKey()==='ceo';
-  return'<div class="recv-item" data-mobile-record-card="receivable" onclick="showRecvInvoiceDetail(\''+leader.id+'\')" title="點開查看收款與傳票細節"><div class="recv-item-main"><div class="recv-item-title"><div style="font-size:12px;font-weight:650;color:#334155">'+escAttr(title)+'</div><span class="badge '+cls+'">'+recvStatusShortLabel(leader)+'</span>'+(groupCount>1?'<span class="badge b-blue">整批 '+groupCount+' 張</span>'+unpaidBadge:'')+'</div><div class="recv-item-buyer">'+escAttr(buyer)+'</div><div class="recv-item-meta">'+proofText+' · '+escAttr(follow)+'</div></div><div class="recv-item-amount"><div>'+fmt(groupTotal)+'</div><small>'+escAttr(typeText)+'</small></div><div class="recv-item-actions">'+(canUploadReceipt?'<label onclick="event.stopPropagation()">上傳證明<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="event.stopPropagation();submitReceiptReview(\''+(receiptTarget?receiptTarget.id:leader.id)+'\',this)"></label>':'')+(canReviewReceipt?'<button class="btn-g" onclick="event.stopPropagation();approveReceiptReview(\''+leader.id+'\')">確認已收</button>':'')+'</div></div>';
+  return'<div class="recv-item" data-mobile-record-card="receivable" onclick="showRecvInvoiceDetail(\''+leader.id+'\')" title="點開查看收款與傳票細節"><div class="recv-item-main"><div class="recv-item-title"><div style="font-size:12px;font-weight:650;color:#334155">'+financeBatchNumberHtml(title)+'</div><span class="badge '+cls+'">'+recvStatusShortLabel(leader)+'</span>'+(groupCount>1?'<span class="badge b-blue">整批 '+groupCount+' 張</span>'+unpaidBadge:'')+'</div><div class="recv-item-buyer">'+escAttr(buyer)+'</div><div class="recv-item-meta">'+proofText+' · '+escAttr(follow)+'</div></div><div class="recv-item-amount"><div>'+fmt(groupTotal)+'</div><small>'+escAttr(typeText)+'</small></div><div class="recv-item-actions">'+(canUploadReceipt?'<label onclick="event.stopPropagation()">上傳證明<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="event.stopPropagation();submitReceiptReview(\''+(receiptTarget?receiptTarget.id:leader.id)+'\',this)"></label>':'')+(canReviewReceipt?'<button class="btn-g" onclick="event.stopPropagation();approveReceiptReview(\''+leader.id+'\')">確認已收</button>':'')+'</div></div>';
 }
 	function singleInvoiceDetailHtml(i){
 	  if(!i)return'';
@@ -35632,7 +35662,7 @@ window.showRecvInvoiceDetail=function(id){
   if(canActReceipt(leader)&&statusKey==='pending_receipt_review'&&S.user&&currentRoleKey()==='ceo')actionH='<button class="btn-p" style="background:#1a7040" onclick="approveReceiptReview(\''+leader.id+'\')">確認已收款入帳</button>';
   openApprModal();
   el('appr-inner').innerHTML=
-	    '<div style="padding:12px 14px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--brxxl)"><div style="display:flex;align-items:center;gap:8px"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:14px">←</button><div><div style="font-family:var(--font-sans);font-size:11px;color:#c0a080">'+escAttr(invoiceGroupNo(leader))+'</div><div style="font-size:14px;font-weight:650;color:#334155">收款 / 傳票詳情 · '+escAttr(e.s||'')+(groupCount>1?' · 整批 '+groupCount+' 張':'')+'</div></div></div><span class="badge '+statusCls+'">'+recvStatusShortLabel(leader)+'</span></div>'
+	    '<div style="padding:12px 14px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--brxxl)"><div style="display:flex;align-items:center;gap:8px"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:14px">←</button><div><div style="font-family:var(--font-sans);font-size:11px;color:#c0a080">'+financeBatchNumberHtml(invoiceGroupNo(leader),true)+'</div><div style="font-size:14px;font-weight:650;color:#334155">收款 / 傳票詳情 · '+escAttr(e.s||'')+(groupCount>1?' · 整批 '+groupCount+' 張':'')+'</div></div></div><span class="badge '+statusCls+'">'+recvStatusShortLabel(leader)+'</span></div>'
 	    +'<div style="padding:12px 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;border-bottom:1px solid #f0e6d6">'+[['法人',e.full||e.s||'—'],['買受人',groupCount>1?'整批 '+groupCount+' 張，請看下方明細':(leader.buyer||'—')],['金額','<strong>'+fmt(groupTotal)+'</strong>'],['狀態','<span class="badge '+statusCls+'">'+recvStatusShortLabel(leader)+'</span>'],['開立方式',groupCount>1?'依各張明細':invoiceIdentifierType(leader.identifierType)],['申請人',leader.applicant||'—'],['收款證明',proofCount+' 份'],['收款日期',leader.paidAt?normDate(leader.paidAt):'—']].map(function(x){return'<div style="background:var(--warm);border-radius:8px;padding:8px"><div style="font-size:11px;color:#a08060">'+x[0]+'</div><div style="font-size:12px;margin-top:2px;color:#3b2410;word-break:break-word">'+x[1]+'</div></div>';}).join('')+'</div>'
 	    +invoiceReviewDetailHtml(leader,{title:groupCount>1?'整批發票核對表':'發票核對表'})
 	    +invoiceLifecyclePanelHtml(rows,leader,groupCount)
@@ -36147,7 +36177,7 @@ function renderShareholderList(){
 window.openRecvBatch=function(batchId){
   var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue',pending_receipt_review:'b-purp'};
   var items=visibleInvoicesForCurrentUser().filter(function(i){return i.batchId===batchId&&invoiceNeedsReceivableFollowup(i);});
-  el('recv-list-title').textContent=batchId.replace('batch_','批次 ')+' · 個別發票';
+  el('recv-list-title').textContent=financeBatchNumberLabel(batchId.replace('batch_','批次 '))+' · 個別發票';
   el('recv-detail').innerHTML='<div style="padding:7px 12px;border-bottom:1px solid #f0e6d6"><button class="btn-g" onclick="renderRecvDetail()">← 返回整批列表</button></div>'+items.map(function(i){return recvInvoiceRowHtml(i,RECV);}).join('');
 };
 window.submitReceiptReview=async function(id,inp,noteId){

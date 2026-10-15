@@ -114,6 +114,7 @@
     "test:notification-paging-browser": "node scripts/check_notification_paging_browser_20261013.cjs",
     "test:personal-bill-batch-history": "node scripts/check_finance_personal_bill_batch_history.cjs",
     "test:personal-bill-batch-history-browser": "node scripts/check_personal_bill_batch_browser_20261013.cjs",
+    "test:short-batch-numbers-browser": "node scripts/check_short_batch_numbers_browser_20261015.cjs",
     "test:bill-form-attachments": "node scripts/check_bill_form_attachments_20261013.cjs",
     "test:bill-form-attachments-browser": "node scripts/check_bill_form_attachments_browser_20261013.cjs",
     "test:applicant-history-withdraw-browser": "node scripts/check_applicant_history_withdraw_browser_20261013.cjs",

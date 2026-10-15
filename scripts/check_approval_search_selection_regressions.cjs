@@ -52,7 +52,7 @@ function fixture(){
     requestIsRejected:()=>false,fromIsoDate:value=>value,
   };
   vm.createContext(c);
-  for(const name of ['requestPurposeText','requestNoteText','fullWidthSlice','expenseRequestSummary','approvalRowSummary',
+  for(const name of ['financeBatchNumberParts','financeBatchNumberLabel','financeBatchNumberHtml','requestPurposeText','requestNoteText','fullWidthSlice','expenseRequestSummary','approvalRowSummary',
     'billGroupApprovalRows','invoiceGroupApprovalRows','financeDocumentMatchesQuery','requestSearchAmounts',
     'approvalSearchRowText','approvalSearchText','approvalMatchesQuery','approvalPersonalTab','approvalApplySearchSort',
     'approvalItemKey','selectedApprovalItems','approvalBulkBarHtml','refreshApprovalBulkCount',

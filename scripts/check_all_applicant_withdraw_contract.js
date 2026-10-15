@@ -138,6 +138,7 @@ const context = {
 };
 vm.createContext(context);
 for (const name of [
+  'financeBatchNumberParts', 'financeBatchNumberLabel', 'financeBatchNumberHtml',
   'incomeApplicantWithdrawAvailability', 'canWithdrawIncomeDocument',
   'incomeApplicantWithdrawButtonHtml', 'approvalHistoryWithdrawalRows', 'approvalHistoryBatchReadOnly', 'approvalHistoryModalRequiresManagement',
   'approvalHistoryIncomeWriteBlocked', 'rejectApprovalHistoryIncomeWrite', 'approvalHistoryModalVerifiedRow', 'withdrawIncomeDocument',
@@ -365,7 +366,7 @@ const detailContext = {
   receiptStatusLabel: record => record.status
 };
 vm.createContext(detailContext);
-['escAttr', 'financeInlineJsString'].forEach(name => vm.runInContext(namedFunction(name), detailContext));
+['escAttr', 'financeInlineJsString', 'financeBatchNumberParts', 'financeBatchNumberHtml'].forEach(name => vm.runInContext(namedFunction(name), detailContext));
 for (const [start, end] of [
   ['function showApprD(r){', '\nfunction showBillApprD('],
   ['function showBillApprD(b){', '\nfunction showInvApprD('],

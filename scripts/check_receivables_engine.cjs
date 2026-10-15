@@ -32,7 +32,8 @@ check('real legacy missing issue dates are separate from known months',()=>{payl
 const rowSource=source.slice(source.indexOf('function recvInvoiceRowHtml(i,RECV){'),source.indexOf('\n\tfunction singleInvoiceDetailHtml',source.indexOf('function recvInvoiceRowHtml(i,RECV){')));
 const partial={id:'P1',eid:'E1',status:'partial',total:100},paid={id:'P0',eid:'E1',status:'paid',total:100};
 Object.assign(ctx,{S:{user:{id:'FICT'},recvEntity:'E1'},invoiceGroupRows:()=>[paid,partial],invoiceGroupTotal:()=>200,invoiceGroupLeader:()=>paid,receiptFilesForInvoiceRows:()=>[],invoiceGroupReceiptCounts:()=>({paid:1,unpaid:0,partial:1,total:2}),invoiceGroupNo:()=> 'FICT-BATCH',recvGroupStatusKey:()=> 'partial',recvStatusKey:i=>i.status,recvStatusShortLabel:()=> '部分已收',invoiceIdentifierType:()=>'',captureReceiptReviewVersions:()=>{},canActReceipt:i=>i.status==='partial',currentRoleKey:()=> 'accountant'});
-vm.runInContext(rowSource,ctx);
+const batchNumberSource=source.slice(source.indexOf('function financeBatchNumberParts('),source.indexOf('function financeBatchNumberSearchQuery('));
+vm.runInContext(batchNumberSource+'\n'+rowSource,ctx);
 check('real partial group upload targets actionable invoice even when leader already paid',()=>{const html=ctx.recvInvoiceRowHtml(paid,{});assert.match(html,/submitReceiptReview\('P1',this\)/);assert.match(html,/上傳證明/);});
 const bankHealth=source.slice(source.indexOf('function bankReconciliationHealthForEntity('),source.indexOf('\n\tfunction bankTxShort',source.indexOf('function bankReconciliationHealthForEntity(')));
 const bankPanel=source.slice(source.indexOf('function renderBankReconciliationPanel('),source.indexOf('\n\twindow.recvTab=',source.indexOf('function renderBankReconciliationPanel(')));

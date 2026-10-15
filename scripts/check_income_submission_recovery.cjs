@@ -145,7 +145,7 @@ function fixture(shared={}){
   f.nodes['bill-list']={innerHTML:''};
   c.BILLS=[{id:'saved-bill',no:'BILL-2026-1234',createdAt:'2026-10-08T04:30:00Z',item:'居家服務費',payer:'虛構繳費人',period:'2026/10',amt:100,status:'unpaid',approvalStatus:'pending_accountant',applicantId:c.S.user.id}];
   Object.assign(c,{visibleBillsForCurrentUser:()=>c.BILLS,billApprovalCompleted:()=>false,requestIsRejected:()=>false,billApprovalLabel:()=> '待簽核',billIsMine:b=>b.applicantId===c.S.user.id,fmt:value=>'NT$'+value,escAttr:value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'),incomeManagementSearchState:()=>({bill:''}),incomeApplicantWithdrawButtonHtml:()=>''});
-  ['billCardCreatedAt','renderBillList'].forEach(name=>vm.runInContext(fn(name),c));
+  ['financeBatchNumberParts','financeBatchNumberLabel','billCardCreatedAt','renderBillList'].forEach(name=>vm.runInContext(fn(name),c));
   const openStart=html.indexOf('window.openPersonalBillByNumber=function(no){'),openEnd=html.indexOf('\n};',openStart)+3;vm.runInContext(html.slice(openStart,openEnd),c);
   c.renderBillList();
   check('Bill card shows its number, creation date and exact My Applications search link',f.nodes['bill-list'].innerHTML.includes('BILL-2026-1234')&&f.nodes['bill-list'].innerHTML.includes('2026')&&f.nodes['bill-list'].innerHTML.includes('在我的申請查這張'));
