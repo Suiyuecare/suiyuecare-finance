@@ -142,6 +142,15 @@ try {
       identity_scope_preserved:true,live_latency_proven:false}
   });
   assert.equal(domains.get(invoiceBulkContract.result.canary),invoiceBulkContract.domain);
+  const billApprovalBulkContract=Object.freeze({
+    filename:'finance_bill_approval_bulk_canary.sql',
+    marker:'bill_approval_bulk_canary_result',
+    domain:'bill_approval_bulk',
+    result:{canary:'readonly_bill_approval_bulk_v1',ok:true,rolled_back:true,
+      identity_scope_preserved:true,live_latency_proven:false}
+  });
+  assert.equal(domains.get(billApprovalBulkContract.result.canary),billApprovalBulkContract.domain);
+  let billApprovalBulkVerified=0;
   let invoiceBulkVerified=0;
   let verified = 0,boundedVerified=0;
   let identityOnceVerified = 0;
@@ -225,6 +234,25 @@ try {
       invoiceBulkVerified++;
       pass('invoice bulk actual final SQL has its exact reviewed marker/domain and rejects altered flags, wrong canary, wrong marker and duplicate results');
     }
+    if(name===billApprovalBulkContract.filename){
+      const rows=actualResults.flatMap(result=>result.rows||[]);
+      assert.equal(rows.length,1,'bill approval bulk final SQL must emit exactly one result row');
+      assert.equal(rows[0].marker,'FINANCE_BILL_APPROVAL_BULK_CANARY_ROLLED_BACK');
+      assert.deepEqual(rows[0][billApprovalBulkContract.marker],billApprovalBulkContract.result,
+        'actual bill approval bulk SQL must preserve exact identity, rollback and unproven-live-latency flags');
+      const negative=join(outputDir,'bill-approval-bulk-negative.json');
+      const verifyNegative=payload=>{
+        fs.writeFileSync(negative,JSON.stringify(payload));
+        assert.throws(()=>guard.verifyReportsCanary(negative,billApprovalBulkContract.domain));
+      };
+      for(const flag of ['ok','rolled_back','identity_scope_preserved','live_latency_proven'])
+        verifyNegative([{[billApprovalBulkContract.marker]:{...billApprovalBulkContract.result,[flag]:!billApprovalBulkContract.result[flag]}}]);
+      verifyNegative([{[billApprovalBulkContract.marker]:{...billApprovalBulkContract.result,canary:'wrong-canary'}}]);
+      verifyNegative([{wrong_marker:billApprovalBulkContract.result}]);
+      verifyNegative([{[billApprovalBulkContract.marker]:billApprovalBulkContract.result},{[billApprovalBulkContract.marker]:billApprovalBulkContract.result}]);
+      billApprovalBulkVerified++;
+      pass('bill approval bulk actual final SQL has its exact reviewed marker/domain and rejects altered flags, wrong canary, wrong marker and duplicate results');
+    }
     if(name==='finance_bounded_global_logout_canary.sql'){
       const rows=actualResults.flatMap(result=>result.rows||[]);
       assert.equal(rows.length,1,'bounded logout canary must emit exactly one complete marker');
@@ -237,9 +265,32 @@ try {
   assert.equal(identityOnceVerified, 1, 'the reviewed identity-once file must be explicitly covered exactly once');
   assert.equal(billHistoryVerified,1,'the reviewed bill batch file must be explicitly covered exactly once');
   assert.equal(invoiceBulkVerified,1,'the reviewed invoice bulk file must be explicitly covered exactly once');
-  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-1,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
+  assert.equal(billApprovalBulkVerified,1,'the reviewed bill approval bulk file must be explicitly covered exactly once');
+  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-boundedVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
   assert.equal(boundedVerified,1,'bounded logout exact final SQL is covered once');
-  assert.equal(verified,43,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk and bounded logout results are covered');
-  pass('all 39 original final SQL results and reviewed identity-once, bill batch and invoice bulk results satisfy their protected release parsers');
+  assert.equal(verified,44,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout and bill approval bulk results are covered');
+  // Versioned canaries deliberately retain their old filenames for archived
+  // phases, so they are outside the generic *canary.sql discovery above.
+  const attachmentSuccessor=fs.readFileSync(new URL('finance_audit_security_canary_20261015.sql',scripts),'utf8');
+  const attachmentSelect=attachmentSuccessor.match(/(?:^|\n)(select\s+(?:pg_catalog\.)?jsonb_build_object\([\s\S]*?\)\s+as\s+\w+\s*;)\s*$/i)?.[1];
+  assert.ok(attachmentSelect,'versioned attachment audit successor has an explicit final result');
+  const attachmentResults=await outputDb.exec(attachmentSelect);
+  const attachmentRows=attachmentResults.flatMap(result=>result.rows||[]);
+  const attachmentExpected={canary:'readonly_audit_security_v1',ok:true,rolled_back:true,identity_scope_preserved:true,attachment_scope_preserved:true};
+  assert.deepEqual(attachmentRows,[{audit_security_canary_result:attachmentExpected}]);
+  const attachmentFile=join(outputDir,'attachment-successor.json');
+  fs.writeFileSync(attachmentFile,JSON.stringify(attachmentResults));
+  guard.verifyReportsCanary(attachmentFile,'audit_security');
+  const rejectAttachmentResult=rows=>{
+    fs.writeFileSync(attachmentFile,JSON.stringify(rows));
+    assert.throws(()=>guard.verifyReportsCanary(attachmentFile,'audit_security'));
+  };
+  for(const flag of ['ok','rolled_back','identity_scope_preserved','attachment_scope_preserved'])
+    rejectAttachmentResult([{audit_security_canary_result:{...attachmentExpected,[flag]:false}}]);
+  rejectAttachmentResult([{audit_security_canary_result:{...attachmentExpected,canary:'wrong-canary'}}]);
+  rejectAttachmentResult([{wrong_marker:attachmentExpected}]);
+  rejectAttachmentResult([...attachmentRows,...attachmentRows]);
+  pass('versioned bill-attachment audit successor final SQL retains exact authority/rollback flags and rejects altered flags, wrong canary/marker and duplicates');
+  pass('all 39 original final SQL results and reviewed identity-once, bill batch, invoice bulk, bounded logout and bill approval bulk results satisfy their protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);
