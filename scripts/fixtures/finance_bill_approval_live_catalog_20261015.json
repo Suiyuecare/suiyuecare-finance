@@ -1,0 +1,985 @@
+{
+  "capturedAt": "2026-10-15",
+  "project": "udtlppnrugmtzhigdsxo",
+  "functions": [
+    {
+      "schema_name": "public",
+      "name": "finance_bill_act_active_step_v2",
+      "signature": "finance_bill_act_active_step_v2(text[],text,text,text,jsonb,text,jsonb,text)",
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_bill_act_active_step_v2(p_bill_ids text[], p_action text, p_idempotency_key text, p_comment text DEFAULT NULL::text, p_files jsonb DEFAULT '[]'::jsonb, p_add_sign_finance_user_id text DEFAULT NULL::text, p_expected_steps jsonb DEFAULT '{}'::jsonb, p_data_environment text DEFAULT 'production'::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\n SET lock_timeout TO '5s'\nAS $function$\ndeclare\n  v_tenant_id uuid;\n  v_actor public.finance_users%rowtype;\n  v_target public.finance_users%rowtype;\n  v_environment text := pg_catalog.lower(coalesce(p_data_environment, 'production'));\n  v_action text := pg_catalog.lower(coalesce(p_action, ''));\n  v_comment text := coalesce(pg_catalog.btrim(p_comment), '');\n  v_digest text;\n  v_cached jsonb;\n  v_bill_id text;\n  v_bill public.bills%rowtype;\n  v_steps jsonb;\n  v_step jsonb;\n  v_expected_step jsonb;\n  v_step_updated jsonb;\n  v_active_index int;\n  v_previous_index int;\n  v_previous_step jsonb;\n  v_role_key text;\n  v_status jsonb;\n  v_add_step jsonb;\n  v_revision_step jsonb;\n  v_result_rows jsonb := '[]'::jsonb;\n  v_result jsonb;\nbegin\n  if auth.uid() is null then\n    raise exception '請先登入後再處理繳費單簽核'\n      using errcode = '42501';\n  end if;\n  if v_environment not in ('production', 'test') then\n    raise exception '資料環境只允許 production 或 test'\n      using errcode = '22023';\n  end if;\n  if v_action not in ('approve', 'return', 'reject', 'add_sign') then\n    raise exception '簽核動作只允許 approve、return、reject 或 add_sign'\n      using errcode = '22023';\n  end if;\n  if p_bill_ids is null\n     or pg_catalog.cardinality(p_bill_ids) < 1\n     or pg_catalog.cardinality(p_bill_ids) > 150 then\n    raise exception '每次必須處理 1 到 150 張繳費單'\n      using errcode = '22023';\n  end if;\n  if pg_catalog.cardinality(p_bill_ids) <> (\n    select pg_catalog.count(distinct bill_id)\n    from pg_catalog.unnest(p_bill_ids) bill_id\n  ) then\n    raise exception '同一次簽核不可包含重複的繳費單 ID'\n      using errcode = '23505';\n  end if;\n  if pg_catalog.jsonb_typeof(coalesce(p_files, '[]'::jsonb)) <> 'array'\n     or pg_catalog.jsonb_array_length(coalesce(p_files, '[]'::jsonb)) > 20 then\n    raise exception '附件資料格式錯誤或超過 20 個'\n      using errcode = '22023';\n  end if;\n  -- APPROVAL_V2_EXPECTED_ROW_VERSION_SHAPE\n  if pg_catalog.jsonb_typeof(\n       coalesce(p_expected_steps, '{}'::jsonb)\n     ) <> 'object'\n     or (\n       select pg_catalog.count(*)\n       from pg_catalog.jsonb_object_keys(\n         coalesce(p_expected_steps, '{}'::jsonb)\n       )\n     ) <> pg_catalog.cardinality(p_bill_ids)\n     or exists (\n       select 1\n       from pg_catalog.jsonb_object_keys(\n         coalesce(p_expected_steps, '{}'::jsonb)\n       ) expected_id\n       where not (expected_id = any(p_bill_ids))\n     )\n     or exists (\n       select 1\n       from pg_catalog.jsonb_each(\n         coalesce(p_expected_steps, '{}'::jsonb)\n       ) expected_row(expected_id, expected_value)\n       where pg_catalog.jsonb_typeof(expected_row.expected_value) <> 'object'\n          or pg_catalog.jsonb_typeof(\n               expected_row.expected_value -> 'row_version'\n             ) <> 'number'\n          or pg_catalog.jsonb_typeof(\n               expected_row.expected_value -> 'active_step_index'\n             ) <> 'number'\n     ) then\n    raise exception\n      '繳費單預期資料版本不完整，請重新載入後再處理'\n      using errcode = '40001';\n  end if;\n\n  if exists (\n    select 1\n    from pg_catalog.jsonb_each(\n      coalesce(p_expected_steps, '{}'::jsonb)\n    ) expected_row(expected_id, expected_value)\n    where coalesce(\n            expected_row.expected_value ->> 'row_version',\n            ''\n          ) !~ '^[1-9][0-9]{0,18}$'\n       or coalesce(\n            expected_row.expected_value ->> 'active_step_index',\n            ''\n          ) !~ '^(0|[1-9][0-9]{0,9})$'\n  ) then\n    raise exception\n      '繳費單預期資料版本不完整，請重新載入後再處理'\n      using errcode = '40001';\n  end if;\n\n  if exists (\n    select 1\n    from pg_catalog.jsonb_each(\n      coalesce(p_expected_steps, '{}'::jsonb)\n    ) expected_row(expected_id, expected_value)\n    where (expected_row.expected_value ->> 'row_version')::numeric >\n            9223372036854775807::numeric\n       or (expected_row.expected_value ->> 'active_step_index')::numeric >\n            2147483647::numeric\n  ) then\n    raise exception\n      '繳費單預期資料版本超出允許範圍，請重新載入後再處理'\n      using errcode = '40001';\n  end if;\n\n  if v_action in ('return', 'reject', 'add_sign') and v_comment = '' then\n    raise exception '退回、不通過或加簽必須填寫原因'\n      using errcode = '22023';\n  end if;\n  if v_action = 'add_sign'\n     and coalesce(p_add_sign_finance_user_id, '') = '' then\n    raise exception '加簽必須指定人員'\n      using errcode = '22023';\n  end if;\n\n  v_tenant_id := public.current_tenant_id();\n  select finance_user.*\n    into v_actor\n  from public.finance_users finance_user\n  where finance_user.tenant_id = v_tenant_id\n    and finance_user.auth_user_id = auth.uid()\n    and finance_user.active is true\n  order by finance_user.created_at, finance_user.id\n  limit 1;\n\n  if not found then\n    raise exception '目前登入帳號沒有此租戶的有效財務人員身分'\n      using errcode = '42501';\n  end if;  v_digest := private.finance_income_request_digest(\n    pg_catalog.jsonb_build_object(\n      'operation', 'bill_action',\n      'environment', v_environment,\n      'bill_ids', pg_catalog.to_jsonb(p_bill_ids),\n      'action', v_action,\n      'comment', v_comment,\n      'files', coalesce(p_files, '[]'::jsonb),\n      'add_sign_finance_user_id', p_add_sign_finance_user_id,\n      'expected_steps', coalesce(p_expected_steps, '{}'::jsonb)\n    )\n  );\n  v_cached := private.finance_income_begin_operation(\n    v_tenant_id,\n    v_environment,\n    'bill_action',\n    p_idempotency_key,\n    v_digest,\n    v_actor.id\n  );\n  if v_cached is not null then\n    return v_cached || pg_catalog.jsonb_build_object(\n      'idempotent_replay',\n      true\n    );\n  end if;\n\n\n  -- APPROVAL_V2_BILL_MEMBERSHIP_TABLE_LOCK\n  -- CONCURRENCY WARNING: this deliberately serializes bill v2 mutations\n  -- across all tenants. Contention fails within lock_timeout=5s for retry.\n  lock table public.bills in share row exclusive mode;\n\n\n  if v_action = 'add_sign' then\n    select finance_user.*\n      into v_target\n    from public.finance_users finance_user\n    where finance_user.tenant_id = v_tenant_id\n      and finance_user.id = p_add_sign_finance_user_id\n      and finance_user.active is true\n    limit 1;\n\n    if not found then\n      raise exception '指定的加簽人不存在、已停用或不屬於目前租戶'\n        using errcode = '23503';\n    end if;\n    if v_target.id = v_actor.id then\n      raise exception '不可加簽自己'\n        using errcode = '22023';\n    end if;\n  end if;\n\n\n  -- BILL_BATCH_COMPLETE_SIBLINGS_GUARD_V1\n  -- BILL_BATCH_SELECTED_IDS_SCOPE_GUARD_V1\n  if (\n    select pg_catalog.count(*)\n    from public.bills selected_row\n    where selected_row.tenant_id = v_tenant_id\n      and selected_row.data_environment = v_environment\n      and selected_row.id = any(p_bill_ids)\n  ) <> pg_catalog.cardinality(p_bill_ids) then\n    raise exception\n      '部分繳費單不存在或不屬於目前租戶，請重新整理後再試'\n      using errcode = '55000';\n  end if;\n\n  if exists (\n    with selected_bill_rows as (\n      select bill_row.id,\n             nullif(pg_catalog.btrim(bill_row.batch_id), '') as batch_id\n      from public.bills bill_row\n      where bill_row.tenant_id = v_tenant_id\n        and bill_row.data_environment = v_environment\n        and bill_row.id = any(p_bill_ids)\n    ),\n    selected_batches as (\n      select selected_bill.batch_id,\n             pg_catalog.count(*) as selected_count\n      from selected_bill_rows selected_bill\n      where selected_bill.batch_id is not null\n      group by selected_bill.batch_id\n    )\n    select 1\n    from selected_batches selected_batch\n    where selected_batch.selected_count <> (\n      select pg_catalog.count(*)\n      from public.bills sibling_row\n      where sibling_row.tenant_id = v_tenant_id\n        and sibling_row.data_environment = v_environment\n        and nullif(pg_catalog.btrim(sibling_row.batch_id), '') =\n            selected_batch.batch_id\n    )\n  ) then\n    raise exception '同一批繳費單必須完整簽核，請重新整理後再試'\n      using errcode = '55000';\n  end if;\n\n  for v_bill_id in\n    select bill_id\n    from pg_catalog.unnest(p_bill_ids) bill_id\n    order by bill_id\n  loop\n    select bill_row.*\n      into v_bill\n    from public.bills bill_row\n    where bill_row.tenant_id = v_tenant_id\n      and bill_row.data_environment = v_environment\n      and bill_row.id = v_bill_id\n    for update;\n\n    if not found then\n      raise exception '繳費單不存在或不屬於目前租戶：%', v_bill_id\n        using errcode = 'P0002';\n    end if;\n    -- APPROVAL_V2_LOCKED_ROW_VERSION_CAS\n    v_expected_step := p_expected_steps -> v_bill_id;\n    if v_bill.row_version is distinct from\n         (v_expected_step ->> 'row_version')::bigint\n       or coalesce(\n            (v_expected_step ->> 'active_step_index')::int,\n            -1\n          ) <> private.finance_income_active_step_index(v_bill.steps)\n       or coalesce(v_expected_step ->> 'role_key', '') <>\n          coalesce(\n            private.finance_income_step_role(\n              v_bill.steps ->\n              private.finance_income_active_step_index(v_bill.steps)\n            ),\n            ''\n          )\n       or coalesce(v_expected_step ->> 'finance_user_id', '') <>\n          coalesce(\n            private.finance_income_step_user_id(\n              v_bill.steps ->\n              private.finance_income_active_step_index(v_bill.steps)\n            ),\n            ''\n          )\n       or pg_catalog.lower(\n            coalesce(v_expected_step ->> 'email', '')\n          ) <> pg_catalog.lower(\n            coalesce(\n              v_bill.steps ->\n                private.finance_income_active_step_index(v_bill.steps)\n                ->> 'email',\n              ''\n            )\n          )\n       or coalesce(v_expected_step ->> 'approval_status', '') <>\n          coalesce(v_bill.approval_status, '') then\n      raise exception\n        '繳費單內容或簽核關卡已被其他操作更新，請重新載入後再處理：%',\n        v_bill_id\n        using errcode = '40001';\n    end if;\n\n    if v_bill.voided_at is not null\n       or v_bill.status in ('paid', 'void')\n       or v_bill.approval_status in ('completed', 'rejected', 'cancelled') then\n      raise exception '繳費單已結案，不能再執行簽核：%', v_bill_id\n        using errcode = '55000';\n    end if;\n\n    v_steps := v_bill.steps;\n    v_active_index := private.finance_income_active_step_index(v_steps);\n    if v_active_index is null then\n      raise exception '繳費單沒有待處理的簽核步驟：%', v_bill_id\n        using errcode = '55000';\n    end if;\n    v_step := v_steps -> v_active_index;\n    v_role_key := private.finance_income_step_role(v_step);\n\n    if not private.finance_bill_actor_can_act(\n      v_tenant_id,\n      v_bill,\n      v_active_index,\n      v_step,\n      v_actor.id,\n      v_actor.email,\n      v_actor.role\n    ) then\n      raise exception '您不是繳費單目前待簽步驟的有效處理人：%', v_bill_id\n        using errcode = '42501';\n    end if;\n\n    if v_action in ('approve', 'add_sign') then\n      v_step_updated := private.finance_income_append_step_action(\n        v_step,\n        v_actor.id,\n        v_actor.name,\n        case\n          when v_action = 'add_sign' then '簽核通過並加簽'\n          else '簽核通過'\n        end,\n        v_comment,\n        p_files\n      ) || pg_catalog.jsonb_build_object('a', 'approved');\n      v_steps := pg_catalog.jsonb_set(\n        v_steps,\n        array[v_active_index::text],\n        v_step_updated,\n        false\n      );\n\n      if v_action = 'add_sign' then\n        v_add_step := pg_catalog.jsonb_build_object(\n          'r', '加簽：' || v_target.name,\n          'rk', 'assigned_user',\n          'uid', v_target.id,\n          'n', '',\n          'a', '',\n          't', '',\n          'c', '加簽原因：' || v_comment,\n          'files', '[]'::jsonb,\n          'status', 'pending_countersign',\n          'requestedBy', v_actor.name\n        );\n        v_steps := pg_catalog.jsonb_insert(\n          v_steps,\n          array[v_active_index::text],\n          v_add_step,\n          true\n        );\n      end if;\n    elsif v_action = 'reject' then\n      v_step_updated := private.finance_income_append_step_action(\n        v_step,\n        v_actor.id,\n        v_actor.name,\n        '不通過',\n        v_comment,\n        p_files\n      ) || pg_catalog.jsonb_build_object('a', 'rejected');\n      v_steps := pg_catalog.jsonb_set(\n        v_steps,\n        array[v_active_index::text],\n        v_step_updated,\n        false\n      );\n    else\n      v_previous_index := v_active_index - 1;\n      while v_previous_index >= 0 loop\n        v_previous_step := v_steps -> v_previous_index;\n        exit when pg_catalog.lower(\n          coalesce(v_previous_step ->> 'autoSkip', 'false')\n        ) <> 'true';\n        v_previous_index := v_previous_index - 1;\n      end loop;\n\n      if v_previous_index < 0 then\n        raise exception '繳費單目前沒有可退回的上一關：%', v_bill_id\n          using errcode = '55000';\n      end if;\n\n      v_step_updated := private.finance_income_append_step_action(\n        v_step,\n        v_actor.id,\n        v_actor.name,\n        '退回上一關',\n        v_comment,\n        p_files\n      );\n      v_steps := pg_catalog.jsonb_set(\n        v_steps,\n        array[v_active_index::text],\n        v_step_updated,\n        false\n      );\n      v_previous_step := v_steps -> v_previous_index;\n\n      if private.finance_income_step_role(v_previous_step) =\n         'applicant_submit' then\n        v_revision_step := pg_catalog.jsonb_build_object(\n          'r', '申請人補件後重新送出',\n          'rk', 'applicant_revision',\n          'uid', v_bill.applicant_id,\n          'n', '',\n          'a', '',\n          't', '',\n          'c', '',\n          'files', '[]'::jsonb,\n          'status', 'pending_applicant_confirm'\n        );\n        v_revision_step := private.finance_income_append_step_action(\n          v_revision_step,\n          v_actor.id,\n          v_actor.name,\n          '退回上一關',\n          v_comment,\n          p_files\n        ) - 'n' - 't';\n        v_steps := pg_catalog.jsonb_insert(\n          v_steps,\n          array[v_active_index::text],\n          v_revision_step,\n          false\n        );\n      else\n        v_previous_step := private.finance_income_append_step_action(\n          v_previous_step - 'a' - 'n' - 't',\n          v_actor.id,\n          v_actor.name,\n          '退回上一關',\n          v_comment,\n          p_files\n        ) - 'a' - 'n' - 't';\n        v_steps := pg_catalog.jsonb_set(\n          v_steps,\n          array[v_previous_index::text],\n          v_previous_step,\n          false\n        );\n      end if;\n    end if;\n\n    if v_action = 'reject' then\n      v_status := pg_catalog.jsonb_build_object(\n        'approval_status', 'rejected',\n        'approval_step', v_active_index + 1\n      );\n    else\n      v_status := private.finance_income_status_from_steps(v_steps);\n    end if;\n\n    update public.bills bill_row\n       set steps = v_steps,\n           approval_status = v_status ->> 'approval_status',\n           approval_step = (v_status ->> 'approval_step')::int\n     where bill_row.tenant_id = v_tenant_id\n       and bill_row.data_environment = v_environment\n       and bill_row.id = v_bill_id;\n\n    v_result_rows := v_result_rows || pg_catalog.jsonb_build_array(\n      pg_catalog.jsonb_build_object(\n        'id', v_bill_id,\n        'no', v_bill.no,\n        'action', v_action,\n        'active_role_key', v_role_key,\n        'approval_status', v_status ->> 'approval_status',\n        'approval_step', (v_status ->> 'approval_step')::int\n      )\n    );\n  end loop;\n\n  v_result := pg_catalog.jsonb_build_object(\n    'ok', true,\n    'idempotent_replay', false,\n    'document_type', 'bill',\n    'action', v_action,\n    'idempotency_key', p_idempotency_key,\n    'count', pg_catalog.jsonb_array_length(v_result_rows),\n    'rows', v_result_rows\n  );\n  perform private.finance_income_finish_operation(\n    v_tenant_id,\n    v_environment,\n    'bill_action',\n    p_idempotency_key,\n    v_result\n  );\n  return v_result;\nend;\n$function$\n",
+      "source_md5": "b6f348ec65ffc8c951d963ab9fbafbe6",
+      "owner_name": "postgres",
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "schema_name": "private",
+      "name": "finance_bill_actor_can_act",
+      "signature": "private.finance_bill_actor_can_act(uuid,bills,integer,jsonb,text,text,text)",
+      "definition": "CREATE OR REPLACE FUNCTION private.finance_bill_actor_can_act(p_tenant_id uuid, p_bill bills, p_step_index integer, p_step jsonb, p_actor_finance_user_id text, p_actor_email text, p_actor_role text)\n RETURNS boolean\n LANGUAGE plpgsql\n STABLE\n SET search_path TO ''\nAS $function$\ndeclare\n  v_role_key text := private.finance_income_step_role(p_step);\n  v_explicit_user_id text := private.finance_income_step_user_id(p_step);\n  v_explicit_email text := pg_catalog.lower(coalesce(\n    nullif(p_step ->> 'email', ''),\n    nullif(p_step ->> 'user_email', ''),\n    nullif(p_step ->> 'approver_email', ''),\n    ''\n  ));\nbegin\n  if p_actor_finance_user_id is null or p_step_index is null then\n    return false;\n  end if;\n\n  if p_actor_finance_user_id = p_bill.applicant_id\n     and v_role_key not in (\n       'applicant_revision',\n       'applicant_confirm',\n       'applicant_invoice_delivery'\n     ) then\n    return false;\n  end if;\n\n  if v_explicit_user_id = p_actor_finance_user_id then\n    return true;\n  end if;\n\n  if v_explicit_email <> ''\n     and v_explicit_email = pg_catalog.lower(coalesce(p_actor_email, '')) then\n    return true;\n  end if;\n\n  if exists (\n    select 1\n    from public.approval_step_actor_snapshots snapshot_row\n    where snapshot_row.tenant_id = p_tenant_id\n      and snapshot_row.data_environment = p_bill.data_environment\n      and snapshot_row.record_type = 'bills'\n      and snapshot_row.record_id = p_bill.id\n      and snapshot_row.step_index = p_step_index + 1\n      and snapshot_row.resolved_user_id = p_actor_finance_user_id\n      and coalesce(snapshot_row.resolved_active, true)\n  ) then\n    return true;\n  end if;\n\n  if v_explicit_user_id <> '' and exists (\n    select 1\n    from public.approval_delegations delegation\n    where delegation.tenant_id = p_tenant_id\n      and delegation.delegator_finance_user_id = v_explicit_user_id\n      and delegation.delegatee_finance_user_id = p_actor_finance_user_id\n      and delegation.active is true\n      and delegation.starts_at <= pg_catalog.now()\n      and (delegation.ends_at is null or delegation.ends_at > pg_catalog.now())\n      and (delegation.role_key is null or delegation.role_key = v_role_key)\n      and (\n        coalesce(\n          delegation.scope_json ->> 'entity_id',\n          delegation.scope_json ->> 'entityId',\n          ''\n        ) = ''\n        or coalesce(\n          delegation.scope_json ->> 'entity_id',\n          delegation.scope_json ->> 'entityId'\n        ) = p_bill.entity_id\n      )\n      and (\n        coalesce(\n          delegation.scope_json ->> 'department_code',\n          delegation.scope_json ->> 'departmentCode',\n          ''\n        ) = ''\n        or coalesce(\n          delegation.scope_json ->> 'department_code',\n          delegation.scope_json ->> 'departmentCode'\n        ) = p_bill.department_code\n      )\n  ) then\n    return true;\n  end if;\n\n  -- An explicit actor is authoritative.  Never fall back to a broad role if\n  -- that actor does not match and has no effective delegation.\n  if v_explicit_user_id <> '' or v_explicit_email <> '' then\n    return false;\n  end if;\n\n  if v_role_key in (\n       'applicant_revision',\n       'applicant_confirm',\n       'applicant_invoice_delivery'\n     )\n     and p_bill.applicant_id = p_actor_finance_user_id then\n    return true;\n  end if;\n\n  if exists (\n    select 1\n    from public.employee_department_roles employee_role\n    where employee_role.tenant_id = p_tenant_id\n      and employee_role.finance_user_id = p_actor_finance_user_id\n      and employee_role.active is true\n      and employee_role.can_approve is true\n      and employee_role.effective_from <= current_date\n      and (\n        employee_role.effective_to is null\n        or employee_role.effective_to >= current_date\n      )\n      and employee_role.role_key = v_role_key\n      and (\n        employee_role.department_code is null\n        or employee_role.department_code = p_bill.department_code\n      )\n  ) then\n    return true;\n  end if;\n\n  return (\n    (v_role_key in ('accountant', 'accountant_final', 'accountant_invoice')\n      and p_actor_role = 'accountant')\n    or (v_role_key = 'cashier' and p_actor_role in ('cashier', 'ceo'))\n    or (v_role_key = 'ceo' and p_actor_role = 'ceo')\n    or (v_role_key = 'admin_director' and p_actor_role in ('admin_director', 'ceo'))\n    or (v_role_key = 'general_affairs' and p_actor_role = 'general_affairs')\n    or (v_role_key = 'hr' and p_actor_role = 'hr')\n  );\nend;\n$function$\n",
+      "source_md5": "29feeff99f3008850cbfc993d7c61b84",
+      "owner_name": "postgres",
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "schema_name": "private",
+      "name": "finance_income_active_step_index",
+      "signature": "private.finance_income_active_step_index(jsonb)",
+      "definition": "CREATE OR REPLACE FUNCTION private.finance_income_active_step_index(p_steps jsonb)\n RETURNS integer\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\n  select (step_rows.ordinality - 1)::int\n  from pg_catalog.jsonb_array_elements(coalesce(p_steps, '[]'::jsonb))\n    with ordinality as step_rows(step_value, ordinality)\n  where coalesce(step_rows.step_value ->> 'a', '') = ''\n  order by step_rows.ordinality\n  limit 1\n$function$\n",
+      "source_md5": "535aca0ecaab85e30581937f3f4a79a6",
+      "owner_name": "postgres",
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "schema_name": "private",
+      "name": "finance_income_append_step_action",
+      "signature": "private.finance_income_append_step_action(jsonb,text,text,text,text,jsonb)",
+      "definition": "CREATE OR REPLACE FUNCTION private.finance_income_append_step_action(p_step jsonb, p_actor_finance_user_id text, p_actor_name text, p_action_label text, p_comment text, p_files jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare\n  v_comment text := coalesce(pg_catalog.btrim(p_comment), '');\n  v_note text;\n  v_existing_comment text := coalesce(p_step ->> 'c', '');\n  v_action_log jsonb;\n  v_files jsonb;\nbegin\n  if pg_catalog.jsonb_typeof(coalesce(p_files, '[]'::jsonb)) <> 'array' then\n    raise exception '附件資料必須是 JSON 陣列'\n      using errcode = '22023';\n  end if;\n\n  if pg_catalog.jsonb_array_length(coalesce(p_files, '[]'::jsonb)) > 20 then\n    raise exception '單次簽核附件最多 20 個'\n      using errcode = '22023';\n  end if;\n\n  v_note := p_action_label || '（' || p_actor_name || '，' ||\n    pg_catalog.to_char(current_date, 'MM/DD') || '）' ||\n    case when v_comment <> '' then '：' || v_comment else '' end;\n\n  v_action_log :=\n    case\n      when pg_catalog.jsonb_typeof(p_step -> 'actionLog') = 'array'\n        then p_step -> 'actionLog'\n      else '[]'::jsonb\n    end\n    || pg_catalog.jsonb_build_array(\n      pg_catalog.jsonb_build_object(\n        'action', p_action_label,\n        'by', p_actor_name,\n        'byId', p_actor_finance_user_id,\n        'at', pg_catalog.now(),\n        'comment', v_comment\n      )\n    );\n\n  v_files :=\n    case\n      when pg_catalog.jsonb_typeof(p_step -> 'files') = 'array'\n        then p_step -> 'files'\n      else '[]'::jsonb\n    end\n    || coalesce(p_files, '[]'::jsonb);\n\n  return p_step || pg_catalog.jsonb_build_object(\n    'n', p_actor_name,\n    't', pg_catalog.to_char(current_date, 'MM/DD'),\n    'c', case\n      when v_existing_comment = '' then v_note\n      else v_existing_comment || pg_catalog.chr(10) || v_note\n    end,\n    'files', v_files,\n    'actionLog', v_action_log\n  );\nend;\n$function$\n",
+      "source_md5": "11542a71507994cef34c3accdc3b6f30",
+      "owner_name": "postgres",
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "schema_name": "private",
+      "name": "finance_income_status_from_steps",
+      "signature": "private.finance_income_status_from_steps(jsonb)",
+      "definition": "CREATE OR REPLACE FUNCTION private.finance_income_status_from_steps(p_steps jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\ndeclare\n  v_index int;\n  v_step jsonb;\nbegin\n  v_index := private.finance_income_active_step_index(p_steps);\n  if v_index is null then\n    return pg_catalog.jsonb_build_object(\n      'approval_status', 'completed',\n      'approval_step', greatest(\n        pg_catalog.jsonb_array_length(coalesce(p_steps, '[]'::jsonb)),\n        1\n      )\n    );\n  end if;\n\n  v_step := p_steps -> v_index;\n  return pg_catalog.jsonb_build_object(\n    'approval_status', coalesce(\n      nullif(v_step ->> 'status', ''),\n      'pending_approval'\n    ),\n    'approval_step', v_index + 1\n  );\nend;\n$function$\n",
+      "source_md5": "b4ec15882d68a2314fc62afb8302e05d",
+      "owner_name": "postgres",
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "schema_name": "private",
+      "name": "finance_income_step_role",
+      "signature": "private.finance_income_step_role(jsonb)",
+      "definition": "CREATE OR REPLACE FUNCTION private.finance_income_step_role(p_step jsonb)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\n  select pg_catalog.lower(coalesce(\n    nullif(p_step ->> 'rk', ''),\n    nullif(p_step ->> 'role_key', ''),\n    nullif(p_step ->> 'roleKey', ''),\n    nullif(p_step ->> 'role', ''),\n    nullif(p_step ->> 'key', ''),\n    ''\n  ))\n$function$\n",
+      "source_md5": "f5d7a6e00274ad0b76a9319e56fcf521",
+      "owner_name": "postgres",
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "schema_name": "private",
+      "name": "finance_income_step_user_id",
+      "signature": "private.finance_income_step_user_id(jsonb)",
+      "definition": "CREATE OR REPLACE FUNCTION private.finance_income_step_user_id(p_step jsonb)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\n  select coalesce(\n    nullif(p_step ->> 'uid', ''),\n    nullif(p_step ->> 'user_id', ''),\n    nullif(p_step ->> 'userId', ''),\n    nullif(p_step ->> 'finance_user_id', ''),\n    nullif(p_step ->> 'financeUserId', ''),\n    ''\n  )\n$function$\n",
+      "source_md5": "dd4fa1656940dc3973a4c7beafb1eeff",
+      "owner_name": "postgres",
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "schema_name": "storage",
+      "name": "foldername",
+      "signature": "storage.foldername(text)",
+      "definition": "CREATE OR REPLACE FUNCTION storage.foldername(name text)\n RETURNS text[]\n LANGUAGE plpgsql\n IMMUTABLE\nAS $function$\nDECLARE\n    _parts text[];\nBEGIN\n    -- Split on \"/\" to get path segments\n    SELECT string_to_array(name, '/') INTO _parts;\n    -- Return everything except the last segment\n    RETURN _parts[1 : array_length(_parts,1) - 1];\nEND\n$function$\n",
+      "source_md5": "d74c9ac376970bf5b265ecb58e855df9",
+      "owner_name": "supabase_storage_admin",
+      "acl": [
+        {
+          "grantee": "PUBLIC",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "supabase_storage_admin",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    },
+    {
+      "schema_name": "finance_attachment_private",
+      "name": "parent_links_v1",
+      "signature": "finance_attachment_private.parent_links_v1(uuid,text,text,text,text)",
+      "definition": "CREATE OR REPLACE FUNCTION finance_attachment_private.parent_links_v1(p_attachment_id uuid, p_record_type text, p_record_no text, p_storage_path text, p_environment text)\n RETURNS TABLE(parent_key text)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n select l.parent_key from private.finance_legacy_attachment_links_v1 l\n where l.attachment_id=p_attachment_id and l.tenant_id=public.current_tenant_id()\n  and l.record_type=p_record_type and l.original_record_no=p_record_no\n  and l.storage_path=p_storage_path and l.data_environment=p_environment\n  and nullif(public.current_finance_user_id(),'') is not null\n  and nullif(public.finance_current_verified_google_email_v2(),'') is not null\n$function$\n",
+      "source_md5": "5fbafda67ee3f17d8236773d537980af",
+      "owner_name": "postgres",
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "schema_name": "public",
+      "name": "approval_delegations",
+      "columns": [
+        {
+          "name": "id",
+          "type": "text",
+          "default": "('apdel_'::text || replace((gen_random_uuid())::text, '-'::text, ''::text))",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "tenant_id",
+          "type": "uuid",
+          "default": "current_tenant_id()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "delegator_finance_user_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "delegatee_finance_user_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "role_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "scope_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "starts_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "ends_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "constraints": [
+        {
+          "name": "approval_delegations_delegatee_finance_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (delegatee_finance_user_id) REFERENCES finance_users(id) ON UPDATE CASCADE ON DELETE CASCADE"
+        },
+        {
+          "name": "approval_delegations_delegator_finance_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (delegator_finance_user_id) REFERENCES finance_users(id) ON UPDATE CASCADE ON DELETE CASCADE"
+        },
+        {
+          "name": "approval_delegations_effective_range_check",
+          "type": "c",
+          "definition": "CHECK (((ends_at IS NULL) OR (ends_at > starts_at)))"
+        },
+        {
+          "name": "approval_delegations_no_self_check",
+          "type": "c",
+          "definition": "CHECK ((delegator_finance_user_id <> delegatee_finance_user_id))"
+        },
+        {
+          "name": "approval_delegations_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "approval_delegations_tenant_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_approval_delegations_active ON public.approval_delegations USING btree (tenant_id, delegator_finance_user_id, role_key, starts_at, ends_at) WHERE (active = true)",
+        "CREATE INDEX approval_delegations_delegator_lookup_idx ON public.approval_delegations USING btree (delegator_finance_user_id)",
+        "CREATE INDEX approval_delegations_delegatee_lookup_idx ON public.approval_delegations USING btree (delegatee_finance_user_id)"
+      ]
+    },
+    {
+      "schema_name": "public",
+      "name": "employee_department_roles",
+      "columns": [
+        {
+          "name": "id",
+          "type": "text",
+          "default": "('edr_'::text || replace((gen_random_uuid())::text, '-'::text, ''::text))",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "tenant_id",
+          "type": "uuid",
+          "default": "current_tenant_id()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "finance_user_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "department_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "department_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "position_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "role_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "role_type",
+          "type": "text",
+          "default": "'member'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "relation_type",
+          "type": "text",
+          "default": "'primary'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_primary",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "effective_from",
+          "type": "date",
+          "default": "CURRENT_DATE",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "effective_to",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "direct_supervisor_finance_user_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "is_department_manager",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_department_director",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "can_approve",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approval_delegate_finance_user_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "permissions_override",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "metadata",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "constraints": [
+        {
+          "name": "employee_department_roles_approval_delegate_finance_user_i_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (approval_delegate_finance_user_id) REFERENCES finance_users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+        },
+        {
+          "name": "employee_department_roles_department_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (department_id) REFERENCES departments(id) ON UPDATE CASCADE ON DELETE SET NULL"
+        },
+        {
+          "name": "employee_department_roles_direct_supervisor_finance_user_i_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (direct_supervisor_finance_user_id) REFERENCES finance_users(id) ON UPDATE CASCADE ON DELETE SET NULL"
+        },
+        {
+          "name": "employee_department_roles_effective_range_check",
+          "type": "c",
+          "definition": "CHECK (((effective_to IS NULL) OR (effective_to >= effective_from)))"
+        },
+        {
+          "name": "employee_department_roles_finance_user_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (finance_user_id) REFERENCES finance_users(id) ON UPDATE CASCADE ON DELETE CASCADE"
+        },
+        {
+          "name": "employee_department_roles_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "employee_department_roles_position_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (position_id) REFERENCES positions(id) ON UPDATE CASCADE ON DELETE SET NULL"
+        },
+        {
+          "name": "employee_department_roles_tenant_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+        },
+        {
+          "name": "trg_finance_configured_org_supervisor_cycle",
+          "type": "t",
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "trg_finance_org_assignment_signer_guard_delete",
+          "type": "t",
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "trg_finance_org_assignment_signer_guard_insert",
+          "type": "t",
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "trg_finance_org_assignment_signer_guard_update",
+          "type": "t",
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_employee_department_roles_can_approve_role ON public.employee_department_roles USING btree (tenant_id, role_key, can_approve) WHERE (active = true)",
+        "CREATE INDEX idx_employee_department_roles_delegate ON public.employee_department_roles USING btree (tenant_id, approval_delegate_finance_user_id) WHERE (active = true)",
+        "CREATE UNIQUE INDEX idx_employee_department_roles_one_primary_active ON public.employee_department_roles USING btree (tenant_id, finance_user_id) WHERE ((active = true) AND (is_primary = true))",
+        "CREATE INDEX idx_employee_department_roles_department ON public.employee_department_roles USING btree (tenant_id, department_code, role_key) WHERE (active = true)",
+        "CREATE INDEX idx_employee_department_roles_supervisor ON public.employee_department_roles USING btree (tenant_id, direct_supervisor_finance_user_id) WHERE (active = true)"
+      ]
+    },
+    {
+      "schema_name": "public",
+      "name": "departments",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "company_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "branch_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "parent_department_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "department_type",
+          "type": "text",
+          "default": "'administration'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'active'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "constraints": [
+        {
+          "name": "departments_branch_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (branch_id) REFERENCES branches(id)"
+        },
+        {
+          "name": "departments_company_id_code_key",
+          "type": "u",
+          "definition": "UNIQUE (company_id, code)"
+        },
+        {
+          "name": "departments_company_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "departments_department_type_check",
+          "type": "c",
+          "definition": "CHECK ((department_type = ANY (ARRAY['administration'::text, 'hr'::text, 'finance'::text, 'homecare'::text, 'daycare'::text, 'operations'::text, 'support'::text])))"
+        },
+        {
+          "name": "departments_parent_department_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (parent_department_id) REFERENCES departments(id)"
+        },
+        {
+          "name": "departments_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "departments_status_check",
+          "type": "c",
+          "definition": "CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_departments_company_branch ON public.departments USING btree (company_id, branch_id)"
+      ]
+    },
+    {
+      "schema_name": "public",
+      "name": "positions",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "company_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "department_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "level",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "employment_type",
+          "type": "text",
+          "default": "'full_time'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_manager",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'active'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "constraints": [
+        {
+          "name": "positions_company_id_code_key",
+          "type": "u",
+          "definition": "UNIQUE (company_id, code)"
+        },
+        {
+          "name": "positions_company_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "positions_department_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (department_id) REFERENCES departments(id)"
+        },
+        {
+          "name": "positions_employment_type_check",
+          "type": "c",
+          "definition": "CHECK ((employment_type = ANY (ARRAY['full_time'::text, 'part_time'::text, 'contract'::text, 'intern'::text, 'temporary'::text])))"
+        },
+        {
+          "name": "positions_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "positions_status_check",
+          "type": "c",
+          "definition": "CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_positions_company_department ON public.positions USING btree (company_id, department_id)"
+      ]
+    },
+    {
+      "schema_name": "public",
+      "name": "branches",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "company_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "parent_branch_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "branch_type",
+          "type": "text",
+          "default": "'headquarters'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "address",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "geo_location",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'active'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "settings",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "constraints": [
+        {
+          "name": "branches_branch_type_check",
+          "type": "c",
+          "definition": "CHECK ((branch_type = ANY (ARRAY['headquarters'::text, 'branch'::text, 'site'::text, 'homecare_station'::text, 'daycare_center'::text])))"
+        },
+        {
+          "name": "branches_company_id_code_key",
+          "type": "u",
+          "definition": "UNIQUE (company_id, code)"
+        },
+        {
+          "name": "branches_company_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "branches_parent_branch_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (parent_branch_id) REFERENCES branches(id)"
+        },
+        {
+          "name": "branches_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "branches_status_check",
+          "type": "c",
+          "definition": "CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text, 'closed'::text])))"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_branches_company_id ON public.branches USING btree (company_id)"
+      ]
+    }
+  ]
+}

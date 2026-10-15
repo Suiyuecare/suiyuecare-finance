@@ -565,3 +565,13 @@ supabase/.temp
 !scripts/finance_bounded_global_logout_fingerprint.sql
 !scripts/finance_bounded_global_logout_canary.sql
 !scripts/test_bounded_global_logout_release_batch.mjs
+
+# Bill approval bulk transaction and executable protected-release rehearsal.
+!scripts/check_bill_approval_bulk_20261015.cjs
+!scripts/test_bill_approval_bulk_release_batch.mjs
+!scripts/finance_bill_approval_bulk_preflight.sql
+!scripts/finance_bill_approval_bulk_postflight.sql
+!scripts/finance_bill_approval_bulk_fingerprint.sql
+!scripts/finance_bill_approval_bulk_canary.sql
+!scripts/fixtures/finance_bill_approval_fixture_20261015.cjs
+!scripts/fixtures/finance_bill_approval_live_catalog_20261015.json

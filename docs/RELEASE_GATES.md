@@ -241,3 +241,29 @@ pass; this required proof is enforced by CI before build or database mutation.
 These checks establish synthetic behavior and release integrity. Google OAuth
 and real employee operation remain distinct production acceptance evidence.
 No missing payroll or revenue is estimated or backfilled by the migration.
+
+### Bill approval bulk transaction (2026-10-15)
+
+`database_bill_approval_bulk_20261015` accepts only migration `20261015060930`
+(`finance_bill_approval_bulk_v1.sql`) and its SHA-256 seal in the release guard.
+The phase requires every reviewed predecessor and verifies the exact original
+`finance_bill_act_active_step_v2` source, owner, grants, settings and history
+trigger before applying. It performs a rollback rehearsal with schema fingerprints
+and ledger comparison, then installs the migration and ledger entry atomically
+with a sealed postflight. A read-only canary verifies the installed contract and
+denies anonymous signing; it does not sign employee documents or claim live
+end-to-end approval latency.
+
+`pnpm test:bill-approval-bulk` checks business-result parity, one statement and
+one group refresh per batch, security, idempotency and rollback. PR and release
+CI require native PostgreSQL via `FINANCE_BILL_APPROVAL_NATIVE_REQUIRED=1` and
+the private loopback-only `FINANCE_NATIVE_PG_CONFIG`; the PGlite fallback cannot
+satisfy native timing/concurrency acceptance. The release-batch test executes
+the actual rehearsal and apply SQL with fictional records and checks that failed
+postflight rolls back DDL and ledger together.
+
+This is a database-only phase: before/after production alias and manifest must
+match, and frontend promotion is excluded. Future frontend releases must verify
+this migration and its read-only postflight/canary again. Applying this release
+does not replay a previous user's approval; the original approver must act on
+the existing batch after deployment.
