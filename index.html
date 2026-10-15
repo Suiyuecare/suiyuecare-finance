@@ -5485,15 +5485,32 @@ function financeRuntimeRecordType(recordType,record){
   if(record&&record.requestType)return'expense_requests';
   return '';
 }
+function financeApplicantTaskBelongsToCurrentUser(r,s){
+  if(!S.user||!s)return false;
+  var expense=approvalRecordSourceTable(r)==='expense_requests';
+  if(stepHasExplicitAssignee(s)){
+    if(expense&&s.uid){
+      // Expense RPC treats UID as authoritative and rejects a conflicting
+      // email, even if that email belongs to the original applicant.
+      var assignee=userById(s.uid),email=String(s.email||'').trim().toLowerCase();
+      if(email&&(!assignee||String(assignee.email||'').trim().toLowerCase()!==email))return false;
+      if(String(s.uid)!==String(S.user.id||'')&&email===String(S.user.email||'').trim().toLowerCase())return false;
+    }
+    // Expense revision resubmission additionally requires the original
+    // applicant. A reassignment cannot bypass that server-side rule.
+    if(expense&&s.rk==='applicant_revision'&&!requestIsMine(r))return false;
+    return stepAssignedToCurrentUser(s);
+  }
+  return requestIsMine(r)||invoiceIsMine(r)||billIsMine(r);
+}
 function financeCurrentUserCanActStep(r,s){
   if(!S.user||!s)return false;
   if(flowIsTerminal(r)||requestIsRejected(r))return false;
   if(s.rk==='applicant_submit')return false;
   if(currentUserCanTakeAccountingStep(s))return true;
+  if(['applicant_revision','applicant_confirm'].indexOf(s.rk)>-1)return financeApplicantTaskBelongsToCurrentUser(r,s);
   if(stepAssignedToCurrentUser(s))return true;
   if(s.rk==='assigned_user')return false;
-  if(s.rk==='applicant_revision')return requestIsMine(r)||invoiceIsMine(r)||billIsMine(r);
-  if(s.rk==='applicant_confirm')return requestIsMine(r)||invoiceIsMine(r)||billIsMine(r);
   if(s.rk==='applicant_invoice_delivery')return requestIsMine(r)||invoiceIsMine(r)||billIsMine(r);
   if(['procurement_review','procurement_payment','procurement_receipt'].indexOf(s.rk)>-1)return !stepHasExplicitAssignee(s)&&currentUserRoleMatchesStep('general_affairs');
   if(s.rk==='cashier')return !stepHasExplicitAssignee(s)&&(currentUserRoleMatchesStep('cashier')||currentUserRoleMatchesStep('ceo'));
@@ -14280,11 +14297,10 @@ function canActReceipt(i){
 function stepBelongsToUser(s,owner){
   if(!S.user||!s)return false;
   if(currentUserCanTakeAccountingStep(s))return true;
+  if(['applicant_revision','applicant_confirm'].indexOf(s.rk)>-1)return financeApplicantTaskBelongsToCurrentUser(owner,s);
   if(stepAssignedToCurrentUser(s))return true;
   if(s.rk==='assigned_user')return false;
-  if(['applicant_submit','applicant_revision','applicant_confirm','applicant_invoice_delivery'].indexOf(s.rk)>=0){
-    return requestIsMine(owner)||invoiceIsMine(owner);
-  }
+  if(['applicant_submit','applicant_invoice_delivery'].indexOf(s.rk)>-1)return requestIsMine(owner)||invoiceIsMine(owner);
   if(['procurement_review','procurement_payment','procurement_receipt'].indexOf(s.rk)>-1)return !stepHasExplicitAssignee(s)&&currentUserRoleMatchesStep('general_affairs');
   if(s.rk==='cashier')return !stepHasExplicitAssignee(s)&&(currentUserRoleMatchesStep('cashier')||currentUserRoleMatchesStep('ceo'));
   if(stepHasExplicitAssignee(s)&&stepExplicitAssigneeIsResolvable(s))return false;

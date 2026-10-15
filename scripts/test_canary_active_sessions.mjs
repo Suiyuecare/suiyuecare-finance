@@ -150,6 +150,15 @@ try {
       identity_scope_preserved:true,live_latency_proven:false}
   });
   assert.equal(domains.get(billApprovalBulkContract.result.canary),billApprovalBulkContract.domain);
+  const verifiedSessionTasksContract=Object.freeze({
+    filename:'finance_approval_tasks_verified_session_canary.sql',
+    marker:'approval_tasks_verified_session_canary_result',
+    domain:'approval_tasks_verified_session',
+    result:{canary:'readonly_approval_tasks_verified_session_v1',ok:true,rolled_back:true,
+      staff_identity_used:false,business_mutation_performed:false}
+  });
+  assert.equal(domains.get(verifiedSessionTasksContract.result.canary),verifiedSessionTasksContract.domain);
+  let verifiedSessionTasksVerified=0;
   let billApprovalBulkVerified=0;
   let invoiceBulkVerified=0;
   let verified = 0,boundedVerified=0;
@@ -253,6 +262,34 @@ try {
       billApprovalBulkVerified++;
       pass('bill approval bulk actual final SQL has its exact reviewed marker/domain and rejects altered flags, wrong canary, wrong marker and duplicate results');
     }
+    if(name===verifiedSessionTasksContract.filename){
+      const rows=actualResults.flatMap(result=>result.rows||[]);
+      assert.equal(rows.length,1,'verified-session tasks final SQL must emit exactly one result row');
+      assert.equal(rows[0].marker,'FINANCE_APPROVAL_TASKS_VERIFIED_SESSION_CANARY_ROLLED_BACK');
+      assert.deepEqual(rows[0][verifiedSessionTasksContract.marker],verifiedSessionTasksContract.result,
+        'actual task SQL must preserve rollback and must not claim a staff identity or business action');
+      assert.match(source,/begin isolation level repeatable read read only;/);
+      assert.match(source,/auth\.uid\(\) is not null then raise exception/);
+      assert.match(source,/public\.finance_approval_tasks_for_current_user\('pending'\)/);
+      assert.match(source,/public\.finance_approval_tasks_for_current_user\(null\)/);
+      assert.doesNotMatch(source,/set_config\s*\(\s*'request\.jwt\.claims'|(?:insert\s+into|update|delete\s+from)\s+(?:auth\.|public\.)/i,
+        'new task canary must not impersonate an employee or mutate identity/business rows');
+      const negative=join(outputDir,'verified-session-tasks-negative.json');
+      const verifyNegative=payload=>{
+        fs.writeFileSync(negative,JSON.stringify(payload));
+        assert.throws(()=>guard.verifyReportsCanary(negative,verifiedSessionTasksContract.domain));
+      };
+      for(const flag of ['ok','rolled_back','staff_identity_used','business_mutation_performed']){
+        verifyNegative([{[verifiedSessionTasksContract.marker]:{...verifiedSessionTasksContract.result,[flag]:!verifiedSessionTasksContract.result[flag]}}]);
+        const missing={...verifiedSessionTasksContract.result};delete missing[flag];
+        verifyNegative([{[verifiedSessionTasksContract.marker]:missing}]);
+      }
+      verifyNegative([{[verifiedSessionTasksContract.marker]:{...verifiedSessionTasksContract.result,canary:'wrong-canary'}}]);
+      verifyNegative([{wrong_marker:verifiedSessionTasksContract.result}]);
+      verifyNegative([{[verifiedSessionTasksContract.marker]:verifiedSessionTasksContract.result},{[verifiedSessionTasksContract.marker]:verifiedSessionTasksContract.result}]);
+      verifiedSessionTasksVerified++;
+      pass('verified-session tasks actual final SQL preserves exact anonymous/read-only/rollback flags and rejects changed or missing flags, wrong canary/marker and duplicates');
+    }
     if(name==='finance_bounded_global_logout_canary.sql'){
       const rows=actualResults.flatMap(result=>result.rows||[]);
       assert.equal(rows.length,1,'bounded logout canary must emit exactly one complete marker');
@@ -266,9 +303,10 @@ try {
   assert.equal(billHistoryVerified,1,'the reviewed bill batch file must be explicitly covered exactly once');
   assert.equal(invoiceBulkVerified,1,'the reviewed invoice bulk file must be explicitly covered exactly once');
   assert.equal(billApprovalBulkVerified,1,'the reviewed bill approval bulk file must be explicitly covered exactly once');
-  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-boundedVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
+  assert.equal(verifiedSessionTasksVerified,1,'the reviewed verified-session tasks file must be explicitly covered exactly once');
+  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-boundedVerified-verifiedSessionTasksVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
   assert.equal(boundedVerified,1,'bounded logout exact final SQL is covered once');
-  assert.equal(verified,44,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout and bill approval bulk results are covered');
+  assert.equal(verified,45,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk and verified-session tasks results are covered');
   // Versioned canaries deliberately retain their old filenames for archived
   // phases, so they are outside the generic *canary.sql discovery above.
   const attachmentSuccessor=fs.readFileSync(new URL('finance_audit_security_canary_20261015.sql',scripts),'utf8');
@@ -291,6 +329,6 @@ try {
   rejectAttachmentResult([{wrong_marker:attachmentExpected}]);
   rejectAttachmentResult([...attachmentRows,...attachmentRows]);
   pass('versioned bill-attachment audit successor final SQL retains exact authority/rollback flags and rejects altered flags, wrong canary/marker and duplicates');
-  pass('all 39 original final SQL results and reviewed identity-once, bill batch, invoice bulk, bounded logout and bill approval bulk results satisfy their protected release parsers');
+  pass('all 39 original final SQL results and reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk and verified-session tasks results satisfy their protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);

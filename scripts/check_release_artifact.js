@@ -109,6 +109,16 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+    'supabase/migrations/20261015172658_finance_approval_tasks_verified_session_v1.sql',
+    'scripts/check_taipei2_google_identity_repair_20261015.cjs',
+    'scripts/check_taipei2_applicant_confirm_browser_20261015.cjs',
+    'scripts/fixtures/finance_expense_read_actor_authorities_20261015.json',
+    'scripts/test_approval_tasks_verified_session_release_batch.mjs',
+    'scripts/finance_approval_tasks_verified_session_preflight.sql',
+    'scripts/finance_approval_tasks_verified_session_postflight.sql',
+    'scripts/finance_approval_tasks_verified_session_fingerprint.sql',
+    'scripts/finance_approval_tasks_verified_session_canary.sql',
+
     'supabase/migrations/20261014123427_finance_invoice_batch_bulk_insert_v2.sql',
     'scripts/check_income_rpc_http_20261014.cjs',
     'scripts/check_submission_acceptance_manifest.cjs',

@@ -175,6 +175,7 @@ jobs:
           FINANCE_HISTORY_NATIVE_REQUIRED=1 pnpm test:personal-history-identity-once
           FINANCE_INVOICE_NATIVE_REQUIRED=1 pnpm test:invoice-batch-bulk
           FINANCE_BILL_APPROVAL_NATIVE_REQUIRED=1 pnpm test:bill-approval-bulk
+          pnpm test:taipei2-applicant-confirm-browser
           pnpm test:income-rpc-http
           pnpm test:income-recovery-storage-browser
           pnpm test:org-chart-browser
@@ -202,6 +203,7 @@ jobs:
           path: |
             /tmp/finance-invoice-batch-bulk-20261014
             /tmp/finance-bill-approval-bulk-20261015
+            /tmp/finance-taipei2-applicant-confirm-browser-20261015
             /tmp/finance-income-rpc-http-20261014
             /tmp/finance-income-recovery-storage-browser
             /tmp/finance-submission-acceptance-20261014
