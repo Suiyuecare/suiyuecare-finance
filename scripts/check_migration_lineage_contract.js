@@ -344,6 +344,14 @@ for(const[version,sha256]of Object.entries(BILL_APPROVAL_BULK_SOURCE_SHA256)){
   check('bill approval bulk source matches reviewed SHA-256: '+version,
     !!file&&/^[0-9a-f]{64}$/.test(sha256)&&crypto.createHash('sha256').update(read('supabase/migrations/'+file)).digest('hex')===sha256);
   if(file)require('./finance_production_release_guard').assertCliAtomicMigration(read('supabase/migrations/'+file),file);
+  if(file){
+    const definitions=[...read('supabase/migrations/'+file).matchAll(/CREATE OR REPLACE FUNCTION ([^\n]+)[\s\S]*?AS \$function\$([\s\S]*?)\$function\$/g)];
+    check('bill approval atomic successor changes exactly the two reviewed function bodies',definitions.length===2
+      &&definitions[0][1].startsWith('public.finance_bill_act_active_step_v2(')
+      &&definitions[1][1]==='private.finance_claim_attachment_metadata_v2()'
+      &&crypto.createHash('md5').update(definitions[0][2]).digest('hex')==='435f663305bce08a8fe7a05fe4747d66'
+      &&crypto.createHash('md5').update(definitions[1][2]).digest('hex')==='630e313afc532a88be3690bb87b93251');
+  }
 }
 for(const[version,sha256]of Object.entries(INVOICE_BATCH_APPROVAL_SOURCE_SHA256)){
  const filename=migrations.find(name=>name.startsWith(version+'_'));

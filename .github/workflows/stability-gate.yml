@@ -201,6 +201,7 @@ jobs:
           name: finance-invoice-batch-reliability-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             /tmp/finance-invoice-batch-bulk-20261014
+            /tmp/finance-bill-approval-bulk-20261015
             /tmp/finance-income-rpc-http-20261014
             /tmp/finance-income-recovery-storage-browser
             /tmp/finance-submission-acceptance-20261014

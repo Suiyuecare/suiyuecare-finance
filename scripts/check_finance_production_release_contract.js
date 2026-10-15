@@ -239,7 +239,9 @@ try {
   assert.match(appliedSql,/90d74f07ec5ac883060dec34b6cdadfe/);
   const frontendGate=path.join(attachmentClaimTemp,'frontend-gate.sql');
   guard.preparePhaseQuery(scripts('finance_production_db_postflight.sql'),frontendGate,'frontend_compat','none');
-  assert.match(fs.readFileSync(frontendGate,'utf8'),/90d74f07ec5ac883060dec34b6cdadfe[\s\S]+FINANCE_ATTACHMENT_CLAIM_POSTFLIGHT_OK/);
+  const frontendAttachmentGate=fs.readFileSync(frontendGate,'utf8');
+  assert.match(frontendAttachmentGate,/630e313afc532a88be3690bb87b93251[\s\S]+460d1de56a73764c103c61e38f6904034a1253064dcd652b22c43a6b568c1c59[\s\S]+FINANCE_ATTACHMENT_CLAIM_POSTFLIGHT_OK/);
+  assert.doesNotMatch(frontendAttachmentGate,/90d74f07ec5ac883060dec34b6cdadfe|f6b0a07ae4ee42f178da9e09fa46aee85aa902cc98936175389449b06680bbe3/);
   const priorGate=path.join(attachmentClaimTemp,'prior-gate.sql');
   guard.preparePhaseQuery(scripts('finance_production_db_postflight.sql'),priorGate,
     guard.RELEASE_PHASE_DATABASE_EXTERNAL_LABOR,guard.EXTERNAL_LABOR_MIGRATIONS.join(','));
@@ -1685,7 +1687,9 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   guard.AR_READ_SCOPE_POSTFLIGHT_FILES.forEach(name=>fs.writeFileSync(path.join(temp,name),'\\set ON_ERROR_STOP on\nselect 21;\n'));
   guard.AUDIT_REMEDIATION_POSTFLIGHT_FILES.forEach((name,i)=>fs.writeFileSync(path.join(temp,name),'\\set ON_ERROR_STOP on\nselect '+(16+i)+';\n'));
   for(const name of ['finance_demo_password_retirement_postflight.sql','finance_audit_controls_20260927_postflight.sql','finance_payroll_accrual_v1_postflight.sql','finance_hr_contractor_postflight.sql','finance_portal_session_logout_postflight.sql','finance_external_labor_postflight.sql'])fs.writeFileSync(path.join(temp,name),'\\set ON_ERROR_STOP on\nselect 27;\n');
-  fs.writeFileSync(path.join(temp,'finance_attachment_claim_postflight.sql'),'\\set ON_ERROR_STOP on\nselect 28;\n');
+  const attachmentPredecessorSha='f6b0a07ae4ee42f178da9e09fa46aee85aa902cc98936175389449b06680bbe3';
+  const attachmentFixture='\\set ON_ERROR_STOP on\nselect 28;\n-- '+attachmentPredecessorSha+'\n';
+  fs.writeFileSync(path.join(temp,'finance_attachment_claim_postflight.sql'),attachmentFixture);
   guard.preparePhaseQuery(phasePostflightSource, compatGateOutput, 'frontend_compat', 'none');
   assert.match(fs.readFileSync(compatGateOutput,'utf8'),/select 10;[\s\S]+select 11;[\s\S]+select 12;[\s\S]+select 31;[\s\S]+select 14;[\s\S]+select 15;[\s\S]+select 16;[\s\S]+select 17;[\s\S]+select 33;[\s\S]+select 29;[\s\S]+select 20;[\s\S]+select 21;[\s\S]+select 22;[\s\S]+select 23;[\s\S]+select 30;/,'Current frontend requires successor history ACL and personal permission postflights');
   assert.doesNotMatch(fs.readFileSync(compatGateOutput,'utf8'),/select (8|13|18|19);/,'Current frontend cannot retain retired grouped-history grant contracts');
@@ -1693,6 +1697,13 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   guard.preparePhaseQuery(phasePostflightSource,historicalClaimOutput,guard.RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM,guard.ATTACHMENT_CLAIM_MIGRATIONS.join(','));
   assert.match(fs.readFileSync(historicalClaimOutput,'utf8'),/select 8;[\s\S]+select 13;[\s\S]+select 18;[\s\S]+select 19;[\s\S]+select 28;/,'Historical attachment-claim phase keeps all immutable grouped-history postflights');
   assert.doesNotMatch(fs.readFileSync(historicalClaimOutput,'utf8'),/select (29|30|31|32|33);/);
+  assert.match(fs.readFileSync(historicalClaimOutput,'utf8'),/90d74f07ec5ac883060dec34b6cdadfe/);
+  assert.match(fs.readFileSync(historicalClaimOutput,'utf8'),new RegExp(attachmentPredecessorSha));
+  for(const [name,mutation] of [['missing',attachmentFixture.replace(attachmentPredecessorSha,'unreviewed')],['duplicate',attachmentFixture+'-- '+attachmentPredecessorSha+'\n']]){
+    fs.writeFileSync(path.join(temp,'finance_attachment_claim_postflight.sql'),mutation);
+    assert.throws(()=>guard.preparePhaseQuery(phasePostflightSource,path.join(temp,'invalid-successor-'+name+'.sql'),'frontend_compat','none'),/predecessor hash exactly once/);
+  }
+  fs.writeFileSync(path.join(temp,'finance_attachment_claim_postflight.sql'),attachmentFixture);
   const hrBridgeGateOutput=path.join(temp,'hr-bridge-gate-rendered.sql');
   guard.preparePhaseQuery(phasePostflightSource,hrBridgeGateOutput,guard.RELEASE_PHASE_DATABASE_HR_BRIDGE,guard.HR_BRIDGE_MIGRATIONS.join(','));
   assert.match(fs.readFileSync(hrBridgeGateOutput,'utf8'),/select 20;[\s\S]+select 21;[\s\S]+select 22;/,'HR phase includes both AR and private HR postflights');
@@ -2182,7 +2193,7 @@ try {
   assert.match(fs.readFileSync(rehearsal,'utf8'),/savepoint finance_release_migration;[\s\S]+insert into supabase_migrations\.schema_migrations[\s\S]+rollback to savepoint finance_release_migration;[\s\S]+bill approval bulk rollback rehearsal changed schema fingerprints/);
   const apply=path.join(billApprovalBulkTemp,'apply.sql');
   guard.prepareAuditBatchApply(directory,apply,billApprovalBulkVersion,ledger,scripts('finance_bill_approval_bulk_postflight.sql'),baseline,billApprovalBulkPhase);
-  assert.match(fs.readFileSync(apply,'utf8'),/^begin;[\s\S]+finance_bill_act_active_step_v2[\s\S]+insert into supabase_migrations\.schema_migrations[\s\S]+commit;/);
+  assert.match(fs.readFileSync(apply,'utf8'),/^begin;[\s\S]+finance_bill_act_active_step_v2[\s\S]+CREATE OR REPLACE FUNCTION private\.finance_claim_attachment_metadata_v2[\s\S]+insert into supabase_migrations\.schema_migrations[\s\S]+commit;/);
   const canaryPath=path.join(billApprovalBulkTemp,'canary.json');
   const result={canary:'readonly_bill_approval_bulk_v1',ok:true,rolled_back:true,identity_scope_preserved:true,live_latency_proven:false};
   const writeCanary=value=>fs.writeFileSync(canaryPath,JSON.stringify({rows:[{bill_approval_bulk_canary_result:value}]}));
@@ -2200,9 +2211,19 @@ const billApprovalEnd=databaseJob.indexOf('\n          elif ',billApprovalStart+
 assert(billApprovalStart>=0&&billApprovalEnd>billApprovalStart);
 assert.match(databaseJob.slice(billApprovalStart,billApprovalEnd),/finance_bill_approval_bulk_preflight\.sql[\s\S]+prepare-bill-approval-bulk-rehearsal[\s\S]+finance_bill_approval_bulk_fingerprint\.sql[\s\S]+finance_bill_approval_bulk_canary\.sql[\s\S]+finance_bill_approval_bulk_postflight\.sql[\s\S]+prepare-bill-approval-bulk-apply/);
 for(const file of ['.github/workflows/stability-gate.yml','.github/workflows/finance-production-release.yml'])assert(fs.readFileSync(path.join(root,file),'utf8').includes('FINANCE_BILL_APPROVAL_NATIVE_REQUIRED=1 pnpm test:bill-approval-bulk'));
+for(const file of ['.github/workflows/stability-gate.yml','.github/workflows/finance-production-release.yml'])assert.match(fs.readFileSync(path.join(root,file),'utf8'),/if: always\(\)[\s\S]+\/tmp\/finance-bill-approval-bulk-20261015/,'failed shared-attachment timing evidence must be retained');
 assert(fs.readFileSync(path.join(root,'package.json'),'utf8').includes('&& pnpm test:bill-approval-bulk'));
-for(const filename of ['finance_bill_approval_bulk_preflight.sql', 'finance_bill_approval_bulk_postflight.sql', 'finance_bill_approval_bulk_fingerprint.sql', 'finance_bill_approval_bulk_canary.sql', 'check_bill_approval_bulk_20261015.cjs', 'test_bill_approval_bulk_release_batch.mjs', 'fixtures/finance_bill_approval_fixture_20261015.cjs', 'fixtures/finance_bill_approval_live_catalog_20261015.json']) {
+for(const filename of ['finance_bill_approval_bulk_preflight.sql', 'finance_bill_approval_bulk_postflight.sql', 'finance_bill_approval_bulk_fingerprint.sql', 'finance_bill_approval_bulk_canary.sql', 'check_bill_approval_bulk_20261015.cjs', 'test_bill_approval_bulk_release_batch.mjs', 'fixtures/finance_bill_approval_fixture_20261015.cjs', 'fixtures/finance_bill_approval_live_catalog_20261015.json', 'finance_audit_security_canary_20261015.sql']) {
   assert(workflow.includes('scripts/'+filename),'bill approval release tool is sealed: '+filename);
   for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'scripts/"+filename+"'"));
 }
+const priorAttachmentAudit=fs.readFileSync(path.join(root,'scripts/finance_audit_security_canary_20261001.sql'),'utf8');
+const successorAttachmentAudit=fs.readFileSync(path.join(root,'scripts/finance_audit_security_canary_20261015.sql'),'utf8');
+assert.equal(successorAttachmentAudit,priorAttachmentAudit
+  .replace('Versioned audit-security canary for attachment-claim trigger revision.','Versioned audit-security canary for bill shared-attachment query-plan revision.')
+  .replace('90d74f07ec5ac883060dec34b6cdadfe','630e313afc532a88be3690bb87b93251'),
+  'successor audit canary retains every previous identity, RLS, attachment and grant assertion');
+assert.equal((workflow.match(/if test "\$RELEASE_PHASE" = "frontend_compat"; then\n\s+AUDIT_SECURITY_CANARY="scripts\/finance_audit_security_canary_20261015\.sql"/g)||[]).length,2,
+  'frontend before/after gates use successor helper audit contract; older phases retain old canaries');
+for(const part of ['preflight','postflight','fingerprint','canary'])assert(fs.readFileSync(path.join(root,'scripts/finance_bill_approval_bulk_'+part+'.sql'),'utf8').includes('private.finance_claim_attachment_metadata_v2()'),part+' must include the attachment helper in two-function release proof');
 console.log('PASS bill approval bulk fixed phase/source/prerequisites/rehearsal/DB-only contracts');

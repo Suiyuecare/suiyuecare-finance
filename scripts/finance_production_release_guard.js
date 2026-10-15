@@ -148,7 +148,7 @@ const BILL_BATCH_BULK_MIGRATIONS=Object.freeze(['20261008100000']);
 const BILL_BATCH_BULK_SOURCE_SHA256=Object.freeze({'20261008100000':'e32c37f775e7f08d42b36205802dc5ffbece17d5274f41567db265b45fb25a7a'});
 const RELEASE_PHASE_DATABASE_BILL_BATCH_BULK='database_bill_batch_bulk_20261008';
 const BILL_APPROVAL_BULK_MIGRATIONS=Object.freeze(['20261015060930']);
-const BILL_APPROVAL_BULK_SOURCE_SHA256=Object.freeze({'20261015060930':'d570ffb77f08a842cecd8e13e49f3bc5c3b8967116eab9c123a22dc71b50fa19'});
+const BILL_APPROVAL_BULK_SOURCE_SHA256=Object.freeze({'20261015060930':'508f8f557db6cd9b57e86ba029505038565424b6658afa59af8471b708209272'});
 const RELEASE_PHASE_DATABASE_BILL_APPROVAL_BULK='database_bill_approval_bulk_20261015';
 const INVOICE_BATCH_BULK_MIGRATIONS=Object.freeze(['20261014123427']);
 const INVOICE_BATCH_BULK_SOURCE_SHA256=Object.freeze({'20261014123427':'8409b6e25f8bf021c0247f5c7fe69f8e6bba24ffc7715dfebc69a55c899ff71e'});
@@ -1264,6 +1264,15 @@ function frontendCompatPostflightChain(postflightPath,profilePostflightPath){
    ['finance_approval_history_summary_postflight.sql','finance_approval_history_summary_permission_postflight.sql']
  ];
  let chain=attachmentClaimPostflightChain(postflightPath,profilePostflightPath);
+ // Only the latest frontend successor follows the reviewed bill-attachment
+ // query-plan repair. Historical database phase gates retain their exact source.
+ for(const [oldHash,newHash] of [
+   ['90d74f07ec5ac883060dec34b6cdadfe','630e313afc532a88be3690bb87b93251'],
+   ['f6b0a07ae4ee42f178da9e09fa46aee85aa902cc98936175389449b06680bbe3','460d1de56a73764c103c61e38f6904034a1253064dcd652b22c43a6b568c1c59']
+ ]){
+   if(chain.split(oldHash).length!==2)fail('Frontend compatibility must replace the reviewed bill attachment predecessor hash exactly once');
+   chain=chain.replace(oldHash,newHash);
+ }
  for(const [oldName,successorName] of replacements){
    const oldSource=stripPsqlDirectives(fs.readFileSync(path.join(directory,oldName),'utf8'),oldName).trimEnd();
    const successor=stripPsqlDirectives(fs.readFileSync(path.join(directory,successorName),'utf8'),successorName).trimEnd();

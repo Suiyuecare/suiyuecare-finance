@@ -230,6 +230,7 @@ jobs:
           name: finance-invoice-batch-reliability-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             /tmp/finance-invoice-batch-bulk-20261014
+            /tmp/finance-bill-approval-bulk-20261015
             /tmp/finance-income-rpc-http-20261014
             /tmp/finance-income-recovery-storage-browser
             /tmp/finance-submission-acceptance-20261014
@@ -458,6 +459,7 @@ jobs:
           cp scripts/check_finance_personal_bill_batch_history.cjs scripts/check_personal_bill_batch_browser_20261013.cjs "$BUNDLE/release-tools/scripts/"
           cp scripts/fixtures/finance_history_identity_authorities_20261012.json "$BUNDLE/release-tools/scripts/fixtures/"
           cp scripts/finance_audit_security_canary_20261001.sql "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_audit_security_canary_20261015.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_invoice_select_initplan_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_invoice_select_initplan_canary.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_ar_verified_accounting_scope_postflight.sql "$BUNDLE/release-tools/scripts/"
@@ -1694,6 +1696,9 @@ jobs:
             if test "$RELEASE_PHASE" = "database_attachment_claim_20261001" || test "$RELEASE_PHASE" = "frontend_compat"; then
               AUDIT_SECURITY_CANARY="scripts/finance_audit_security_canary_20261001.sql"
             fi
+            if test "$RELEASE_PHASE" = "frontend_compat"; then
+              AUDIT_SECURITY_CANARY="scripts/finance_audit_security_canary_20261015.sql"
+            fi
             (cd "$TOOLS" && supabase db query --linked --file "$AUDIT_SECURITY_CANARY" --output json) > "$RUNNER_TEMP/audit-security-canary.json"
             node "$GUARD" verify-reports-canary --domain audit_security --input "$RUNNER_TEMP/audit-security-canary.json"
           fi
@@ -2002,6 +2007,9 @@ jobs:
             AUDIT_SECURITY_CANARY="scripts/finance_audit_security_canary.sql"
             if test "$RELEASE_PHASE" = "database_attachment_claim_20261001" || test "$RELEASE_PHASE" = "frontend_compat"; then
               AUDIT_SECURITY_CANARY="scripts/finance_audit_security_canary_20261001.sql"
+            fi
+            if test "$RELEASE_PHASE" = "frontend_compat"; then
+              AUDIT_SECURITY_CANARY="scripts/finance_audit_security_canary_20261015.sql"
             fi
             (cd "$TOOLS" && supabase db query --linked --file "$AUDIT_SECURITY_CANARY" --output json) > "$RUNNER_TEMP/promotion-audit-security-canary.json"
             node "$GUARD" verify-reports-canary --domain audit_security --input "$RUNNER_TEMP/promotion-audit-security-canary.json"

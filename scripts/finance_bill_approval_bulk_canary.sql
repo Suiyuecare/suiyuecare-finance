@@ -22,6 +22,24 @@ begin
 end;
 $bill_approval_guard$;
 
+do $bill_attachment_guard$
+declare p pg_proc%rowtype;
+begin
+  select * into p from pg_proc where oid=to_regprocedure('private.finance_claim_attachment_metadata_v2()');
+  if p.oid is null or md5(p.prosrc) is distinct from '630e313afc532a88be3690bb87b93251'
+     or pg_get_userbyid(p.proowner)<>'postgres' or not p.prosecdef
+     or p.proconfig is distinct from array['search_path=""']::text[]
+     or has_function_privilege('anon',p.oid,'EXECUTE')
+     or has_function_privilege('authenticated',p.oid,'EXECUTE')
+     or not has_function_privilege('service_role',p.oid,'EXECUTE')
+     or exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a where a.grantee=0 and a.privilege_type='EXECUTE')
+     or not exists(select 1 from pg_trigger where tgrelid='public.bills'::regclass
+       and tgname='trg_claim_bill_attachments_v2' and tgenabled='O' and tgtype=21
+       and tgfoid='private.finance_claim_attachment_metadata_v2()'::regprocedure)
+  then raise exception 'Bill attachment authority/function/trigger drifted; review before release' using errcode='55000';end if;
+end;
+$bill_attachment_guard$;
+
 do $anonymous$
 declare denied boolean:=false;
 begin

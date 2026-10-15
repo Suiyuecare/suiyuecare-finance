@@ -269,6 +269,28 @@ try {
   assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-boundedVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
   assert.equal(boundedVerified,1,'bounded logout exact final SQL is covered once');
   assert.equal(verified,44,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout and bill approval bulk results are covered');
+  // Versioned canaries deliberately retain their old filenames for archived
+  // phases, so they are outside the generic *canary.sql discovery above.
+  const attachmentSuccessor=fs.readFileSync(new URL('finance_audit_security_canary_20261015.sql',scripts),'utf8');
+  const attachmentSelect=attachmentSuccessor.match(/(?:^|\n)(select\s+(?:pg_catalog\.)?jsonb_build_object\([\s\S]*?\)\s+as\s+\w+\s*;)\s*$/i)?.[1];
+  assert.ok(attachmentSelect,'versioned attachment audit successor has an explicit final result');
+  const attachmentResults=await outputDb.exec(attachmentSelect);
+  const attachmentRows=attachmentResults.flatMap(result=>result.rows||[]);
+  const attachmentExpected={canary:'readonly_audit_security_v1',ok:true,rolled_back:true,identity_scope_preserved:true,attachment_scope_preserved:true};
+  assert.deepEqual(attachmentRows,[{audit_security_canary_result:attachmentExpected}]);
+  const attachmentFile=join(outputDir,'attachment-successor.json');
+  fs.writeFileSync(attachmentFile,JSON.stringify(attachmentResults));
+  guard.verifyReportsCanary(attachmentFile,'audit_security');
+  const rejectAttachmentResult=rows=>{
+    fs.writeFileSync(attachmentFile,JSON.stringify(rows));
+    assert.throws(()=>guard.verifyReportsCanary(attachmentFile,'audit_security'));
+  };
+  for(const flag of ['ok','rolled_back','identity_scope_preserved','attachment_scope_preserved'])
+    rejectAttachmentResult([{audit_security_canary_result:{...attachmentExpected,[flag]:false}}]);
+  rejectAttachmentResult([{audit_security_canary_result:{...attachmentExpected,canary:'wrong-canary'}}]);
+  rejectAttachmentResult([{wrong_marker:attachmentExpected}]);
+  rejectAttachmentResult([...attachmentRows,...attachmentRows]);
+  pass('versioned bill-attachment audit successor final SQL retains exact authority/rollback flags and rejects altered flags, wrong canary/marker and duplicates');
   pass('all 39 original final SQL results and reviewed identity-once, bill batch, invoice bulk, bounded logout and bill approval bulk results satisfy their protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);

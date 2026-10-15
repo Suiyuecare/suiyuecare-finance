@@ -325,6 +325,7 @@ function releaseSourceFiles() {
   'scripts/finance_attachment_claim_canary.sql',
   'scripts/finance_attachment_claim_fingerprint.sql',
   'scripts/finance_audit_security_canary_20261001.sql',
+  'scripts/finance_audit_security_canary_20261015.sql',
   'scripts/check_attachment_claim_migration_contract.js',
   'supabase/migrations/20261002035707_finance_human_accounting_float_residue_20261002.sql',
   'scripts/finance_human_accounting_float_preflight.sql',

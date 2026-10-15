@@ -14,7 +14,9 @@ with selected_functions as (
     pg_catalog.to_regprocedure('private.finance_income_begin_operation(uuid,text,text,text,text,text)'),
     pg_catalog.to_regprocedure('private.finance_income_next_number(uuid,text,text,text)'),
     pg_catalog.to_regprocedure('private.finance_income_finish_operation(uuid,text,text,text,jsonb)'),
-    pg_catalog.to_regprocedure('private.finance_history_projection_source_trigger_v1()')
+    pg_catalog.to_regprocedure('private.finance_history_projection_source_trigger_v1()'),
+    pg_catalog.to_regprocedure('private.finance_claim_attachment_metadata_v2()'),
+    pg_catalog.to_regprocedure('public.can_read_bill(public.bills)')
   )
 ), selected_triggers as (
   select t.tgname as signature, t.tgenabled::text as owner_name,

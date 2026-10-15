@@ -20,6 +20,26 @@ let checks=0,serial=0;
 const eq=(a,b,message)=>{assert.deepEqual(a,b,message);checks++;};
 const rejects=async(fn,re)=>{await assert.rejects(fn,re);checks++;};
 const identifier=s=>'"'+s.replaceAll('"','""')+'"';
+const approvalSignature='public.finance_bill_act_active_step_v2(text[],text,text,text,jsonb,text,jsonb,text)';
+const attachmentSignature='private.finance_claim_attachment_metadata_v2()';
+const originalSources={
+ [approvalSignature]:'b6f348ec65ffc8c951d963ab9fbafbe6',
+ [attachmentSignature]:'90d74f07ec5ac883060dec34b6cdadfe'
+};
+const installedSources={
+ [approvalSignature]:'435f663305bce08a8fe7a05fe4747d66',
+ [attachmentSignature]:'630e313afc532a88be3690bb87b93251'
+};
+const helperDriftMutations=[
+ 'grant execute on function '+attachmentSignature+' to anon',
+ 'grant execute on function '+attachmentSignature+' to authenticated',
+ 'grant execute on function '+attachmentSignature+' to public',
+ 'revoke execute on function '+attachmentSignature+' from service_role',
+ 'alter function '+attachmentSignature+' owner to service_role',
+ 'alter function '+attachmentSignature+' security invoker',
+ 'alter function '+attachmentSignature+" set search_path to public",
+ 'create or replace function '+attachmentSignature+" returns trigger language plpgsql security definer set search_path to '' as $$begin return new; end$$"
+];
 try {
  await fixture.setup(db);
  // Include existing fictional bills, operation receipts, snapshots and history in rollback proof.
@@ -36,7 +56,20 @@ try {
   for(const t of [...base.catalog.tables,...extra.tables])result[t.schema_name+'.'+t.name]=(await db.query('select md5(coalesce(string_agg(to_jsonb(r)::text,E\'\\n\' order by to_jsonb(r)::text),\'\')) hash from '+identifier(t.schema_name)+'.'+identifier(t.name)+' r')).rows[0].hash;
   return result;
  };
- const original=await fingerprint(),originalData=await dataFingerprint();
+ const functionState=async()=>Object.fromEntries((await db.query(`select requested.signature,
+   md5(prosrc) source_md5,pg_get_userbyid(proowner) owner_name,prosecdef security_definer,
+   proconfig settings,proacl::text acl from unnest($1::text[]) requested(signature)
+   join pg_proc on oid=to_regprocedure(requested.signature) order by requested.signature`,
+   [[approvalSignature,attachmentSignature]])).rows.map(({signature,...metadata})=>[signature,metadata]));
+ const original=await fingerprint(),originalData=await dataFingerprint(),originalFunctions=await functionState();
+ eq(Object.fromEntries(Object.entries(originalFunctions).map(([signature,state])=>[signature,state.source_md5])),originalSources,
+   'fixture must contain both exact production predecessor functions');
+ for(const mutation of helperDriftMutations){
+  await db.exec('begin;'+mutation+';');
+  assert.notEqual(await fingerprint(),original,'rehearsal fingerprint includes attachment helper DDL and privileges');checks++;
+  await rejects(async()=>db.exec(await readGate('preflight')),/drifted/);await db.exec('rollback');
+  eq(await functionState(),originalFunctions,'preflight rejects attachment source/owner/settings/ACL drift without changing either function');
+ }
  const render=async kind=>{
   const file=path.join(dir,kind+'-'+serial+++'.sql');
   if(kind==='rehearsal')guard.prepareBillApprovalBulkRehearsal(migrationDir,file,version,ledger,gate('fingerprint'),gate('canary'),gate('preflight'),gate('postflight'),baseline);
@@ -47,6 +80,7 @@ try {
  await db.exec(await readGate('preflight'));
  await db.exec(await render('rehearsal'));
  eq(await fingerprint(),original,'rehearsal restores exact functions, grants and triggers');
+ eq(await functionState(),originalFunctions,'rehearsal restores both signing and attachment helper sources, owners, settings and ACLs');
  eq(await dataFingerprint(),originalData,'rehearsal never alters documents, receipts, identities, history or notifications');
  eq((await db.query('select count(*)::int n from supabase_migrations.schema_migrations where version=$1',[version])).rows[0].n,0);
  const apply=await render('apply');
@@ -55,13 +89,17 @@ try {
  const failed=apply.replace("select 'FINANCE_BILL_APPROVAL_BULK_POSTFLIGHT_OK' as marker;",()=>"do $$begin raise exception 'synthetic_postflight_failure';end $$;");
  assert.notEqual(failed,apply);checks++;
  await rejects(()=>db.exec(failed),/synthetic_postflight_failure/);await db.exec('rollback');
- eq(await fingerprint(),original,'failed postflight restores old signing function');
+ eq(await fingerprint(),original,'failed postflight restores signing and attachment helper metadata');
+ eq(await functionState(),originalFunctions,'failed apply restores both previous function implementations and privileges');
  eq(await dataFingerprint(),originalData,'failed apply preserves existing synthetic records');
  eq((await db.query('select count(*)::int n from supabase_migrations.schema_migrations where version=$1',[version])).rows[0].n,0);
  await db.exec(apply);
  eq((await db.query('select count(*)::int n from supabase_migrations.schema_migrations where version=$1',[version])).rows[0].n,1);
  eq(await dataFingerprint(),originalData,'successful schema-only release cannot approve or modify an existing bill');
  assert.notEqual(await fingerprint(),original,'actual approval implementation changes');checks++;
+ eq(await functionState(),Object.fromEntries(Object.entries(originalFunctions).map(([signature,state])=>[
+   signature,{...state,source_md5:installedSources[signature]}
+ ])),'atomic apply changes only the reviewed source of both functions and preserves authority');
  await db.exec(await readGate('postflight'));
  const canary=await db.exec(await readGate('canary')),result=path.join(dir,'canary.json');await fs.writeFile(result,JSON.stringify(canary));
  eq(guard.verifyReportsCanary(result,'bill_approval_bulk'),true,'actual SQL marker verifies against protected guard');
@@ -70,12 +108,13 @@ try {
  await rejects(()=>db.exec(apply),/migration ledger changed/);await db.exec('rollback');
  const installed=await fingerprint();
  for(const mutation of [
-  'grant execute on function public.finance_bill_act_active_step_v2(text[],text,text,text,jsonb,text,jsonb,text) to anon',
-  'alter table public.bills disable trigger finance_history_projection_update_v1'
+  'grant execute on function '+approvalSignature+' to anon',
+  'alter table public.bills disable trigger finance_history_projection_update_v1',
+  ...helperDriftMutations
  ]){
   await db.exec('begin;'+mutation+';');
   await rejects(async()=>db.exec(await readGate('postflight')),/drifted/);await db.exec('rollback');
   eq(await fingerprint(),installed,'authority/history drift probes are rolled back');
  }
- console.log(JSON.stringify({verified:true,checks,phase,version,engine:'PGlite',atomicLedger:true,rollbackProven:true,productionApprovalExecuted:false}));
+ console.log(JSON.stringify({verified:true,checks,phase,version,engine:'PGlite',atomicLedger:true,rollbackProven:true,twoFunctionRollbackProven:true,attachmentAuthorityDriftRejected:true,productionApprovalExecuted:false}));
 } finally {await db.close();await fs.rm(dir,{recursive:true,force:true});}

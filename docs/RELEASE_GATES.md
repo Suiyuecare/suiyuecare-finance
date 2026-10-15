@@ -247,8 +247,11 @@ No missing payroll or revenue is estimated or backfilled by the migration.
 `database_bill_approval_bulk_20261015` accepts only migration `20261015060930`
 (`finance_bill_approval_bulk_v1.sql`) and its SHA-256 seal in the release guard.
 The phase requires every reviewed predecessor and verifies the exact original
-`finance_bill_act_active_step_v2` source, owner, grants, settings and history
-trigger before applying. It performs a rollback rehearsal with schema fingerprints
+`finance_bill_act_active_step_v2` and `finance_claim_attachment_metadata_v2`
+sources, owners, grants, settings and trigger bindings before applying. The
+attachment change bounds the bill-origin permission lookup to its primary key;
+it preserves the same uploader, tenant, source scope and readable-origin checks.
+It performs a rollback rehearsal with both function definitions and ACLs in the schema fingerprints
 and ledger comparison, then installs the migration and ledger entry atomically
 with a sealed postflight. A read-only canary verifies the installed contract and
 denies anonymous signing; it does not sign employee documents or claim live
@@ -260,10 +263,17 @@ CI require native PostgreSQL via `FINANCE_BILL_APPROVAL_NATIVE_REQUIRED=1` and
 the private loopback-only `FINANCE_NATIVE_PG_CONFIG`; the PGlite fallback cannot
 satisfy native timing/concurrency acceptance. The release-batch test executes
 the actual rehearsal and apply SQL with fictional records and checks that failed
-postflight rolls back DDL and ledger together.
+postflight rolls back both functions and ledger together. Mutated attachment
+source, owner, security mode, search path and grants must fail preflight and
+postflight. The full shared-attachment path must pass the same measured capacity
+budget under cold generic plans as well as normal plans; a rerun that happens to
+pass is not a substitute for this proof. CI retains this evidence on failure.
 
 This is a database-only phase: before/after production alias and manifest must
 match, and frontend promotion is excluded. Future frontend releases must verify
-this migration and its read-only postflight/canary again. Applying this release
+this migration and its read-only postflight/canary again. Their common attachment
+postflight and versioned audit-security canary check the exact successor helper
+hashes; earlier database phases continue to check their original hashes and all
+existing authority checks remain in place. Applying this release
 does not replay a previous user's approval; the original approver must act on
 the existing batch after deployment.
