@@ -65,6 +65,7 @@ function setup(){
   c.INVS.forEach(row=>row.verified=true);
   vm.createContext(c);
   vm.runInContext([
+    source('financeBatchNumberParts'),source('financeBatchNumberHtml'),
     source('invoiceBatchFallbackKey'),source('invoiceGroupKey'),
     'var APPROVAL_INVOICE_MODAL_GROUP=null;',
     source('approvalInvoiceModalRows'),source('invoiceGroupRows'),source('invoiceBatchActionRows'),

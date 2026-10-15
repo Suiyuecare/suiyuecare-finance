@@ -6,6 +6,7 @@
 
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 | --- | --- | --- | --- | --- |
+| 整批表單短編號 | financeBatchNumberParts / Label / Html / SearchQuery | index.html；正式 batch_id 不改號 | BILLB → B2609-003、INVB → I2609-003；TEST 前綴保留；超過 999 不截短；僅 2000–2099 正式格式縮寫，舊格式原樣 | Chromium／WebKit 1440／390、完整編號複製、待辦／出納／歷史與明細、完整後端短號搜尋 |
 | 簽核清單欄寬 | approval-worklist-table / approval-worklist-scroll | finance-core.css；renderApprList / renderApprDraftList | 桌機和平板固定欄寬、長單號欄內換行；空間不足只捲動表格；手機沿用 mobile-ux-engine 卡片 | 長批次繳費／發票單號、金額完整、待辦／出納／歷史、Chromium／WebKit 多尺寸 |
 | 人員可見範圍 | visiblePersonnelUsers() | index.html 既有資料載入與 canAccessPage('users') | 沿用已授權目錄；不擴張後端讀取範圍 | 真 index 人資／唯讀／撤權瀏覽器檢查 |
 | 人員變更 | openEditU / toggleU / deleteUserAccount | index.html reliable RPC、member.role.manage 與原離職交接 guard | UI callback 只觸發一次；新人須新增後交接 | personnel-save 與 workspace 實際 handler 驗收 |
@@ -24,6 +25,12 @@
 驗收使用隔離的虛構身份與單據，測試允許／禁止角色、系統帳號、執行長、長姓名／信箱、空結果、錯誤／停權、切換身份、輸入競速、快速返回與捲動保留。正式帳號 Google 登入與真人實機試用不由模擬測試冒充。
 
 人員與單據搜尋含私人資訊，條件只存在本次已授權的記憶體畫面，不寫入 URL、analytics 或跨身分持久快取。
+
+## 整批表單短編號（2026-10-15）
+
+短編號僅為已授權資料的顯示別名，不能作為資料庫、簽核、附件、下載或稽核識別碼。`invoiceGroupNo`／`billGroupNo` 保持完整號。清單與明細使用同一 formatter；明細另顯示可換行的完整編號。短號按鈕沿用 `copyExpenseInvoiceNumber` 的完整號複製能力，具明確 accessible name、44px 高度及 live status；失敗顯示可手動複製的完整值。
+
+本機搜尋同時索引短號與原號。我的申請／歷史的分頁搜尋只將完全符合短號格式的查詢，依目前 tenant 轉成完整號交由既有 scoped RPC；輸入及 runtime query 保持使用者所填內容。不能在已載入的第一頁自行過濾，也不改環境、權限或來源分組。一般文字、金額、完整號及舊批次格式維持既有搜尋。
 
 ## 通知讀取與歷史（2026-10-13）
 

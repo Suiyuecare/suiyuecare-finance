@@ -200,6 +200,7 @@ jobs:
           pnpm test:income-recovery-storage-browser
           FINANCE_HISTORY_NATIVE_REQUIRED=1 pnpm test:personal-bill-batch-history
           pnpm test:personal-bill-batch-history-browser
+          pnpm test:short-batch-numbers-browser
           pnpm test:bill-form-attachments-browser
           pnpm test:applicant-history-withdraw-browser
           pnpm test:finance-oauth-account-guard-browser

@@ -1223,6 +1223,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--br);box-
 .appr-select input{width:14px;height:14px;margin:0;accent-color:#d97706}
 .approval-form-inline{display:flex;align-items:center;gap:6px;min-width:0}
 .approval-form-number{font-size:12px;font-weight:850;color:#334155;white-space:nowrap}
+.finance-batch-reference{display:inline-block;max-width:100%;min-width:0;vertical-align:middle}
+.finance-batch-number{display:inline-flex;align-items:center;justify-content:center;min-height:44px;max-width:100%;padding:4px 8px;border:1px solid transparent;border-radius:var(--radius-control,10px);background:transparent;color:var(--brtxt);font:inherit;font-weight:750;font-variant-numeric:tabular-nums;white-space:nowrap;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:4px}
+.finance-batch-number:hover{background:var(--brxxl);border-color:var(--br)}
+.finance-batch-number:focus-visible{outline:2px solid var(--br);outline-offset:2px}
+.finance-batch-number:active{background:var(--warm)}
+.finance-batch-number:disabled{cursor:default;opacity:.65}
+.finance-batch-full-number{display:block;max-width:100%;font-size:12px;font-weight:400;line-height:1.5;color:#6e6259;white-space:normal;overflow-wrap:anywhere}
+.finance-batch-reference .finance-batch-copy-error{position:static;display:block;width:auto;height:auto;max-width:100%;margin:0;clip:auto;white-space:normal;overflow-wrap:anywhere;color:var(--danger,#8a1010);font-size:12px;font-weight:400}
 .approval-form-badges{display:flex;align-items:center;gap:4px;min-width:0;flex-wrap:wrap}
 @media(min-width:761px){
   .approval-table.compact td.appr-col-formNo{text-align:center!important}

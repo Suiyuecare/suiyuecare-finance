@@ -28,7 +28,7 @@ function fixture(){
   showApprD:r=>c.opened.push({kind:'req',raw:r}),showBillApprD:r=>c.opened.push({kind:'bill',raw:r,rows:c.billGroupRows(r)}),showInvApprD:r=>c.opened.push({kind:'inv',raw:r,rows:c.invoiceGroupRows(r)}),showReceiptTaskD:r=>c.opened.push({kind:'recv',raw:r,rows:c.invoiceGroupRows(r)}),
   invoiceBatchFallbackKey:i=>i.legacy||'',billCreatedBucket:b=>b.legacy||'',syncApprovalWaitTimer(){},approvalShortDate:x=>String(x||'—').slice(0,10),draftTime:x=>x,
   approvalTableHeaderHtml:()=>'<thead><tr><th>選取</th><th>簽核日期</th></tr></thead>',approvalPagerHtml:(total,page,pages)=>'<footer>'+[total,page,pages].join('/')+'</footer>'});
- vm.createContext(c);vm.runInContext([fn('withOperationTimeout'),fn('updateApprovalSearchClear'),fn('renderConfirmedBillSubmission'),history,fn('remoteRowKey'),fn('mergeRemoteRowsByKey'),fn('financeReadSourceSnapshot'),fn('invoiceGroupKey'),fn('invoiceGroupRows'),fn('billGroupKey'),fn('billGroupRows'),fn('openApprovalFullItem'),handler('openApprovalItem'),fn('renderApprovalHistorySummaries')].join('\n'),c);
+ vm.createContext(c);vm.runInContext([fn('financeBatchNumberParts'),fn('financeBatchNumberHtml'),fn('financeBatchNumberSearchQuery'),fn('withOperationTimeout'),fn('updateApprovalSearchClear'),fn('renderConfirmedBillSubmission'),history,fn('remoteRowKey'),fn('mergeRemoteRowsByKey'),fn('financeReadSourceSnapshot'),fn('invoiceGroupKey'),fn('invoiceGroupRows'),fn('billGroupKey'),fn('billGroupRows'),fn('openApprovalFullItem'),handler('openApprovalItem'),fn('renderApprovalHistorySummaries')].join('\n'),c);
  c.node=node;c.respond=async(n,data,error)=>{c.calls[n].resolve(error?{error}:{data});await flush();};
  return c;
 }
