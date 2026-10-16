@@ -68,3 +68,12 @@ Canonical owner 是 `requestApplicantWithdrawButtonHtml`／`incomeApplicantWithd
 查看明細立即呈現已授權資料；批次抽單確認在背景進行，只更新抽單區，不阻擋閱讀、不重刷明細或改變捲動。關閉、換帳號或撤權後的舊回應不啟用操作。沿用原有危險操作確認、idempotency、送件不明回查與完成後重新讀取，保留原單、附件及稽核。
 
 驗收包含所有既有支出種類及電子勞報、本人／非本人／撤權、單張及 4／95 張批次、部分批次、舊版本、資料讀取失敗、背景延遲、已收付／已開票／已邀請限制，以及桌機與手機的實際點擊。
+
+
+## 覆核手續費資訊（2026-10-16）
+
+`requestBankFeeReviewHtml` 是一般明細表及發票分組明細的共同手續費摘要，固定顯示負擔方與已存公司手續費，包含 0 元。以正式 `fee_bearer`、`bank_fee_amount` 為準；缺值顯示未填／待確認，不以目前費率改寫舊單。原人事試算與已存值不一致時顯示核對提示，不自動補加費用。電子勞報顯示由獨立付款流程確認；預支已撥款後提示最後核銷不重複加計。
+
+沿用 `finance-core.css` 品牌、字體 token；手續費放在品項表外，不成為可編輯本金列。原申請負擔選項統一為「己方支出／對方支出」，覆核摘要不新增無法保存的下拉框。依據：`private.finance_finalize_accounting_patch_v1` 鎖定已存手續費、`expenseApprovalTransactionPatch` 既有可修改範圍。新申請及總務明確重新填寫匯款資料才依法人費率計算；其他讀取、保存、簽核與入帳保留既定費用。
+
+驗收：`check_bank_fee_review.cjs`、`check_fee_review_browser.cjs`，涵蓋人事與一般發票、己方／對方、0 元／多筆費用、缺值／矛盾資料、兩種詳情入口、桌機與手機及 Chromium／WebKit；使用虛構資料，不執行正式付款或入帳。

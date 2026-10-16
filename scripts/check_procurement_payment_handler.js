@@ -47,11 +47,11 @@ function requestFixture() {
     form_payload:{accountingLines:[],accountingLinePolicy:'preserved-policy',applicantProfile:{id:'applicant'},purchaseEstimate:{stage:'purchase_request',createdAt:'2026-08-05T00:00:00Z',requestRows:[],requestAmount:0},requestPurpose:'unchanged',purchaseRows:[]}};
 }
 const today = () => new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Taipei',month:'2-digit',day:'2-digit'}).format(new Date());
-async function runHandler(db, old, actor='audit', alter=null, bypassUi=false) {
+async function runHandler(db, old, actor='audit', alter=null, bypassUi=false, paymentInfo=null) {
   await db.exec('set session authorization postgres; delete from public.expense_requests');
   await db.query('insert into public.expense_requests select * from jsonb_populate_record(null::public.expense_requests,$1::jsonb)',[JSON.stringify(old)]);
   const storage=new Map(),session=new Map();
-  const state={REQS:[{id:old.id,no:old.no,type:old.type,amt:old.amount,estimatedAmt:old.estimated_amount,steps:clone(old.steps),status:old.status,step:old.step,formPayload:clone(old.form_payload)}],S:{user:{id:actor,n:actor==='audit'?'Audit':'Accountant'},demoLogin:false},window:{},Date,alerts:[],writes:0,error:null,storage};
+  const state={REQS:[{id:old.id,no:old.no,type:old.type,eid:old.entity_id,dc:old.department_code,amt:old.amount,estimatedAmt:old.estimated_amount,bankType:old.bank_type,bankName:old.bank_name,bankAcc:old.bank_account,feeBearer:old.fee_bearer,bankFeeAmount:old.bank_fee_amount,steps:clone(old.steps),status:old.status,step:old.step,formPayload:clone(old.form_payload)}],S:{user:{id:actor,n:actor==='audit'?'Audit':'Accountant'},demoLogin:false},window:{},Date,alerts:[],writes:0,error:null,storage};
   Object.assign(state,{
     hasSupabase:()=>true, cloneSettingValue:clone, normalizeFiles:clone, todayShort:today,
     expenseSubmissionOperationIdentity:()=>JSON.stringify([tenant,'production',actor]),
@@ -62,9 +62,9 @@ async function runHandler(db, old, actor='audit', alter=null, bypassUi=false) {
     newlyUploadedAttachmentResults:files=>files.filter(file=>file.__uploadCreatedThisAttempt),cleanupApprovalFilesAfterDefiniteFailure:async()=>{},
     expenseApplicantRevisionRpcErrorIsAmbiguous:error=>/fetch|network|timeout/i.test(String(error&&error.message||'')),
     canActRequest:r=>bypassUi || r.steps.find(s=>!s.a).uid===actor,
-    collectProcurementPaymentInfo:()=>({amount:4250,payee:'Anonymous supplier',bankType:'transfer',bankName:'Fixture bank',bankBranch:'Fixture branch',bankNo:'TEST-ONLY',expectedPayDate:new Date().toISOString().slice(0,10),feeBearer:'company',summary:'Anonymous account'}),
+    collectProcurementPaymentInfo:()=>Object.assign({amount:4250,payee:'Anonymous supplier',bankType:'transfer',bankName:'Fixture bank',bankBranch:'Fixture branch',bankNo:'TEST-ONLY',expectedPayDate:new Date().toISOString().slice(0,10),feeBearer:'company',summary:'Anonymous account'},paymentInfo||{}),
     approvalActionPayload:async()=>({comment:'fixture payment info',files:[],addUid:''}),uploadApprovalFiles:async p=>p,
-    requestBankFeeAmount:()=>0,requestCashPostedAt:()=>'',fmt:String,
+    num:value=>Number(value)||0,getBankTransferFee:()=>15,entityOfDept:()=> 'entity',requestCashPostedAt:()=>'',fmt:String,
     accountingLineManualFields:()=>[],settingsWriteResultOk:r=>r&&r.ok===true,
     cleanupUploadedSupabaseAttachments:async()=>{},rememberPayeeBankAccount:async()=>{},buildAll:()=>{},openDetail:()=>{},
     alert:message=>state.alerts.push(message),recordApprovalWriteFailure:(_action,_row,result)=>{state.error=result.error;},
@@ -82,7 +82,7 @@ async function runHandler(db, old, actor='audit', alter=null, bypassUi=false) {
       finally {await db.exec('set session authorization postgres');}
     }
   });
-  const names=['allowLegacyClientFlowRepair','flowStatusValue','flowIsTerminal','autoAdvanceDuplicateDeptManagerSteps','activeStep','activeStepIndex','requestApprovalStepCompleted','approvedStepCount','requestWorkflowStepCount','syncRequestStatus','markRequestCashPosted','appendStepAction','approveActiveStep','invalidateAccountingLines'];
+  const names=['requestFeeBearer','isMegaBankRecipient','requestFeeEntity','requestStoredBankFeeAmount','requestBankFeeAmount','allowLegacyClientFlowRepair','flowStatusValue','flowIsTerminal','autoAdvanceDuplicateDeptManagerSteps','activeStep','activeStepIndex','requestApprovalStepCompleted','approvedStepCount','requestWorkflowStepCount','syncRequestStatus','markRequestCashPosted','appendStepAction','approveActiveStep','invalidateAccountingLines'];
   vm.createContext(state); vm.runInContext(names.map(source).join('\n')+'\n'+handler,state);
   await state.window.submitProcurementPaymentInfo('fixture','proc');
   state.saved=(await db.query("select * from public.expense_requests where id='fixture'")).rows[0];
@@ -205,6 +205,28 @@ function faultFixture(kind, shared, newTab=false) {
   const afterRace=(await db.query("select * from public.expense_requests where id='fixture'")).rows[0];
   check(afterRace.ver===2&&afterRace.step===3&&afterRace.form_payload.procurementPaymentInfo.operationId==='other-tab-wins',
     'Real PostgreSQL guard preserves another tab winning between old-step read and frozen retry');
+  // A new procurement payment submission deliberately recalculates fees from
+  // freshly entered bank/payer fields, unlike read-only review of a saved fee.
+  for(const feeCase of [
+    {label:'stored zero to own-party non-Mega fee',before:0,bankType:'other',bankName:'非兆豐銀行',feeBearer:'己方支出',expected:15},
+    {label:'stored positive fee to counterparty zero',before:15,bankType:'other',bankName:'非兆豐銀行',feeBearer:'對方支出',expected:0},
+    {label:'stored positive fee to Mega zero',before:15,bankType:'mega',bankName:'017 兆豐銀行',feeBearer:'己方支出',expected:0}
+  ]){
+    const feeOld=Object.assign(clone(old),{bank_type:'other',bank_name:'Anonymous previous bank',bank_account:'Anonymous previous account',fee_bearer:'己方支出',bank_fee_amount:feeCase.before});
+    const feeResult=await runHandler(db,feeOld,'audit',null,false,{
+      bankType:feeCase.bankType,bankName:feeCase.bankName,feeBearer:feeCase.feeBearer,
+      summary:'Anonymous updated bank / 手續費 '+feeCase.feeBearer
+    });
+    if(feeResult.error)throw feeResult.error;
+    check(feeResult.writes===1&&feeResult.saved.step===3&&feeResult.saved.ver===2,
+      feeCase.label+' commits once through actual handler and PostgreSQL guard');
+    check(Number(feeResult.saved.bank_fee_amount)===feeCase.expected&&feeResult.sentPayload.bank_fee_amount===feeCase.expected,
+      feeCase.label+' uses fresh payment details instead of the previous stored fee');
+    check(feeResult.saved.fee_bearer===feeCase.feeBearer&&feeResult.saved.bank_type===feeCase.bankType,
+      feeCase.label+' persists fee payer and bank classification together');
+    check(Number(feeResult.saved.amount)===4250&&feeResult.saved.cash_posted_at===null,
+      feeCase.label+' keeps fees outside principal and does not execute payment');
+  }
   const uiDenied=await runHandler(db,old,'accountant');
   check(uiDenied.writes===0&&uiDenied.alerts.length===1,'Accountant UI cannot act for assigned general affairs');
   const apiDenied=await runHandler(db,old,'accountant',null,true);

@@ -6000,8 +6000,12 @@ function requestFeeBearer(r){
   return raw||'';
 }
 function isMegaBankRecipient(r){
+  var bankType=String(r&&r.bankType||r&&r.bank_type||'').trim().toLowerCase();
+  if(bankType==='mega')return true;
+  if(bankType==='other')return false;
   var bankText=[r&&r.bankName,r&&r.bank_name,r&&r.bankAcc,r&&r.bank_account].filter(Boolean).join(' ');
-  return /兆豐|mega|(^|[^0-9])017([^0-9]|$)/i.test(bankText);
+  if(/(?:非|不是)\s*兆豐|\bnon[\s-]*mega\b/i.test(bankText))return false;
+  return /兆豐|\bmega\b|(^|[^0-9])017([^0-9]|$)/i.test(bankText);
 }
 function selectedBankType(){
   var v=((el('nr-bank-type')||{}).value||'').trim();
@@ -6198,12 +6202,46 @@ function voucherBadgeClass(v){
   return 'b-blue';
 }
 loadComplianceStores();
+function requestStoredBankFeeAmount(r){
+  var value=r&&r.bankFeeAmount;
+  if(value==null||String(value).trim()==='')value=r&&r.bank_fee_amount;
+  if(value==null||String(value).trim()==='')return null;
+  var amount=Number(value);
+  return Number.isFinite(amount)?Math.max(0,amount):null;
+}
 function requestBankFeeAmount(r){
-  if(r&&r.bankType==='mega')return 0;
+  // Saved fees, including zero, are the server's posting authority. Do not
+  // reprice an existing request using today's settings or a bank-name alias.
+  var saved=requestStoredBankFeeAmount(r);
+  if(saved!==null)return saved;
   if(isMegaBankRecipient(r))return 0;
-  var amt=num(r&&r.bankFeeAmount||r&&r.bank_fee_amount);
-  if(amt)return amt;
   return requestFeeBearer(r)==='己方支出'?getBankTransferFee(requestFeeEntity(r)):0;
+}
+function requestBankFeeReviewHtml(r){
+  if(!r)return '';
+  var electronic=typeof laborElectronicMarker==='function'&&laborElectronicMarker(r);
+  var bearer=requestFeeBearer(r),saved=requestStoredBankFeeAmount(r);
+  var payload=r.formPayload||r.form_payload||{},hr=payload.hrInfo||{};
+  var notes=[],warning=false;
+  if(electronic){
+    notes.push('手續費依電子勞報付款流程確認；本區不試算。');
+  }else{
+    if(!bearer)notes.push('原單未記錄手續費負擔，請會計核對。');
+    if(saved===null)notes.push('尚未取得已存手續費金額，請重新讀取單據確認。');
+    var hrFee=hr.transferFeeTotal;
+    if(hrFee!=null&&String(hrFee).trim()!==''&&Number.isFinite(Number(hrFee))&&saved!==null&&Math.abs(Number(hrFee)-saved)>0.005){
+      warning=true;
+      notes.push('原申請試算手續費 '+fmt(Number(hrFee))+' 與已存金額不一致，請會計核對原匯款記錄；系統不會自動補加。');
+    }else if(saved>0&&(bearer==='對方支出'||isMegaBankRecipient(r))){
+      warning=true;
+      notes.push('已存手續費與負擔或銀行設定不一致，請會計核對原匯款記錄。');
+    }
+    if(r.type==='advance_request'&&typeof requestCashPostedAt==='function'&&requestCashPostedAt(r))notes.push('手續費已於首次撥款處理，最後核銷不重複加計。');
+  }
+  return '<section class="accounting-bank-fee-review'+(warning?' accounting-bank-fee-warning':'')+'" aria-label="手續費資訊">'
+    +'<dl><div><dt>手續費負擔</dt><dd data-fee-bearer>'+escAttr(electronic?'依電子勞報付款流程':(bearer||'未填・待確認'))+'</dd></div>'
+    +'<div><dt>公司手續費</dt><dd data-fee-amount>'+escAttr(electronic?'由付款流程確認':(saved===null?'尚未確認':fmt(saved)))+'</dd></div></dl>'
+    +'<p>'+(notes.length?notes.map(function(note){return escAttr(note);}).join(' '):'手續費獨立列帳，不併入品項本金。')+'</p></section>';
 }
 function requestCashPostedAt(r){
   return (r&&r.cashPostedAt)||(r&&r.cash_posted_at)||(r&&r.formPayload&&r.formPayload.cashPostedAt)||'';
@@ -6438,7 +6476,7 @@ function mapReq(r){
     mapped.dr=hm.dr;mapped.drN=hm.drN;mapped.cr=hm.cr;mapped.crN=hm.crN;
   }
   mapped.feeBearer=requestFeeBearer(Object.assign({},r,mapped));
-  mapped.bankFeeAmount=requestBankFeeAmount(Object.assign({},r,mapped));
+  mapped.bankFeeAmount=requestStoredBankFeeAmount(r);
   mapped.cashPostedAt=requestCashPostedAt(mapped);
   mapped.ledgerPostedAt=requestLedgerPostedAt(mapped);
   return mapped;
@@ -18894,7 +18932,7 @@ function accountingLinesHtml(r,editable,title){
       +'<td>'+(posted&&r.type==='petty_cash_request'&&!pettyIsInitial(r)?'<span class="acct-cr">1111</span><div style="font-size:10px;color:#64748b">零用金核銷；補足另貸 1112</div>':(subjectEditable?'<select id="'+prefix+'-cr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.creditAccount,'credit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-cr">'+escAttr(line.creditAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.creditAccountName)+'（系統鎖定）</div>'))+'</td>'
       +'</tr>';
   }).join('');
-  return'<div class="card" data-accounting-request="'+escAttr(r.id)+'" data-accounting-prefix="'+escAttr(prefix)+'"'+(posted?' data-posted-accounting-key="'+escAttr(posted.key)+'"':'')+' oninput="scheduleAccountingReviewDraft(this)" onchange="captureAccountingReviewDraftForElement(this)" style="margin-top:10px"><div class="chd"><span class="cht">'+escAttr(title||'明細列會計科目')+'</span><span style="font-size:10px;color:#94a3b8">'+(editAllowed?'可覆核編輯':'僅供檢視')+'</span></div><div style="padding:11px">'+head+(typeof accountingReviewDraftHtml==='function'?accountingReviewDraftHtml(r,prefix):'')+'<div class="accounting-lines-scroll" tabindex="0" role="region" aria-label="會計明細，可左右捲動"><table class="accounting-lines-table"><thead><tr><th>#</th><th>明細</th><th style="text-align:right">未稅/費用</th><th style="text-align:right">進項稅額</th><th style="text-align:right">含稅</th><th>借方科目</th><th>貸方科目</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+(posted?'<details style="margin-top:12px"><summary>完整正式傳票分錄</summary>'+postedVoucherEntriesHtml(r,prefix+'-voucher',posted).replace('data-accounting-request=','data-posted-voucher-request=')+'</details>':'')+'</div></div>';
+  return'<div class="card" data-accounting-request="'+escAttr(r.id)+'" data-accounting-prefix="'+escAttr(prefix)+'"'+(posted?' data-posted-accounting-key="'+escAttr(posted.key)+'"':'')+' oninput="scheduleAccountingReviewDraft(this)" onchange="captureAccountingReviewDraftForElement(this)" style="margin-top:10px"><div class="chd"><span class="cht">'+escAttr(title||'明細列會計科目')+'</span><span style="font-size:10px;color:#94a3b8">'+(editAllowed?'可覆核編輯':'僅供檢視')+'</span></div><div style="padding:11px">'+head+(typeof accountingReviewDraftHtml==='function'?accountingReviewDraftHtml(r,prefix):'')+requestBankFeeReviewHtml(r)+'<div class="accounting-lines-scroll" tabindex="0" role="region" aria-label="會計明細，可左右捲動"><table class="accounting-lines-table"><thead><tr><th>#</th><th>明細</th><th style="text-align:right">未稅/費用</th><th style="text-align:right">進項稅額</th><th style="text-align:right">含稅</th><th>借方科目</th><th>貸方科目</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+(posted?'<details style="margin-top:12px"><summary>完整正式傳票分錄</summary>'+postedVoucherEntriesHtml(r,prefix+'-voucher',posted).replace('data-accounting-request=','data-posted-voucher-request=')+'</details>':'')+'</div></div>';
 }
 function expenseInvoiceReviewGroups(r){
   var fp=(r&&r.formPayload)||{};
@@ -19150,7 +19188,7 @@ function expenseInvoiceAccountingReviewHtml(r,editable,title,prefix){
   return '<section class="card expense-accounting-review invoice-accounting-review'+(showAccounting?'':' invoice-accounting-no-ledger')+'" aria-label="發票與入帳明細"'+(showAccounting?' data-accounting-request="'+escAttr(r.id)+'" data-accounting-prefix="'+escAttr(prefix)+'" data-invoice-accounting-review="true"'+(posted?' data-posted-accounting-key="'+escAttr(posted.key)+'"':'')+' oninput="scheduleAccountingReviewDraft(this)" onchange="captureAccountingReviewDraftForElement(this)"':'')+'>'
     +'<div class="chd"><span class="cht">發票與入帳明細</span><span class="expense-accounting-review-count">'+groups.length+' 組憑據 · '+sourceItems.length+' 品項 · '+fmt(total)+'</span></div>'
     +head+(showAccounting&&typeof accountingReviewDraftHtml==='function'?accountingReviewDraftHtml(r,prefix):'')
-    +columnHead+'<div class="invoice-accounting-groups">'+groupHtml+orphanHtml+'</div>'+voucherHtml+'</section>';
+    +requestBankFeeReviewHtml(r)+columnHead+'<div class="invoice-accounting-groups">'+groupHtml+orphanHtml+'</div>'+voucherHtml+'</section>';
 }
 var INVOICE_ACCOUNTING_BIND_RUNNING=Object.create(null);
 window.bindLegacyInvoiceAccountingItem=async function(button){
@@ -23980,8 +24018,11 @@ function hrTransferFeePerRow(){
 }
 function hrRowIsMegaBank(r){
   r=r||{};
-  var bankText=[r['銀行別'],r['銀行代號'],r['銀行']].filter(Boolean).join(' ').trim();
-  if(bankText)return isMegaBankRecipient({bankName:bankText,bankAcc:r['銀行帳號']||r['帳號']})!==false;
+  var bankCode=r['銀行代號']!=null?r['銀行代號']:r.bank_code;
+  var bankText=[bankCode,r['銀行別'],r['銀行'],r.bank_name].filter(Boolean).join(' ').trim();
+  if(/(?:非|不是)\s*兆豐|\bnon[\s-]*mega\b/i.test(bankText))return false;
+  if(/^017/.test(hrDigitsOnly(bankCode)))return true;
+  if(bankText)return isMegaBankRecipient({bankName:bankText})!==false;
   return hrBankTypeValue()==='mega';
 }
 function hrTransferFeeForRow(r){
@@ -31819,7 +31860,7 @@ window.submitProcurementPaymentInfo=async function(rid,prefix){
   r.expectedPayDate=info.expectedPayDate.replace(/-/g,'/');
   r.feeBearer=info.feeBearer;
   r.bankAcc=info.summary;
-  r.bankFeeAmount=requestBankFeeAmount(r);
+  r.bankFeeAmount=requestBankFeeAmount({eid:r.eid,dc:r.dc,bankType:r.bankType,bankName:r.bankName,bankAcc:r.bankAcc,feeBearer:r.feeBearer});
   invalidateAccountingLines(r,'總務填寫採購預估付款資料，金額與匯款資訊已變更。',true);
   r.formPayload=Object.assign({},r.formPayload||{},{
     purchaseEstimate:Object.assign({},(r.formPayload||{}).purchaseEstimate||{},{

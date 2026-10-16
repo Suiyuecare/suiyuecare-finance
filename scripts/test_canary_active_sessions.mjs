@@ -150,6 +150,15 @@ try {
       identity_scope_preserved:true,live_latency_proven:false}
   });
   assert.equal(domains.get(billApprovalBulkContract.result.canary),billApprovalBulkContract.domain);
+  const bankFeeClassificationContract=Object.freeze({
+    filename:'finance_bank_fee_classification_canary.sql',
+    marker:'bank_fee_classification_canary_result',
+    domain:'bank_fee_classification',
+    result:{canary:'readonly_bank_fee_classification_v1',ok:true,rolled_back:true,
+      staff_identity_used:false,business_mutation_performed:false}
+  });
+  assert.equal(domains.get(bankFeeClassificationContract.result.canary),bankFeeClassificationContract.domain);
+  let bankFeeClassificationVerified=0;
   const verifiedSessionTasksContract=Object.freeze({
     filename:'finance_approval_tasks_verified_session_canary.sql',
     marker:'approval_tasks_verified_session_canary_result',
@@ -262,6 +271,34 @@ try {
       billApprovalBulkVerified++;
       pass('bill approval bulk actual final SQL has its exact reviewed marker/domain and rejects altered flags, wrong canary, wrong marker and duplicate results');
     }
+    if(name===bankFeeClassificationContract.filename){
+      const rows=actualResults.flatMap(result=>result.rows||[]);
+      assert.equal(rows.length,1,'bank fee classification final SQL must emit exactly one result row');
+      assert.equal(rows[0].marker,'FINANCE_BANK_FEE_CLASSIFICATION_CANARY_ROLLED_BACK');
+      assert.deepEqual(rows[0][bankFeeClassificationContract.marker],bankFeeClassificationContract.result,
+        'actual bank fee SQL must preserve rollback and must not claim a staff identity or business action');
+      assert.match(source,/begin isolation level repeatable read read only;/);
+      assert.match(source,/auth\.uid\(\) is not null then raise exception/);
+      assert.match(source,/public\.finance_expense_resubmit_applicant_revision\(/);
+      assert.match(source,/foreach action in array array\['resubmit','cancel'\]/);
+      assert.doesNotMatch(source,/set_config\s*\(\s*'request\.jwt\.claims'|(?:insert\s+into|update|delete\s+from)\s+(?:auth\.|public\.)/i,
+        'new bank fee canary must not impersonate an employee or mutate identity/business rows');
+      const negative=join(outputDir,'bank-fee-classification-negative.json');
+      const verifyNegative=payload=>{
+        fs.writeFileSync(negative,JSON.stringify(payload));
+        assert.throws(()=>guard.verifyReportsCanary(negative,bankFeeClassificationContract.domain));
+      };
+      for(const flag of ['ok','rolled_back','staff_identity_used','business_mutation_performed']){
+        verifyNegative([{[bankFeeClassificationContract.marker]:{...bankFeeClassificationContract.result,[flag]:!bankFeeClassificationContract.result[flag]}}]);
+        const missing={...bankFeeClassificationContract.result};delete missing[flag];
+        verifyNegative([{[bankFeeClassificationContract.marker]:missing}]);
+      }
+      verifyNegative([{[bankFeeClassificationContract.marker]:{...bankFeeClassificationContract.result,canary:'wrong-canary'}}]);
+      verifyNegative([{wrong_marker:bankFeeClassificationContract.result}]);
+      verifyNegative([{[bankFeeClassificationContract.marker]:bankFeeClassificationContract.result},{[bankFeeClassificationContract.marker]:bankFeeClassificationContract.result}]);
+      bankFeeClassificationVerified++;
+      pass('bank fee classification actual final SQL preserves exact anonymous/read-only/rollback flags and rejects changed or missing flags, wrong canary/marker and duplicates');
+    }
     if(name===verifiedSessionTasksContract.filename){
       const rows=actualResults.flatMap(result=>result.rows||[]);
       assert.equal(rows.length,1,'verified-session tasks final SQL must emit exactly one result row');
@@ -304,9 +341,10 @@ try {
   assert.equal(invoiceBulkVerified,1,'the reviewed invoice bulk file must be explicitly covered exactly once');
   assert.equal(billApprovalBulkVerified,1,'the reviewed bill approval bulk file must be explicitly covered exactly once');
   assert.equal(verifiedSessionTasksVerified,1,'the reviewed verified-session tasks file must be explicitly covered exactly once');
-  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-boundedVerified-verifiedSessionTasksVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
+  assert.equal(bankFeeClassificationVerified,1,'the reviewed bank fee classification file must be explicitly covered exactly once');
+  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-boundedVerified-verifiedSessionTasksVerified-bankFeeClassificationVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
   assert.equal(boundedVerified,1,'bounded logout exact final SQL is covered once');
-  assert.equal(verified,45,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk and verified-session tasks results are covered');
+  assert.equal(verified,46,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, verified-session tasks and bank fee classification results are covered');
   // Versioned canaries deliberately retain their old filenames for archived
   // phases, so they are outside the generic *canary.sql discovery above.
   const attachmentSuccessor=fs.readFileSync(new URL('finance_audit_security_canary_20261015.sql',scripts),'utf8');
@@ -329,6 +367,6 @@ try {
   rejectAttachmentResult([{wrong_marker:attachmentExpected}]);
   rejectAttachmentResult([...attachmentRows,...attachmentRows]);
   pass('versioned bill-attachment audit successor final SQL retains exact authority/rollback flags and rejects altered flags, wrong canary/marker and duplicates');
-  pass('all 39 original final SQL results and reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk and verified-session tasks results satisfy their protected release parsers');
+  pass('all 39 original final SQL results and reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, verified-session tasks and bank fee classification results satisfy their protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);
