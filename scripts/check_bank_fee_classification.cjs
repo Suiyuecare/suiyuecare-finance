@@ -52,6 +52,30 @@ const check=(label,value=true)=>{assert(value,label);checks++;console.log('PASS 
     ['counterparty',[{'銀行別':'非兆豐銀行','匯款金額':1050}],1,'other','對方支出']
   ];
   for(const [label,rows,feeRows,type,bearer] of hrCases){const fee=bearer==='己方支出'?feeRows*15:0,r=await fresh('hr_expense_request'),p=patch({rows,feeRows,type,bearer,fee});await call(r,p);const saved=await state(r.id);check('HR '+label+' uses row classification and payer',saved.bank_fee_amount===fee&&saved.amount===1050&&saved.form_payload.hrInfo.transferFeeTotal===fee);}
+  const frontendRows=[
+    {'銀行別':'非兆豐銀行','銀行代號':'808','分行名稱':'匿名分行','銀行帳號':'TEST-0000000000','金額':500},
+    {'銀行別':'兆豐銀行','銀行代號':'017','分行名稱':'匿名分行','銀行帳號':'TEST-0000000001','金額':550}
+  ];
+  for(const [label,bearer,setting,expectedFee] of [
+    ['own payer','己方支出',15,15],['counterparty','對方支出',15,0],
+    ['configured zero fee','己方支出',0,0],['counterparty with zero fee','對方支出',0,0]
+  ]){
+    await admin("update public.system_settings set value=$1 where key='bank_transfer_fees'",[JSON.stringify({E1:setting})]);
+    const r=await fresh('hr_expense_request'),emitted=await createFixture.frontendHrRevision(root,r,{rows:frontendRows,bearer,setting});
+    const info=emitted.patch.form_payload.hrInfo;
+    check('Actual frontend '+label+' records eligible transfer count even when company fee is zero',info.transferFeeRows===1&&info.transferFeeTotal===expectedFee);
+    await call(r,emitted.patch);const saved=await state(r.id);
+    check('Actual frontend '+label+' RPC is accepted and persists principal and fee once',saved.amount===1050&&saved.bank_fee_amount===expectedFee&&saved.form_payload.hrInfo.cashTotal===1050+expectedFee&&saved.ver===2);
+    const retry=await call(r,emitted.patch);
+    check('Actual frontend '+label+' RPC retry remains idempotent',retry.idempotent_replay===true&&(await state(r.id)).ver===2);
+  }
+  await admin("update public.system_settings set value=$1 where key='bank_transfer_fees'",[JSON.stringify({E1:15})]);
+  const ordinary=await fresh(),ordinaryEmitted=await createFixture.frontendHrRevision(root,ordinary,{});
+  check('Actual ordinary payment payload omits the digital-only reserved field',!Object.hasOwn(ordinaryEmitted.patch.form_payload,'electronicLabor'));
+  await call(ordinary,ordinaryEmitted.patch);
+  check('Actual ordinary payment form RPC persists principal and fee',(await state(ordinary.id)).bank_fee_amount===15&&(await state(ordinary.id)).amount===1050);
+  const digital=await createFixture.frontendHrRevision(root,await fresh('hr_expense_request'),{digital:true});
+  check('Actual digital form retains its electronic-labor payload shape',digital.patch.form_payload.hrInfo.digital===true&&digital.patch.form_payload.hrInfo.totalGrossCents===105000&&digital.patch.form_payload.electronicLabor.status==='pending_invite'&&digital.patch.form_payload.electronicLabor.totalGrossCents===105000&&digital.patch.form_payload.hrRows.length===0);
   for(const [label,opts] of [['anonymous',{actor:'anonymous'}],['other employee',{actor:'other'}],['stale version',{version:0}]]){await denied(label+' cannot revise fees',await fresh(),patch(),opts);}
   const bad=patch();bad.form_payload.lazyRows[1].total=99;await denied('Tampered fee row rejected',await fresh(),bad);
   const badHr=patch({rows:hr,feeRows:1});badHr.form_payload.hrInfo.transferFeeTotal=99;await denied('Tampered HR total rejected',await fresh('hr_expense_request'),badHr);

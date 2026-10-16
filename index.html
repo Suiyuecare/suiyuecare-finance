@@ -22873,7 +22873,7 @@ function collectPaymentInfo(){
     var hrFeeRows=hrTransferFeeRows((S.hrRows||[]));
     var hrFeePerRow=hrTransferFeePerRow();
     if(hrFeeTotal||hrHasNonMegaTransferRows(S.hrRows||[]))hrBankType='other';
-    var feeText=hrFeeTotal?('轉帳費 '+fmt(hrFeeTotal)+'（'+hrFeeRows+' 筆 x '+fmt(hrFeePerRow)+'）'):(hrBankType==='mega'?'兆豐不列轉帳費':'非兆豐轉帳費由對方吸收');
+    var feeText=hrFeeTotal?('轉帳費 '+fmt(hrFeeTotal)+'（'+hrFeeRows+' 筆 x '+fmt(hrFeePerRow)+'）'):(hrBankType==='mega'?'兆豐不列轉帳費':(hrFeeBearer==='己方支出'?'手續費己方支出，本次公司手續費 '+fmt(0):'非兆豐轉帳費由對方吸收'));
     return{payee:'整批人事費用匯款',bankType:hrBankType,bankName:hrBankType==='mega'?'017 兆豐銀行':'非兆豐銀行',bankBranch:'',bankNo:'',expectedPayDate:hrPayDate,feeBearer:hrFeeBearer,bankFeeAmount:hrFeeTotal,summary:['整批人事費用匯款',hrPayDate?('預計匯款日 '+hrPayDate):'',feeText].filter(Boolean).join(' / ')};
   }
   if(S.nrType==='purchase_request'){
@@ -24031,7 +24031,7 @@ function hrTransferFeeForRow(r){
   return fee;
 }
 function hrTransferFeeRows(rows){
-  return (rows||[]).filter(function(r){return hrTransferFeeForRow(r)>0;}).length;
+  return (rows||[]).filter(function(r){return hrRowAmount(r)>0&&!hrRowIsMegaBank(r);}).length;
 }
 function hrHasNonMegaTransferRows(rows){
   return (rows||[]).some(function(r){return hrRowAmount(r)>0&&!hrRowIsMegaBank(r);});
@@ -25804,9 +25804,9 @@ async function submitExpenseApplicantRevisionFromForm(ctx){
     receiptType:S.nrRec||'',paymentType:S.nrPay||'bank',isFixedExpense:ctx.isFixedExpense,is_fixed_expense:ctx.isFixedExpense,
     lazyRows:cloneSettingValue(S.lazyRows||[]),refundRows:cloneSettingValue(S.refundRows||[]),purchaseRows:cloneSettingValue(S.purchaseRows||[]),
     hrRows:ctx.hrInfo&&ctx.hrInfo.digital?[]:cloneSettingValue(S.hrRows||[]),hrItem:S.hrItem||'',pettyMode:S.pettyMode||'',passbookFiles:delta.passbookFiles.map(function(file){return cloneSettingValue(file);}),
-    travelInfo:ctx.travelInfo||null,refundInfo:ctx.refundInfo||null,purchaseInfo:ctx.purchaseInfo||null,hrInfo:ctx.hrInfo&&ctx.hrInfo.digital?{digital:true,item:ctx.hrInfo.item,period:ctx.hrInfo.period,totalGrossCents:ctx.hrInfo.totalGrossCents,serviceLines:ctx.hrInfo.serviceLines,plannedPaymentDates:ctx.hrInfo.plannedPaymentDates,summary:ctx.hrInfo.summary}:(ctx.hrInfo||null),
-    electronicLabor:ctx.hrInfo&&ctx.hrInfo.digital?{version:1,status:'pending_invite',signerName:ctx.hrInfo.signerName,inviteEmail:ctx.hrInfo.inviteEmail,period:ctx.hrInfo.period,plannedPaymentDates:ctx.hrInfo.plannedPaymentDates,totalGrossCents:ctx.hrInfo.totalGrossCents,serviceLines:ctx.hrInfo.serviceLines}:null
+    travelInfo:ctx.travelInfo||null,refundInfo:ctx.refundInfo||null,purchaseInfo:ctx.purchaseInfo||null,hrInfo:ctx.hrInfo&&ctx.hrInfo.digital?{digital:true,item:ctx.hrInfo.item,period:ctx.hrInfo.period,totalGrossCents:ctx.hrInfo.totalGrossCents,serviceLines:ctx.hrInfo.serviceLines,plannedPaymentDates:ctx.hrInfo.plannedPaymentDates,summary:ctx.hrInfo.summary}:(ctx.hrInfo||null)
   };
+  if(ctx.hrInfo&&ctx.hrInfo.digital)formPayload.electronicLabor={version:1,status:'pending_invite',signerName:ctx.hrInfo.signerName,inviteEmail:ctx.hrInfo.inviteEmail,period:ctx.hrInfo.period,plannedPaymentDates:ctx.hrInfo.plannedPaymentDates,totalGrossCents:ctx.hrInfo.totalGrossCents,serviceLines:ctx.hrInfo.serviceLines};
   var patch={
     amount:ctx.amount,description:ctx.description,payee:ctx.payment.payee||'',bank_type:ctx.payment.bankType||'',bank_name:ctx.payment.bankName||'',
     bank_branch:ctx.payment.bankBranch||'',bank_no:ctx.payment.bankNo||'',expected_pay_date:ctx.payment.expectedPayDate||null,

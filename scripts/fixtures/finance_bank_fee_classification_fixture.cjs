@@ -31,3 +31,79 @@ module.exports=async function createFixture(root=path.resolve(__dirname,'../..')
     f.read=read;return f;
   }catch(e){await db.close();throw e;}
 };
+
+// Exercise the real HR normalization, collector and resubmit payload builder.
+// Only DOM/configuration, attachment transport and page navigation are fixture
+// interfaces; fee computations and the emitted RPC patch are production code.
+module.exports.frontendHrRevision=async function frontendHrRevision(root,record,{rows=[],bearer='己方支出',setting=15,digital=false}){
+  const vm=require('node:vm');
+  const source=fs.readFileSync(path.join(root,'index.html'),'utf8');
+  const clone=value=>JSON.parse(JSON.stringify(value));
+  function extract(name){
+    const marker='function '+name+'(',at=source.indexOf(marker);assert(at>=0,name);
+    const start=source.slice(at-6,at)==='async '?at-6:at,open=source.indexOf('{',at);let depth=0;
+    for(let i=open;i<source.length;i++){
+      if(source[i]==='{')depth++;
+      else if(source[i]==='}'&&--depth===0)return source.slice(start,i+1);
+    }
+    throw new Error('Unclosed production function '+name);
+  }
+  const form={
+    'nr-ent':{value:'E1'},'hr-bank-type':{value:'other'},'hr-fee-bearer':{value:bearer},
+    'hr-period':{value:'2026-09'},'hr-labor-period':{value:'2026-09'},'nr-paydate':{value:'2026-09-12'},
+    'nr-payee':{value:'Anonymous payee'},'nr-bank-name':{value:'非兆豐銀行'},
+    'nr-bank-branch':{value:'Anonymous branch'},'nr-bank-no':{value:'TEST-ONLY'},'nr-fee-bearer':{value:bearer}
+  };
+  let emitted=null;
+  const context=vm.createContext({
+    console,BANK_TRANSFER_FEES:{E1:setting},BANK_TRANSFER_FEE:setting,
+    S:{nrType:record.type,hrItem:digital?'labor_electronic':'salary_50',hrRows:clone(rows),nrFiles:[],nrRec:'receipt',nrPay:'bank',nrRevisionOriginalPassbookFiles:[]},
+    REQS:[],window:{},el:id=>form[id]||null,financeFormEngine:()=>null,financeReportEngine:()=>null,
+    currentUserEntityId:()=> 'E1',selectedBankType:()=> 'other',laborElectronicPlannedDates:()=> ['2026-09-12'],formFieldVisible:(_id,_key,fallback)=>fallback,
+    formFieldRequired:(_id,_key,fallback)=>fallback,todayMonth:()=> '2026-09',
+    cloneSettingValue:clone,expensePostingIdentity:()=>({fixture:true}),expenseTransactionIdentityCurrent:()=>true,
+    loadExpenseRevisionPending:()=>null,expenseApplicantRevisionCurrentRecord:()=>record,
+    expenseApplicantRevisionGuard:()=>({ok:true}),laborElectronicMarker:()=>digital,
+    laborElectronicCached:()=>({fixture:true}),laborElectronicUninvited:()=>true,
+    requestTypeLabel:()=> 'Anonymous HR',gE:()=>({full:'Anonymous company'}),gD:()=>({n:'Anonymous department'}),
+    isLazyRequestType:()=>false,showSubmitConfirm:async()=>true,showActionFeedback:()=>{},
+    prepareExpenseRevisionDetailExport:async()=>'',uploadExpenseRevisionDelta:async()=>({requestFiles:[],passbookFiles:[],stepFiles:[]}),
+    expenseApplicantRevisionRpc:async(r,action,comment,patch,stepFiles)=>{assert.equal(action,'resubmit');assert.equal(r.id,record.id);emitted={patch:clone(patch),stepFiles:clone(stepFiles)};return{ok:true};},
+    clearExpenseApplicantRevisionMode:()=>{},clearNRDirtyBaseline:()=>{},completeActionFeedback:()=>{},
+    buildAll:()=>{},openApprovalTab:()=>{},alert:()=>{}
+  });
+  const constants=['HR_ITEMS','HR_DETAIL_COLS','HR_BANK_TRANSFER_COLS','HR_BANK_CODE_ALIASES'].map(name=>{
+    const match=source.match(new RegExp('var '+name+'=\\[[\\s\\S]*?\\];'));assert(match,name);return match[0];
+  });
+  const names=['num','fmt','getBankTransferFee','hrItem','normalizeHrLaborType','normalizeHrMonthStrict',
+    'hrSelectedPeriod','hrSelectedLaborPeriod','deriveHrExpensePeriod','isLaborHrItem','laborElectronicSelected',
+    'hrPrivacyMode','hrBankTypeValue','hrFeeBearerValue','hrTransferFeePerRow',
+    'hrDigitsOnly','hrLooksLikeBankAccountValue','hrRowAmount','hrNormalizeAmount','hrNormalizeTransferAmount',
+    'normalizeHrAccountNumber','resolveHrPrivacyAccountAmount','hrExtractBankCode','hrBankNameFromCode',
+    'hrCleanBankName','hrExtractBranchName','hrJoinNote','hrNormalizeTransferBankRow','hrNormalizeTransferRows','hrTransferRow',
+    'hrTransferFieldKey','hrTransferFormId','hrTransferColumns','hrTransferColumnRequired',
+    'hrRowIsMegaBank','hrTransferFeeForRow','hrTransferFeeRows','hrTransferFeeTotal','hrHasNonMegaTransferRows','hrRowsWithTransferFees',
+    'collectHrExpenseInfo','collectPaymentInfo','submitExpenseApplicantRevisionFromForm'];
+  vm.runInContext(constants.concat(names.map(extract)).join('\n'),context,{filename:'actual-frontend-hr-revision.js'});
+  let info=null;
+  if(digital){
+    // Preserve the existing digital payload shape without exercising its separate
+    // signing/invitation backend through the ordinary-expense fixture.
+    info={digital:true,item:{id:'labor_electronic',label:'Electronic labor'},period:'2026-09',
+      totalGrossCents:105000,serviceLines:[{id:'00000000-0000-4000-8000-000000000001',grossCents:105000}],
+      plannedPaymentDates:['2026-09-12'],signerName:'Anonymous lecturer',inviteEmail:'lecturer@example.invalid',summary:'Anonymous digital fixture'};
+  }else if(record.type==='hr_expense_request'){
+    info=context.collectHrExpenseInfo();assert.deepEqual(clone(info.missing),[],'Fictional frontend form must be valid');
+  }else{
+    context.S.hrRows=[];context.S.hrItem='';
+    context.S.lazyRows=[{item:'Anonymous item',total:1050}];
+    if(bearer==='己方支出'&&setting)context.S.lazyRows.push({item:'銀行手續費（己方支出，免憑證）',qty:1,file:'免憑證',taxMode:'exempt',total:setting,grossAmount:setting,netAmount:setting,taxAmount:0,systemFee:true});
+  }
+  const sent=await context.submitExpenseApplicantRevisionFromForm({
+    amount:info&&!info.digital?info.paymentTotal:1050,description:'Anonymous frontend revision',purpose:'Anonymous fee parity',note:'Fixture',
+    hrInfo:info,isFixedExpense:false,requestDate:'2026-09-12',
+    payment:context.collectPaymentInfo()
+  });
+  assert.equal(sent,true);assert(emitted,'Production form must emit its RPC patch');
+  return emitted;
+};

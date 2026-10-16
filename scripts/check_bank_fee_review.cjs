@@ -45,6 +45,7 @@ const context = vm.createContext({
   withTenantColumn: (row, tenantId) => Object.assign(row, { tenant_id: tenantId || 'EXAMPLE_TENANT' }),
   activeDataEnvironment: () => 'test'
 });
+context.laborElectronicSelected = () => false;
 Object.assign(context, {
   normalizeFiles: value => value || [], fromIsoDate: value => value || '',
   jsonArrayValue: value => value || [], rowDataEnvironment: () => 'test',
@@ -58,7 +59,7 @@ const names = [
   'hrDigitsOnly', 'hrLooksLikeBankAccountValue', 'hrRowAmount',
   'hrRowIsMegaBank', 'hrTransferFeeForRow', 'hrTransferFeeRows',
   'hrHasNonMegaTransferRows', 'hrTransferFeeTotal', 'hrTotalWithTransferFee',
-  'requestBankFeeReviewHtml', 'reqDbRow', 'mapReq'
+  'requestBankFeeReviewHtml', 'reqDbRow', 'mapReq', 'collectPaymentInfo'
 ];
 vm.runInContext(names.map(extract).join('\n'), context, { filename: 'production-bank-fee-functions.js' });
 const own = { eid: 'EXAMPLE_ENTITY', bankType: 'other', bankName: 'Example Bank', feeBearer: '己方支出', amt: 3600, type: 'payment_request' };
@@ -129,6 +130,27 @@ test('HR counterparty choice removes only company fee', () => {
   assert.equal(context.hrTransferFeeTotal(rows), 0);
   assert.equal(context.hrTotalWithTransferFee(rows), 4100);
   form['hr-fee-bearer'].value = '己方支出';
+});
+test('HR counterparty retains positive non-Mega row count required by resubmission', () => {
+  form['hr-fee-bearer'].value = '對方支出';
+  try { assert.equal(context.hrTransferFeeRows(rows), 2); }
+  finally { form['hr-fee-bearer'].value = '己方支出'; }
+});
+test('HR zero configured fee retains eligible row count without mislabeling payer', () => {
+  context.BANK_TRANSFER_FEES.EXAMPLE_ENTITY = 0;
+  context.S.hrRows = rows;
+  try {
+    assert.equal(context.hrTransferFeeRows(rows), 2);
+    assert.equal(context.hrTransferFeeTotal(rows), 0);
+    const payment = context.collectPaymentInfo();
+    assert.equal(payment.feeBearer, '己方支出');
+    assert.equal(payment.bankFeeAmount, 0);
+    assert.match(payment.summary, /手續費己方支出/);
+    assert.doesNotMatch(payment.summary, /對方吸收/);
+  } finally {
+    context.BANK_TRANSFER_FEES.EXAMPLE_ENTITY = 15;
+    context.S.hrRows = [];
+  }
 });
 
 test('review summary has stable semantic wrapper and explicit own-party label', () => {
