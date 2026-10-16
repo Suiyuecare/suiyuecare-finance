@@ -51,6 +51,8 @@ const context = vm.createContext({
   activeCanAct: false, currentRole: 'employee', postingLocked: false, ledgerExists: false,
   amountAllowed: true, subjectAllowed: true,
 });
+load(context, 'function requestFeeBearer(', 'function selectedBankType(');
+load(context, 'function requestStoredBankFeeAmount(', 'function requestCashPostedAt(');
 load(context, 'function expenseInvoiceReviewGroups(', 'window.toggleExpenseInvoiceDetailRow=');
 load(context, 'function expenseInvoiceAccountingReviewHtml(', 'function collectAccountingLinesFromDom(');
 

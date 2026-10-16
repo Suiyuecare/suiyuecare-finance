@@ -109,6 +109,17 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+    'supabase/migrations/20261016043221_finance_bank_fee_classification_v1.sql',
+    'scripts/check_bank_fee_review.cjs',
+    'scripts/check_fee_review_browser.cjs',
+    'scripts/check_bank_fee_classification.cjs',
+    'scripts/test_bank_fee_classification_release_batch.mjs',
+    'scripts/fixtures/finance_bank_fee_classification_fixture.cjs',
+    'scripts/finance_bank_fee_classification_preflight.sql',
+    'scripts/finance_bank_fee_classification_postflight.sql',
+    'scripts/finance_bank_fee_classification_fingerprint.sql',
+    'scripts/finance_bank_fee_classification_canary.sql',
+
     'supabase/migrations/20261015172658_finance_approval_tasks_verified_session_v1.sql',
     'scripts/check_taipei2_google_identity_repair_20261015.cjs',
     'scripts/check_taipei2_applicant_confirm_browser_20261015.cjs',

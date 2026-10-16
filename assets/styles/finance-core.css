@@ -4880,3 +4880,12 @@ input:focus,select:focus,textarea:focus{
 #pg-orgchart .org-explorer-runtime>summary{min-height:44px;cursor:pointer;padding:12px 20px;font-size:13px;line-height:1.5;color:var(--admin-muted)}
 #pg-orgchart .org-explorer-runtime[data-org-health-state="warn"]>summary{color:var(--admin-orange-action);font-weight:700}
 #pg-orgchart .org-explorer-runtime button{min-height:44px!important}
+
+/* One request-level fee summary shared by both accounting review layouts. */
+.accounting-bank-fee-review{margin:10px 12px;padding:10px 12px;background:var(--brxxl);border:1px solid var(--brl);border-radius:10px;color:var(--brtxt);font-size:13px;line-height:1.6;min-width:0;overflow-wrap:anywhere}
+.accounting-bank-fee-review dl{display:flex;flex-wrap:wrap;gap:8px 28px;margin:0}
+.accounting-bank-fee-review dl>div{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;min-width:0}
+.accounting-bank-fee-review dt{font-weight:400}
+.accounting-bank-fee-review dd{margin:0;font-weight:650;font-variant-numeric:tabular-nums}
+.accounting-bank-fee-review p{margin:4px 0 0;font-size:12px}
+.accounting-bank-fee-warning{border-left:4px solid var(--brd)}

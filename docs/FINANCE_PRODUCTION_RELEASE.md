@@ -334,3 +334,30 @@ postflight/canary，且確認正式站別名與前端 manifest 沒變。
 `pnpm test:bill-batch-bulk` 比對正式舊 RPC 快照與新 RPC 的回傳及資料欄位，
 測試 150 筆觸發次數、冪等重試、失敗回滾及角色授權。這些本機測試不能單獨證明
 正式資料庫的耗時已降至目標；發布後仍須追蹤實際批次量、逾時率與資料庫執行時間。
+
+
+## 2026-10-16 手續費覆核與銀行分類修正
+
+`database_bank_fee_classification_20261016` 固定對應
+`20261016043221_finance_bank_fee_classification_v1.sql`。此版本須先完成所有較早的
+已審查遷移；只允許 SHA256
+`365a1e15a9e2e738c6018345e7507ccfb5929e5e051a641f069813659909c8e2` 的來源。
+補件驗證的銀行分類必須區分「非兆豐」與「兆豐」，以免前端保留的正確手續費在
+補件時被後端誤算為零；既有申請、權限、鎖定與操作識別碼規則保持不變。
+
+此階段同時發布前端：先建立並封存候選版，再執行資料庫唯讀 preflight、回滾演練、
+精確單版原子套用與 postflight/canary；全部通過後才提升原候選版至正式網域。
+重試已套用的版本只執行驗證，不重複變更。後續 `frontend_compat` 發布也須在提升前後
+驗證此修正版的函式來源、授權與遷移紀錄，不能略過已套用的費用規則。
+
+必要驗收包括 `pnpm test:bank-fee-review`、`pnpm test:bank-fee-classification`
+及 `pnpm test:bank-fee-review-browser`。測試使用虛構資料，涵蓋已保存零元優先、
+己方／對方負擔、兆豐／非兆豐、人事批次與補件、重試不重複、非本人及已付款禁止異動，
+並以 Chromium/WebKit 檢查桌面與手機的覆核區塊。正式 canary 僅讀取來源與授權，
+驗證無員工身分的呼叫被拒絕；不代用員工登入，不送件、付款或改寫歷史手續費。
+
+遷移紀錄的 statement MD5 為 `de4fabd6b440789435a1ff499f20c868`；
+補件內部函式修正後 definition MD5 為 `ccaad5b351be270e9597a02271518585`，
+公開 wrapper 維持 `6af47c58cd50b60f0a500ac8221a57e3`。
+正式發布須以成功的受保護 workflow、live release manifest 與封存資產雜湊另行確認；
+本機及 CI 測試通過本身不等於已發布，也不等於任何員工的 Google 登入已通過。
