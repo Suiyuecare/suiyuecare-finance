@@ -597,6 +597,7 @@ supabase/.temp
 !scripts/finance_bank_fee_classification_canary.sql
 
 # Mega bank-file generation and protected migration acceptance.
+!docs/finance-mega-remittance.md
 !scripts/check_mega_remittance_engine.cjs
 !scripts/check_mega_remittance_source.cjs
 !scripts/check_mega_remittance_adapter.cjs

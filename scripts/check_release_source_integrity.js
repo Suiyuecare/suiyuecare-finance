@@ -1298,6 +1298,13 @@ for (const requiredScript of requiredVercelScripts) {
 }
 check('Vercel source includes the release gate contract',
   !vercelIgnoreLines.has('docs/*') || vercelIgnoreLines.has('!docs/RELEASE_GATES.md'));
+for (const requiredDoc of REQUIRED_RELEASE_FILES.filter((file) => /^docs\/[^/]+$/.test(file))) {
+  check(`Vercel source includes release document: ${requiredDoc}`,
+    !vercelIgnoreLines.has('docs/*') || (vercelIgnoreLines.has(`!${requiredDoc}`)
+      && orderedIgnoreRules.lastIndexOf(`!${requiredDoc}`) > orderedIgnoreRules.lastIndexOf('docs/*')
+      && !orderedIgnoreRules.slice(orderedIgnoreRules.lastIndexOf(`!${requiredDoc}`) + 1)
+        .some((rule) => [requiredDoc, '/' + requiredDoc, 'docs/*', '/docs/*', 'docs/**', '/docs/**'].includes(rule))));
+}
 
 const workflow = fs.existsSync(path.join(ROOT, '.github/workflows/stability-gate.yml'))
   ? fs.readFileSync(path.join(ROOT, '.github/workflows/stability-gate.yml'), 'utf8')
