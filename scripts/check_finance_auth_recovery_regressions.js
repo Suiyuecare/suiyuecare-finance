@@ -44,9 +44,19 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
   let listener, saves = 0, stops = 0, fetches = 0;
   const timers = [];
+  // Run the shipped view registry cleanup against disposable private buffers.
+  // The panel's own byte disposal is covered by the Mega browser regressions.
+  const detailBytes = Uint8Array.from([80, 75, 1, 2]);
+  const approvalBytes = Uint8Array.from([80, 75, 3, 4]);
+  const clearedMegaViews = [];
+  const megaViews = {
+    detail: { clear() { detailBytes.fill(0); clearedMegaViews.push('detail'); } },
+    approval: { clear() { approvalBytes.fill(0); clearedMegaViews.push('approval'); } }
+  };
   const nodes = Object.fromEntries(['main-wrap', 'sidebar', 'mobile-bottom-nav'].map(id => [id, { style:{},setAttribute() {}, removeAttribute() {} }]));
   const tabs = install({
     S: { user: profile(), demoLogin: false }, financeWorkspaceIdentityBlocked: false,
+    FINANCE_MEGA_REMITTANCE_VIEWS: megaViews,
     supabaseAuthSubscription: null, financeAuthIdentityEpoch: 0, supabaseAuthCheckPromise: null,
     financeLogoutInProgress: false, AUTH_RUNTIME_STATE: {}, AUTH_REQUEST_TIMEOUT_MS: 8000,
     setTimeout: callback => timers.push(callback), currentTenantId: () => 'tenant-a',
@@ -56,10 +66,13 @@ const plain = value => JSON.parse(JSON.stringify(value));
     hideFinanceAuthRecovery() { throw new Error('must not hide a cross-tab lock'); }, syncStatusText: () => '',
     window: { fetch: async () => fetches++ }, Headers, atob, console,
     getSb(){throw new Error('must not restart realtime after identity lock');}
-  }, [...googleFns, 'currentFinanceAuthUserId', 'financeSessionMatchesWorkspace', 'setFinanceWorkspaceIdentityBlocked', 'captureFinanceWorkspaceRecoveryBeforeLock', 'lockFinanceWorkspaceIdentity', 'bindSupabaseAuthState', 'financeSupabaseFetch', 'startRealtime']);
+  }, [...googleFns, 'currentFinanceAuthUserId', 'financeSessionMatchesWorkspace', 'clearFinanceMegaRemittance', 'setFinanceWorkspaceIdentityBlocked', 'captureFinanceWorkspaceRecoveryBeforeLock', 'lockFinanceWorkspaceIdentity', 'bindSupabaseAuthState', 'financeSupabaseFetch', 'startRealtime']);
   tabs.bindSupabaseAuthState({ auth: { onAuthStateChange(callback) { listener = callback; return { data: { subscription: {} } }; } } });
   listener('SIGNED_IN', { user: user('auth-b'), access_token: 'other-tab' });
   assert.equal(tabs.financeWorkspaceIdentityBlocked, true, 'lock synchronous before deferred callback');
+  assert.deepEqual(clearedMegaViews, ['detail', 'approval'], 'identity lock synchronously disposes every remittance view');
+  assert.ok(detailBytes.every(byte => byte === 0) && approvalBytes.every(byte => byte === 0), 'private remittance buffers are cleared before replacement identity can render');
+  assert.deepEqual(Object.keys(megaViews), [], 'cleared private views cannot be reused after identity lock');
   assert.equal(saves, 1); assert.equal(nodes['main-wrap'].inert, true); assert.equal(nodes['main-wrap'].style.visibility,'hidden','old documents hidden from replacement account');
   timers.splice(0).forEach(callback => callback());
   assert.ok(stops > 0);
@@ -78,11 +91,17 @@ const plain = value => JSON.parse(JSON.stringify(value));
   assert.doesNotThrow(()=>tabs.lockFinanceWorkspaceIdentity('auth_identity_mismatch'));
   assert.equal(tabs.financeWorkspaceIdentityBlocked,true,'snapshot errors must not prevent identity lock');
   assert.doesNotThrow(()=>tabs.startRealtime(),'late bootstrap cannot restart realtime while identity is blocked');
-  console.log('PASS A04: immediate multi-tab lock, realtime stop, no stale-token writes, no token-only unlock');
+  console.log('PASS A04: immediate multi-tab lock, private remittance disposal, realtime stop, no stale-token writes, no token-only unlock');
 
   const workspaceFrames=[],workspaceTargets=[];
+  const navigationMegaClears=[];
+  const navigationMegaViews={
+    detail:{clear(){navigationMegaClears.push('detail');}},
+    approval:{clear(){navigationMegaClears.push('approval');}}
+  };
   const workspace=install({
     S:{page:'dashboard',user:profile()},financeWorkspaceNavigationRevision:0,financeAuthIdentityEpoch:0,
+    FINANCE_MEGA_REMITTANCE_VIEWS:navigationMegaViews,
     financeWorkspaceIdentityBlocked:false,currentTenantId:()=> 'tenant-a',activeDataEnvironment:()=> 'production',
     APPROVAL_WAIT_TIMER_ID:null,PT:{newreq:'新增申請'},
     el:()=>({style:{},classList:{add(){}}}),document:{querySelectorAll:()=>[]},
@@ -91,9 +110,11 @@ const plain = value => JSON.parse(JSON.stringify(value));
     pendingApprovalDeepLink:()=>null,isExpenseApplicantRevisionMode:()=>false,shouldPromptUnsavedNewReq:()=>false,
     shouldPromptUnsavedIncomeDoc:()=>false,canAccessPage:()=>true,ensureDeferredFinanceDocumentSources(){},buildNR(){},syncMobileNavSelect(){},
     enhanceLongSelects(){},startSearchableSelectObserver(){},enhanceMobileTables(){},startMobileEnhancer(){}
-  },['currentFinanceAuthUserId','financeReauthenticationIdentity','openFinanceWorkspace','guardedNav']);
+  },['currentFinanceAuthUserId','financeReauthenticationIdentity','clearFinanceMegaRemittance','openFinanceWorkspace','guardedNav']);
   workspace.openFinanceWorkspace();
   await workspace.guardedNav('newreq',null);
+  assert.deepEqual(navigationMegaClears,['detail'],'leaving detail disposes only its remittance view');
+  assert.deepEqual(Object.keys(navigationMegaViews),['approval'],'navigation does not dispose an unrelated approval view');
   workspaceFrames.shift()();
   assert.deepEqual(workspaceTargets,[],'initial dashboard frame cannot navigate away from recovered form');
   assert.equal(workspace.S.page,'newreq');
