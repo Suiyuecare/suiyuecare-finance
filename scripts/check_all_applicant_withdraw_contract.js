@@ -366,6 +366,10 @@ const detailContext = {
   receiptStatusLabel: record => record.status
 };
 vm.createContext(detailContext);
+const privateRemittanceBytes = new Uint8Array([1, 2, 3]);
+let privateRemittanceClears = 0;
+detailContext.FINANCE_MEGA_REMITTANCE_VIEWS = { approval: { clear() { privateRemittanceClears++; privateRemittanceBytes.fill(0); } } };
+['clearFinanceMegaRemittance', 'mountFinanceMegaRemittance'].forEach(name => vm.runInContext(namedFunction(name), detailContext));
 ['escAttr', 'financeInlineJsString', 'financeBatchNumberParts', 'financeBatchNumberHtml'].forEach(name => vm.runInContext(namedFunction(name), detailContext));
 for (const [start, end] of [
   ['function showApprD(r){', '\nfunction showBillApprD('],
@@ -386,6 +390,8 @@ for (const [name, record] of [
 ]) {
   detailHtml.innerHTML = '';
   detailContext[name](record);
+  if (name === 'showApprD') check('completed history detail clears prior private remittance bytes without mounting a new export',
+    privateRemittanceClears === 1 && privateRemittanceBytes.every(value => value === 0) && Object.keys(detailContext.FINANCE_MEGA_REMITTANCE_VIEWS).length === 0);
   check(`${name} escapes hostile source text in history detail markup`,
     !detailHtml.innerHTML.includes('<img') && detailHtml.innerHTML.includes('&lt;img'));
 }
