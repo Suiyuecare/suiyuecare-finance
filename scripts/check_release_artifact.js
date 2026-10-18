@@ -109,6 +109,24 @@ function recordDigest(records) {
 
 function releaseSourceFiles() {
   const exact = [
+    'assets/engines/mega-remittance-engine.js',
+    'assets/engines/mega-remittance-source.js',
+    'assets/engines/mega-remittance-adapter.js',
+    'assets/engines/mega-remittance-ui.js',
+    'supabase/migrations/20261018074245_finance_mega_remittance_private_v1.sql',
+    'scripts/check_mega_remittance_engine.cjs',
+    'scripts/check_mega_remittance_source.cjs',
+    'scripts/check_mega_remittance_adapter.cjs',
+    'scripts/check_mega_remittance_private.cjs',
+    'scripts/check_mega_remittance_ui.cjs',
+    'scripts/check_mega_remittance_app_browser.cjs',
+    'scripts/test_mega_remittance_release_batch.mjs',
+    'scripts/finance_mega_remittance_preflight.sql',
+    'scripts/finance_mega_remittance_postflight.sql',
+    'scripts/finance_mega_remittance_fingerprint.sql',
+    'scripts/finance_mega_remittance_canary.sql',
+    'docs/finance-mega-remittance.md',
+
     'supabase/migrations/20261016043221_finance_bank_fee_classification_v1.sql',
     'scripts/check_bank_fee_review.cjs',
     'scripts/check_fee_review_browser.cjs',

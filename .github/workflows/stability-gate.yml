@@ -162,6 +162,7 @@ jobs:
           node scripts/check_finance_oauth_error_browser.cjs
           pnpm test:procurement-closeout-browser
           pnpm test:bank-fee-review-browser
+          pnpm test:mega-remittance-browser
           pnpm test:personnel-save-browser
           pnpm test:personnel-workspace-browser
           pnpm test:history-search-browser

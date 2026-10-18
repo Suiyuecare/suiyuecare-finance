@@ -42,6 +42,11 @@
 <script src="assets/engines/personnel-workspace.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/approval-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/payroll-accrual-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/mega-remittance-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/mega-remittance-source.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/mega-remittance-adapter.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/mega-remittance-ui.js?v=__FINANCE_ASSET_VERSION__"></script>
+
 <script src="assets/engines/hr-bridge-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/attachment-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/permission-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -3369,6 +3374,7 @@ function financeSessionMatchesWorkspace(session){
     &&(!S.user.tenantId||S.user.tenantId===currentTenantId());
 }
 function setFinanceWorkspaceIdentityBlocked(blocked){
+  if(blocked)clearFinanceMegaRemittance();
   var wasBlocked=financeWorkspaceIdentityBlocked;
   financeWorkspaceIdentityBlocked=!!blocked;
   if(blocked&&typeof retireFinanceBootstrapReadQueue==='function')retireFinanceBootstrapReadQueue('');
@@ -6202,6 +6208,69 @@ function voucherBadgeClass(v){
   return 'b-blue';
 }
 loadComplianceStores();
+var FINANCE_MEGA_REMITTANCE_VIEWS={};
+function financeMegaIdentity(){
+  if(financeWorkspaceIdentityBlocked||!S.user||S.user.active===false||S.demoLogin||!currentFinanceAuthUserId()||financeLogoutInProgress||financeGoogleAccountSwitchInProgress)return '';
+  return expensePostingIdentity()+'|'+financeAuthIdentityEpoch+'|'+JSON.stringify(CURRENT_PERMISSION_SNAPSHOT);
+}
+function clearFinanceMegaRemittance(view){
+  Object.keys(FINANCE_MEGA_REMITTANCE_VIEWS||{}).forEach(function(key){
+    if(view&&key!==view)return;
+    var entry=FINANCE_MEGA_REMITTANCE_VIEWS[key];
+    if(entry&&entry.clear)entry.clear();
+    delete FINANCE_MEGA_REMITTANCE_VIEWS[key];
+  });
+}
+function mountFinanceMegaRemittance(r,view,parent){
+  clearFinanceMegaRemittance(view);
+  if(!parent||!r||r.status!=='pending_cashier'||!window.FinanceMegaRemittanceUI||!window.FinanceMegaRemittanceSource||!window.FinanceMegaRemittanceAdapter||!window.FinanceMegaRemittance)return;
+  if(['admin_director','accountant','ceo','cashier','hr'].indexOf(currentRoleKey())<0||!financeMegaIdentity())return;
+  var node=document.createElement('div');node.className='detail-full-row';
+  node.setAttribute('aria-label','兆豐匯款檔');node.setAttribute('data-mega-remittance-view',view);
+  // Place the ready bank file before the existing payment/approval action area.
+  var action=parent.querySelector('.approval-action-section');
+  if(action)action.before(node);else parent.appendChild(node);
+  var controller=window.FinanceMegaRemittanceUI.create({
+    identityKey:financeMegaIdentity,
+    readSnapshot:async function(id){
+      var identity=financeMegaIdentity();
+      if(!identity||!hasSupabase())throw new Error('MEGA_AUTH_REQUIRED');
+      var response=await withOperationTimeout(getSb().rpc('finance_mega_remittance_snapshot_v1',{p_request_id:id,p_data_environment:activeDataEnvironment()}),'讀取兆豐匯款資料',15000);
+      if(identity!==financeMegaIdentity())throw new Error('MEGA_IDENTITY_CHANGED');
+      if(response.error){
+        if(response.error.code==='42501')return {ok:false,authorized:false};
+        if(response.error.code==='55000')return {ok:false,authorized:true,eligible:false};
+        throw new Error('MEGA_SNAPSHOT_UNAVAILABLE');
+      }
+      var snapshot=window.FinanceMegaRemittanceAdapter.adapt(response.data,window.FinanceMegaRemittanceSource);
+      var entity=ENTS.find(function(item){return item.id===snapshot.entityLabel;});
+      if(entity)snapshot.entityLabel=entity.n||entity.s||snapshot.entityLabel;
+      return snapshot;
+    },
+    saveSupplement:async function(id,digest,rows){
+      var identity=financeMegaIdentity();
+      if(!identity||!hasSupabase())throw new Error('MEGA_AUTH_REQUIRED');
+      var response=await withOperationTimeout(getSb().rpc('finance_mega_remittance_supplement_save_v1',{p_request_id:id,p_data_environment:activeDataEnvironment(),p_expected_digest:digest,p_rows:rows}),'保存匯款必要欄位',15000);
+      if(identity!==financeMegaIdentity())throw new Error('MEGA_IDENTITY_CHANGED');
+      // A timeout is not success. The controller always rereads before exporting.
+      if(response.error)throw new Error(response.error.code==='40001'?'MEGA_VERSION_CONFLICT':'MEGA_SUPPLEMENT_NOT_CONFIRMED');
+      if(!response.data||response.data.ok!==true)throw new Error('MEGA_SUPPLEMENT_NOT_CONFIRMED');
+      return response.data;
+    },
+    ensureXlsx:async function(){await ensureFinanceDocumentLibrary('xlsx');return window.XLSX;},
+    buildXlsx:function(input,xlsx){return window.FinanceMegaRemittance.buildXlsx(input,xlsx);},
+    saveBytes:function(bytes,metadata){
+      if(!financeMegaIdentity()||metadata.signal&&metadata.signal.aborted)throw new Error('MEGA_AUTH_REQUIRED');
+      var url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+      var link=document.createElement('a');link.href=url;link.download=metadata.filename;link.style.display='none';document.body.appendChild(link);
+      try{link.click();}finally{link.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);}
+    },
+    formatMoney:fmt
+  });
+  FINANCE_MEGA_REMITTANCE_VIEWS[view]=controller;
+  controller.mount(node,r.id);
+}
+
 function requestStoredBankFeeAmount(r){
   var value=r&&r.bankFeeAmount;
   if(value==null||String(value).trim()==='')value=r&&r.bank_fee_amount;
@@ -16318,6 +16387,7 @@ window.returnToPortalModules=function(){
 function clearFinanceLoginState(){
   INCOME_SUBMISSION_PENDING={};INCOME_SUBMISSION_RUNNING={};INCOME_RECOVERED_DRAFTS={};FINANCE_MEMBER_PENDING_CONFIRMATIONS=Object.create(null);
   clearDocumentArchiveRetryForCurrentIdentity();
+  clearFinanceMegaRemittance();
   if(window.FinanceHrBridge)window.FinanceHrBridge.dispose();
   clearApprovalFastBootstrapState();
   resetFinanceUsersDirectoryReadiness();
@@ -16739,6 +16809,7 @@ async function guardedNav(id,btn){
     clearInterval(APPROVAL_WAIT_TIMER_ID);
     APPROVAL_WAIT_TIMER_ID=null;
   }
+  if(id!=='detail')clearFinanceMegaRemittance('detail');
   if(window.FinanceHrBridge)window.FinanceHrBridge.dispose();
   if(S.page==='users'&&id!=='users'&&window.FinancePersonnelWorkspace)FinancePersonnelWorkspace.suspend();
   if(id!=='detail')S.prev=S.page;S.page=id;
@@ -27783,6 +27854,7 @@ window.openDetail=function(rid){
   var progressRows=approvalTimelineRows(r,{includeSubmitFallback:true});
   var progressCard='<div class="card detail-progress-card"><div class="chd"><span class="cht">簽核進度</span><span style="font-size:11px;color:#94a3b8">'+approvalTimelineProgressText(r)+(progressRows.length>5?' · 可上下滑動':'')+'</span></div><div class="detail-progress-scroll">'+tl+'</div></div>';
   el('detail-body').innerHTML=managerCard+infoCard+(laborMarker?laborElectronicDetailHtml(r,laborEntry):'')+progressCard+'<div class="detail-full-row">'+(laborMarker?'':paidReturnBoundaryHtml(r)+(typeof accountingCorrectionPanelHtml==='function'?accountingCorrectionPanelHtml(r):''))+'</div>'+'<div class="detail-full-row">'+accountingCard+'</div>'+(invoiceAccountingCard&&!laborMarker?'<div class="detail-full-row">'+invoiceAccountingCard+'</div>':'');
+  mountFinanceMegaRemittance(r,'detail',el('detail-body'));
   hydrateApprovalRuntimeLogsForRecord('expense',r,tlRuntime.slotId);
   if(r.type==='purchase_request'&&r.status==='pending_procurement'&&canActRequest(r))loadProcurementExistingEvidence(rid,'detail-proc');
   if(laborMarker)loadLaborElectronicDetail(rid,false);
@@ -30437,6 +30509,7 @@ async function readbackApprovalStepMutation(kind,ids,expectedSteps){
   return !!(targeted&&approvalStepMutationReadbackMatches(kind,ids,expectedSteps));
 }
 async function refreshApprovalAfterCommittedAction(reason,affectedSource,affectedIds){
+  clearFinanceMegaRemittance();
   var identity=approvalFastBootstrapIdentity();
   invalidateDashboardFinancialCache();
   affectedSource=String(affectedSource||'');
@@ -31293,6 +31366,7 @@ function approvalModalSetBackgroundInert(on){
   else{root.removeAttribute('inert');root.removeAttribute('aria-hidden');}
 }
 function openApprModal(){
+  clearFinanceMegaRemittance('approval');
   approvalClearModalExpectedSteps();
   var m=el('m-appr');
   if(!m)return;
@@ -31386,6 +31460,7 @@ function showApprD(r){
     +(r.steps.length?'<div style="padding:10px 12px;border-bottom:1px solid #f0e6d6"><div style="font-size:11px;color:#a08060;margin-bottom:5px">簽核進度</div>'+sh+'</div>':"")
     +actH;
   el('appr-inner').insertAdjacentHTML('beforeend',paidReturnBoundaryHtml(r)+(typeof accountingCorrectionPanelHtml==='function'?accountingCorrectionPanelHtml(r):''));
+  mountFinanceMegaRemittance(r,'approval',el('appr-inner'));
   hydrateApprovalRuntimeLogsForRecord('expense',r,shRuntime.slotId);
   if(r.type==='purchase_request'&&r.status==='pending_procurement'&&canAct)loadProcurementExistingEvidence(r.id,'proc');
 }
@@ -31499,6 +31574,7 @@ function showReceiptTaskD(i){
   hydrateApprovalRuntimeLogsForRecord('receipt',i,shRuntime.slotId);
 }
 window.closeAppr=function(){
+  clearFinanceMegaRemittance('approval');
   cancelApprovalHistoryDetail(true);
   APPROVAL_INVOICE_MODAL_GROUP=null;
   receiptReviewSnapshotState().modal=null;

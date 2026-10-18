@@ -77,3 +77,11 @@ Canonical owner 是 `requestApplicantWithdrawButtonHtml`／`incomeApplicantWithd
 沿用 `finance-core.css` 品牌、字體 token；手續費放在品項表外，不成為可編輯本金列。原申請負擔選項統一為「己方支出／對方支出」，覆核摘要不新增無法保存的下拉框。依據：`private.finance_finalize_accounting_patch_v1` 鎖定已存手續費、`expenseApprovalTransactionPatch` 既有可修改範圍。新申請及總務明確重新填寫匯款資料才依法人費率計算；其他讀取、保存、簽核與入帳保留既定費用。
 
 驗收：`check_bank_fee_review.cjs`、`check_fee_review_browser.cjs`，涵蓋人事與一般發票、己方／對方、0 元／多筆費用、缺值／矛盾資料、兩種詳情入口、桌機與手機及 Chromium／WebKit；使用虛構資料，不執行正式付款或入帳。
+
+## 兆豐匯款檔（2026-10-18）
+
+Canonical owner 為 `FinanceMegaRemittanceUI`，由 `mountFinanceMegaRemittance` 在原單詳情／簽核詳情掛載。沿用 `.card`、`.chd`、`.btn-p`、`.btn-s` 與既有字體、品牌 token。沒有新增簽核關卡、overlay、全站 CSS 或銀行送款入口。付款前自動讀取已授權的最新 snapshot，僅在畫面記憶體產檔；準備不阻擋原有簽核／付款流程。
+
+狀態明確區分讀取、產製、已備妥、待補齊、逾時、無權限與不適用。補件 form 使用 `novalidate`、inline error、`aria-invalid`、首個錯誤焦點及明確 label；原核定帳號與金額只能看、不能改。操作至少 44px，390／375px 不整頁橫溢。私人資料不寫 URL、localStorage、一般附件或 telemetry；失敗訊息不顯示原始 exception／薪資資料。
+
+下載重新查權限和來源，來源變更須再次確認。切單、離頁、關閉、登出、換身分、停權及晚到回應都清除舊檔；網路失敗不能把舊檔顯示為最新成功。補件值僅能暫存在同一來源摘要下，原單更新即清除。格式、資料來源與驗收界線見 `docs/finance-mega-remittance.md`。
