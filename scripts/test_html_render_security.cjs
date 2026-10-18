@@ -3,6 +3,11 @@ const source=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 function between(start,end){const a=source.indexOf(start);assert.ok(a>=0,start);const b=source.indexOf(end,a+start.length);assert.ok(b>a,end);return source.slice(a,b);}
 const nodes={};const context={loadExpenseRevisionPending:()=>null,loadExpensePostingPending:()=>null,laborElectronicMarker:()=>null,procurementSubmissionRecoveryHtml:()=>'',window:{},S:{page:'list',user:null},REQS:[],SCSS:{completed:'done'},SL:{completed:'完成'},TCSS:{payment_request:'type'},el:id=>nodes[id]||(nodes[id]={innerHTML:''}),normalizeFileMeta:f=>f,fileExt:()=>'',normalizeRequestTerminalState(){},ensureRequestCashierStep(){},nav(){},gD:()=>({n:'單位'}),gE:()=>({s:'公司'}),activeStep:()=>null,isRestrictedReturnedMiddleStep:()=>false,approvalActionFields:()=>'',approvalApplicantIds:()=>[],canActRequest:()=>false,canWithdrawRequest:()=>false,requestBankFeeAmount:()=>0,isMegaBankRecipient:()=>false,requestFeeBearer:()=>'',fmt:String,approvalTimelineWithRuntimeLogs:()=>({html:'',slotId:''}),expenseInvoiceAccountingReviewHtml:()=>'',accountingLinesTitleForRequest:()=>'',shouldShowRequestAccountingLines:()=>false,isFinance:()=>true,entityDeptEditorHtml:()=>'',purchaseAmountCompareHtml:()=>'',advanceTwoEventHtml:()=>'',pettyAccountingHtml:()=>'',approvalTimelineRows:()=>[],approvalTimelineProgressText:()=>'',hydrateApprovalRuntimeLogsForRecord(){},paidReturnBoundaryHtml:()=>''};
 vm.createContext(context);
+// Exercise the real mount boundary: non-cashier detail rows must dispose of
+// the previous private export without starting another remittance read.
+const remittanceBytes=new Uint8Array([1,2,3]);let remittanceClears=0;
+context.FINANCE_MEGA_REMITTANCE_VIEWS={detail:{clear(){remittanceClears++;remittanceBytes.fill(0);}}};
+vm.runInContext(between('function clearFinanceMegaRemittance(', 'function requestStoredBankFeeAmount('),context);
 vm.runInContext(between('function requestCashPostedAt(', 'function ledgerPostingKey('),context);
 vm.runInContext(between('function escAttr(', 'function normalizeFileMeta('),context);
 vm.runInContext(between('function fileChipDownloadHtml(', 'var STEP_DOWNLOADS='),context);
@@ -18,6 +23,9 @@ vm.runInContext(between('window.openDetail=function(', 'window.doApprove='),cont
 const attack='<img src=x onerror="globalThis.injected=true">';
 context.REQS.push({id:'r1',type:'payment_request',status:'completed',amt:100,files:[],steps:[],no:'R1',dc:'D1',eid:'E1',desc:attack,app:attack,payee:attack,bankName:attack,bankBranch:attack,bankNo:attack,bankAcc:attack,expectedPayDate:attack,date:attack,drN:attack,crN:attack});
 context.window.openDetail('r1');
+assert.equal(remittanceClears,1,'opening completed detail clears the previous private export');
+assert.ok(remittanceBytes.every(value=>value===0));
+assert.equal(Object.keys(context.FINANCE_MEGA_REMITTANCE_VIEWS).length,0);
 for(const id of ['detail-hd','detail-body']){assert.ok(!nodes[id].innerHTML.includes('<img'),id);assert.ok(nodes[id].innerHTML.includes('&lt;img'),id);}
 context.REQS[0].status='pending_voucher';
 context.window.openDetail('r1');
