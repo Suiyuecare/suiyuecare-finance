@@ -172,6 +172,27 @@ async function browserCase(engine,width,origin){
       else{await scope("nav('dashboard',null);");equal(await scope('!!FINANCE_MEGA_REMITTANCE_VIEWS.detail'),false,label+' navigation removes historical bytes and consent');}
       results.push({engine,width,kind:'historical-'+kind,view,geometry,filename:downloaded.suggestedFilename()});
     }
+    for(const kind of ['bulk','payroll','refund'])for(const purpose of ['payment','historical']){
+      const label=engine+'/'+width+'/formatted-'+kind+'/'+purpose,data=rawRequest(kind),formatted='0000-0000 1234';
+      if(kind==='payroll')data.form_payload.hrInfo.rows[0].account=formatted;
+      else if(kind==='refund')data.form_payload.refundInfo.rows[0].accountNo=formatted;
+      else data.bank_no=formatted;
+      if(purpose==='historical'){data.status='completed';data.cash_posted_at='2026-10-18T03:00:00Z';data.form_payload.cashAmount=data.amount;data.steps[2].a='approved';data.steps[2].t=data.cash_posted_at;}
+      await scope(`(function(){closeAppr();clearFinanceMegaRemittance();window.__qaPurpose=${JSON.stringify(purpose)};window.__qaReason='';window.__qaSnapshot=${JSON.stringify(data)};window.__qaSnapshot.tenant_id=currentTenantId();window.__qaSupplements=[];REQS=[mapReq(structuredClone(window.__qaSnapshot))];window.__qaFormattingBefore=JSON.stringify({source:window.__qaSnapshot,mapped:REQS[0]});showApprD(REQS[0]);})()`);
+      await page.waitForFunction(()=>document.querySelector('#appr-inner [data-mega-state="ready"]'));
+      const panel=page.locator('#appr-inner .finance-mega-remittance'),before=await scope('window.__qaFormattingBefore');
+      if(purpose==='historical')await panel.getByRole('checkbox',{name:'已知為已付款歷史檔，不會再次送銀行匯款'}).check();
+      const readBefore=await scope('window.__qaReads.length'),event=page.waitForEvent('download');await panel.getByRole('button',{name:purpose==='historical'?'下載歷史 Excel':'下載 Excel',exact:true}).click();const download=await event;
+      const book=XLSX.read(fs.readFileSync(await download.path()),{type:'buffer'}),sheet=book.Sheets['工作表1'],accountCell=kind==='payroll'?sheet.E2:sheet.D2;
+      equal(accountCell.v,'000000001234',label+' real XLSX strips only account separators and keeps leading zeroes');
+      equal(accountCell.t,'s',label+' normalized account remains an Excel text cell');
+      equal(kind==='payroll'?sheet.F2.v:sheet.B2.v,1200,label+' account normalization does not change payment principal');
+      equal(await scope('window.__qaReads.length'),readBefore+1,label+' download still performs a fresh authoritative read');
+      equal(await scope('JSON.stringify({source:window.__qaSnapshot,mapped:REQS[0]})'),before,label+' saved source, version and mapped request remain unchanged');
+      equal(await scope('window.__qaWrites.length'),0,label+' compatible formatting never writes the source or records a payment');
+      if(purpose==='historical')ok(download.suggestedFilename().startsWith('已付款_歷史補檔_勿重複匯款_'),label+' normalized history retains its do-not-pay-again filename');
+      results.push({engine,width,kind:'formatted-'+kind,view:'approval',purpose,filename:download.suggestedFilename()});
+    }
     for(const scenario of ['waiting','cancelled','historical-mismatch','before-cutoff']){
       const data=rawRequest();
       if(scenario==='waiting'){data.status='pending_ceo';data.steps[1].a='';}
@@ -205,7 +226,7 @@ async function browserCase(engine,width,origin){
       };
       window.__qaHoldNextModalFocus();
     });
-    const missing=rawRequest('payroll');missing.form_payload.hrInfo.rows[0].name='';missing.form_payload.hrInfo.rows[0].identityNo='';missing.form_payload.hrInfo.rows[0].bankCode='';
+    const missing=rawRequest('payroll');missing.form_payload.hrInfo.rows[0].name='';missing.form_payload.hrInfo.rows[0].identityNo='';missing.form_payload.hrInfo.rows[0].bankCode='';missing.form_payload.hrInfo.rows[0].account='0000-0000 1234';
     await scope(`(function(){closeAppr();clearFinanceMegaRemittance();window.__qaSnapshot=${JSON.stringify(missing)};window.__qaSnapshot.tenant_id=currentTenantId();window.__qaSupplements=[];REQS=[mapReq(structuredClone(window.__qaSnapshot))];showApprD(REQS[0]);})()`);
     await page.waitForFunction(()=>document.querySelector('#appr-inner [data-mega-state="missing"]'));
     await page.waitForFunction(()=>window.__qaHeldModalFocus.length===1);
@@ -215,6 +236,7 @@ async function browserCase(engine,width,origin){
     equal(await page.evaluate(()=>document.activeElement===document.body),true,engine+'/'+width+' a closed modal focus callback cannot focus the reopened modal');
     const missingPanel=page.locator('#appr-inner .finance-mega-remittance'),principalBefore=await scope('JSON.stringify({amount:window.__qaSnapshot.amount,rows:window.__qaSnapshot.form_payload.hrInfo.rows})');
     equal(await missingPanel.locator('input').count(),2,engine+'/'+width+' actual approval editor exposes only required name and branch-code supplements');
+    ok((await missingPanel.innerText()).includes('核定收款帳號：0000-0000 1234'),engine+'/'+width+' missing bank details display the original authorized formatted account for comparison');
     const payeeInput=missingPanel.getByLabel('收款戶名',{exact:true}),bankInput=missingPanel.getByLabel('銀行代號',{exact:true});
     await payeeInput.focus();await page.keyboard.insertText('虛構');
     await page.evaluate(()=>window.__qaHeldModalFocus[1](performance.now()));
@@ -227,6 +249,7 @@ async function browserCase(engine,width,origin){
     equal(await scope('window.__qaWrites.map(function(x){return x.name;})'),['finance_remittance_export_supplement_save_v1'],engine+'/'+width+' supplement uses only the dedicated CAS metadata RPC');
     equal(await scope('JSON.stringify({amount:window.__qaSnapshot.amount,rows:window.__qaSnapshot.form_payload.hrInfo.rows})'),principalBefore,engine+'/'+width+' supplement does not change approved source accounts, amounts or rows');
     equal(await scope('Object.keys(window.__qaWrites[0].rows[0]).sort()'),['bankCode','name','rowKey'],engine+'/'+width+' submitted supplement contains no editable payment account or amount');
+    equal(await scope('window.__qaWrites[0].digest'),'opaque-qa-digest-1',engine+'/'+width+' account display formatting does not alter the authoritative CAS digest');
     const supplementEvent=page.waitForEvent('download');await missingPanel.getByRole('button',{name:'下載 Excel',exact:true}).click();const supplementDownload=await supplementEvent;
     const supplementBook=XLSX.read(fs.readFileSync(await supplementDownload.path()),{type:'buffer'}),supplementSheet=supplementBook.Sheets['工作表1'];
     equal(supplementSheet.B2.v,'虛構薪轉補充戶名',engine+'/'+width+' real downloaded workbook applies the authorized payee supplement');

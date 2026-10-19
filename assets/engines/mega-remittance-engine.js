@@ -15,6 +15,13 @@
     issues.push({row:row,excelRow:row===null?null:row+1,field:field,code:code,message:message});
   }
   function controlCharacters(value){return /[\u0000-\u001f\u007f\ufffe\uffff]/.test(value);}
+  function normalizeAccount(value){
+    if(typeof value!=='string'||/[^0-9 -]/.test(value))return value;
+    // Only bank-account formatting is removable. Keep malformed values intact
+    // so validation rejects signs, control characters and non-ASCII lookalikes.
+    var core=value.replace(/^ +| +$/g,'');
+    return /^[0-9]+([ -]+[0-9]+)*$/.test(core)?core.replace(/[ -]/g,''):value;
+  }
   function nameUnits(value){
     return Array.from(value).reduce(function(total,character){return total+(character.codePointAt(0)<=127?1:2);},0);
   }
@@ -76,7 +83,8 @@
       var name=readText(item.name,'name',row,issues,mode==='bulk');
       var identity=mode==='payroll'?readText(item.identityNo,'identityNo',row,issues,false):'';
       var bankCode=readText(item.bankCode,'bankCode',row,issues,true);
-      var account=readText(item.account,'account',row,issues,true);
+      var accountText=readText(item.account,'account',row,issues,true);
+      var account=normalizeAccount(accountText);
       var amount=readAmount(item.amount,row,mode,issues);
       if(mode==='payroll'){
         if(!name&&!identity)addIssue(issues,row,'name','name_or_identity_required','薪轉收款人姓名與身分證號至少需填一項。');
@@ -87,7 +95,7 @@
       }else if(bankCode&&!/^[0-9]+$/.test(bankCode)){
         addIssue(issues,row,'bankCode','digits_required','銀行代號只能包含數字，請保留前導 0。');
       }
-      if(account&&!/^[0-9]+$/.test(account))addIssue(issues,row,'account','digits_required','收款帳號只能包含數字，請保留前導 0。');
+      if(accountText&&(!account||/[^0-9]/.test(account)))addIssue(issues,row,'account','digits_required','收款帳號請填數字；數字之間可用半形空格或連字號分隔，請保留前導 0。');
       if(amount!==null){
         total+=amount;
         if(!Number.isSafeInteger(total)||total>MAX_EXCEL_INTEGER)totalUnsafe=true;
@@ -139,7 +147,7 @@
       return {ok:false,issues:[{row:null,excelRow:null,field:'file',code:'xlsx_generation_failed',message:'Excel 檔案未產生，原付款資料保留，請重試。'}],bytes:null};
     }
   }
-  var api=Object.freeze({schemaVersion:SCHEMA_VERSION,validate:validate,buildWorkbook:buildWorkbook,buildXlsx:buildXlsx});
+  var api=Object.freeze({schemaVersion:SCHEMA_VERSION,normalizeAccount:normalizeAccount,validate:validate,buildWorkbook:buildWorkbook,buildXlsx:buildXlsx});
   global.FinanceMegaRemittance=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

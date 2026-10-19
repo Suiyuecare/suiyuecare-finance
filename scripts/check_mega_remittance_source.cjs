@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const api = require('../assets/engines/mega-remittance-source.js');
+const bankEngine = require('../assets/engines/mega-remittance-engine.js');
 let count = 0;
 function test(label, run) { run(); count++; }
 function copy(value) { return JSON.parse(JSON.stringify(value)); }
@@ -53,6 +54,45 @@ test('ordinary principal excludes company fee and preserves leading zeroes', () 
   assert.equal(out.mode, 'bulk'); assert.equal(out.expectedTotal, 1250);
   assert.deepEqual(out.rows, [{name: '測試戶甲', identityNo: '', bankCode: '017', account: '00000001234567', amount: 1250}]);
   assert.deepEqual(out.sourceRowKeys, ['payment:1']); assert.equal(out.context.bankFeeAmount, 30);
+});
+function withAccount(kind, account) {
+  if(kind==='hr')return hr([{姓名:'測試員工甲',金額:1250,銀行代號:'017',銀行帳號:account}]);
+  if(kind==='refund')return refund([{method:'銀行轉帳',accountName:'測試退費戶',accountNo:account,bankName:'017 兆豐銀行',refundAmount:1250}]);
+  return payment({bankNo:account});
+}
+for(const purpose of ['payment','historical'])for(const kind of ['payment','hr','refund']){
+  test(purpose+' '+kind+' retains formatted source account while bank output keeps all digits',()=>{
+    const account=' 000-123 45678901 ',compact='00012345678901';
+    const r=purpose==='historical'?historical(withAccount(kind,account)):withAccount(kind,account);
+    const opts=purpose==='historical'?historicalAuthority(r):{};
+    const before=JSON.stringify({r,opts}),out=success(api.resolve(r,opts));
+    assert.equal(out.rows[0].account,account,'source account is not rewritten');
+    assert.equal(out.expectedTotal,1250,'principal excludes bank fee');
+    assert.equal(out.context.bankFeeAmount,30);assert.equal(out.context.status,r.status);
+    assert.deepEqual(out.sourceRowKeys,[kind==='hr'?'hr:1':kind==='refund'?'refund:1':'payment:1']);
+    const model=bankEngine.buildWorkbook({mode:out.mode,rows:out.rows});assert.equal(model.ok,true);
+    assert.equal(model.workbook.rows[1][out.mode==='payroll'?4:3],compact);
+    assert.equal(model.workbook.rows[1][out.mode==='payroll'?5:1],1250);
+    assert.equal(JSON.stringify({r,opts}),before,'no request, workflow, fee or source mutation');
+    const compactRequest=purpose==='historical'?historical(withAccount(kind,compact)):withAccount(kind,compact);
+    const compactOpts=purpose==='historical'?historicalAuthority(compactRequest):{};
+    const compactSource=success(api.resolve(compactRequest,compactOpts));
+    assert.notEqual(out.snapshotText,compactSource.snapshotText,'raw account formatting remains part of private source fingerprint');
+    assert.deepEqual(model.workbook,bankEngine.buildWorkbook({mode:compactSource.mode,rows:compactSource.rows}).workbook);
+  });
+  test(purpose+' '+kind+' rejects malformed account without losing row identity',()=>{
+    for(const account of ['-123','123-',' -123 ','---','12/34','12e3','１２３','12\u201334','12\u00a034','12\t34','123\n','123\r',123]){
+      const r=purpose==='historical'?historical(withAccount(kind,account)):withAccount(kind,account);
+      const opts=purpose==='historical'?historicalAuthority(r):{},before=JSON.stringify({r,opts});
+      const out=api.resolve(r,opts),key=kind==='hr'?'hr:1':kind==='refund'?'refund:1':'payment:1';
+      bad(out,typeof account==='number'?'text_type_required':'digits_required','account',key);
+      assert.equal(out.rows[0].account,account);assert.equal(JSON.stringify({r,opts}),before);
+    }
+  });
+}
+test('formatted payroll account still obeys normalized 14 digit bound at source boundary',()=>{
+  success(api.resolve(withAccount('hr',' 00-0000 0000-0001 ')));
+  bad(api.resolve(withAccount('hr',' 000-0000 0000-0001 ')),'account_too_long','account','hr:1');
 });
 test('raw snake_case DB record supported without mapReq coercion', () => {
   const r = payment();

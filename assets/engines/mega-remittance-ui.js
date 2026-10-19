@@ -173,7 +173,12 @@
       var seen={};return snapshot.supplementRows.slice(0,100).reduce(function(result,row){
         if(!row||typeof row.rowKey!=='string'||!/^(hr|refund|payment):[1-9][0-9]*$/.test(row.rowKey)||!positiveInteger(row.row)||seen[row.rowKey])return result;
         var fields=Array.isArray(row.fields)?row.fields.filter(function(field,index,all){return (field==='name'||field==='bankCode')&&all.indexOf(field)===index;}):[];
-        if(fields.length){seen[row.rowKey]=true;result.push({rowKey:row.rowKey,row:row.row,fields:fields,account:typeof row.account==='string'&&/^[0-9]{1,100}$/.test(row.account)?row.account:'',amount:positiveInteger(row.amount)?row.amount:null});}return result;
+        var bankEngine=global.FinanceMegaRemittance;
+        var normalizedAccount=bankEngine&&typeof bankEngine.normalizeAccount==='function'?bankEngine.normalizeAccount(row.account):row.account;
+        // Display the authorized source as saved, including its separators. Only
+        // the bank-file serializer normalizes it; source digests remain unchanged.
+        var displayAccount=typeof row.account==='string'&&row.account.length<=100&&typeof normalizedAccount==='string'&&normalizedAccount.length>0&&normalizedAccount.length<=100&&!/[^0-9]/.test(normalizedAccount)?row.account:'';
+        if(fields.length){seen[row.rowKey]=true;result.push({rowKey:row.rowKey,row:row.row,fields:fields,account:displayAccount,amount:positiveInteger(row.amount)?row.amount:null});}return result;
       },[]);
     }
     function acceptSnapshot(snapshot,token){

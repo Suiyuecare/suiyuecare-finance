@@ -132,6 +132,15 @@ async function clickDownload(page){await page.getByRole('button',{name:'下載 E
     ok(await page.evaluate(()=>spies.supplements.length===1&&spies.supplements[0].digest==='opaque-digest-1'&&Object.keys(spies.supplements[0].rows[0]).sort().join(',')==='bankCode,name,rowKey'),'supplement save uses expected digest and cannot edit approved account or amount');
     ok((await readSpies(page)).reads===3&&(await readSpies(page)).saves===0,'supplement save re-reads server state and regenerates without automatic download');
 
+    const formattedMissing={...missing,rows:[{name:'',account:'0000-0000 1234',bankCode:'',amount:1200}],supplementRows:[{rowKey:'payment:1',row:1,fields:['name','bankCode'],account:'0000-0000 1234',amount:1200}]};
+    await setup(page,{snapshot:formattedMissing});await state(page,'missing');
+    ok((await page.locator('#mount').innerText()).includes('核定收款帳號：0000-0000 1234'),'authorized supplement preview retains the source account separators for comparison');
+    ok(await page.evaluate(()=>source.rows[0].account==='0000-0000 1234'&&source.supplementRows[0].account==='0000-0000 1234'&&source.sourceDigest==='opaque-digest-1'),'preview never normalizes the source or changes its version digest');
+    for(const unsafeAccount of ['0000A1234','0000\u00a01234','0000\t1234','0000/1234','123\n','123\r','-123','123-','+123','---',1234]){
+      await setup(page,{snapshot:{...formattedMissing,supplementRows:[{rowKey:'payment:1',row:1,fields:['name'],account:unsafeAccount,amount:1200}]}});await state(page,'missing');
+      ok((await page.locator('#mount').innerText()).includes('核定收款帳號：待確認'),'account preview fails closed for unsupported characters or numeric source: '+JSON.stringify(unsafeAccount));
+    }
+
     await setup(page,{snapshot:missing});await state(page,'missing');await page.getByLabel('收款戶名',{exact:true}).fill('虛構補件戶名');await page.getByLabel('銀行代號',{exact:true}).fill('0170000');
     await page.evaluate(()=>{source.sourceDigest='other-edit';source.sourceVersion=2;source.rows=[{name:'虛構已補資料',account:'000000001234',bankCode:'0170000',amount:1200}];source.supplementRows=[];});
     await page.getByRole('button',{name:'儲存並重新產製',exact:true}).click();await state(page,'ready');
