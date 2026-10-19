@@ -301,6 +301,16 @@ jobs:
           retention-days: 14
           compression-level: 9
 
+      - name: Retain fictional Mega remittance evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: finance-mega-remittance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/finance-mega-app-evidence
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
+
       - name: Retain fictional audit controls evidence even on failure
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

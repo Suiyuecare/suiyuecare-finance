@@ -75,14 +75,25 @@ const fixtureSetup=`(async function(){
 
 async function browserCase(engine,width,origin){
   const browser=await playwright[engine].launch({headless:true});
+  let page;const errors=[],dialogs=[];
   try{
     const context=await browser.newContext({viewport:{width,height:width<600?844:1000},acceptDownloads:true});
     await context.route('**/*',route=>{const url=new URL(route.request().url());return url.origin===origin||url.protocol==='blob:'||url.protocol==='data:'?route.continue():route.abort();});
-    const page=await context.newPage(),errors=[],dialogs=[];page.setDefaultTimeout(15000);
+    page=await context.newPage();page.setDefaultTimeout(15000);
     page.on('pageerror',error=>errors.push(error.message));page.on('dialog',async dialog=>{dialogs.push(dialog.message());await dialog.dismiss();});
     await page.goto(origin);await page.waitForFunction(()=>window.__megaAppQA&&window.XLSX);
     const scope=code=>page.evaluate(value=>window.__megaAppQA.run(value),code);
     await scope(fixtureSetup);
+    // These fixtures contain invented identities/accounts only. Keep a bounded
+    // event trail so a platform-specific failure explains what the real DOM did.
+    await page.evaluate(()=>{
+      window.__qaMegaEvents=[];
+      for(const type of ['focusin','focusout','input','change','pointerdown','pointerup','click','submit','invalid'])document.addEventListener(type,event=>{
+        const target=event.target;if(!(target instanceof Element)||!target.closest('.finance-mega-remittance'))return;
+        window.__qaMegaEvents.push({type,tag:target.tagName,id:target.id,name:target.getAttribute('name'),action:target.getAttribute('data-mega-action'),value:target instanceof HTMLInputElement?target.value:null,prevented:event.defaultPrevented,time:Math.round(performance.now())});
+        if(window.__qaMegaEvents.length>50)window.__qaMegaEvents.shift();
+      },true);
+    });
     for(const kind of ['bulk','payroll','refund'])for(const view of ['detail','approval']){
       const label=engine+'/'+width+'/'+kind+'/'+view,data=rawRequest(kind);
       await scope(`(function(){closeAppr();clearFinanceMegaRemittance();window.__qaDenied=false;window.__qaSupplements=[];window.__qaSnapshot=${JSON.stringify(data)};window.__qaSnapshot.tenant_id=currentTenantId();REQS=[mapReq(structuredClone(window.__qaSnapshot))];})()`);
@@ -212,6 +223,19 @@ async function browserCase(engine,width,origin){
     await scope('setFinanceWorkspaceIdentityBlocked(true);');equal(await scope('Object.keys(FINANCE_MEGA_REMITTANCE_VIEWS).length'),0,engine+'/'+width+' identity lock clears all private contexts');
     equal(await scope('window.__qaNetwork'),[],engine+'/'+width+' no real API network request');equal(errors,[],engine+'/'+width+' no uncaught app errors');equal(dialogs,[],engine+'/'+width+' no unexpected browser dialogs');
     await context.close();
+  }catch(error){
+    if(page&&!page.isClosed()){
+      let diagnostic;
+      try{diagnostic=await page.evaluate(()=>({
+        panels:Array.from(document.querySelectorAll('.finance-mega-remittance')).map(panel=>({host:panel.closest('#appr-inner')?'approval':'detail',state:panel.dataset.megaState,busy:panel.querySelector('.mega-body')?.getAttribute('aria-busy'),text:panel.innerText,inputs:Array.from(panel.querySelectorAll('input')).map(input=>({name:input.name,value:input.value,invalid:input.getAttribute('aria-invalid'),formClass:input.form?.className})),buttons:Array.from(panel.querySelectorAll('button')).map(button=>({text:button.textContent,type:button.type,disabled:button.disabled,formClass:button.form?.className}))})),
+        activeElement:{tag:document.activeElement?.tagName,id:document.activeElement?.id,name:document.activeElement?.getAttribute('name')},modal:{display:document.querySelector('#m-appr')?.style.display,hidden:document.querySelector('#m-appr')?.getAttribute('aria-hidden')},events:window.__qaMegaEvents||[],writes:window.__qaWrites||[],reads:(window.__qaReads||[]).slice(-6),fixture:window.__qaSnapshot?{id:window.__qaSnapshot.id,status:window.__qaSnapshot.status,version:window.__qaSnapshot.ver,purpose:window.__qaPurpose,supplements:window.__qaSupplements}:null
+      }));}catch(captureError){diagnostic={captureError:captureError.message};}
+      const details={engine,width,error:error.message,checks,errors,dialogs,diagnostic};
+      fs.writeFileSync(path.join(output,engine+'-'+width+'-failure.json'),JSON.stringify(details,null,2));
+      console.error('MEGA_APP_FAILURE_DIAGNOSTIC '+JSON.stringify(details));
+      await page.screenshot({path:path.join(output,engine+'-'+width+'-failure.png')}).catch(()=>{});
+    }
+    throw error;
   }finally{await browser.close();}
 }
 (async()=>{
