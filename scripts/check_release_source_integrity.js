@@ -60,6 +60,19 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
   'supabase/migrations/20261019032213_finance_remittance_export_history_v1.sql',
+  'supabase/migrations/20261019063423_finance_remittance_namespace_boundary_v1.sql',
+  'supabase/migrations/20261019063700_finance_org_google_repair_snapshot_v1.sql',
+  'scripts/check_remittance_boundary_private.cjs',
+  'scripts/test_remittance_boundary_release_batch.mjs',
+  'scripts/test_org_google_repair_snapshot.mjs',
+  'scripts/finance_remittance_boundary_preflight.sql',
+  'scripts/finance_remittance_boundary_postflight.sql',
+  'scripts/finance_remittance_boundary_fingerprint.sql',
+  'scripts/finance_remittance_boundary_canary.sql',
+  'scripts/finance_org_google_repair_snapshot_preflight.sql',
+  'scripts/finance_org_google_repair_snapshot_postflight.sql',
+  'scripts/finance_org_google_repair_snapshot_fingerprint.sql',
+  'scripts/finance_org_google_repair_snapshot_canary.sql',
   'scripts/check_remittance_history_private.cjs',
   'scripts/test_remittance_history_release_batch.mjs',
   'scripts/finance_remittance_history_preflight.sql',
@@ -577,6 +590,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/finance_build_environment.js',
   'scripts/check_environment_isolation_contract.js',
   'scripts/check_finance_production_release_contract.js',
+  'scripts/test_finance_release_source_fingerprint.mjs',
   'scripts/check_release_source_integrity.js',
   'scripts/check_migration_lineage_contract.js',
   'scripts/check_root_cause_regressions.js',
@@ -654,7 +668,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
 ]);
 
 const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
-  'test:mega-remittance': 'node scripts/check_mega_remittance_engine.cjs && node scripts/check_mega_remittance_source.cjs && node scripts/check_mega_remittance_adapter.cjs && node scripts/check_mega_remittance_private.cjs && node scripts/test_mega_remittance_release_batch.mjs && node scripts/check_remittance_history_private.cjs && node scripts/test_remittance_history_release_batch.mjs',
+  'test:mega-remittance': 'node scripts/check_mega_remittance_engine.cjs && node scripts/check_mega_remittance_source.cjs && node scripts/check_mega_remittance_adapter.cjs && node scripts/check_mega_remittance_private.cjs && node scripts/test_mega_remittance_release_batch.mjs && node scripts/check_remittance_history_private.cjs && node scripts/test_remittance_history_release_batch.mjs && node scripts/check_remittance_boundary_private.cjs && node scripts/test_org_google_repair_snapshot.mjs && node scripts/test_remittance_boundary_release_batch.mjs',
   'test:mega-remittance-browser': 'node scripts/check_mega_remittance_ui.cjs && node scripts/check_mega_remittance_app_browser.cjs',
 
   'test:bank-fee-review': 'node scripts/check_bank_fee_review.cjs',
@@ -697,7 +711,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'release:source-integrity': 'node scripts/check_release_source_integrity.js',
   'release:environment-isolation': 'node scripts/check_environment_isolation_contract.js',
   'release:migration-lineage': 'node scripts/check_migration_lineage_contract.js',
-  'release:production-contract': 'node scripts/check_finance_production_release_contract.js',
+  'release:production-contract': 'node scripts/check_finance_production_release_contract.js && node scripts/test_finance_release_source_fingerprint.mjs',
   'release:root-cause-regressions': 'node scripts/check_root_cause_regressions.js && node scripts/check_submission_identity_directory_contract.js && node scripts/check_notification_staff_access_reconciliation_contract.js && node scripts/check_membership_org_expense_submission_contract.js && node scripts/check_submission_applicant_identity_contract.js && node scripts/check_submission_persona_routes.js && node scripts/test_expense_route_authority_v2.js && node scripts/check_incident_account_org_repair.js && node scripts/check_final_accountant_self_post_contract.js && node scripts/check_formal_cashier_self_disbursement_contract.js && node scripts/check_human_accounting_authority.js',
   'test:revenue-repair-release': "node scripts/check_home_care_revenue_repair.cjs && node scripts/check_dashboard_revenue_gap.cjs && node scripts/check_revenue_repair_migration_integration.cjs && node scripts/test_revenue_repair_release_batch.mjs",
   'test:operational-stability-release': 'node scripts/check_operational_stability_migration.cjs',
@@ -763,6 +777,9 @@ const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
   'scripts/check_fee_review_browser.cjs',
   'scripts/check_bank_fee_classification.cjs',
   'scripts/test_bank_fee_classification_release_batch.mjs',
+  'scripts/check_remittance_boundary_private.cjs',
+  'scripts/test_remittance_boundary_release_batch.mjs',
+  'scripts/test_org_google_repair_snapshot.mjs',
   'scripts/fixtures/finance_bank_fee_classification_fixture.cjs',
   'scripts/finance_bank_fee_classification_preflight.sql',
   'scripts/finance_bank_fee_classification_postflight.sql',
@@ -1021,6 +1038,7 @@ const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
   'scripts/finance_build_environment.js',
   'scripts/check_environment_isolation_contract.js',
   'scripts/check_finance_production_release_contract.js',
+  'scripts/test_finance_release_source_fingerprint.mjs',
   'scripts/check_release_source_integrity.js',
   'scripts/check_migration_lineage_contract.js',
   'scripts/check_root_cause_regressions.js',

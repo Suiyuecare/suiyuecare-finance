@@ -123,7 +123,7 @@ begin
       raise exception 'approval notification claim worker prerequisites are missing';
     end if;
     select pg_catalog.encode(
-             extensions.digest(proc_row.prosrc::bytea, 'sha256'),
+             extensions.digest(pg_catalog.convert_to(proc_row.prosrc,'UTF8'), 'sha256'),
              'hex'
            ),
            pg_catalog.encode(
@@ -266,7 +266,7 @@ begin
       if v_definition not ilike '%private.finance_expense_assert_authoritative_route_v2%'
          or v_definition not ilike '%private.finance_submit_expense_request_v1_unsafe%' then raise exception 'v3 preflight submit wrapper is not the reviewed v2 baseline'; end if;
       if pg_catalog.to_regprocedure('extensions.digest(bytea,text)') is null then raise exception 'v3 preflight digest extension is unavailable'; end if;
-      select pg_catalog.encode(extensions.digest(proc_row.prosrc::bytea,'sha256'),'hex'),
+      select pg_catalog.encode(extensions.digest(pg_catalog.convert_to(proc_row.prosrc,'UTF8'),'sha256'),'hex'),
              pg_catalog.encode(extensions.digest(pg_catalog.convert_to(pg_catalog.pg_get_functiondef(proc_row.oid),'UTF8'),'sha256'),'hex')
         into v_source_sha256, v_definition_sha256
       from pg_catalog.pg_proc proc_row
@@ -333,11 +333,45 @@ begin
          or v_definition not ilike '%private.finance_expense_assert_applicant_revision_future_route_v3%'
          or v_definition not ilike '%private.finance_expense_resubmit_applicant_revision_v1_unsafe%'
          or v_definition not ilike '%for update%' then raise exception 'none phase actual applicant-revision wrapper is incomplete'; end if;
-      select pg_catalog.encode(extensions.digest(proc_row.prosrc::bytea,'sha256'),'hex')
-        into v_source_sha256
-      from pg_catalog.pg_proc proc_row
-      where proc_row.oid='private.finance_expense_resubmit_applicant_revision_v1_unsafe(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)'::regprocedure::oid;
-      if v_source_sha256 is distinct from '012297096ad81638aae4fc26e9fe23a2009e576a5bff5a67ae3166eff9cac17e' then raise exception 'none phase applicant-revision delegate source drifted'; end if;
+      -- FINANCE_APPLICANT_REVISION_SOURCE_IDENTITY_V2_BEGIN
+      declare
+        v_expected_source text := '012297096ad81638aae4fc26e9fe23a2009e576a5bff5a67ae3166eff9cac17e';
+        v_expected_definition text := '5dedbec02d1440f855c69cdab2684515';
+        v_actual_source text;
+        v_actual_definition text;
+      begin
+        -- A recorded successor is accepted only when its sealed ledger and
+        -- reviewed body agree. Never accept both versions unconditionally.
+        if exists (select 1 from supabase_migrations.schema_migrations where version='20261016043221') then
+          if (select count(*) from supabase_migrations.schema_migrations where version='20261016043221') <> 1
+             or not exists (
+               select 1 from supabase_migrations.schema_migrations
+               where version='20261016043221'
+                 and name='finance_bank_fee_classification_v1'
+                 and pg_catalog.md5(pg_catalog.array_to_string(statements,''))='de4fabd6b440789435a1ff499f20c868'
+             ) then
+            raise exception 'applicant-revision bank-fee successor ledger differs from reviewed migration';
+          end if;
+          v_expected_source := '9dc66c49d987d7729f3d830251a7fcc71cb425f4cb60ec87bff656f741bb8562';
+          v_expected_definition := 'ccaad5b351be270e9597a02271518585';
+        end if;
+        -- prosrc is text, not a bytea escape literal; hash its exact UTF8 bytes.
+        select pg_catalog.encode(extensions.digest(pg_catalog.convert_to(proc_row.prosrc,'UTF8'),'sha256'),'hex'),
+               pg_catalog.md5(pg_catalog.pg_get_functiondef(proc_row.oid))
+          into v_actual_source, v_actual_definition
+        from pg_catalog.pg_proc proc_row
+        where proc_row.oid='private.finance_expense_resubmit_applicant_revision_v1_unsafe(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)'::regprocedure::oid;
+        if v_actual_source is distinct from v_expected_source
+           or v_actual_definition is distinct from v_expected_definition then
+          raise exception 'applicant-revision delegate source differs from reviewed ledger version';
+        end if;
+        if pg_catalog.md5(pg_catalog.pg_get_functiondef(
+             'public.finance_expense_resubmit_applicant_revision(text,text,text,integer,timestamptz,integer,text,jsonb,jsonb,text)'::regprocedure
+           )) is distinct from '6af47c58cd50b60f0a500ac8221a57e3' then
+          raise exception 'applicant-revision wrapper differs from reviewed definition';
+        end if;
+      end;
+      -- FINANCE_APPLICANT_REVISION_SOURCE_IDENTITY_V2_END
     end if;
   end if;
 end $gate$;

@@ -23,8 +23,24 @@ begin
 end;
 $mega_existing_authority$;
 do $mega_function_guard$
-declare expected record; proc pg_catalog.pg_proc%rowtype;
+declare expected record; proc pg_catalog.pg_proc%rowtype; boundary_applied boolean;
 begin
+  -- Only the exact reviewed successor receipt enables the narrower public API.
+  -- Before that release, keep the original invoker/private-entrypoint contract.
+  select exists(select 1 from supabase_migrations.schema_migrations
+    where version='20261019063423') into boundary_applied;
+  if boundary_applied then
+    if (select count(*) from supabase_migrations.schema_migrations where version='20261019063423')<>1
+       or not exists(select 1 from supabase_migrations.schema_migrations
+         where version='20261019063423' and name='finance_remittance_namespace_boundary_v1'
+           and pg_catalog.md5(pg_catalog.array_to_string(statements,''))='cf3ece3069473df9fe629cdc2032f7bb') then
+      raise exception 'Remittance namespace boundary sealed ledger missing or differs' using errcode='55000';
+    end if;
+    if pg_catalog.has_schema_privilege('anon','private','USAGE')
+       or pg_catalog.has_schema_privilege('authenticated','private','USAGE') then
+      raise exception 'Remittance private namespace boundary drift' using errcode='55000';
+    end if;
+  end if;
   perform pg_catalog.set_config('search_path','',true);
   if (select count(*) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
       where n.nspname in ('private','public') and p.proname like 'finance_mega_%')<>12 then
@@ -44,6 +60,19 @@ begin
     ('public.finance_mega_remittance_snapshot_v1(text,text)','58332e61aec57e7a0ba3cc989720481a',false,'v',true),
     ('public.finance_mega_remittance_supplement_save_v1(text,text,text,jsonb)','1807e06238e4a34ae76fc95c5c51aaa9',false,'v',true)
   ) x(signature,definition_md5,security_definer,volatility,client_execute) loop
+    if boundary_applied then
+      if expected.signature='public.finance_mega_remittance_snapshot_v1(text,text)' then
+        expected.definition_md5 := 'd2627b572ab40abe5c8fcd9890b92ada';
+        expected.security_definer := true;
+      elsif expected.signature='public.finance_mega_remittance_supplement_save_v1(text,text,text,jsonb)' then
+        expected.definition_md5 := '557b7b8638fdcadb3e4a859de539449b';
+        expected.security_definer := true;
+      elsif expected.signature in (
+        'private.finance_mega_remittance_snapshot_v1(text,text)',
+        'private.finance_mega_remittance_supplement_save_v1(text,text,text,jsonb)') then
+        expected.client_execute := false;
+      end if;
+    end if;
     select * into proc from pg_catalog.pg_proc where oid=pg_catalog.to_regprocedure(expected.signature);
     if proc.oid is null or pg_catalog.md5(pg_catalog.pg_get_functiondef(proc.oid)) is distinct from expected.definition_md5
        or pg_catalog.pg_get_userbyid(proc.proowner) is distinct from 'postgres'
