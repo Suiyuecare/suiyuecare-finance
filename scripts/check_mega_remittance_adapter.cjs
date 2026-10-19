@@ -46,4 +46,57 @@ check('Known saved fee and payment date are passed without recomputing',()=>{
 check('Changed stage is ineligible despite successful stale wrapper',()=>{
   const out=adapter.adapt(response({status:'pending_ceo'}),source);assert.equal(out.eligible,false);assert.deepEqual(out.rows,[]);
 });
+function historicalResponse(){
+  const data=response({status:'completed',created_at:'2026-10-01T00:00:00Z',cash_posted_at:'2026-10-02T03:00:00Z',applicant_id:'FICT-APPLICANT',voucher_id:'FICT-VOUCHER',ledger_posted_at:'2026-10-03T00:00:00Z'});
+  data.request.steps=[{rk:'applicant_submit',a:'approved',uid:'FICT-APPLICANT'},{rk:'ceo',a:'AUTO'},{rk:'cashier',a:'approved'},{rk:'applicant_confirm'}];
+  Object.assign(data.request.form_payload,{_submissionPayloadSha256V3:'a'.repeat(64),cashAmount:315});
+  Object.assign(data,{exportPurpose:'historical',submittedAt:data.request.created_at,submissionSource:'server_created_at',historyCutoff:'2026-09-30T16:00:00Z',canSupplement:true});
+  data.supplements=[{rowKey:'refund:2',name:'虛構退款戶',bankCode:'017'}];return data;
+}
+check('Explicit historical snapshot preserves real stage, payment evidence and original bank-only total',()=>{
+  const data=historicalResponse(),before=JSON.stringify(data),out=adapter.adapt(data,source);
+  assert.equal(out.eligible,true);assert.equal(out.exportPurpose,'historical');assert.equal(out.stage,'completed');assert.equal(out.expectedTotal,200);
+  assert.equal(out.paidAt,data.request.cash_posted_at);assert.equal(out.sourceBasis,'current_saved_reconstruction');assert.equal(out.submittedAt,data.request.created_at);
+  assert.equal(out.submissionSource,'server_created_at');assert.equal(out.historyCutoff,data.historyCutoff);assert.equal(out.sourceDigest,data.sourceDigest);assert.equal(out.sourceVersion,3);
+  assert.equal(JSON.stringify(data),before);assert(!Object.hasOwn(out,'request'));assert(!Object.hasOwn(out,'snapshotText'));
+});
+check('No export purpose retains strict original response compatibility',()=>{
+  const data=historicalResponse();delete data.exportPurpose;const out=adapter.adapt(data,source);
+  assert.equal(out.eligible,false);assert.equal(out.exportPurpose,'payment');assert.deepEqual(out.rows,[]);
+  const current=adapter.adapt(response(),source);assert.equal(current.eligible,true);assert.equal(current.exportPurpose,'payment');
+});
+check('Unknown export purpose cannot authorize a file',()=>{
+  const data=historicalResponse();for(const purpose of ['preview','unsupported','',null]){data.exportPurpose=purpose;const out=adapter.adapt(data,source);assert.equal(out.eligible,false);assert.deepEqual(out.rows,[]);assert.equal(out.canSupplement,false);}
+});
+check('Historical missing source data remains editable only with current server supplement authority',()=>{
+  const data=historicalResponse();data.supplements=[];let out=adapter.adapt(data,source);
+  assert.equal(out.eligible,true);assert(out.issues.length>0);assert.equal(out.supplementRows[0].rowKey,'refund:2');assert.equal(out.supplementRows[0].amount,200);
+  data.canSupplement=false;out=adapter.adapt(data,source);assert.equal(out.canSupplement,false);assert.deepEqual(out.supplementRows,[]);
+});
+check('Missing or mismatched historical payment evidence cannot expose supplement editor',()=>{
+  const data=historicalResponse();data.request.cash_posted_at=null;const out=adapter.adapt(data,source);
+  assert.equal(out.eligible,false);assert.equal(out.reasonCode,'historical_payment_unverified');assert.deepEqual(out.rows,[]);assert.deepEqual(out.supplementRows,[]);assert.equal(out.canSupplement,false);
+});
+check('Thin waiting snapshot carries metadata without demanding or leaking private source rows',()=>{
+  const data={ok:true,requestId:'FICT-THIN',stage:'pending_ceo',sourceVersion:8,sourceDigest:'opaque-waiting-digest',exportPurpose:'waiting',reason:'awaiting_cashier',submittedAt:'2026-10-02T00:00:00Z',submissionSource:'server_created_at',historyCutoff:'2026-09-30T16:00:00Z',canSupplement:true,supplements:[{name:'MUST-NOT-LEAK'}]};
+  const out=adapter.adapt(data,{resolve(){throw new Error('thin state must not resolve private rows');}});
+  assert.equal(out.authorized,true);assert.equal(out.eligible,false);assert.equal(out.exportPurpose,'waiting');assert.equal(out.stage,'pending_ceo');assert.equal(out.reasonCode,'waiting_for_cashier');assert.equal(out.requestId,data.requestId);
+  assert.equal(out.sourceVersion,8);assert.equal(out.sourceDigest,data.sourceDigest);assert.equal(out.canSupplement,false);assert.deepEqual(out.rows,[]);assert.deepEqual(out.supplementRows,[]);assert(!JSON.stringify(out).includes('MUST-NOT-LEAK'));
+});
+check('Thin unavailable reasons are translated through a fixed whitelist',()=>{
+  const expected={before_history_cutoff:'historical_before_cutoff',submission_evidence_missing:'historical_submission_unverified',cancelled_or_rejected:'historical_status_invalid',payment_not_applicable:'export_unavailable',accounting_correction_requires_review:'historical_correction_unsupported',cashier_evidence_missing:'historical_cashier_unverified',cashier_evidence_incomplete:'historical_cashier_unverified',payment_evidence_incomplete:'historical_payment_unverified',payment_timestamp_invalid:'historical_payment_unverified',historical_amount_incomplete:'historical_principal_missing',historical_amount_mismatch:'historical_cash_mismatch'};
+  for(const [reason,code] of Object.entries(expected)){
+    const out=adapter.adapt({ok:true,exportPurpose:'unavailable',requestId:'FICT-THIN',stage:'completed',reason},source);
+    assert.equal(out.reasonCode,code);assert.equal(out.eligible,false);assert.deepEqual(out.rows,[]);
+  }
+  const out=adapter.adapt({ok:true,exportPurpose:'unavailable',requestId:'FICT-THIN',reason:'PRIVATE-EXCEPTION-MUST-NOT-LEAK'},source);
+  assert.equal(out.reasonCode,'export_unavailable');assert(!JSON.stringify(out).includes('PRIVATE-EXCEPTION'));
+});
+check('Thin metadata cannot invent success, omit request identity or promote historical source',()=>{
+  for(const data of [{ok:false,exportPurpose:'waiting',requestId:'FICT'}, {ok:true,exportPurpose:'waiting'}, {ok:true,exportPurpose:'historical',requestId:'FICT'}])assert.notEqual(adapter.adapt(data,source).authorized,true);
+});
+check('Historical filename carries paid reference warning and cannot become a fresh payment filename',()=>{
+  const out=adapter.adapt(historicalResponse(),source);assert.match(adapter.filename(out),/^已付款_歷史補檔_勿重複匯款_兆豐_整批匯款_TEST-001\.xlsx$/);
+  assert.doesNotMatch(adapter.filename(adapter.adapt(response(),source)),/已付款|歷史補檔/);
+});
 console.log('Mega remittance adapter: '+checks+' checks passed (synthetic data only).');

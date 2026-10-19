@@ -59,6 +59,13 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'supabase/migrations/20261019032213_finance_remittance_export_history_v1.sql',
+  'scripts/check_remittance_history_private.cjs',
+  'scripts/test_remittance_history_release_batch.mjs',
+  'scripts/finance_remittance_history_preflight.sql',
+  'scripts/finance_remittance_history_postflight.sql',
+  'scripts/finance_remittance_history_fingerprint.sql',
+  'scripts/finance_remittance_history_canary.sql',
   'assets/engines/mega-remittance-engine.js',
   'assets/engines/mega-remittance-source.js',
   'assets/engines/mega-remittance-adapter.js',
@@ -647,7 +654,7 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
 ]);
 
 const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
-  'test:mega-remittance': 'node scripts/check_mega_remittance_engine.cjs && node scripts/check_mega_remittance_source.cjs && node scripts/check_mega_remittance_adapter.cjs && node scripts/check_mega_remittance_private.cjs && node scripts/test_mega_remittance_release_batch.mjs',
+  'test:mega-remittance': 'node scripts/check_mega_remittance_engine.cjs && node scripts/check_mega_remittance_source.cjs && node scripts/check_mega_remittance_adapter.cjs && node scripts/check_mega_remittance_private.cjs && node scripts/test_mega_remittance_release_batch.mjs && node scripts/check_remittance_history_private.cjs && node scripts/test_remittance_history_release_batch.mjs',
   'test:mega-remittance-browser': 'node scripts/check_mega_remittance_ui.cjs && node scripts/check_mega_remittance_app_browser.cjs',
 
   'test:bank-fee-review': 'node scripts/check_bank_fee_review.cjs',
