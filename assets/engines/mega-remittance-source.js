@@ -3,7 +3,8 @@
   var BANK_ENGINE=typeof module!=='undefined'&&module.exports?require('./mega-remittance-engine.js'):null;
   var TYPES=['expense_reimbursement','payment_request','advance_request','petty_cash_request','travel_request','purchase_request','refund_request','welfare_request','hr_expense_request'];
   var HR_ITEMS=['salary_50','bonus','labor_fee_9a','labor_fee_9b','labor_insurance','health_insurance','labor_pension','supplemental_premium','severance_termination','hr_other'];
-  var SOURCE_VERSION='mega-remittance-source-v1';
+  var SOURCE_VERSION='mega-remittance-source-v2';
+  var HISTORY_CUTOFF='2026-09-30T16:00:00Z';
   function object(value){return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}
   function present(value){return value!==undefined&&value!==null&&value!=='';}
   function pick(source,keys){
@@ -16,20 +17,50 @@
     var row=rowKey?Number(rowKey.split(':')[1]):null;
     issues.push({row:row,excelRow:null,rowKey:rowKey||null,field:field,code:code,message:message});
   }
-  function eligibility(request){
-    request=object(request);var fp=payload(request);
-    function deny(code,reason){return {eligible:false,code:code,reason:reason};}
+  function timestamp(value){
+    if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value))return NaN;
+    var day=value.slice(0,10),date=new Date(day+'T00:00:00Z');
+    if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==day)return NaN;
+    return Date.parse(value);
+  }
+  function eligibility(request,options){
+    request=object(request);options=object(options);var fp=payload(request);
+    // Only the authenticated snapshot adapter supplies this authority. A request
+    // payload cannot opt itself into historical access or change its real stage.
+    var purpose=options.exportPurpose===undefined?'payment':options.exportPurpose;
+    function deny(code,reason){return {eligible:false,code:code,reason:reason,exportPurpose:purpose};}
+    if(['payment','historical','waiting','unavailable'].indexOf(purpose)<0)return deny('export_purpose_invalid','尚未取得有效的匯出用途，請重新讀取。');
     if(TYPES.indexOf(request.type)<0)return deny('transaction_not_supported','此單據不是可產製匯款檔的付款申請。');
-    if(request.status!=='pending_cashier')return deny('not_pending_cashier','完成前段核准、到達出納放款關卡後才產製匯款檔。');
+    if(purpose==='waiting')return deny('waiting_for_cashier','尚未到出納付款關卡；完成核准後會自動準備匯款檔。');
+    if(purpose==='unavailable')return deny('export_unavailable','此單目前不符合匯款檔產製或歷史重建條件。');
+    if(purpose==='payment'&&request.status!=='pending_cashier')return deny('not_pending_cashier','完成前段核准、到達出納放款關卡後才產製匯款檔。');
     if(fp.electronicLabor||object(fp.hrInfo).digital||fp.hrItem==='labor_electronic')return deny('electronic_labor_separate_flow','電子勞報依獨立的簽署與付款流程處理。');
-    if(pick(request,['cashPostedAt','cash_posted_at','ledgerPostedAt','ledger_posted_at','postingLockedAt','posting_locked_at','voucherId','voucher_id','voidedAt','voided_at','paidAt','paid_at'])||pick(fp,['cashPostedAt','cash_posted_at']))return deny('already_paid_or_locked','此單已有付款、入帳或作廢紀錄，不能重新產製待付款檔。');
+    if(purpose==='payment'&&(pick(request,['cashPostedAt','cash_posted_at','ledgerPostedAt','ledger_posted_at','postingLockedAt','posting_locked_at','voucherId','voucher_id','voidedAt','voided_at','paidAt','paid_at'])||pick(fp,['cashPostedAt','cash_posted_at'])))return deny('already_paid_or_locked','此單已有付款、入帳或作廢紀錄，不能重新產製待付款檔。');
     if(!Array.isArray(request.steps)||!request.steps.length||Array.from(request.steps).some(function(step){return !step||typeof step!=='object'||Array.isArray(step);}))return deny('workflow_missing','尚未取得完整簽核關卡，請重新讀取單據。');
-    var index=request.steps.findIndex(function(step){return !step.a;});
-    if(index<0||request.steps[index].rk!=='cashier')return deny('cashier_step_not_active','目前有效關卡不是出納放款，請重新確認簽核進度。');
+    var index;
+    if(purpose==='historical'){
+      if(['draft','pending_cashier','rejected','cancelled','canceled','withdrawn','void','voided'].indexOf(request.status)>-1||!request.status||pick(request,['voidedAt','voided_at']))return deny('historical_status_invalid','作廢、取消、駁回或尚未付款的單據不能重建已付款歷史檔。');
+      var submitted=timestamp(options.submittedAt),created=timestamp(pick(request,['createdAt','created_at']));
+      if(options.submissionSource!=='server_created_at'||options.historyCutoff!==HISTORY_CUTOFF||!Number.isFinite(submitted)||!Number.isFinite(created)||submitted!==created)return deny('historical_submission_unverified','尚未確認正式送出時間，不能重建歷史匯款檔。');
+      if(submitted<Date.parse(HISTORY_CUTOFF))return deny('historical_before_cutoff','此單正式送出時間早於本次歷史補檔範圍。');
+      var submission=request.steps[0],applicant=pick(request,['applicantId','applicant_id']);
+      if(submission.rk!=='applicant_submit'||submission.a!=='approved'||!applicant||submission.uid!==applicant||typeof fp._submissionPayloadSha256V3!=='string'||!/^[0-9a-f]{64}$/.test(fp._submissionPayloadSha256V3))return deny('historical_submission_unverified','缺少可核對申請人的正式送出證據，不能重建歷史匯款檔。');
+      var paid=timestamp(pick(request,['cashPostedAt','cash_posted_at']));
+      if(!Number.isFinite(paid)||paid<submitted)return deny('historical_payment_unverified','尚未取得有效的正式付款紀錄，不能以預計日期或簽核顯示日期代替。');
+      if(present(fp.correctionCashEvents)&&(!Array.isArray(fp.correctionCashEvents)||fp.correctionCashEvents.length))return deny('historical_correction_unsupported','此單有付款更正紀錄，需核對原付款及差額，不能合併推測歷史匯款。');
+      if(present(fp.accountingCorrection)&&(typeof fp.accountingCorrection!=='object'||Array.isArray(fp.accountingCorrection)||Object.keys(fp.accountingCorrection).length))return deny('historical_correction_unsupported','此單有會計更正紀錄，不能以目前欄位推測原付款。');
+      var cashierSteps=request.steps.filter(function(step){return step.rk==='cashier';});
+      if(cashierSteps.length!==1||cashierSteps[0].a!=='approved')return deny('historical_cashier_unverified','歷史補檔須有出納實際核准付款紀錄。');
+      index=request.steps.indexOf(cashierSteps[0]);
+      if(request.steps.some(function(step){return step.a&&['approved','AUTO'].indexOf(step.a)<0;}))return deny('historical_workflow_invalid','此單有退回或未核准紀錄，不能當作已完成付款的歷史檔。');
+    }else{
+      index=request.steps.findIndex(function(step){return !step.a;});
+      if(index<0||request.steps[index].rk!=='cashier')return deny('cashier_step_not_active','目前有效關卡不是出納放款，請重新確認簽核進度。');
+    }
     if(request.steps.slice(0,index).some(function(step){return ['approved','AUTO'].indexOf(step.a)<0;}))return deny('prior_step_not_approved','出納之前仍有未核准的關卡，不能產製付款檔。');
     var method=pick(fp,['paymentType','payment_type']);
     if(['bank','transfer','匯款','銀行轉帳'].indexOf(method)<0)return deny('payment_method_not_bank','請確認核准單據已明確指定銀行轉帳付款。');
-    return {eligible:true,code:'ready',reason:''};
+    return {eligible:true,code:'ready',reason:'',exportPurpose:purpose};
   }
   function wholeAmount(value,issues,rowKey,field){
     if(typeof value!=='number'&&typeof value!=='string'||typeof value==='string'&&!/^[0-9]+(?:\.0{1,2})?$/.test(value)){
@@ -73,8 +104,8 @@
     return JSON.stringify(value===undefined?null:value);
   }
   function resolve(request,options){
-    request=object(request);options=object(options);var allowed=eligibility(request),issues=[],rows=[],keys=[],excluded=[],fp=payload(request),mode='bulk';
-    var result={eligible:allowed.eligible,ok:false,mode:mode,rows:[],sourceRowKeys:[],issues:issues,excludedRows:excluded,summary:null,context:null,snapshot:null,snapshotText:null,requestId:pick(request,['id']),expectedTotal:null};
+    request=object(request);options=object(options);var allowed=eligibility(request,options),issues=[],rows=[],keys=[],excluded=[],fp=payload(request),mode='bulk',historical=allowed.exportPurpose==='historical';
+    var result={eligible:allowed.eligible,ok:false,exportPurpose:allowed.exportPurpose,reasonCode:allowed.code,mode:mode,rows:[],sourceRowKeys:[],issues:issues,excludedRows:excluded,summary:null,context:null,snapshot:null,snapshotText:null,requestId:pick(request,['id']),expectedTotal:null};
     if(!allowed.eligible){issue(issues,null,'status',allowed.code,allowed.reason);return result;}
     var hr=object(fp.hrInfo),refund=object(fp.refundInfo),procurement=object(fp.procurementPaymentInfo),estimate=object(fp.purchaseEstimate);
     var hrItem=pick(fp,['hrItem'])||pick(object(hr.item),['id']);
@@ -85,6 +116,8 @@
     }
     result.mode=mode;
     var context={requestId:pick(request,['id']),requestNo:pick(request,['no']),entityId:pick(request,['eid','entity_id']),departmentCode:pick(request,['dc','department_code']),requestType:request.type,status:request.status,version:pick(request,['ver','rowVersion','row_version']),updatedAt:pick(request,['updatedAt','updated_at']),payDate:normalizedDate(pick(request,['expectedPayDate','expected_pay_date'])),feeBearer:pick(request,['feeBearer','fee_bearer']),bankFeeAmount:pick(request,['bankFeeAmount','bank_fee_amount']),dataEnvironment:pick(request,['dataEnv','data_environment']),tenantId:pick(request,['tenantId','tenant_id'])};
+    context.exportPurpose=allowed.exportPurpose;context.submittedAt=options.submittedAt||null;context.submissionSource=options.submissionSource||null;context.historyCutoff=options.historyCutoff||null;
+    context.paidAt=historical?pick(request,['cashPostedAt','cash_posted_at']):null;context.sourceBasis=historical?'current_saved_reconstruction':'current_approved_request';
     result.context=context;
     if(!context.requestId||typeof context.requestId!=='string')issue(issues,null,'requestId','request_id_missing','尚未取得正式單據識別碼。');
     if(!context.entityId||typeof context.entityId!=='string')issue(issues,null,'entityId','entity_missing','尚未取得付款法人，不能混合產製匯款檔。');
@@ -92,11 +125,27 @@
     var principalValue=pick(request,['amt','amount']);
     if(request.type==='purchase_request'||request.type==='advance_request'){
       principalValue=pick(request,['estimatedAmt','estimated_amount']);
-      if(!present(principalValue)&&request.type==='purchase_request')principalValue=pick(procurement,['amount']);
-      if(!present(principalValue)&&request.type==='purchase_request')principalValue=pick(estimate,['procurementAmount']);
-      if(!present(principalValue))principalValue=pick(request,['amt','amount']);
+      if(historical&&request.type==='advance_request'){
+        var original=pick(fp,['advanceOriginalAmount','advanceDisbursementAmount']);
+        if(present(original))principalValue=original;
+      }
+      if(historical&&request.type==='purchase_request'){
+        if(!present(principalValue))principalValue=pick(estimate,['procurementAmount']);
+        if(!present(principalValue))principalValue=pick(procurement,['amount']);
+      }else if(request.type==='purchase_request'){
+        if(!present(principalValue))principalValue=pick(procurement,['amount']);
+        if(!present(principalValue))principalValue=pick(estimate,['procurementAmount']);
+      }
+      if(!present(principalValue)&&!historical)principalValue=pick(request,['amt','amount']);
+      if(!present(principalValue)&&historical)issue(issues,null,'principalAmount','historical_principal_missing','缺少原核定撥款本金，不能用最後核銷金額推測原匯款。');
     }
     var principal=wholeAmount(principalValue,issues,null,'principalAmount'),sourceRows,prefix;
+    if(historical){
+      var cash=wholeAmount(fp.cashAmount,issues,null,'cashAmount'),savedFee=context.bankFeeAmount,fee=null;
+      if((typeof savedFee==='number'||typeof savedFee==='string'&&/^[0-9]+(?:\.0{1,2})?$/.test(savedFee))&&Number.isSafeInteger(Number(savedFee))&&Number(savedFee)>=0)fee=Number(savedFee);
+      else issue(issues,null,'bankFeeAmount','historical_fee_missing','缺少有效的已存公司手續費，不能推算原匯款本金。');
+      if(cash!==null&&fee!==null&&(cash-fee<=0||!Number.isSafeInteger(cash-fee)||principal===null||cash-fee!==principal))issue(issues,null,'principalAmount','historical_cash_mismatch','已存付款總額扣除手續費後，與原核准本金不同；請先核對歷史付款。');
+    }
     if(request.type==='hr_expense_request'){sourceRows=Array.isArray(hr.rows)?hr.rows:fp.hrRows;prefix='hr';}
     else if(request.type==='refund_request'){sourceRows=Array.isArray(refund.rows)?refund.rows:fp.refundRows;prefix='refund';}
     else {sourceRows=[request];prefix='payment';}

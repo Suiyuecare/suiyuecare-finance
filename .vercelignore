@@ -609,3 +609,11 @@ supabase/.temp
 !scripts/finance_mega_remittance_postflight.sql
 !scripts/finance_mega_remittance_fingerprint.sql
 !scripts/finance_mega_remittance_canary.sql
+
+# Historical Mega exports and protected release gates
+!scripts/check_remittance_history_private.cjs
+!scripts/test_remittance_history_release_batch.mjs
+!scripts/finance_remittance_history_preflight.sql
+!scripts/finance_remittance_history_postflight.sql
+!scripts/finance_remittance_history_fingerprint.sql
+!scripts/finance_remittance_history_canary.sql

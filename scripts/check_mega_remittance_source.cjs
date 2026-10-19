@@ -30,6 +30,17 @@ function refund(rows, overrides = {}) {
     formPayload: {paymentType: 'bank', refundInfo: {rows: rows || [{method: '銀行轉帳', accountName: '測試退費戶', accountNo: '00000001234567', bankName: '017 兆豐銀行', refundAmount: 1250}]}}
   }, overrides));
 }
+function historical(request=payment(),overrides={}) {
+  const r=copy(request);
+  r.status='completed';r.applicantId='synthetic-applicant';r.createdAt='2026-10-01T00:00:00Z';
+  r.cashPostedAt='2026-10-02T03:00:00Z';r.voucherId='SYNTHETIC-VOUCHER';r.ledgerPostedAt='2026-10-03T03:00:00Z';r.postingLockedAt='2026-10-03T03:00:00Z';
+  r.steps=[{rk:'applicant_submit',uid:r.applicantId,a:'approved'},{rk:'ceo',a:'AUTO'},{rk:'cashier',uid:'synthetic-cashier',a:'approved'},{rk:'applicant_confirm',a:'approved'},{rk:'accountant_final',a:'approved'}];
+  r.formPayload={...r.formPayload,_submissionPayloadSha256V3:'a'.repeat(64),cashAmount:1280};
+  return Object.assign(r,overrides);
+}
+function historicalAuthority(request,overrides={}) {
+  return {exportPurpose:'historical',submittedAt:request.createdAt||request.created_at,submissionSource:'server_created_at',historyCutoff:'2026-09-30T16:00:00Z',...overrides};
+}
 function bad(result, code, field, rowKey) {
   assert.equal(result.ok, false, 'must block export');
   assert(result.issues.some(p => p.code === code && (!field || p.field === field) && (!rowKey || p.rowKey === rowKey)), 'missing expected issue ' + code);
@@ -230,6 +241,119 @@ test('source objects and supplements never mutated', () => {
 });
 test('formula-like holder stays literal source text', () => {
   assert.equal(success(api.resolve(payment({payee:'=1+1'}))).rows[0].name,'=1+1');
+});
+test('historical file keeps actual status and locked posting evidence without authorizing another payment',()=>{
+  const r=historical(),before=JSON.stringify(r),out=success(api.resolve(r,historicalAuthority(r)));
+  assert.equal(out.exportPurpose,'historical');assert.equal(out.context.status,'completed');assert.equal(out.context.paidAt,r.cashPostedAt);
+  assert.equal(out.context.sourceBasis,'current_saved_reconstruction');assert.equal(out.expectedTotal,1250);assert.equal(JSON.stringify(r),before);
+  bad(api.resolve(r),'not_pending_cashier');
+});
+test('request payload cannot grant itself historical export authority',()=>{
+  const r=historical();r.formPayload.exportPurpose='historical';r.exportPurpose='historical';
+  bad(api.resolve(r),'not_pending_cashier');
+});
+test('payment authority retains original strict stage and prevents paid requests being relabeled',()=>{
+  const r=historical();bad(api.resolve(r,{exportPurpose:'payment'}),'not_pending_cashier');
+  r.status='pending_cashier';bad(api.resolve(r,{exportPurpose:'payment'}),'already_paid_or_locked');
+  bad(api.resolve(r,historicalAuthority(r)),'historical_status_invalid');
+});
+test('waiting and unavailable never expose a partial export or supplement rows',()=>{
+  for(const [exportPurpose,code] of [['waiting','waiting_for_cashier'],['unavailable','export_unavailable']]){
+    const out=api.resolve(payment(),{exportPurpose});bad(out,code);assert.equal(out.eligible,false);assert.deepEqual(out.rows,[]);assert.equal(out.expectedTotal,null);
+  }
+  for(const exportPurpose of [null,'unsupported','preview','',false])bad(api.resolve(payment(),{exportPurpose}),'export_purpose_invalid');
+});
+test('historical cutoff is exact Taipei October 1, including offset equivalence',()=>{
+  const r=historical(payment(),{createdAt:'2026-09-30T16:00:00Z'});success(api.resolve(r,historicalAuthority(r)));
+  success(api.resolve(r,historicalAuthority(r,{submittedAt:'2026-10-01T00:00:00+08:00'})));
+  r.createdAt='2026-09-30T15:59:59.999Z';bad(api.resolve(r,historicalAuthority(r)),'historical_before_cutoff');
+});
+test('historical date must come from exact authorized server-created timestamp',()=>{
+  const r=historical();
+  for(const override of [{submittedAt:null},{submittedAt:'2026-10-02T00:00:00Z'},{submittedAt:'2026-10-01'},{submittedAt:'2026-02-30T00:00:00Z'},{submissionSource:'request_date'},{submissionSource:'expense_created_at'},{historyCutoff:'2026-09-01T00:00:00Z'}])bad(api.resolve(r,historicalAuthority(r,override)),'historical_submission_unverified');
+  delete r.createdAt;r.request_date='2026-10-01';bad(api.resolve(r,historicalAuthority(r,{submittedAt:'2026-10-01T00:00:00Z'})),'historical_submission_unverified');
+});
+test('historical formal submission requires matching first applicant and server payload seal',()=>{
+  for(const mutate of [r=>delete r.formPayload._submissionPayloadSha256V3,r=>r.formPayload._submissionPayloadSha256V3='not-a-seal',r=>r.steps[0].rk='ceo',r=>r.steps[0].a='AUTO',r=>r.steps[0].uid='another-applicant',r=>delete r.applicantId]){
+    const r=historical();mutate(r);bad(api.resolve(r,historicalAuthority(r)),'historical_submission_unverified');
+  }
+});
+test('historical payment timestamp never inferred from expected date, step text or payload',()=>{
+  for(const value of ['',null,'10/02','2026-10-02','invalid','2026-09-30T00:00:00Z']){
+    const r=historical(payment(),{cashPostedAt:value});r.formPayload.cashPostedAt='2026-10-02T03:00:00Z';r.steps[2].t='10/02';
+    bad(api.resolve(r,historicalAuthority(r)),'historical_payment_unverified');
+  }
+});
+test('historical requires exactly one genuinely approved cashier',()=>{
+  for(const mutate of [r=>r.steps[2].a='AUTO',r=>r.steps[2].a='',r=>r.steps[2].rk='ceo',r=>r.steps.push({rk:'cashier',a:'approved'})]){
+    const r=historical();mutate(r);bad(api.resolve(r,historicalAuthority(r)),'historical_cashier_unverified');
+  }
+});
+test('historical cannot skip a prior incomplete step or include rejection afterwards',()=>{
+  const r=historical();r.steps[1].a='';bad(api.resolve(r,historicalAuthority(r)),'prior_step_not_approved');
+  r.steps[1].a='AUTO';r.steps[4].a='rejected';bad(api.resolve(r,historicalAuthority(r)),'historical_workflow_invalid');
+});
+test('paid status still awaiting receipt or voucher is historical only with payment evidence',()=>{
+  for(const status of ['pending_applicant_confirm','pending_procurement','pending_voucher','completed']){
+    const r=historical(payment(),{status});r.steps[3].a='';r.steps[4].a='';assert.equal(success(api.resolve(r,historicalAuthority(r))).context.status,status);
+  }
+});
+test('cancelled rejected voided draft and withdrawn cannot become historical',()=>{
+  for(const status of ['draft','pending_cashier','rejected','cancelled','canceled','withdrawn','void','voided']){
+    const r=historical(payment(),{status});bad(api.resolve(r,historicalAuthority(r)),'historical_status_invalid');
+  }
+  const r=historical(payment(),{voided_at:'2026-10-04T00:00:00Z'});bad(api.resolve(r,historicalAuthority(r)),'historical_status_invalid');
+});
+test('cash corrections cannot silently become original bank transfers',()=>{
+  for(const correctionCashEvents of [[{amount:25}],{},'changed']){
+    const r=historical();r.formPayload.correctionCashEvents=correctionCashEvents;bad(api.resolve(r,historicalAuthority(r)),'historical_correction_unsupported');
+  }
+  const r=historical();r.formPayload.accountingCorrection={id:'synthetic-correction'};bad(api.resolve(r,historicalAuthority(r)),'historical_correction_unsupported');
+  r.formPayload.accountingCorrection={};r.formPayload.correctionCashEvents=[];success(api.resolve(r,historicalAuthority(r)));
+});
+test('historical cash amount minus explicitly stored fee must exactly match principal',()=>{
+  for(const change of [{cashAmount:1250},{cashAmount:1281},{cashAmount:0},{cashAmount:null}]){
+    const r=historical();Object.assign(r.formPayload,change);const out=api.resolve(r,historicalAuthority(r));assert.equal(out.ok,false);
+    assert(out.issues.some(issue=>['amount_invalid','historical_cash_mismatch'].includes(issue.code)));
+  }
+  for(const bankFeeAmount of ['',null,undefined,-1,'1e1','30.5']){
+    const r=historical(payment(),{bankFeeAmount});bad(api.resolve(r,historicalAuthority(r)),'historical_fee_missing');
+  }
+  const r=historical(payment(),{bankFeeAmount:0});r.formPayload.cashAmount=1250;success(api.resolve(r,historicalAuthority(r)));
+});
+test('historical ordinary principal does not use actual amount or add fees',()=>{
+  const r=historical(payment({actualAmt:9900}));assert.equal(success(api.resolve(r,historicalAuthority(r))).expectedTotal,1250);
+});
+test('historical purchase uses original funding, never overwritten amount or final actual',()=>{
+  const r=historical(payment({type:'purchase_request',estimatedAmt:1250,amt:1900,actualAmt:1900}));assert.equal(success(api.resolve(r,historicalAuthority(r))).expectedTotal,1250);
+  delete r.estimatedAmt;bad(api.resolve(r,historicalAuthority(r)),'historical_principal_missing');
+  r.formPayload.purchaseEstimate={procurementAmount:1250};r.formPayload.procurementPaymentInfo={amount:1600};assert.equal(success(api.resolve(r,historicalAuthority(r))).expectedTotal,1250);
+  r.estimatedAmt=0;bad(api.resolve(r,historicalAuthority(r)),'amount_invalid');
+});
+test('historical advance preserves original/disbursement priority and never hides zero',()=>{
+  const r=historical(payment({type:'advance_request',estimatedAmt:1600,amt:1900,actualAmt:1900}));r.formPayload.advanceOriginalAmount=1250;r.formPayload.advanceDisbursementAmount=1500;
+  assert.equal(success(api.resolve(r,historicalAuthority(r))).expectedTotal,1250);
+  delete r.formPayload.advanceOriginalAmount;r.formPayload.advanceDisbursementAmount=1250;assert.equal(success(api.resolve(r,historicalAuthority(r))).expectedTotal,1250);
+  r.formPayload.advanceOriginalAmount=0;bad(api.resolve(r,historicalAuthority(r)),'amount_invalid');
+  delete r.formPayload.advanceOriginalAmount;delete r.formPayload.advanceDisbursementAmount;delete r.estimatedAmt;bad(api.resolve(r,historicalAuthority(r)),'historical_principal_missing');
+});
+test('paid HR still requires stored net rows and original principal, never final actual or gross',()=>{
+  const r=historical(hr(undefined,{actualAmt:9999}));const out=success(api.resolve(r,historicalAuthority(r)));assert.equal(out.mode,'payroll');assert.equal(out.rows[0].amount,1250);
+  r.formPayload.hrInfo.rows[0].金額=1300;bad(api.resolve(r,historicalAuthority(r)),'principal_mismatch');
+  delete r.formPayload.hrInfo.rows[0].金額;r.formPayload.hrInfo.rows[0].給付總額=1250;bad(api.resolve(r,historicalAuthority(r)),'amount_invalid');
+});
+test('historical mixed refund reconciles full paid principal but exports bank rows only',()=>{
+  const r=historical(refund([{method:'現金',refundAmount:600},{method:'bank',accountName:'測試乙',accountNo:'000002',bankName:'004 測試銀行',refundAmount:650}]));
+  const out=success(api.resolve(r,historicalAuthority(r)));assert.equal(out.expectedTotal,650);assert.equal(out.summary.cashPrincipal,600);assert.deepEqual(out.sourceRowKeys,['refund:2']);
+  r.formPayload.refundInfo.rows[1].refundAmount=649;bad(api.resolve(r,historicalAuthority(r)),'principal_mismatch');
+});
+test('historical raw DB snake-case fields work without front-end date or number coercion',()=>{
+  const r=historical();for(const [camel,snake] of [['createdAt','created_at'],['cashPostedAt','cash_posted_at'],['applicantId','applicant_id'],['bankFeeAmount','bank_fee_amount'],['formPayload','form_payload']]){r[snake]=r[camel];delete r[camel];}
+  assert.equal(success(api.resolve(r,historicalAuthority(r))).context.status,'completed');
+});
+test('same source purpose and historical authority are part of private snapshot context',()=>{
+  const r=historical(),opts=historicalAuthority(r),before=JSON.stringify({r,opts});const out=success(api.resolve(r,opts));
+  assert.equal(JSON.stringify({r,opts}),before);assert.equal(out.context.exportPurpose,'historical');assert.equal(out.context.submissionSource,'server_created_at');assert.equal(out.context.historyCutoff,opts.historyCutoff);
 });
 test('browser UMD works with bank engine global', () => {
   const root=path.join(__dirname,'../assets/engines/');const context=vm.createContext({window:{}});

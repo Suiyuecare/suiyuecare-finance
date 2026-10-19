@@ -6223,7 +6223,11 @@ function clearFinanceMegaRemittance(view){
 }
 function mountFinanceMegaRemittance(r,view,parent){
   clearFinanceMegaRemittance(view);
-  if(!parent||!r||r.status!=='pending_cashier'||!window.FinanceMegaRemittanceUI||!window.FinanceMegaRemittanceSource||!window.FinanceMegaRemittanceAdapter||!window.FinanceMegaRemittance)return;
+  if(!parent||!r||!window.FinanceMegaRemittanceUI||!window.FinanceMegaRemittanceSource||!window.FinanceMegaRemittanceAdapter||!window.FinanceMegaRemittance)return;
+  // This is only an entry-point hint. The authenticated snapshot RPC decides
+  // whether the request is payable, historical, waiting or unavailable.
+  var submittedAt=r.createdAt||r.created_at||'';
+  if(r.status!=='pending_cashier'&&!(typeof submittedAt==='string'&&Number.isFinite(Date.parse(submittedAt))&&Date.parse(submittedAt)>=Date.parse('2026-09-30T16:00:00Z')))return;
   if(['admin_director','accountant','ceo','cashier','hr'].indexOf(currentRoleKey())<0||!financeMegaIdentity())return;
   var node=document.createElement('div');node.className='detail-full-row';
   node.setAttribute('aria-label','兆豐匯款檔');node.setAttribute('data-mega-remittance-view',view);
@@ -6235,11 +6239,11 @@ function mountFinanceMegaRemittance(r,view,parent){
     readSnapshot:async function(id){
       var identity=financeMegaIdentity();
       if(!identity||!hasSupabase())throw new Error('MEGA_AUTH_REQUIRED');
-      var response=await withOperationTimeout(getSb().rpc('finance_mega_remittance_snapshot_v1',{p_request_id:id,p_data_environment:activeDataEnvironment()}),'讀取兆豐匯款資料',15000);
+      var response=await withOperationTimeout(getSb().rpc('finance_remittance_export_snapshot_v1',{p_request_id:id,p_data_environment:activeDataEnvironment()}),'讀取兆豐匯款資料',15000);
       if(identity!==financeMegaIdentity())throw new Error('MEGA_IDENTITY_CHANGED');
       if(response.error){
         if(response.error.code==='42501')return {ok:false,authorized:false};
-        if(response.error.code==='55000')return {ok:false,authorized:true,eligible:false};
+        if(response.error.code==='55000')return {ok:false,authorized:true,eligible:false,exportPurpose:'unavailable',reasonCode:'workflow_changed'};
         throw new Error('MEGA_SNAPSHOT_UNAVAILABLE');
       }
       var snapshot=window.FinanceMegaRemittanceAdapter.adapt(response.data,window.FinanceMegaRemittanceSource);
@@ -6250,7 +6254,7 @@ function mountFinanceMegaRemittance(r,view,parent){
     saveSupplement:async function(id,digest,rows){
       var identity=financeMegaIdentity();
       if(!identity||!hasSupabase())throw new Error('MEGA_AUTH_REQUIRED');
-      var response=await withOperationTimeout(getSb().rpc('finance_mega_remittance_supplement_save_v1',{p_request_id:id,p_data_environment:activeDataEnvironment(),p_expected_digest:digest,p_rows:rows}),'保存匯款必要欄位',15000);
+      var response=await withOperationTimeout(getSb().rpc('finance_remittance_export_supplement_save_v1',{p_request_id:id,p_data_environment:activeDataEnvironment(),p_expected_digest:digest,p_rows:rows}),'保存匯款必要欄位',15000);
       if(identity!==financeMegaIdentity())throw new Error('MEGA_IDENTITY_CHANGED');
       // A timeout is not success. The controller always rereads before exporting.
       if(response.error)throw new Error(response.error.code==='40001'?'MEGA_VERSION_CONFLICT':'MEGA_SUPPLEMENT_NOT_CONFIRMED');

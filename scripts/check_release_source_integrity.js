@@ -59,6 +59,13 @@ const LEGACY_SCHEMA_SQL_BASELINE = Object.freeze({
 });
 
 const REQUIRED_RELEASE_FILES = Object.freeze([
+  'supabase/migrations/20261019032213_finance_remittance_export_history_v1.sql',
+  'scripts/check_remittance_history_private.cjs',
+  'scripts/test_remittance_history_release_batch.mjs',
+  'scripts/finance_remittance_history_preflight.sql',
+  'scripts/finance_remittance_history_postflight.sql',
+  'scripts/finance_remittance_history_fingerprint.sql',
+  'scripts/finance_remittance_history_canary.sql',
   'assets/engines/mega-remittance-engine.js',
   'assets/engines/mega-remittance-source.js',
   'assets/engines/mega-remittance-adapter.js',

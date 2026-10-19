@@ -168,6 +168,15 @@ try {
   });
   assert.equal(domains.get(megaRemittanceContract.result.canary),megaRemittanceContract.domain);
   let megaRemittanceVerified=0;
+  const remittanceHistoryContract=Object.freeze({
+    filename:'finance_remittance_history_canary.sql',
+    marker:'remittance_history_canary_result',
+    domain:'remittance_history',
+    result:{canary:'readonly_remittance_history_v1',ok:true,rolled_back:true,
+      staff_identity_used:false,business_mutation_performed:false}
+  });
+  assert.equal(domains.get(remittanceHistoryContract.result.canary),remittanceHistoryContract.domain);
+  let remittanceHistoryVerified=0;
   const verifiedSessionTasksContract=Object.freeze({
     filename:'finance_approval_tasks_verified_session_canary.sql',
     marker:'approval_tasks_verified_session_canary_result',
@@ -346,6 +355,44 @@ try {
       megaRemittanceVerified++;
       pass('Mega actual final SQL preserves anonymous/read-only/rollback safeguards and rejects changed, missing or mistyped flags, wrong canary/marker/domain and duplicates');
     }
+    if(name===remittanceHistoryContract.filename){
+      const rows=actualResults.flatMap(result=>result.rows||[]);
+      assert.equal(rows.length,1,'Remittance history final SQL must emit exactly one result row');
+      assert.equal(rows[0].marker,'FINANCE_REMITTANCE_HISTORY_CANARY_ROLLED_BACK');
+      assert.deepEqual(rows[0][remittanceHistoryContract.marker],remittanceHistoryContract.result,
+        'actual History SQL must preserve rollback and must not claim a staff identity or business action');
+      assert.match(source,/begin isolation level repeatable read read only;/);
+      assert.match(source,/auth\.uid\(\) is not null then raise exception/);
+      // The canary may only clear JWT identity, never populate a staff subject.
+      const jwtSettings=[...source.matchAll(/set_config\(\s*'(request\.jwt\.[^']+)'\s*,\s*'([^']*)'\s*,\s*true\s*\)/g)].map(match=>[match[1],match[2]]);
+      assert.deepEqual(jwtSettings,[['request.jwt.claim.sub',''],['request.jwt.claims','{}']]);
+      assert.match(source,/execute 'set local role authenticated';/);
+      assert.match(source,/execute 'reset role';/);
+      assert.match(source,/perform public\.finance_remittance_export_snapshot_v1\('anonymous-mega-canary','test'\);\s*exception when insufficient_privilege then denied:=true;/);
+      assert.match(source,/perform public\.finance_remittance_export_supplement_save_v1\('anonymous-mega-canary','test','anonymous-digest','\[\]'::jsonb\);\s*exception when insufficient_privilege then denied:=true;/);
+      for(const action of ['read','save'])assert.match(source,new RegExp("if not denied then raise exception 'Remittance history "+action+" accepted anonymous identity' using errcode='42501';end if;"));
+      assert.match(source,/-- FINANCE_AUTHENTICATED_CANARY_CORE_END\s*rollback;\s*-- FINANCE_AUTHENTICATED_CANARY_ROLLBACK_CHECK_BEGIN/);
+      assert.match(source,/current_setting\('transaction_read_only'\)='on' then raise exception 'Remittance history canary remains open'/);
+      assert.doesNotMatch(source,/(?:insert\s+into|update|delete\s+from|truncate\s+(?:table\s+)?)\s*(?:auth\.|public\.|private\.)/i,
+        'History canary must not mutate identity, business or private supplement rows');
+      const negative=join(outputDir,'remittance-history-negative.json');
+      const verifyNegative=payload=>{
+        fs.writeFileSync(negative,JSON.stringify(payload));
+        assert.throws(()=>guard.verifyReportsCanary(negative,remittanceHistoryContract.domain));
+      };
+      for(const flag of ['ok','rolled_back','staff_identity_used','business_mutation_performed']){
+        verifyNegative([{[remittanceHistoryContract.marker]:{...remittanceHistoryContract.result,[flag]:!remittanceHistoryContract.result[flag]}}]);
+        const missing={...remittanceHistoryContract.result};delete missing[flag];
+        verifyNegative([{[remittanceHistoryContract.marker]:missing}]);
+        verifyNegative([{[remittanceHistoryContract.marker]:{...remittanceHistoryContract.result,[flag]:String(remittanceHistoryContract.result[flag])}}]);
+      }
+      verifyNegative([{[remittanceHistoryContract.marker]:{...remittanceHistoryContract.result,canary:'wrong-canary'}}]);
+      verifyNegative([{wrong_marker:remittanceHistoryContract.result}]);
+      verifyNegative([{[remittanceHistoryContract.marker]:remittanceHistoryContract.result},{[remittanceHistoryContract.marker]:remittanceHistoryContract.result}]);
+      assert.throws(()=>guard.verifyReportsCanary(file,bankFeeClassificationContract.domain),'History result cannot satisfy another protected domain');
+      remittanceHistoryVerified++;
+      pass('History actual final SQL preserves anonymous/read-only/rollback safeguards and rejects changed, missing or mistyped flags, wrong canary/marker/domain and duplicates');
+    }
     if(name===verifiedSessionTasksContract.filename){
       const rows=actualResults.flatMap(result=>result.rows||[]);
       assert.equal(rows.length,1,'verified-session tasks final SQL must emit exactly one result row');
@@ -390,9 +437,10 @@ try {
   assert.equal(verifiedSessionTasksVerified,1,'the reviewed verified-session tasks file must be explicitly covered exactly once');
   assert.equal(bankFeeClassificationVerified,1,'the reviewed bank fee classification file must be explicitly covered exactly once');
   assert.equal(megaRemittanceVerified,1,'the reviewed Mega remittance file must be explicitly covered exactly once');
-  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-boundedVerified-verifiedSessionTasksVerified-bankFeeClassificationVerified-megaRemittanceVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
+  assert.equal(remittanceHistoryVerified,1,'the reviewed Remittance history file must be explicitly covered exactly once');
+  assert.equal(verified-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-boundedVerified-verifiedSessionTasksVerified-bankFeeClassificationVerified-megaRemittanceVerified-remittanceHistoryVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
   assert.equal(boundedVerified,1,'bounded logout exact final SQL is covered once');
-  assert.equal(verified,47,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, verified-session tasks, bank fee classification and Mega remittance results are covered');
+  assert.equal(verified,48,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, verified-session tasks, bank fee classification Mega remittance and remittance history results are covered');
   // Versioned canaries deliberately retain their old filenames for archived
   // phases, so they are outside the generic *canary.sql discovery above.
   const attachmentSuccessor=fs.readFileSync(new URL('finance_audit_security_canary_20261015.sql',scripts),'utf8');
@@ -415,6 +463,6 @@ try {
   rejectAttachmentResult([{wrong_marker:attachmentExpected}]);
   rejectAttachmentResult([...attachmentRows,...attachmentRows]);
   pass('versioned bill-attachment audit successor final SQL retains exact authority/rollback flags and rejects altered flags, wrong canary/marker and duplicates');
-  pass('all 39 original final SQL results and reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, verified-session tasks, bank fee classification and Mega remittance results satisfy their protected release parsers');
+  pass('all 39 original final SQL results and reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, verified-session tasks, bank fee classification Mega remittance and remittance history results satisfy their protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);

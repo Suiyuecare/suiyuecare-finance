@@ -18,7 +18,7 @@ async function setup(page,overrides={}){
   await page.evaluate(config=>{
     if(window.ui)window.ui.clear();
     window.identity='qa-user|qa-tenant|test|permission-1';window.spies={reads:0,libraries:0,writes:0,saves:[],supplements:[]};window.pending=[];window.readMode=config.readMode||'normal';window.saveMode='normal';
-    window.source={ok:true,authorized:true,eligible:true,stage:'pending_cashier',requestId:'qa-request',requestNo:'QA-ONLY-001',sourceVersion:1,sourceDigest:'opaque-digest-1',mode:'bulk',rows:[{name:'虛構收款戶名甲',account:'000000001234',bankCode:'0170000',amount:1200}],expectedTotal:1200,issues:[],canSupplement:false,supplementRows:[],entityLabel:'虛構付款公司',paymentDate:'2026-10-20',feeBearer:'己方支出',companyFee:0};
+    window.source={ok:true,authorized:true,eligible:true,stage:'pending_cashier',exportPurpose:'payment',requestId:'qa-request',requestNo:'QA-ONLY-001',sourceVersion:1,sourceDigest:'opaque-digest-1',mode:'bulk',rows:[{name:'虛構收款戶名甲',account:'000000001234',bankCode:'0170000',amount:1200}],expectedTotal:1200,issues:[],canSupplement:false,supplementRows:[],entityLabel:'虛構付款公司',paymentDate:'2026-10-20',feeBearer:'己方支出',companyFee:0};
     Object.assign(window.source,config.snapshot||{});
     const serializer={write(book){window.spies.writes++;window.lastBook=book;return new Uint8Array([80,75,3,4,1,2,3,4]);}};
     window.ui=FinanceMegaRemittanceUI.create({
@@ -71,12 +71,35 @@ async function clickDownload(page){await page.getByRole('button',{name:'下載 E
     ok((await page.locator('#mount').innerText()).includes('預計匯款日期：請確認有效'),'resolver failure displays actionable missing field rather than a permission error');
 
     for(const stage of ['pending_ceo','completed','unknown']){
-      await setup(page,{snapshot:{stage}});await state(page,'ineligible');
+      await setup(page,{snapshot:{stage}});await state(page,'unavailable');
       ok((await readSpies(page)).writes===0,'unsupported stage '+stage+' produces no file');
     }
     await setup(page,{snapshot:{expectedTotal:1500}});await state(page,'missing');
     ok(!(await page.evaluate(()=>ui.getState().hasFile))&&(await page.locator('#mount').innerText()).includes('明細合計與已核定的匯款本金不一致'),'principal mismatch never exposes a partial or wrong-total file');
     await setup(page,{snapshot:{expectedTotal:null}});await state(page,'missing');ok((await readSpies(page)).writes===0,'unknown approved principal never falls back to the requested amount');
+
+    const historical={exportPurpose:'historical',stage:'completed',submittedAt:'2026-10-02T01:00:00Z',submissionSource:'server_created_at',historyCutoff:'2026-09-30T16:00:00Z',paidAt:'2026-10-03T01:00:00Z',sourceBasis:'current_saved_reconstruction'};
+    await setup(page,{snapshot:historical});await state(page,'ready');
+    ok((await page.locator('#mount').innerText()).includes('已付款歷史補檔，勿重複匯款')&&!(await page.locator('#mount').innerText()).includes('銀行系統檢核及執行匯款'),'historical mode shows reconstruction warning without inviting another bank payment');
+    ok(await page.getByRole('button',{name:'下載歷史 Excel',exact:true}).isDisabled(),'historical download requires explicit acknowledgement');
+    await page.evaluate(()=>ui.download());ok((await readSpies(page)).saves===0&&(await readSpies(page)).reads===1,'direct download invocation cannot bypass history acknowledgement');
+    await page.getByRole('checkbox',{name:'已知為已付款歷史檔，不會再次送銀行匯款'}).check();
+    await page.getByRole('button',{name:'下載歷史 Excel',exact:true}).click();await state(page,'ready');
+    ok((await readSpies(page)).saves===1&&await page.evaluate(()=>spies.saves[0].filename==='已付款_歷史補檔_勿重複匯款_兆豐_整批匯款_QA-ONLY-001.xlsx'),'acknowledged history freshly checks and downloads unmistakably marked filename');
+    await page.evaluate(()=>{source.sourceDigest='history-new-version';source.sourceVersion++;});
+    await page.getByRole('button',{name:'下載歷史 Excel',exact:true}).click();await state(page,'ready');
+    ok((await readSpies(page)).saves===1&&!(await page.getByRole('checkbox').isChecked())&&await page.getByRole('button',{name:'下載歷史 Excel',exact:true}).isDisabled(),'changed historical version requires a new acknowledgement before any download');
+    await page.getByRole('checkbox').check();await page.evaluate(()=>{source.authorized=false;});await page.getByRole('button',{name:'下載歷史 Excel',exact:true}).click();await state(page,'denied');
+    ok(!await page.getByRole('checkbox').count()&&!(await page.locator('#mount').innerText()).includes('NT$')&&(await readSpies(page)).saves===1,'history revocation removes consent, private amount and file');
+    for(const invalid of [{sourceBasis:''},{paidAt:''},{submittedAt:'2026-09-30T15:59:59Z'},{submissionSource:'request_date'},{historyCutoff:'2026-01-01T00:00:00Z'}]){
+      await setup(page,{snapshot:{...historical,...invalid}});await state(page,'unavailable');ok((await readSpies(page)).writes===0,'incomplete or out-of-range historical authority fails closed: '+Object.keys(invalid)[0]);
+    }
+    await setup(page,{snapshot:{eligible:false,exportPurpose:'waiting',stage:'pending_ceo',reasonCode:'waiting_approval'}});await state(page,'waiting');
+    ok((await readSpies(page)).writes===0&&await page.getByRole('button',{name:'重新確認',exact:true}).count()===1,'waiting request explains approval prerequisite without generating bytes');
+    await setup(page,{snapshot:{eligible:false,exportPurpose:'unavailable',stage:'cancelled',reasonCode:'cancelled_or_rejected'}});await state(page,'unavailable');
+    ok((await page.locator('#mount').innerText()).includes('已取消或駁回')&&(await readSpies(page)).writes===0,'cancelled or rejected request has no usable bank export');
+    await setup(page,{snapshot:{...historical,ok:false,issues:[{field:'expectedTotal',code:'principal_mismatch'}]}});await state(page,'missing');
+    ok(!await page.getByRole('checkbox').count()&&(await readSpies(page)).writes===0,'historical principal mismatch cannot be acknowledged or downloaded');
 
     await setup(page,{readMode:'deferred'});await page.waitForFunction(()=>pending.length===1);
     await page.evaluate(()=>{identity='different-user';pending[0].resolve(structuredClone(source));});
