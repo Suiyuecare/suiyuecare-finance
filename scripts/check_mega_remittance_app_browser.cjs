@@ -75,7 +75,7 @@ const fixtureSetup=`(async function(){
 
 async function browserCase(engine,width,origin){
   const browser=await playwright[engine].launch({headless:true});
-  let page;const errors=[],dialogs=[];
+  let page,downloadInteraction=null;const errors=[],dialogs=[];
   try{
     const context=await browser.newContext({viewport:{width,height:width<600?844:1000},acceptDownloads:true});
     await context.route('**/*',route=>{const url=new URL(route.request().url());return url.origin===origin||url.protocol==='blob:'||url.protocol==='data:'?route.continue():route.abort();});
@@ -173,7 +173,13 @@ async function browserCase(engine,width,origin){
     let importPanel=page.locator('#appr-inner .finance-mega-remittance');
     await importPanel.locator('[data-mega-action="download"]').waitFor();
     const importBefore=await scope('JSON.stringify(window.__qaSnapshot)');
-    const importDownloadEvent=page.waitForEvent('download');await importPanel.getByRole('button',{name:'下載 Excel',exact:true}).click();const importDownload=await importDownloadEvent;
+    downloadInteraction={scenario:importLabel,click:'pending',download:'pending'};
+    // Observe both promises immediately: an actionability failure must reach the
+    // diagnostic catch instead of leaving the download timeout unhandled.
+    const [importDownload]=await Promise.all([
+      page.waitForEvent('download').then(download=>{downloadInteraction.download='received';return download;},error=>{downloadInteraction.download='failed';throw error;}),
+      importPanel.getByRole('button',{name:'下載 Excel',exact:true}).click().then(()=>{downloadInteraction.click='resolved';},error=>{downloadInteraction.click='failed';downloadInteraction.clickError=error.message;throw error;})
+    ]);
     const importBook=XLSX.read(fs.readFileSync(await importDownload.path()),{type:'buffer',cellText:false}),importSheet=importBook.Sheets[importBook.SheetNames[0]];
     equal(importSheet.D2.v,'0040123',importLabel+' actual downloaded salary Excel reassembles all seven code digits');
     equal(importSheet.D2.t,'s',importLabel+' salary bank branch remains an Excel text cell');
@@ -402,11 +408,27 @@ async function browserCase(engine,width,origin){
   }catch(error){
     if(page&&!page.isClosed()){
       let diagnostic;
-      try{diagnostic=await page.evaluate(()=>({
-        panels:Array.from(document.querySelectorAll('.finance-mega-remittance')).map(panel=>({host:panel.closest('#appr-inner')?'approval':'detail',state:panel.dataset.megaState,busy:panel.querySelector('.mega-body')?.getAttribute('aria-busy'),text:panel.innerText,inputs:Array.from(panel.querySelectorAll('input')).map(input=>({name:input.name,value:input.value,invalid:input.getAttribute('aria-invalid'),formClass:input.form?.className})),buttons:Array.from(panel.querySelectorAll('button')).map(button=>({text:button.textContent,type:button.type,disabled:button.disabled,formClass:button.form?.className}))})),
-        activeElement:{tag:document.activeElement?.tagName,id:document.activeElement?.id,name:document.activeElement?.getAttribute('name')},modal:{display:document.querySelector('#m-appr')?.style.display,hidden:document.querySelector('#m-appr')?.getAttribute('aria-hidden')},events:window.__qaMegaEvents||[],writes:window.__qaWrites||[],reads:(window.__qaReads||[]).slice(-6),fixture:window.__qaSnapshot?{id:window.__qaSnapshot.id,status:window.__qaSnapshot.status,version:window.__qaSnapshot.ver,purpose:window.__qaPurpose,supplements:window.__qaSupplements}:null
-      }));}catch(captureError){diagnostic={captureError:captureError.message};}
-      const details={engine,width,error:error.message,checks,errors,dialogs,diagnostic};
+      try{diagnostic=await page.evaluate(async()=>{
+        const elementInfo=element=>element?{tag:element.tagName,id:element.id,className:element.className,action:element.getAttribute('data-mega-action')}:null;
+        const geometry=element=>{
+          const rect=element.getBoundingClientRect(),style=getComputedStyle(element);
+          const x=rect.left+rect.width/2,y=rect.top+rect.height/2;
+          const hit=x>=0&&x<innerWidth&&y>=0&&y<innerHeight?document.elementFromPoint(x,y):null;
+          const scrollAncestors=[];
+          for(let ancestor=element.parentElement;ancestor;ancestor=ancestor.parentElement){
+            const ancestorStyle=getComputedStyle(ancestor);
+            if(ancestor.scrollHeight>ancestor.clientHeight||ancestor.scrollWidth>ancestor.clientWidth)scrollAncestors.push({element:elementInfo(ancestor),scrollTop:ancestor.scrollTop,scrollLeft:ancestor.scrollLeft,clientHeight:ancestor.clientHeight,scrollHeight:ancestor.scrollHeight,overflowX:ancestorStyle.overflowX,overflowY:ancestorStyle.overflowY});
+          }
+          return {rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},display:style.display,visibility:style.visibility,pointerEvents:style.pointerEvents,inertAncestor:elementInfo(element.closest('[inert]')),centerHit:elementInfo(hit),centerHitsSelf:!!hit&&(hit===element||element.contains(hit)),scrollAncestors};
+        };
+        let controllers;
+        try{controllers=await window.__megaAppQA.run('Object.fromEntries(Object.entries(FINANCE_MEGA_REMITTANCE_VIEWS).map(function(entry){return [entry[0],entry[1].getState()];}))');}catch(controllerError){controllers={captureError:controllerError.message};}
+        return {
+          panels:Array.from(document.querySelectorAll('.finance-mega-remittance')).map(panel=>({host:panel.closest('#appr-inner')?'approval':'detail',state:panel.dataset.megaState,busy:panel.querySelector('.mega-body')?.getAttribute('aria-busy'),text:panel.innerText,inputs:Array.from(panel.querySelectorAll('input')).map(input=>({name:input.name,value:input.value,invalid:input.getAttribute('aria-invalid'),formClass:input.form?.className})),buttons:Array.from(panel.querySelectorAll('button')).map(button=>({text:button.textContent,type:button.type,disabled:button.disabled,formClass:button.form?.className,geometry:geometry(button)}))})),
+          controllers,viewport:{width:innerWidth,height:innerHeight,scrollX,scrollY},activeElement:elementInfo(document.activeElement),modal:{display:document.querySelector('#m-appr')?.style.display,hidden:document.querySelector('#m-appr')?.getAttribute('aria-hidden')},events:window.__qaMegaEvents||[],writes:window.__qaWrites||[],reads:(window.__qaReads||[]).slice(-6),fixture:window.__qaSnapshot?{id:window.__qaSnapshot.id,status:window.__qaSnapshot.status,version:window.__qaSnapshot.ver,purpose:window.__qaPurpose,supplements:window.__qaSupplements}:null
+        };
+      });}catch(captureError){diagnostic={captureError:captureError.message};}
+      const details={engine,width,error:error.message,stack:error.stack,checks,errors,dialogs,downloadInteraction,diagnostic};
       fs.writeFileSync(path.join(output,engine+'-'+width+'-failure.json'),JSON.stringify(details,null,2));
       console.error('MEGA_APP_FAILURE_DIAGNOSTIC '+JSON.stringify(details));
       await page.screenshot({path:path.join(output,engine+'-'+width+'-failure.png')}).catch(()=>{});
