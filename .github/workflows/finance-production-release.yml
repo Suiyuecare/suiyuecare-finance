@@ -2023,6 +2023,17 @@ jobs:
             --ledger "$RUNNER_TEMP/promotion-ledger.txt" \
             --migration-dir "$TOOLS/supabase/migrations" --release-phase "$RELEASE_PHASE" \
             --migration-versions "$MIGRATION_VERSIONS"
+          # Every frontend candidate requires its current RPC dependencies, even
+          # when an operator selected an older fixed database release phase.
+          node "$GUARD" verify-ledger --mode post \
+            --ledger "$RUNNER_TEMP/promotion-ledger.txt" \
+            --migration-dir "$TOOLS/supabase/migrations" --release-phase frontend_compat \
+            --migration-versions none
+          node "$GUARD" prepare-read-only-query --input "$TOOLS/scripts/finance_remittance_history_postflight.sql" \
+            --output "$RUNNER_TEMP/promotion-required-remittance-history.sql"
+          (cd "$TOOLS" && supabase db query --linked --file "$RUNNER_TEMP/promotion-required-remittance-history.sql" --output json) > "$RUNNER_TEMP/promotion-required-remittance-history.json"
+          (cd "$TOOLS" && supabase db query --linked --file scripts/finance_remittance_history_canary.sql --output json) > "$RUNNER_TEMP/promotion-required-remittance-history-canary.json"
+          node "$GUARD" verify-reports-canary --domain remittance_history --input "$RUNNER_TEMP/promotion-required-remittance-history-canary.json"
           PROMOTION_POSTFLIGHT_SOURCE="$TOOLS/scripts/finance_production_db_postflight.sql"
           if test "$RELEASE_PHASE" = "database_remittance_history_20261019"; then
             PROMOTION_POSTFLIGHT_SOURCE="$TOOLS/scripts/finance_remittance_history_postflight.sql"

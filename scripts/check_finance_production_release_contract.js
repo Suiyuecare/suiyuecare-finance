@@ -2386,12 +2386,15 @@ try {
   writeLedger(prior);
   assert.equal(guard.classifyLedger(ledger,directory,historyPhase,historyVersion,baseline),'pending');
   assert.throws(()=>guard.classifyLedger(ledger,directory,'frontend_compat','none',baseline),/remittance history migration/);
+  assert.equal(guard.verifyLedger('post',ledger,directory,megaPhase,megaVersion,baseline),true);
+  assert.throws(()=>guard.verifyLedger('post',ledger,directory,'frontend_compat','none',baseline),/remittance history migration/);
   for(const missing of prior.slice(1)){
     writeLedger(prior.filter(version=>version!==missing));
     assert.throws(()=>guard.classifyLedger(ledger,directory,historyPhase,historyVersion,baseline),/every reviewed prerequisite migration/);
   }
   writeLedger([...prior,historyVersion]);
   assert.equal(guard.classifyLedger(ledger,directory,historyPhase,historyVersion,baseline),'applied');
+  assert.equal(guard.verifyLedger('post',ledger,directory,'frontend_compat','none',baseline),true);
   const filename=fs.readdirSync(directory).find(name=>name.startsWith(historyVersion+'_'));
   const source=fs.readFileSync(path.join(directory,filename),'utf8');
   assert.equal(crypto.createHash('sha256').update(source).digest('hex'),guard.REMITTANCE_HISTORY_SOURCE_SHA256[historyVersion]);
@@ -2403,10 +2406,18 @@ try {
 } finally {fs.rmSync(historyTemp,{recursive:true,force:true});}
 assert.doesNotMatch(promoteJob.match(/^    if: \$\{\{[^\n]+/m)?.[0]||'',/database_remittance_history_20261019/,'the new private-data contract must publish together with the tested frontend');
 assert.doesNotMatch(promoteJob,/prepare-remittance-history-(?:apply|rehearsal)/,'promotion cannot rerun the data migration');
-assert.equal((workflow.match(/verify-reports-canary --domain remittance_history/g)||[]).length,4,'fixed DB, promotion and future frontend checks retain the private-data contract');
+assert.equal((workflow.match(/verify-reports-canary --domain remittance_history/g)||[]).length,5,'fixed DB, promotion and future frontend checks retain the private-data contract');
 for(const part of ['preflight','postflight','fingerprint','canary']){
   const file='scripts/finance_remittance_history_'+part+'.sql';
   assert(candidateJob.includes(file),'Mega gate must enter sealed bundle: '+file);
   for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'"+file+"'"),'Mega gate must be sealed: '+file);
 }
 console.log('PASS Remittance history fixed source/prerequisites/private-data/publication contracts');
+
+// Selecting an older DB phase must not publish frontend RPCs absent from its ledger.
+const requiredDependencyBlock=workflow.slice(workflow.indexOf('# Every frontend candidate requires its current RPC dependencies'),workflow.indexOf('          PROMOTION_POSTFLIGHT_SOURCE='));
+assert.match(requiredDependencyBlock,/verify-ledger --mode post[\s\S]*--release-phase frontend_compat[\s\S]*--migration-versions none/);
+assert.match(requiredDependencyBlock,/finance_remittance_history_postflight.sql/);
+assert.match(requiredDependencyBlock,/verify-reports-canary --domain remittance_history/);
+assert.doesNotMatch(requiredDependencyBlock,/if test.*RELEASE_PHASE/);
+console.log('PASS every frontend promotion requires current history RPCs regardless of selected DB phase');
