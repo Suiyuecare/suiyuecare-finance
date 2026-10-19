@@ -94,6 +94,134 @@ async function browserCase(engine,width,origin){
         if(window.__qaMegaEvents.length>50)window.__qaMegaEvents.shift();
       },true);
     });
+    const importLabel=engine+'/'+width+'/bank-code-import';
+    const importRows=async rows=>scope(`(async function(){
+      var book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(${JSON.stringify(rows)}),'工作表1');
+      var file=new File([XLSX.write(book,{type:'array',bookType:'xlsx'})],'fictional-codes.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      try{var values=hrNormalizeTransferRows(hrRowsFromTableRows(await readSpreadsheetRows(file),file.name));return {rows:values,issues:values.map(hrTransferBankCodes)};}catch(error){return {error:error.message};}
+    })()`);
+
+    const imported=await scope(`(async function(){
+      closeAppr();closeModal('m-detail');clearFinanceMegaRemittance();
+      document.querySelectorAll('.pg.on').forEach(function(node){node.classList.remove('on');});el('pg-newreq').classList.add('on');
+      S.page='newreq';S.nrType='hr_expense_request';S.nrStep=3;S.nrRec='receipt';S.nrPay='bank';S.hrItem='salary_50';S.nrFiles=[];S.lazyMode=false;S.hrPrivacyMode=true;
+      var source=[['序位','銀行別','銀行代號','分行名稱','銀行帳號','金額','備註'],['1','臺灣銀行','0040123','虛構分行','000000001234',1200,'虛構資料']];
+      var book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(source),'工作表1');
+      var file=new File([XLSX.write(book,{type:'array',bookType:'xlsx'})],'fictional-transfer.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      var parsed=await readSpreadsheetRows(file);S.hrRows=hrNormalizeTransferRows(hrRowsFromTableRows(parsed,file.name));
+      renderNR();document.querySelectorAll('#nr-content details').forEach(function(node){node.open=true;});renderHrExpenseSheet();
+      return {rows:structuredClone(S.hrRows),repeated:hrNormalizeTransferRows(S.hrRows),sheetColumns:hrSheetCols(S.hrRows)};
+    })()`);
+    equal(imported.rows[0]['銀行代號'],'004',importLabel+' real XLSX importer retains canonical 3 digit bank');
+    equal(imported.rows[0]['分行代號'],'0123',importLabel+' real XLSX importer preserves leading-zero branch separately');
+    equal(imported.rows[0]['銀行帳號'],'000000001234',importLabel+' bank-code processing leaves account unchanged');
+    equal(imported.rows[0]['金額'],1200,importLabel+' bank-code processing leaves principal unchanged');
+    equal(imported.rows[0]['姓名'],'',importLabel+' privacy import keeps payee name blank');
+    equal(imported.repeated,imported.rows,importLabel+' repeated normalization is lossless and stable');
+    equal(imported.sheetColumns.length,7,importLabel+' existing transfer table remains seven columns');
+    for(const layout of [
+      [['1','臺灣銀行','0040123','虛構分行','000000001234',1200,'虛構備註']],
+      [['虛構公司','虛構代碼','虛構部門','臺灣銀行','虛構分行','0040123','0123','000000001234',1200]]
+    ]){
+      const legacy=await importRows(layout);equal(legacy.rows[0]['銀行代號'],'004',importLabel+' existing headerless '+layout[0].length+'-column import retains bank');
+      equal(legacy.rows[0]['分行代號'],'0123',importLabel+' existing headerless '+layout[0].length+'-column import retains full branch');
+      equal(legacy.rows[0]['銀行帳號'],'000000001234',importLabel+' existing headerless '+layout[0].length+'-column import leaves account unchanged');
+      equal(legacy.rows[0]['金額'],1200,importLabel+' existing headerless '+layout[0].length+'-column import leaves amount unchanged');
+      equal(legacy.rows[0]['姓名'],'',importLabel+' existing headerless '+layout[0].length+'-column import keeps privacy');
+    }
+    const duplicateBank=await importRows([['銀行代碼','銀行代號','銀行帳號','金額'],['0040123','0040222','000000001234',1200]]);
+    equal(duplicateBank.rows[0]['銀行代號'],'0040222',importLabel+' real XLSX keeps explicitly provided canonical bank code');
+    equal(duplicateBank.rows[0]['銀行代碼'],'0040123',importLabel+' real XLSX retains conflicting alias instead of overwriting canonical');
+    ok(Boolean(duplicateBank.issues[0].error),importLabel+' true bank-code column conflict blocks validation');
+    const duplicateBranch=await importRows([['銀行代號','分行代碼','分行代號','銀行帳號','金額'],['004','0123','0222','000000001234',1200]]);
+    equal(duplicateBranch.rows[0]['分行代號'],'0222',importLabel+' real XLSX retains canonical conflicting branch');
+    equal(duplicateBranch.rows[0]['分行代碼'],'0123',importLabel+' real XLSX retains original conflicting branch alias');
+    ok(Boolean(duplicateBranch.issues[0].error),importLabel+' true branch-code column conflict blocks validation');
+    const blankCanonical=await importRows([['銀行代碼','銀行代號','銀行帳號','金額'],['0040123','','000000001234',1200]]);
+    equal(blankCanonical.rows[0]['銀行代號'],'004',importLabel+' blank canonical field accepts a single explicit alias');
+    equal(blankCanonical.rows[0]['分行代號'],'0123',importLabel+' single explicit alias retains branch when canonical was blank');
+    const identicalHeader=await importRows([['銀行代號','銀行代號','銀行帳號','金額'],['0040123','0040222','000000001234',1200]]);
+    ok(Boolean(identicalHeader.error&&identicalHeader.error.includes('重複欄名')),importLabel+' duplicate bank headers with differing values cannot lose either value silently');
+    const blankDuplicate=await importRows([['銀行代碼','銀行代號','銀行代號','銀行帳號','金額'],['0040123','0040222','','000000001234',1200]]);
+    equal(blankDuplicate.rows[0]['銀行代號'],'0040222',importLabel+' later blank duplicate cannot erase a conflicting canonical bank code');
+    equal(blankDuplicate.rows[0]['銀行代碼'],'0040123',importLabel+' earlier bank alias survives a blank duplicate canonical column');
+    ok(Boolean(blankDuplicate.issues[0].error),importLabel+' conflict survives trailing blank duplicate headers');
+    for(const header of ['BankCode','BANK CODE','銀行 代碼']){
+      const caseAlias=await importRows([['銀行代號',header,'銀行帳號','金額'],['0040123','0040222','000000001234',1200]]);
+      ok(Boolean(caseAlias.error||(caseAlias.issues&&caseAlias.issues[0].error)),importLabel+' recognized header variant cannot hide a second bank code '+header);
+    }
+    const blankBranchDuplicate=await importRows([['銀行代號','分行代碼','分行代號','分行代號','銀行帳號','金額'],['004','0123','0222','','000000001234',1200]]);
+    equal(blankBranchDuplicate.rows[0]['分行代號'],'0222',importLabel+' later blank branch duplicate cannot erase the conflicting supplied branch');
+    ok(Boolean(blankBranchDuplicate.issues[0].error),importLabel+' branch conflict survives a trailing blank duplicate');
+
+    const zeroCanonical=await importRows([['銀行代碼','銀行代號','銀行帳號','金額'],['0040123',0,'000000001234',1200]]);
+    equal(zeroCanonical.rows[0]['銀行代號'],'0',importLabel+' real XLSX zero code is preserved as supplied instead of becoming blank');
+    ok(Boolean(zeroCanonical.issues[0].error),importLabel+' zero canonical bank code is rejected instead of replaced');
+
+    await page.getByLabel('第 1 列銀行代號',{exact:true}).waitFor();
+    equal(await page.getByLabel('第 1 列分行代號',{exact:true}).inputValue(),'0123',importLabel+' preserved branch can be inspected and corrected');
+    equal(await page.locator('#hr-expense-sheet [data-hr-col="姓名"]').count(),0,importLabel+' private name is not exposed in transfer table');
+    const importGeometry=await page.locator('#hr-expense-sheet .hr-sheet-scroll').evaluate(element=>{const rect=element.getBoundingClientRect();return {left:rect.left,right:rect.right,viewport:innerWidth};});
+    ok(importGeometry.left>=-1&&importGeometry.right<=width+1,importLabel+' dense transfer table remains inside its scroll container');
+    await page.getByLabel('第 1 列分行代號',{exact:true}).scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(output,engine+'-'+width+'-bank-code-import.png')});
+    equal(await scope("window.__qaWrites.filter(function(write){return write.table!=='compliance_audit_logs'||write.method!=='insert';})"),[],importLabel+' opening the form only attempts its existing compliance audit, never a payment write');
+    await scope('window.__qaWrites=[];');
+    const validRequest=rawRequest('payroll');validRequest.amount=validRequest.estimated_amount=1200;
+    validRequest.form_payload.hrInfo={item:{id:'salary_50'},paymentTotal:1200,total:1200,rows:imported.rows};
+    await scope(`(function(){window.__qaSnapshot=${JSON.stringify(validRequest)};window.__qaSnapshot.tenant_id=currentTenantId();window.__qaSupplements=[{rowKey:'hr:1',name:'虛構私有戶名'}];window.__qaPurpose='payment';window.__qaReason='';REQS=[mapReq(structuredClone(window.__qaSnapshot))];showApprD(REQS[0]);})()`);
+    let importPanel=page.locator('#appr-inner .finance-mega-remittance');
+    await importPanel.locator('[data-mega-action="download"]').waitFor();
+    const importBefore=await scope('JSON.stringify(window.__qaSnapshot)');
+    const importDownloadEvent=page.waitForEvent('download');await importPanel.getByRole('button',{name:'下載 Excel',exact:true}).click();const importDownload=await importDownloadEvent;
+    const importBook=XLSX.read(fs.readFileSync(await importDownload.path()),{type:'buffer',cellText:false}),importSheet=importBook.Sheets[importBook.SheetNames[0]];
+    equal(importSheet.D2.v,'0040123',importLabel+' actual downloaded salary Excel reassembles all seven code digits');
+    equal(importSheet.D2.t,'s',importLabel+' salary bank branch remains an Excel text cell');
+    equal(importSheet.E2.v,'000000001234',importLabel+' actual salary download preserves leading-zero account');
+    equal(importSheet.F2.v,1200,importLabel+' actual salary download keeps principal unchanged');
+    equal(await scope('JSON.stringify(window.__qaSnapshot)'),importBefore,importLabel+' download never rewrites approved source');
+    equal(await scope('window.__qaWrites.length'),0,importLabel+' import preview and bank export cause no financial mutation');
+    await scope('closeAppr();');
+    await page.getByLabel('第 1 列銀行代號',{exact:true}).fill('0040222');await page.getByLabel('第 1 列銀行代號',{exact:true}).press('Tab');
+    await page.locator('#hr-bank-code-0-error').waitFor();
+    ok((await page.locator('#hr-bank-code-0-error').innerText()).includes('末 4 碼'),importLabel+' conflicting full code and branch get an actionable visible error');
+    equal(await page.getByLabel('第 1 列銀行代號',{exact:true}).inputValue(),'0040222',importLabel+' conflict retains supplied full code');
+    equal(await page.getByLabel('第 1 列分行代號',{exact:true}).inputValue(),'0123',importLabel+' conflict retains supplied separate branch');
+    ok((await scope('collectHrExpenseInfo().missing')).some(message=>message.includes('末 4 碼')),importLabel+' actual form collector blocks conflicting submission');
+    await page.locator('#hr-bank-code-0-error').scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(output,engine+'-'+width+'-bank-code-conflict.png')});
+    const conflicted=await scope('structuredClone(S.hrRows)');validRequest.form_payload.hrInfo.rows=conflicted;
+    await scope(`(function(){window.__qaSnapshot=${JSON.stringify(validRequest)};window.__qaSnapshot.tenant_id=currentTenantId();REQS=[mapReq(structuredClone(window.__qaSnapshot))];showApprD(REQS[0]);})()`);
+    await page.waitForFunction(()=>document.querySelector('#appr-inner .finance-mega-remittance')?.dataset.megaState==='missing');
+    equal(await page.locator('#appr-inner [data-mega-action="download"]').count(),0,importLabel+' raw conflicting source has no downloadable file without relying on a client marker');
+    await scope('closeAppr();');
+    await page.getByLabel('第 1 列分行代號',{exact:true}).fill('0222');await page.getByLabel('第 1 列分行代號',{exact:true}).press('Tab');
+    equal(await page.locator('#hr-bank-code-0-error').count(),0,importLabel+' explicitly correcting branch clears conflict');
+    equal(await scope('S.hrRows[0]["銀行代號"]'),'004',importLabel+' corrected row restores canonical bank code');
+    equal(await scope('S.hrRows[0]["分行代號"]'),'0222',importLabel+' corrected row retains confirmed branch');
+    await scope('S.hrRows[0].bank_code="0040222";renderHrExpenseSheet();');
+    await page.getByLabel('第 1 列分行代號',{exact:true}).fill('0333');await page.getByLabel('第 1 列分行代號',{exact:true}).press('Tab');
+    equal(await page.locator('#hr-bank-code-0-error').count(),0,importLabel+' confirmed branch edits clear only previously equivalent hidden bank aliases');
+    equal(await scope('S.hrRows[0]["分行代號"]'),'0333',importLabel+' confirmed new branch remains editable after alias import');
+    await scope('S.hrRows[0].bank_code="0070999";renderHrExpenseSheet();');
+    await page.getByLabel('第 1 列分行代號',{exact:true}).fill('0444');await page.getByLabel('第 1 列分行代號',{exact:true}).press('Tab');
+    ok(Boolean(await scope('hrTransferBankCodes(S.hrRows[0]).error')),importLabel+' editing a branch cannot hide preexisting conflicting bank identities');
+    equal(await scope('S.hrRows[0].bank_code'),'0070999',importLabel+' genuinely conflicting bank alias remains available for correction');
+    await page.getByLabel('第 1 列銀行代號',{exact:true}).fill('007');await page.getByLabel('第 1 列銀行代號',{exact:true}).press('Tab');
+    equal(await scope('S.hrRows[0]["分行代號"]'),'',importLabel+' switching banks discards the previous bank branch');
+    await scope('S.hrRows[0]["銀行代號"]="invalid";S.hrRows[0]["分行代號"]="0999";renderHrExpenseSheet();');
+    await page.getByLabel('第 1 列銀行代號',{exact:true}).fill('004');await page.getByLabel('第 1 列銀行代號',{exact:true}).press('Tab');
+    equal(await scope('S.hrRows[0]["分行代號"]'),'',importLabel+' correcting an invalid bank never reuses its ambiguous old branch');
+    for(const value of ['銀行代號：0040123','(0040123)','004','0040123']){
+      const normalized=await scope('hrNormalizeTransferBankRow({銀行代號:'+JSON.stringify(value)+',銀行帳號:"000000001234",金額:1200},0)');
+      equal(normalized['銀行代號'],'004',importLabel+' explicit code preserves canonical bank '+JSON.stringify(value));
+      equal(normalized['分行代號'],value==='004'?'':'0123',importLabel+' explicit code preserves full branch '+JSON.stringify(value));
+    }
+    for(const value of [40123,'004012','00401234','0040123\n','0040123\r','004 0123','004-0123','004/0123','銀行代號：0040123 0070999']){
+      ok(Boolean(await scope('hrTransferBankCodes({銀行代號:'+JSON.stringify(value)+'}).error')),importLabel+' ambiguous or malformed bank code is not guessed '+JSON.stringify(value));
+    }
+    await scope('(async function(){S.nrType=null;S.hrRows=[];S.hrPrivacyMode=false;markNRClean();await nav("dashboard",null);window.__qaSupplements=[];window.__qaWrites=[];})()');
+    results.push({engine,width,kind:'bank-code-import',view:'actual-XLSX-form-and-approval',geometry:importGeometry,filename:importDownload.suggestedFilename()});
     for(const kind of ['bulk','payroll','refund'])for(const view of ['detail','approval']){
       const label=engine+'/'+width+'/'+kind+'/'+view,data=rawRequest(kind);
       await scope(`(function(){closeAppr();clearFinanceMegaRemittance();window.__qaDenied=false;window.__qaSupplements=[];window.__qaSnapshot=${JSON.stringify(data)};window.__qaSnapshot.tenant_id=currentTenantId();REQS=[mapReq(structuredClone(window.__qaSnapshot))];})()`);
