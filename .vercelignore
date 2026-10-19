@@ -617,3 +617,17 @@ supabase/.temp
 !scripts/finance_remittance_history_postflight.sql
 !scripts/finance_remittance_history_fingerprint.sql
 !scripts/finance_remittance_history_canary.sql
+
+# Reviewed namespace repair and organization snapshot release gates.
+!scripts/check_remittance_boundary_private.cjs
+!scripts/test_remittance_boundary_release_batch.mjs
+!scripts/test_org_google_repair_snapshot.mjs
+!scripts/test_finance_release_source_fingerprint.mjs
+!scripts/finance_remittance_boundary_preflight.sql
+!scripts/finance_remittance_boundary_postflight.sql
+!scripts/finance_remittance_boundary_fingerprint.sql
+!scripts/finance_remittance_boundary_canary.sql
+!scripts/finance_org_google_repair_snapshot_preflight.sql
+!scripts/finance_org_google_repair_snapshot_postflight.sql
+!scripts/finance_org_google_repair_snapshot_fingerprint.sql
+!scripts/finance_org_google_repair_snapshot_canary.sql
