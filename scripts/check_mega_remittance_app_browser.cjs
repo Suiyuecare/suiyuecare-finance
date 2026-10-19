@@ -166,28 +166,6 @@ async function browserCase(engine,width,origin){
     await page.getByLabel('第 1 列分行代號',{exact:true}).scrollIntoViewIfNeeded();
     await page.screenshot({path:path.join(output,engine+'-'+width+'-bank-code-import.png')});
     equal(await scope("window.__qaWrites.filter(function(write){return write.table!=='compliance_audit_logs'||write.method!=='insert';})"),[],importLabel+' opening the form only attempts its existing compliance audit, never a payment write');
-    await scope('window.__qaWrites=[];');
-    const validRequest=rawRequest('payroll');validRequest.amount=validRequest.estimated_amount=1200;
-    validRequest.form_payload.hrInfo={item:{id:'salary_50'},paymentTotal:1200,total:1200,rows:imported.rows};
-    await scope(`(function(){window.__qaSnapshot=${JSON.stringify(validRequest)};window.__qaSnapshot.tenant_id=currentTenantId();window.__qaSupplements=[{rowKey:'hr:1',name:'虛構私有戶名'}];window.__qaPurpose='payment';window.__qaReason='';REQS=[mapReq(structuredClone(window.__qaSnapshot))];showApprD(REQS[0]);})()`);
-    let importPanel=page.locator('#appr-inner .finance-mega-remittance');
-    await importPanel.locator('[data-mega-action="download"]').waitFor();
-    const importBefore=await scope('JSON.stringify(window.__qaSnapshot)');
-    downloadInteraction={scenario:importLabel,click:'pending',download:'pending'};
-    // Observe both promises immediately: an actionability failure must reach the
-    // diagnostic catch instead of leaving the download timeout unhandled.
-    const [importDownload]=await Promise.all([
-      page.waitForEvent('download').then(download=>{downloadInteraction.download='received';return download;},error=>{downloadInteraction.download='failed';throw error;}),
-      importPanel.getByRole('button',{name:'下載 Excel',exact:true}).click().then(()=>{downloadInteraction.click='resolved';},error=>{downloadInteraction.click='failed';downloadInteraction.clickError=error.message;throw error;})
-    ]);
-    const importBook=XLSX.read(fs.readFileSync(await importDownload.path()),{type:'buffer',cellText:false}),importSheet=importBook.Sheets[importBook.SheetNames[0]];
-    equal(importSheet.D2.v,'0040123',importLabel+' actual downloaded salary Excel reassembles all seven code digits');
-    equal(importSheet.D2.t,'s',importLabel+' salary bank branch remains an Excel text cell');
-    equal(importSheet.E2.v,'000000001234',importLabel+' actual salary download preserves leading-zero account');
-    equal(importSheet.F2.v,1200,importLabel+' actual salary download keeps principal unchanged');
-    equal(await scope('JSON.stringify(window.__qaSnapshot)'),importBefore,importLabel+' download never rewrites approved source');
-    equal(await scope('window.__qaWrites.length'),0,importLabel+' import preview and bank export cause no financial mutation');
-    await scope('closeAppr();');
     await page.getByLabel('第 1 列銀行代號',{exact:true}).fill('0040222');await page.getByLabel('第 1 列銀行代號',{exact:true}).press('Tab');
     await page.locator('#hr-bank-code-0-error').waitFor();
     ok((await page.locator('#hr-bank-code-0-error').innerText()).includes('末 4 碼'),importLabel+' conflicting full code and branch get an actionable visible error');
@@ -196,11 +174,7 @@ async function browserCase(engine,width,origin){
     ok((await scope('collectHrExpenseInfo().missing')).some(message=>message.includes('末 4 碼')),importLabel+' actual form collector blocks conflicting submission');
     await page.locator('#hr-bank-code-0-error').scrollIntoViewIfNeeded();
     await page.screenshot({path:path.join(output,engine+'-'+width+'-bank-code-conflict.png')});
-    const conflicted=await scope('structuredClone(S.hrRows)');validRequest.form_payload.hrInfo.rows=conflicted;
-    await scope(`(function(){window.__qaSnapshot=${JSON.stringify(validRequest)};window.__qaSnapshot.tenant_id=currentTenantId();REQS=[mapReq(structuredClone(window.__qaSnapshot))];showApprD(REQS[0]);})()`);
-    await page.waitForFunction(()=>document.querySelector('#appr-inner .finance-mega-remittance')?.dataset.megaState==='missing');
-    equal(await page.locator('#appr-inner [data-mega-action="download"]').count(),0,importLabel+' raw conflicting source has no downloadable file without relying on a client marker');
-    await scope('closeAppr();');
+    const conflicted=await scope('structuredClone(S.hrRows)');
     await page.getByLabel('第 1 列分行代號',{exact:true}).fill('0222');await page.getByLabel('第 1 列分行代號',{exact:true}).press('Tab');
     equal(await page.locator('#hr-bank-code-0-error').count(),0,importLabel+' explicitly correcting branch clears conflict');
     equal(await scope('S.hrRows[0]["銀行代號"]'),'004',importLabel+' corrected row restores canonical bank code');
@@ -226,7 +200,53 @@ async function browserCase(engine,width,origin){
     for(const value of [40123,'004012','00401234','0040123\n','0040123\r','004 0123','004-0123','004/0123','銀行代號：0040123 0070999']){
       ok(Boolean(await scope('hrTransferBankCodes({銀行代號:'+JSON.stringify(value)+'}).error')),importLabel+' ambiguous or malformed bank code is not guessed '+JSON.stringify(value));
     }
-    await scope('(async function(){S.nrType=null;S.hrRows=[];S.hrPrivacyMode=false;markNRClean();await nav("dashboard",null);window.__qaSupplements=[];window.__qaWrites=[];})()');
+    // Finish editing the imported form before entering approval. A native leave
+    // dialog is top-layer UI; bypassing navigation can strand it over the modal.
+    ok(await scope('hasUnsavedNewReqChanges()'),importLabel+' edited import remains protected by the real unsaved-form guard');
+    await page.locator('#pg-newreq button[onclick="newReqBack()"]').click();
+    const leaveDialog=page.locator('#m-leave-guard');
+    await leaveDialog.waitFor({state:'visible'});
+    ok(await leaveDialog.evaluate(dialog=>dialog.open),importLabel+' real back button opens the native leave confirmation');
+    await leaveDialog.getByRole('button',{name:'不暫存，直接離開',exact:true}).click();
+    await leaveDialog.waitFor({state:'hidden'});
+    await page.waitForFunction(()=>window.__megaAppQA.run('S.nrStep===1&&S.nrType===null&&S.hrRows.length===0'));
+    equal(await scope('hasUnsavedNewReqChanges()'),false,importLabel+' explicit discard resets the form through the normal application flow');
+    if(width<600)await page.locator('[data-mobile-bottom-nav] [data-mobile-primary-action="dashboard"]').click();
+    else await page.locator('#sidebar button[onclick="nav(\'dashboard\',this)"]').click();
+    await page.waitForFunction(()=>document.querySelector('#pg-dashboard')?.classList.contains('on'));
+    equal(await leaveDialog.evaluate(dialog=>({open:dialog.open,visible:getComputedStyle(dialog).display!=='none',resolverPending:typeof window.__leaveGuardResolve==='function'})),{open:false,visible:false,resolverPending:false},importLabel+' navigation completes with no leave dialog or unresolved confirmation');
+    await scope('window.__qaWrites=[];');
+    const validRequest=rawRequest('payroll');validRequest.amount=validRequest.estimated_amount=1200;
+    validRequest.form_payload.hrInfo={item:{id:'salary_50'},paymentTotal:1200,total:1200,rows:imported.rows};
+    await scope(`(function(){window.__qaSnapshot=${JSON.stringify(validRequest)};window.__qaSnapshot.tenant_id=currentTenantId();window.__qaSupplements=[{rowKey:'hr:1',name:'虛構私有戶名'}];window.__qaPurpose='payment';window.__qaReason='';REQS=[mapReq(structuredClone(window.__qaSnapshot))];showApprD(REQS[0]);})()`);
+    let importPanel=page.locator('#appr-inner .finance-mega-remittance');
+    await importPanel.locator('[data-mega-action="download"]').waitFor();
+    const importBefore=await scope('JSON.stringify(window.__qaSnapshot)');
+    const importDownloadButton=importPanel.getByRole('button',{name:'下載 Excel',exact:true});
+    await importDownloadButton.scrollIntoViewIfNeeded();
+    ok(await importDownloadButton.evaluate(button=>{const rect=button.getBoundingClientRect(),hit=document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2);return !!hit&&(hit===button||button.contains(hit));}),importLabel+' approval download is reachable without a top-layer pointer blocker');
+    equal(await page.locator('#m-leave-guard[open]').count(),0,importLabel+' approval opens only after unsaved-form confirmation has closed');
+    downloadInteraction={scenario:importLabel,click:'pending',download:'pending'};
+    // Observe both promises immediately: an actionability failure must reach the
+    // diagnostic catch instead of leaving the download timeout unhandled.
+    const [importDownload]=await Promise.all([
+      page.waitForEvent('download').then(download=>{downloadInteraction.download='received';return download;},error=>{downloadInteraction.download='failed';throw error;}),
+      importPanel.getByRole('button',{name:'下載 Excel',exact:true}).click().then(()=>{downloadInteraction.click='resolved';},error=>{downloadInteraction.click='failed';downloadInteraction.clickError=error.message;throw error;})
+    ]);
+    const importBook=XLSX.read(fs.readFileSync(await importDownload.path()),{type:'buffer',cellText:false}),importSheet=importBook.Sheets[importBook.SheetNames[0]];
+    equal(importSheet.D2.v,'0040123',importLabel+' actual downloaded salary Excel reassembles all seven code digits');
+    equal(importSheet.D2.t,'s',importLabel+' salary bank branch remains an Excel text cell');
+    equal(importSheet.E2.v,'000000001234',importLabel+' actual salary download preserves leading-zero account');
+    equal(importSheet.F2.v,1200,importLabel+' actual salary download keeps principal unchanged');
+    equal(await scope('JSON.stringify(window.__qaSnapshot)'),importBefore,importLabel+' download never rewrites approved source');
+    equal(await scope('window.__qaWrites.length'),0,importLabel+' import preview and bank export cause no financial mutation');
+    await scope('closeAppr();');
+    validRequest.form_payload.hrInfo.rows=conflicted;
+    await scope(`(function(){window.__qaSnapshot=${JSON.stringify(validRequest)};window.__qaSnapshot.tenant_id=currentTenantId();REQS=[mapReq(structuredClone(window.__qaSnapshot))];showApprD(REQS[0]);})()`);
+    await page.waitForFunction(()=>document.querySelector('#appr-inner .finance-mega-remittance')?.dataset.megaState==='missing');
+    equal(await page.locator('#appr-inner [data-mega-action="download"]').count(),0,importLabel+' raw conflicting source has no downloadable file without relying on a client marker');
+    await scope('closeAppr();');
+    await scope('window.__qaSupplements=[];window.__qaWrites=[];');
     results.push({engine,width,kind:'bank-code-import',view:'actual-XLSX-form-and-approval',geometry:importGeometry,filename:importDownload.suggestedFilename()});
     for(const kind of ['bulk','payroll','refund'])for(const view of ['detail','approval']){
       const label=engine+'/'+width+'/'+kind+'/'+view,data=rawRequest(kind);
