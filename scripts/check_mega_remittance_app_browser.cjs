@@ -192,12 +192,37 @@ async function browserCase(engine,width,origin){
     await scope(`(function(){closeAppr();clearFinanceMegaRemittance();window.__qaSnapshot=${JSON.stringify(olderPayment)};REQS=[mapReq(window.__qaSnapshot)];openDetail(REQS[0].id);})()`);
     await page.waitForFunction(()=>document.querySelector('#detail-body [data-mega-state="ready"]'));
     equal(await page.locator('#detail-body [data-mega-action="download"]').count(),1,engine+'/'+width+' existing pending-cashier requests before cutoff remain payable');
+    // Hold only the modal's next initial-focus callback. Deliver it explicitly
+    // after real keyboard input, without a timing-dependent sleep or retry.
+    await page.evaluate(()=>{
+      window.__qaHeldModalFocus=[];
+      window.__qaHoldNextModalFocus=function(){
+        const raf=window.requestAnimationFrame;
+        window.requestAnimationFrame=function(callback){
+          window.requestAnimationFrame=raf;
+          return raf(()=>window.__qaHeldModalFocus.push(callback));
+        };
+      };
+      window.__qaHoldNextModalFocus();
+    });
     const missing=rawRequest('payroll');missing.form_payload.hrInfo.rows[0].name='';missing.form_payload.hrInfo.rows[0].identityNo='';missing.form_payload.hrInfo.rows[0].bankCode='';
     await scope(`(function(){closeAppr();clearFinanceMegaRemittance();window.__qaSnapshot=${JSON.stringify(missing)};window.__qaSnapshot.tenant_id=currentTenantId();window.__qaSupplements=[];REQS=[mapReq(structuredClone(window.__qaSnapshot))];showApprD(REQS[0]);})()`);
     await page.waitForFunction(()=>document.querySelector('#appr-inner [data-mega-state="missing"]'));
+    await page.waitForFunction(()=>window.__qaHeldModalFocus.length===1);
+    await scope('closeAppr();window.__qaHoldNextModalFocus();showApprD(REQS[0]);');
+    await page.waitForFunction(()=>document.querySelector('#appr-inner [data-mega-state="missing"]')&&window.__qaHeldModalFocus.length===2);
+    await page.evaluate(()=>{document.activeElement.blur();window.__qaHeldModalFocus[0](performance.now());});
+    equal(await page.evaluate(()=>document.activeElement===document.body),true,engine+'/'+width+' a closed modal focus callback cannot focus the reopened modal');
     const missingPanel=page.locator('#appr-inner .finance-mega-remittance'),principalBefore=await scope('JSON.stringify({amount:window.__qaSnapshot.amount,rows:window.__qaSnapshot.form_payload.hrInfo.rows})');
     equal(await missingPanel.locator('input').count(),2,engine+'/'+width+' actual approval editor exposes only required name and branch-code supplements');
-    await missingPanel.getByLabel('收款戶名',{exact:true}).fill('虛構薪轉補充戶名');await missingPanel.getByLabel('銀行代號',{exact:true}).fill('0170000');
+    const payeeInput=missingPanel.getByLabel('收款戶名',{exact:true}),bankInput=missingPanel.getByLabel('銀行代號',{exact:true});
+    await payeeInput.focus();await page.keyboard.insertText('虛構');
+    await page.evaluate(()=>window.__qaHeldModalFocus[1](performance.now()));
+    ok(await payeeInput.evaluate(input=>document.activeElement===input),engine+'/'+width+' delayed modal initial focus preserves the active payee field');
+    await page.keyboard.insertText('薪轉補充戶名');
+    equal(await payeeInput.inputValue(),'虛構薪轉補充戶名',engine+'/'+width+' real keyboard input survives delayed modal initialization');
+    await bankInput.fill('0170000');
+    equal(await bankInput.inputValue(),'0170000',engine+'/'+width+' branch code remains in its intended field');
     await missingPanel.getByRole('button',{name:'儲存並重新產製',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#appr-inner [data-mega-state="ready"]'));
     equal(await scope('window.__qaWrites.map(function(x){return x.name;})'),['finance_remittance_export_supplement_save_v1'],engine+'/'+width+' supplement uses only the dedicated CAS metadata RPC');
     equal(await scope('JSON.stringify({amount:window.__qaSnapshot.amount,rows:window.__qaSnapshot.form_payload.hrInfo.rows})'),principalBefore,engine+'/'+width+' supplement does not change approved source accounts, amounts or rows');

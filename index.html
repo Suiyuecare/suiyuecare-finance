@@ -31356,6 +31356,13 @@ window.bulkCountersignSelected=function(){bulkRunSelected('countersign');};
 window.bulkReturnSelected=function(){return bulkRunSelected('return');};
 window.bulkCancelSelected=function(){bulkRunSelected('cancel');};
 var APPROVAL_MODAL_RETURN_FOCUS=null;
+var APPROVAL_MODAL_FOCUS_FRAME=null;
+var APPROVAL_MODAL_FOCUS_EPOCH=0;
+function cancelApprovalModalInitialFocus(){
+  APPROVAL_MODAL_FOCUS_EPOCH++;
+  if(APPROVAL_MODAL_FOCUS_FRAME!==null)window.cancelAnimationFrame(APPROVAL_MODAL_FOCUS_FRAME);
+  APPROVAL_MODAL_FOCUS_FRAME=null;
+}
 function approvalModalFocusable(dialog){
   if(!dialog)return[];
   return Array.prototype.slice.call(dialog.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')).filter(function(node){
@@ -31370,6 +31377,7 @@ function approvalModalSetBackgroundInert(on){
   else{root.removeAttribute('inert');root.removeAttribute('aria-hidden');}
 }
 function openApprModal(){
+  cancelApprovalModalInitialFocus();
   clearFinanceMegaRemittance('approval');
   approvalClearModalExpectedSteps();
   var m=el('m-appr');
@@ -31380,9 +31388,15 @@ function openApprModal(){
   approvalModalSetBackgroundInert(true);
   m.setAttribute('aria-hidden','false');
   m.style.display='flex';
-  window.requestAnimationFrame(function(){
-    if(m.style.display==='none')return;
+  var focusEpoch=APPROVAL_MODAL_FOCUS_EPOCH;
+  APPROVAL_MODAL_FOCUS_FRAME=window.requestAnimationFrame(function(){
+    if(focusEpoch!==APPROVAL_MODAL_FOCUS_EPOCH)return;
+    APPROVAL_MODAL_FOCUS_FRAME=null;
+    if(!m.isConnected||m.style.display==='none'||m.getAttribute('aria-hidden')==='true')return;
     var dialog=m.querySelector('[role="dialog"]');
+    // A user may already have begun typing before this frame is delivered.
+    // Initial focus must not redirect that input or a newer modal opening.
+    if(!dialog||dialog.contains(document.activeElement))return;
     var focusable=approvalModalFocusable(dialog);
     (focusable[0]||dialog).focus();
   });
@@ -31578,6 +31592,7 @@ function showReceiptTaskD(i){
   hydrateApprovalRuntimeLogsForRecord('receipt',i,shRuntime.slotId);
 }
 window.closeAppr=function(){
+  cancelApprovalModalInitialFocus();
   clearFinanceMegaRemittance('approval');
   cancelApprovalHistoryDetail(true);
   APPROVAL_INVOICE_MODAL_GROUP=null;
