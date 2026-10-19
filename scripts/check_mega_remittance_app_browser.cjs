@@ -46,9 +46,17 @@ const fixtureSetup=`(async function(){
   ];
   ENTS=[{id:'QA-F1',n:'虛構付款公司',s:'虛構付款公司',active:true}];DEPTS=[{c:'QA-D1',n:'虛構部門',eid:'QA-F1',lv:4,active:true}];
   ORG_CHART=[];REQS=[];INVS=[];BILLS=[];VOUCHERS=[];NOTIFS=[];BANK_TRANSFER_FEES={'QA-F1':15};
-  quickLogin('cashier');await new Promise(resolve=>setTimeout(resolve,60));
-  S.demoLogin=false;CURRENT_PERMISSION_SNAPSHOT={loaded:false,authUserId:'qa-auth-cashier',membershipUserId:'qa-cashier',primaryRoleCode:'',roleCodes:[],permissions:[],error:''};
-  financeUsersDirectoryAuthUserId='qa-auth-cashier';financeUsersDirectoryReadyAt='2026-10-18T00:00:00Z';
+  // Hold only the real workspace's initial navigation frame. Delivering it
+  // after form entry makes a slow-browser initialization race deterministic.
+  window.__qaHeldWorkspaceNavigation=[];
+  var workspaceRaf=window.requestAnimationFrame;
+  window.requestAnimationFrame=function(callback){
+    if(callback.name==='openTarget')return workspaceRaf(function(){window.__qaHeldWorkspaceNavigation.push(callback);});
+    return workspaceRaf(callback);
+  };
+  try{quickLogin('employee');}finally{window.requestAnimationFrame=workspaceRaf;}
+  S.demoLogin=false;CURRENT_PERMISSION_SNAPSHOT={loaded:false,authUserId:'qa-auth-employee',membershipUserId:'qa-employee',primaryRoleCode:'',roleCodes:[],permissions:[],error:''};
+  financeUsersDirectoryAuthUserId='qa-auth-employee';financeUsersDirectoryReadyAt='2026-10-18T00:00:00Z';
   setFinanceWorkspaceIdentityBlocked(false);hasSupabase=function(){return true;};
   var mock={rpc:async function(name,args){
     if(name==='finance_remittance_export_snapshot_v1'){
@@ -84,6 +92,7 @@ async function browserCase(engine,width,origin){
     await page.goto(origin);await page.waitForFunction(()=>window.__megaAppQA&&window.XLSX);
     const scope=code=>page.evaluate(value=>window.__megaAppQA.run(value),code);
     await scope(fixtureSetup);
+    await page.waitForFunction(()=>window.__qaHeldWorkspaceNavigation.length===1);
     // These fixtures contain invented identities/accounts only. Keep a bounded
     // event trail so a platform-specific failure explains what the real DOM did.
     await page.evaluate(()=>{
@@ -101,10 +110,14 @@ async function browserCase(engine,width,origin){
       try{var values=hrNormalizeTransferRows(hrRowsFromTableRows(await readSpreadsheetRows(file),file.name));return {rows:values,issues:values.map(hrTransferBankCodes)};}catch(error){return {error:error.message};}
     })()`);
 
-    const imported=await scope(`(async function(){
+    ok(await scope('canAccessPage("newreq")'),importLabel+' fixture role may enter the normal application form');
+    await scope(`(async function(){
       closeAppr();closeModal('m-detail');clearFinanceMegaRemittance();
-      document.querySelectorAll('.pg.on').forEach(function(node){node.classList.remove('on');});el('pg-newreq').classList.add('on');
-      S.page='newreq';S.nrType='hr_expense_request';S.nrStep=3;S.nrRec='receipt';S.nrPay='bank';S.hrItem='salary_50';S.nrFiles=[];S.lazyMode=false;S.hrPrivacyMode=true;
+      await nav('newreq',null);
+    })()`);
+    await page.locator('#nr-content button[onclick="nrT(\'hr_expense_request\')"]').click();
+    equal(await scope('({type:S.nrType,item:S.hrItem,payment:S.nrPay,privacy:S.hrPrivacyMode})'),{type:'hr_expense_request',item:'salary_50',payment:'bank',privacy:true},importLabel+' visible request-type control opens the permitted salary import form');
+    const imported=await scope(`(async function(){
       var source=[['序位','銀行別','銀行代號','分行名稱','銀行帳號','金額','備註'],['1','臺灣銀行','0040123','虛構分行','000000001234',1200,'虛構資料']];
       var book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(source),'工作表1');
       var file=new File([XLSX.write(book,{type:'array',bookType:'xlsx'})],'fictional-transfer.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -112,6 +125,11 @@ async function browserCase(engine,width,origin){
       renderNR();document.querySelectorAll('#nr-content details').forEach(function(node){node.open=true;});renderHrExpenseSheet();
       return {rows:structuredClone(S.hrRows),repeated:hrNormalizeTransferRows(S.hrRows),sheetColumns:hrSheetCols(S.hrRows)};
     })()`);
+    ok(await scope('hasUnsavedNewReqChanges()'),importLabel+' imported form is dirty before the delayed initial navigation arrives');
+    await page.evaluate(()=>window.__qaHeldWorkspaceNavigation.shift()(performance.now()));
+    equal(await scope('S.page'),'newreq',importLabel+' stale login navigation cannot replace the form entered through real navigation');
+    equal(await page.locator('#m-leave-guard[open]').count(),0,importLabel+' delayed login frame cannot open an unrelated leave confirmation');
+    equal(await scope('structuredClone(S.hrRows)'),imported.rows,importLabel+' delayed login frame preserves all imported form rows');
     equal(imported.rows[0]['銀行代號'],'004',importLabel+' real XLSX importer retains canonical 3 digit bank');
     equal(imported.rows[0]['分行代號'],'0123',importLabel+' real XLSX importer preserves leading-zero branch separately');
     equal(imported.rows[0]['銀行帳號'],'000000001234',importLabel+' bank-code processing leaves account unchanged');
@@ -215,7 +233,9 @@ async function browserCase(engine,width,origin){
     else await page.locator('#sidebar button[onclick="nav(\'dashboard\',this)"]').click();
     await page.waitForFunction(()=>document.querySelector('#pg-dashboard')?.classList.contains('on'));
     equal(await leaveDialog.evaluate(dialog=>({open:dialog.open,visible:getComputedStyle(dialog).display!=='none',resolverPending:typeof window.__leaveGuardResolve==='function'})),{open:false,visible:false,resolverPending:false},importLabel+' navigation completes with no leave dialog or unresolved confirmation');
-    await scope('window.__qaWrites=[];');
+    // The import is an employee action; bank export is a separate cashier
+    // fixture after the employee has left the form through the real UI.
+    await scope(`(function(){S.user=USERS.find(function(user){return user.role==='cashier';});CURRENT_PERMISSION_SNAPSHOT={loaded:false,authUserId:'qa-auth-cashier',membershipUserId:'qa-cashier',primaryRoleCode:'',roleCodes:[],permissions:[],error:''};financeUsersDirectoryAuthUserId='qa-auth-cashier';applyRolePermissions();window.__qaWrites=[];})()`);
     const validRequest=rawRequest('payroll');validRequest.amount=validRequest.estimated_amount=1200;
     validRequest.form_payload.hrInfo={item:{id:'salary_50'},paymentTotal:1200,total:1200,rows:imported.rows};
     await scope(`(function(){window.__qaSnapshot=${JSON.stringify(validRequest)};window.__qaSnapshot.tenant_id=currentTenantId();window.__qaSupplements=[{rowKey:'hr:1',name:'虛構私有戶名'}];window.__qaPurpose='payment';window.__qaReason='';REQS=[mapReq(structuredClone(window.__qaSnapshot))];showApprD(REQS[0]);})()`);
