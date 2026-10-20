@@ -187,6 +187,34 @@ test('identity alone accepted by payroll bank template', () => {
 test('exact 7 digit bank branch preserved', () => {
   const r=hr([{姓名:'測試員工丁',金額:1250,銀行代號:'0040123',銀行帳號:'00000001234567'}]);assert.equal(success(api.resolve(r)).rows[0].bankCode,'0040123');
 });
+test('matching explicit seven and four digit bank codes remain authoritative', () => {
+  const r=hr([{姓名:'測試員工丁',金額:1250,銀行代號:'0040123',分行代號:'0123',銀行帳號:'00000001234567'}]);
+  assert.equal(success(api.resolve(r)).rows[0].bankCode,'0040123');
+});
+for(const branch of ['0999',123,'123','0123\n','0123\r'])test('seven digit code cannot override conflicting or invalid branch '+JSON.stringify(branch), () => {
+  const r=hr([{姓名:'測試員工丁',金額:1250,銀行代號:'0040123',分行代號:branch,銀行帳號:'00000001234567'}]);
+  bad(api.resolve(r),'branch_code_invalid','bankCode','hr:1');
+  bad(api.resolve(r,{supplements:[{rowKey:'hr:1',bankCode:'0040123'}]}),'branch_code_invalid','bankCode','hr:1');
+});
+test('conflicting source bank aliases cannot silently choose one', () => {
+  const r=hr([{姓名:'測試員工丁',金額:1250,銀行代號:'004',bankCode:'0070123',分行代號:'0123',銀行帳號:'00000001234567'}]);
+  bad(api.resolve(r),'bank_type_conflict','bankCode','hr:1');
+});
+test('equivalent split and full source bank aliases remain valid', () => {
+  const r=hr([{姓名:'測試員工丁',金額:1250,銀行代號:'004',bankCode:'0040123',分行代號:'0123',銀行帳號:'00000001234567'}]);
+  assert.equal(success(api.resolve(r)).rows[0].bankCode,'0040123');
+});
+test('source bank and branch aliases are selected and validated consistently', () => {
+  for(const bank of ['銀行代碼','金融機構代號']){
+    const r=hr([{姓名:'測試員工丁',金額:1250,[bank]:'004',分行代碼:'0123',銀行帳號:'00000001234567'}]);
+    assert.equal(success(api.resolve(r)).rows[0].bankCode,'0040123');
+    r.formPayload.hrInfo.rows[0].branch_code='0999';bad(api.resolve(r),'branch_code_invalid','bankCode','hr:1');
+  }
+});
+test('conflicting source branch aliases cannot silently choose one', () => {
+  const r=hr([{姓名:'測試員工丁',金額:1250,銀行代號:'004',分行代號:'0123',branch_code:'0999',銀行帳號:'00000001234567'}]);
+  bad(api.resolve(r),'branch_code_invalid','bankCode','hr:1');
+});
 test('non-Mega payroll needs exact branch code', () => {
   const r=hr([{姓名:'測試員工丁',金額:1250,銀行代號:'004',銀行帳號:'00000001234567'}]);bad(api.resolve(r),'bank_code_invalid');
   r.formPayload.hrInfo.rows[0].分行代號='0123';assert.equal(success(api.resolve(r)).rows[0].bankCode,'0040123');

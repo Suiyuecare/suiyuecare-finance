@@ -1,4 +1,3 @@
-\set ON_ERROR_STOP on
 -- Read-only organization publication checks; no staff identity is used.
 begin isolation level repeatable read read only;
 -- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN

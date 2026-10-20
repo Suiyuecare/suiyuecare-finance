@@ -84,16 +84,26 @@
     return codes.length===1?codes[0]:'';
   }
   function resolveBankCode(source,issues,rowKey){
-    var code=pick(source,['轉入銀行代號','銀行代號','bankCode','bank_code','payee_bank_code']);
+    var code=pick(source,['轉入銀行代號','銀行代號','bankCode','bank_code','payee_bank_code','銀行代碼','金融機構代號']);
     var bankName=pick(source,['銀行別','銀行','bankName','bank_name','payee_bank_name']);
-    var branchCode=pick(source,['分行代號','branchCode','branch_code','bank_branch_code']);
+    var branchCode=pick(source,['分行代號','branchCode','branch_code','bank_branch_code','分行代碼']);
     var bankType=pick(source,['bankType','bank_type']);
     if(!present(code))code=explicitCode(bankName);
     if(!present(code)&&bankType==='mega'&&!/(?:非|不是)\s*兆豐|\bnon[\s-]*mega\b/i.test(text(bankName)))code='017';
-    if(typeof code==='string'&&/^[0-9]{3}$/.test(code)&&present(branchCode)){
-      if(typeof branchCode==='string'&&/^[0-9]{4}$/.test(branchCode))code+=branchCode;
-      else issue(issues,rowKey,'bankCode','branch_code_invalid','分行代號須保留完整 4 位文字數字，不能以數字型別補零推測。');
+    var digits=function(value,length){return typeof value==='string'&&value.length===length&&!/[^0-9]/.test(value);};
+    if(present(branchCode)){
+      if(!digits(branchCode,4))issue(issues,rowKey,'bankCode','branch_code_invalid','分行代號須保留完整 4 位文字數字，不能以數字型別補零推測。');
+      else if(digits(code,7)&&code.slice(3)!==branchCode)issue(issues,rowKey,'bankCode','branch_code_invalid','完整銀行分支代號與原始分行代號不一致，請核對原單。');
+      else if(digits(code,3))code+=branchCode;
     }
+    ['轉入銀行代號','銀行代號','bankCode','bank_code','payee_bank_code','銀行代碼','金融機構代號'].forEach(function(key){
+      var other=source[key];if(!present(other))return;
+      if(digits(other,3)&&digits(branchCode,4))other+=branchCode;
+      if(other!==code)issue(issues,rowKey,'bankCode','bank_type_conflict','原始明細有不同的銀行代號，請核對後再產製。');
+    });
+    ['分行代號','branchCode','branch_code','bank_branch_code','分行代碼'].forEach(function(key){
+      if(present(source[key])&&source[key]!==branchCode)issue(issues,rowKey,'bankCode','branch_code_invalid','原始明細有不同的分行代號，請核對後再產製。');
+    });
     if(bankType==='mega'&&present(code)&&typeof code==='string'&&!/^017(?:[0-9]{4})?$/.test(code))issue(issues,rowKey,'bankCode','bank_type_conflict','銀行類別與銀行代號不一致，請核對原始資料。');
     if(bankType==='other'&&typeof code==='string'&&/^017(?:[0-9]{4})?$/.test(code))issue(issues,rowKey,'bankCode','bank_type_conflict','銀行類別與銀行代號不一致，請核對原始資料。');
     return code;

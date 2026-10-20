@@ -2474,6 +2474,25 @@ try{
 assert.doesNotMatch(promoteJob,/prepare-remittance-boundary-(?:apply|rehearsal)/,'promotion must never rerun either migration');
 assert.equal((workflow.match(/verify-reports-canary --domain remittance_boundary/g)||[]).length,5);
 assert.equal((workflow.match(/verify-reports-canary --domain org_google_repair_snapshot/g)||[]).length,5);
+// Direct Supabase Management API queries must be SQL-only and retain their own
+// repeatable-read boundary. A generic BEGIN wrapper would change that boundary.
+function assertDirectApiCanary(source,label){
+ assert.doesNotMatch(source,/^\s*\\/m,label+' must not send psql meta-commands to the SQL API');
+ assert.equal((source.split('-- FINANCE_AUTHENTICATED_CANARY_CORE_BEGIN')[0].match(/^begin\b/gmi)||[]).length,1,label+' must have exactly one transaction opener');
+ assert.match(source,/^begin isolation level repeatable read read only;/m,label+' must retain its original repeatable-read isolation');
+ assert.doesNotMatch(source,/^\s*commit\s*;/im,label+' must never commit');
+ assert.match(source,/FINANCE_AUTHENTICATED_CANARY_CORE_END\s+rollback;[\s\S]+FINANCE_AUTHENTICATED_CANARY_ROLLBACK_CHECK_BEGIN[\s\S]+transaction_read_only[\s\S]+FINANCE_AUTHENTICATED_CANARY_ROLLBACK_CHECK_END[\s\S]+CANARY_ROLLED_BACK/,label+' must keep its rollback proof and result');
+}
+for(const prefix of ['finance_remittance_boundary','finance_org_google_repair_snapshot']){
+ const file='scripts/'+prefix+'_canary.sql',source=fs.readFileSync(path.join(root,file),'utf8');
+ assertDirectApiCanary(source,file);
+ assert.equal(workflow.split('supabase db query --linked --file '+file+' --output json').length-1,5,file+' must remain directly checked across all five release and recovery paths');
+ assert.throws(()=>assertDirectApiCanary('\\set ON_ERROR_STOP on\n'+source,file),/psql meta-commands/);
+ assert.throws(()=>assertDirectApiCanary('begin read only;\n'+source+'\nrollback;\n',file),/exactly one transaction opener/);
+ assert.throws(()=>assertDirectApiCanary(source.replace(/^rollback;/m,'commit;'),file),/never commit/);
+}
+console.log('PASS direct repair canaries remain SQL-only with unchanged repeatable-read and rollback boundaries');
+
 for(const prefix of ['finance_remittance_boundary','finance_org_google_repair_snapshot'])for(const part of ['preflight','postflight','fingerprint','canary']){
  const file='scripts/'+prefix+'_'+part+'.sql';
  assert(candidateJob.includes(file),'both repair gates must be sealed: '+file);

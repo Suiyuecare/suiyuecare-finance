@@ -21734,8 +21734,24 @@ function hrHeaderInfoFromRows(rows){
 }
 function hrObjectFromHeaderRow(row,info){
   var o={},head=info.head||[],map=info.map||{};
-  head.forEach(function(h,i){var key=String(h||'').trim();if(key){o[key]=row[i]||'';o[String(key).toLowerCase()]=row[i]||'';}});
-  var put=function(kind,names){if(map[kind]===undefined)return;names.forEach(function(n){o[n]=row[map[kind]]||'';});};
+  head.forEach(function(h,i){
+    var key=String(h||'').trim(),kind=hrHeaderKind(key),normalizedKey=hrHeaderKey(key);
+    if(!key)return;
+    var bankKey=['銀行代號','銀行代碼','金融機構代號','轉入銀行代號','bankCode','bank_code','payee_bank_code'].find(function(name){return hrHeaderKey(name)===normalizedKey;});
+    var branchKey=['分行代號','分行代碼','branchCode','branch_code','bank_branch_code'].find(function(name){return hrHeaderKey(name)===normalizedKey;});
+    var code=!!(bankKey||branchKey||kind==='bankCode'||kind==='branchCode');
+    if(code)key=bankKey||branchKey||(kind==='branchCode'?'branchCode':'bankCode');
+    var lower=key.toLowerCase(),value=code?(row[i]==null?'':row[i]):(row[i]||'');
+    if(code&&o[lower]!==undefined&&o[lower]!==null&&o[lower]!==''){
+      if(value==='')return;
+      if(o[lower]!==value)throw new Error('銀行或分行代號有重複欄名且值不同，請核對來源檔後重新匯入。');
+    }
+    o[key]=value;o[lower]=value;
+  });
+  var put=function(kind,names){if(map[kind]===undefined)return;names.forEach(function(n){
+    if(kind==='bankCode'||kind==='branchCode'){if(o[n]===undefined||o[n]===null||o[n]==='')o[n]=row[map[kind]]==null?'':row[map[kind]];}
+    else o[n]=row[map[kind]]||'';
+  });};
   put('seq',['序位']);put('bankName',['銀行別','銀行']);put('bankCode',['銀行代號']);put('branchName',['分行名稱','分行']);put('branchCode',['分行代號']);
   put('account',['銀行帳號','帳號','匯款帳號']);put('amount',['金額','轉帳金額','匯款金額']);put('note',['備註']);put('name',['姓名']);put('employeeId',['員工編號']);
   put('type',['類別']);put('month',['薪資月份']);put('gross',['給付總額']);put('tax',['扣繳稅額']);put('supplemental',['補充保費']);
@@ -21802,8 +21818,9 @@ function hrRowFromAny(o,fileName){
   var privacyDeptName=hrPickValue(o,['部門名稱','部門','department_name','dept_name'],2);
   var privacyBank=hrPickValue(o,hrTransferTemplateAliases('bank_name',['銀行別','銀行','銀行名稱','bank_type','bank_name']),newPrivacyArray?1:3);
   var privacyBranch=hrPickValue(o,hrTransferTemplateAliases('branch_name',['分行名稱','分行','branch_name']),newPrivacyArray?3:4);
-  var privacyBankCode=hrPickValue(o,hrTransferTemplateAliases('bank_code',['銀行代號','bank_code']),newPrivacyArray?2:5);
-  var privacyBranchCode=newPrivacyArray?'':hrPickValue(o,['分行代號','branch_code'],6);
+  var privacyBankCode=hrPickValue(o,hrTransferTemplateAliases('bank_code',['銀行代號','銀行代碼','金融機構代號','轉入銀行代號','bank_code','bankCode','payee_bank_code']),newPrivacyArray?2:5);
+  var privacyBranchCode=newPrivacyArray?'':hrPickValue(o,['分行代號','分行代碼','branch_code','branchCode','bank_branch_code'],6);
+  if(Array.isArray(o)){var codeIndex=newPrivacyArray?2:5;privacyBankCode=o[codeIndex]==null?'':o[codeIndex];if(!newPrivacyArray)privacyBranchCode=o[6]==null?'':o[6];}
   var privacyAccount=hrPickValue(o,hrTransferTemplateAliases('account_no',['銀行帳號','帳號','匯款帳號','account_number','bank_account']),newPrivacyArray?4:7);
   var privacyNote=hrPickValue(o,hrTransferTemplateAliases('note',['備註','說明','note','memo']),newPrivacyArray?6:8);
   if(arrayHints.account&&(!privacyAccount||hrLooksLikeBankAccountValue(privacyAmount)))privacyAccount=arrayHints.account;
@@ -21829,7 +21846,8 @@ function hrRowFromAny(o,fileName){
   r['匯款金額']=hrNormalizeAmount(hrPickValue(o,['匯款金額','實付金額','實領金額','給付淨額','金額','amount','payment_amount','net_amount','net_pay'],4));
   if(!r['給付總額'])r['給付總額']=hrRowGrossAmount(r)||r['匯款金額'];
   r['銀行']=hrPickValue(o,['銀行','銀行名稱','金融機構','匯款銀行','bank','bank_name','payee_bank_name'],5);
-  r['銀行代號']=hrExtractBankCode(hrPickValue(o,['銀行代號','銀行代碼','金融機構代號','bank_code','bankCode','payee_bank_code'],5))||hrExtractBankCode(r['銀行']);
+  r['銀行代號']=Array.isArray(o)?'':hrPickValue(o,['轉入銀行代號','銀行代號','銀行代碼','金融機構代號','bank_code','bankCode','payee_bank_code'],5);
+  r['分行代號']=Array.isArray(o)?'':hrPickValue(o,['分行代號','分行代碼','branch_code','branchCode','bank_branch_code'],6);
   r['分行']=hrPickValue(o,['分行','分行名稱','匯款分行','bank_branch','branch','branch_name','payee_bank_branch'],6);
   r['分行名稱']=r['分行'];
   r['帳號']=normalizeHrAccountNumber(hrPickValue(o,['帳號','銀行帳號','匯款帳號','account','bank_account','account_number','payee_bank_account'],7));
@@ -21855,6 +21873,9 @@ function hrRowFromAny(o,fileName){
     r['帳號']=r['銀行帳號'];
     r['備註']=privacyNote||('104 銀行轉帳明細（會計用）；銀行代號：'+privacyBankCode+(privacyBranchCode?'；分行代號：'+privacyBranchCode:''));
   }
+  if(o&&!Array.isArray(o))['銀行代碼','金融機構代號','轉入銀行代號','bank_code','bankCode','payee_bank_code','分行代碼','branch_code','branchCode','bank_branch_code'].forEach(function(k){if(o[k]!==undefined&&o[k]!==null&&o[k]!=='')r[k]=o[k];});
+  var importedCodes=hrTransferBankCodes(r);
+  r['銀行代號']=importedCodes.bankCode;r['分行代號']=importedCodes.branchCode;
   return r;
 }
 function isLaborHrItem(id){return ['labor_fee_9a','labor_fee_9b','labor_fee_9a9b'].indexOf(id)>-1;}
@@ -24114,9 +24135,38 @@ function hrHasNonMegaTransferRows(rows){
 function hrTransferFeeTotal(rows){
   return (rows||[]).reduce(function(s,r){return s+hrTransferFeeForRow(r);},0);
 }
+function hrBankCodeParts(value){
+  if(typeof value!=='string'||/[\x00-\x1f\x7f]/.test(value))return null;
+  var s=value.trim().replace(/^(?:銀行代號|銀行代碼|金融機構代號|bank\s*code|代號|代碼)\s*[：:]?\s*/i,'');
+  if((s[0]==='('&&s.slice(-1)===')')||(s[0]==='（'&&s.slice(-1)==='）'))s=s.slice(1,-1).trim();
+  if((s.length!==3&&s.length!==7)||/[^0-9]/.test(s))return null;
+  return {code:s,bankCode:s.slice(0,3),branchCode:s.length===7?s.slice(3):''};
+}
+function hrTransferBankCodes(row){
+  row=row||{};
+  var bankKeys=['銀行代號','銀行代碼','金融機構代號','bank_code','bankCode','payee_bank_code','轉入銀行代號'];
+  var branchKeys=['分行代號','分行代碼','branch_code','branchCode','bank_branch_code'];
+  var present=function(v){return v!==undefined&&v!==null&&v!=='';};
+  var codes=bankKeys.map(function(k){return row[k];}).filter(present);
+  var branches=branchKeys.map(function(k){return row[k];}).filter(present);
+  var raw=codes.length?codes[0]:'',branch=branches.length?branches[0]:'';
+  var parts=hrBankCodeParts(raw),error='';
+  var branchValid=typeof branch==='string'&&branch.length===4&&!/[^0-9]/.test(branch);
+  if(codes.length&&!parts)error='銀行代號請填 3 碼，或完整 7 碼銀行分行代號；請保留文字格式。';
+  if(branches.length&&!branchValid)error='分行代號請填完整 4 碼文字數字，不能推測或補零。';
+  if(branches.some(function(v){return v!==branch;}))error='來源有不同的分行代號，請核對後重新填寫。';
+  if(parts&&parts.branchCode&&branches.length&&branch!==parts.branchCode)error='完整 7 碼的末 4 碼與分行代號不同，請核對兩個來源值。';
+  var effective=function(v){var p=hrBankCodeParts(v);return p?(p.branchCode?p.code:(p.bankCode+(branchValid?branch:''))):v;};
+  if(codes.some(function(v){return effective(v)!==effective(raw);}))error='來源有不同的銀行代號，請核對後重新填寫。';
+  if(error)return {bankCode:parts?parts.code:raw,branchCode:branch,error:error};
+  if(parts)return {bankCode:parts.bankCode,branchCode:parts.branchCode||branch,error:''};
+  var bankText=[row['銀行別'],row['銀行'],row.bank_name,row.payee_bank_name,row['金融機構']].filter(Boolean).join(' ');
+  return {bankCode:hrExtractBankCode(bankText),branchCode:branch,error:''};
+}
 function hrExtractBankCode(text){
   var s=String(text||'').trim();
   if(!s)return'';
+  var exact=hrBankCodeParts(text);if(exact)return exact.bankCode;
   var labeled=s.match(/(?:銀行代號|銀行代碼|金融機構代號|bank\s*code|代號|代碼)\s*[：:\s]*[（(]?\s*(\d{3})/i);
   if(labeled)return labeled[1];
   var bracket=s.match(/[（(]\s*(\d{3})\s*[)）]/);
@@ -24160,7 +24210,8 @@ function hrJoinNote(note,extra){
 function hrNormalizeTransferBankRow(r,i){
   r=Object.assign({},r||{});
   var bankText=[r['銀行別'],r['銀行'],r.bank_name,r.payee_bank_name,r['金融機構']].filter(Boolean).join(' ');
-  var bankCode=hrExtractBankCode([r['銀行代號'],r.bank_code,r.bankCode,r.payee_bank_code].filter(Boolean).join(' '))||hrExtractBankCode(bankText);
+  var codeInfo=hrTransferBankCodes(r),bankCode=codeInfo.bankCode;
+  ['銀行代碼','金融機構代號','轉入銀行代號','bank_code','bankCode','payee_bank_code'].forEach(function(k){var parsed=hrBankCodeParts(r[k]);if(parsed)r[k]=parsed.code;});
   var bankName=hrCleanBankName(r['銀行別']||r['銀行']||r.bank_name||r.payee_bank_name||'')||(bankCode?hrBankNameFromCode(bankCode):'');
   var branchText=[r['分行名稱'],r['分行'],r.branch_name,r.bank_branch,r.payee_bank_branch,bankText,r['備註']].filter(Boolean).join(' ');
   var branchName=String(r['分行名稱']||r['分行']||r.branch_name||r.bank_branch||r.payee_bank_branch||'').trim()||hrExtractBranchName(branchText);
@@ -24171,7 +24222,7 @@ function hrNormalizeTransferBankRow(r,i){
   var amount=hrNormalizeTransferAmount(accountAmount.amount)||hrRowAmount(r);
   var hasTransferData=!!(bankName||bankCode||branchName||account||amount||r.__privacyMode);
   var note=String(r['備註']||r.note||'').trim();
-  if(!bankCode&&bankName)bankCode=hrExtractBankCode(bankName);
+  if(!codeInfo.error&&!bankCode&&bankName)bankCode=hrExtractBankCode(bankName);
   if(!bankName&&bankCode)bankName=hrBankNameFromCode(bankCode);
   if(!branchName&&hasTransferData&&(bankName||bankCode)&&account&&amount){
     branchName='待補分行';
@@ -24184,6 +24235,7 @@ function hrNormalizeTransferBankRow(r,i){
     '銀行別':bankName,
     '銀行':bankName||r['銀行']||'',
     '銀行代號':bankCode,
+    '分行代號':codeInfo.branchCode,
     '分行名稱':branchName,
     '分行':branchName==='待補分行'?'':(branchName||r['分行']||''),
     '銀行帳號':account,
@@ -24526,6 +24578,14 @@ function renderHrExpenseSheet(){
 	      var readonly=(c==='類別'||c==='序位'||c==='轉帳費用')?' readonly':'';
 	      var missing=S.hrMissingCells&&S.hrMissingCells[i+'|'+c];
 	      var value=c==='序位'?(viewRow[c]||String(i+1)):(c==='轉帳費用'?(hrTransferFeeForRow(viewRow)||''):(viewRow[c]||''));
+          if(c==='銀行代號'){
+            var codeInfo=hrTransferBankCodes(r),bankId='hr-bank-code-'+i,branchId='hr-branch-code-'+i;
+            var branchValue=r['分行代號']==null?'':String(r['分行代號']);
+            var bankValue=r['銀行代號']==null?'':String(r['銀行代號']);
+            return '<td><input id="'+bankId+'" data-hr-row="'+i+'" data-hr-col="銀行代號" type="text" aria-label="第 '+(i+1)+' 列銀行代號"'+(codeInfo.error?' aria-invalid="true" aria-describedby="'+bankId+'-error"':'')+' style="font-size:12px" value="'+escAttr(bankValue)+'" onchange="hrEdit('+i+',\'銀行代號\',this.value)" onkeydown="hrSheetKey(event,'+i+',\'銀行代號\')">'
+              +(branchValue||codeInfo.error?'<label for="'+branchId+'" style="display:block;padding:2px 5px;font-size:12px">分行代號</label><input id="'+branchId+'" data-hr-row="'+i+'" data-hr-col="分行代號" type="text" inputmode="numeric" style="font-size:12px" aria-label="第 '+(i+1)+' 列分行代號" value="'+escAttr(branchValue)+'" onchange="hrEdit('+i+',\'分行代號\',this.value)" onkeydown="hrSheetKey(event,'+i+',\'分行代號\')">':'')
+              +(codeInfo.error?'<span id="'+bankId+'-error" role="alert" style="display:block;padding:4px 5px;color:#9f241c;font-size:12px">'+escAttr(codeInfo.error)+'</span>':'')+'</td>';
+          }
 	      return'<td><input data-hr-row="'+i+'" data-hr-col="'+c+'" type="'+type+'" '+(type==='number'?'min="0" step="1"':'')+readonly+' value="'+escAttr(value)+'" '+(missing?'style="background:#fff1f2;box-shadow:inset 0 0 0 1px #fb7185"':'')+' onchange="hrEdit('+i+',\''+c+'\',this.value)" onkeydown="hrSheetKey(event,'+i+',\''+c+'\')"></td>';
 	    }).join('')+'<td style="width:30px;text-align:center"><button onclick="hrDel('+i+')" style="border:none;background:transparent;color:#94a3b8;cursor:pointer">×</button></td></tr>';
 	  }).join('');
@@ -24541,6 +24601,17 @@ window.hrEdit=function(i,k,v){
   if(!S.hrRows[i])return;
   if(k==='類別'||k==='序位'||k==='轉帳費用')return;
   if(S.hrMissingCells)delete S.hrMissingCells[i+'|'+k];
+  if(k==='銀行代號'){
+    var oldBank=hrBankCodeParts(S.hrRows[i]['銀行代號']),newBank=hrBankCodeParts(v);
+    ['銀行代碼','金融機構代號','轉入銀行代號','bank_code','bankCode','payee_bank_code'].forEach(function(key){delete S.hrRows[i][key];});
+    if(newBank&&(!oldBank||oldBank.bankCode!==newBank.bankCode)){
+      ['分行代號','分行代碼','branch_code','branchCode','bank_branch_code'].forEach(function(key){delete S.hrRows[i][key];});
+    }
+  }
+  if(k==='分行代號'){
+    if(!hrTransferBankCodes(S.hrRows[i]).error)['銀行代碼','金融機構代號','轉入銀行代號','bank_code','bankCode','payee_bank_code'].forEach(function(key){delete S.hrRows[i][key];});
+    ['分行代碼','branch_code','branchCode','bank_branch_code'].forEach(function(key){delete S.hrRows[i][key];});
+  }
   S.hrRows[i][k]=hrAmountCol(k)?num(v):v;
   if(hrPrivacyMode()){
     if(k==='銀行別')S.hrRows[i]['銀行']=v;
@@ -24610,6 +24681,8 @@ function collectHrExpenseInfo(){
   var missing=[];
   if(!rows.length)missing.push('至少一列人事費用明細');
 	  rows.forEach(function(r,i){
+        var bankCodeIssue=hrTransferBankCodes(r).error;
+        if(bankCodeIssue){missing.push('第 '+(i+1)+' 列'+bankCodeIssue);S.hrMissingCells[i+'|銀行代號']=true;}
 	    var required=hrPrivacyMode()?hrTransferColumns().filter(function(c){return c!=='序位'&&hrTransferColumnRequired(c);}):['姓名','類別','薪資月份','匯款金額','銀行','分行','帳號'];
 	    required.forEach(function(c){
 	      if(c==='匯款金額'||c==='金額'||c==='轉帳金額'){
