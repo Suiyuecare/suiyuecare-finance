@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import http from 'node:http';
 import {chromium,webkit} from 'playwright';
 const root=path.resolve(new URL('..',import.meta.url).pathname);
-const output=path.resolve(process.env.APM_FINANCE_BROWSER_OUTPUT||'/Users/seniorlifepr/.codex/tmp/apm-finance-workbench-browser-20261020');
+const output=path.resolve(process.env.APM_FINANCE_BROWSER_OUTPUT||path.join(os.tmpdir(),'apm-finance-workbench-browser-20261020'));
 const files={
  '/workbench.js':await fs.readFile(path.join(root,'assets/engines/apm-bonus-workbench.js')),
  '/workbench.css':await fs.readFile(path.join(root,'assets/styles/apm-bonus-workbench.css')),

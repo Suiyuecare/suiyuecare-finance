@@ -35,6 +35,11 @@ try{
  const workflow=fs.readFileSync(path.join(root,'.github/workflows/finance-production-release.yml'),'utf8');
  assert.equal((workflow.match(/cp scripts\/finance_apm_source_manifest.sql/g)||[]).length,1);checks++;
  assert.equal((workflow.match(/--file scripts\/finance_apm_source_manifest.sql/g)||[]).length,2);checks++;
+ const candidate=workflow.slice(workflow.indexOf('  candidate:'),workflow.indexOf('  database:'));
+ assert.ok(candidate.indexOf('pnpm test:apm-bonus-workbench-browser')>candidate.indexOf('pnpm exec playwright install --with-deps chromium webkit'));checks++;
+ const stability=fs.readFileSync(path.join(root,'.github/workflows/stability-gate.yml'),'utf8').split('  interaction-gate:')[1];
+ assert.ok(stability.indexOf('pnpm test:apm-bonus-workbench-browser')>stability.indexOf('pnpm exec playwright install --with-deps chromium webkit'));checks++;
+ for(const file of ['test_apm_finance_workbench_browser.mjs','test_apm_finance_mount_browser.mjs']){const source=fs.readFileSync(path.join(root,'scripts',file),'utf8');assert.match(source,/os\.tmpdir\(\)/);assert.doesNotMatch(source,/\/Users\/seniorlifepr/);checks++;}
  const query=fs.readFileSync(path.join(root,'scripts/finance_apm_source_manifest.sql'),'utf8');
  assert.match(query,/convert_to\(array_to_string\(statements, E'\\n'\),'UTF8'\)/);checks++;
  for(const item of entries){assert.ok(query.includes("'"+item.remoteVersion+"'"));checks++;}

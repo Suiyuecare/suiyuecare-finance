@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import http from 'node:http';
 import {createRequire} from 'node:module';
 import {chromium,webkit} from 'playwright';
@@ -9,7 +10,7 @@ const root=path.resolve(new URL('..',import.meta.url).pathname),require=createRe
 const {applyBuildEnvironment}=require('./finance_build_environment.js');
 const source=fs.readFileSync(path.join(root,'index.html'),'utf8'),anchor='bootAuthGate();\n\n})();';assert(source.includes(anchor));
 const html=applyBuildEnvironment(source,{target:'local',supabaseUrl:'',supabaseAnonKey:''}).replace(anchor,'window.__apmQA={run:async function(code){return await eval(code)}};\n})();').replace(/<script\b[^>]*src=["']https?:[^>]*><\/script>/gi,'');
-const output=process.env.APM_FINANCE_MOUNT_OUTPUT||'/Users/seniorlifepr/.codex/tmp/apm-finance-mount-browser-20261020';fs.mkdirSync(output,{recursive:true});
+const output=process.env.APM_FINANCE_MOUNT_OUTPUT||path.join(os.tmpdir(),'apm-finance-mount-browser-20261020');fs.mkdirSync(output,{recursive:true});
 const server=http.createServer((req,res)=>{const p=path.resolve(root,'.'+new URL(req.url,'http://localhost').pathname);if(p!==root&&!p.startsWith(root+path.sep)){res.writeHead(403);return res.end();}if(p===root||p===path.join(root,'index.html')){res.setHeader('content-type','text/html;charset=utf-8');return res.end(html);}if(!fs.existsSync(p)||!fs.statSync(p).isFile()){res.writeHead(404);return res.end();}res.setHeader('content-type',p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':'application/octet-stream');res.end(fs.readFileSync(p));});
 let checks=0;const ok=(value,label)=>{assert.ok(value,label);checks++;};
 try{
