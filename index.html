@@ -48,6 +48,7 @@
 <script src="assets/engines/mega-remittance-ui.js?v=__FINANCE_ASSET_VERSION__"></script>
 
 <script src="assets/engines/hr-bridge-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
+<script src="assets/engines/apm-bonus-workbench.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/attachment-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/permission-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
 <script src="assets/engines/report-engine.js?v=__FINANCE_ASSET_VERSION__"></script>
@@ -76,6 +77,7 @@
 <link rel="stylesheet" href="assets/styles/employee-form-ux.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/approval-navigation.css?v=__FINANCE_ASSET_VERSION__">
 <link rel="stylesheet" href="assets/styles/personnel-workspace.css?v=__FINANCE_ASSET_VERSION__">
+<link rel="stylesheet" href="assets/styles/apm-bonus-workbench.css?v=__FINANCE_ASSET_VERSION__">
 <style>
 /* Include dialogs opened by already pending renders after an identity change. */
 body[data-finance-identity-blocked="true"] #main-wrap,
@@ -119,6 +121,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
     <button class="ni" id="nav-approvals" onclick="nav('approvals',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>簽核管理<span class="cnt" id="appr-cnt" aria-live="polite">—</span></button>
     <div class="ns">傳票管理</div>
     <button class="ni" id="nav-hrbridge" onclick="nav('hrbridge',this)"><span class="nav-ico">HR</span>人資付款交接</button>
+    <button class="ni" id="nav-apmbonus" onclick="nav('apmbonus',this)"><span class="nav-ico">KPI</span>季度獎金核對</button>
     <button class="ni" id="nav-voucher" onclick="nav('vouchers',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h4"/></svg></span>傳票查詢</button>
     <div class="ns">收入申請</div>
 	    <button class="ni" id="nav-shareholder" onclick="nav('shareholder',this)"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M12 3v18M6 8h12M7 16h10M5 12h14"/></svg></span>股東 / 公司間往來</button>
@@ -494,6 +497,7 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
   </div>
 
   <div class="pg" id="pg-hrbridge"></div>
+  <div class="pg" id="pg-apmbonus"></div>
 
   <!-- 開立發票 -->
   <div class="pg" id="pg-invoices">
@@ -2372,6 +2376,7 @@ function customerProfileRefs(profile){
   };
 }
 var PAGE_MODULE_MAP={
+  apmbonus:'accounting-ledger',
   dashboard:'finance-core',
   approvals:'finance-core',
   notif:'finance-core',
@@ -3374,6 +3379,7 @@ function financeSessionMatchesWorkspace(session){
     &&(!S.user.tenantId||S.user.tenantId===currentTenantId());
 }
 function setFinanceWorkspaceIdentityBlocked(blocked){
+  if(blocked&&window.FinanceApmBonusWorkbench)window.FinanceApmBonusWorkbench.dispose();
   if(blocked)clearFinanceMegaRemittance();
   var wasBlocked=financeWorkspaceIdentityBlocked;
   financeWorkspaceIdentityBlocked=!!blocked;
@@ -12577,6 +12583,7 @@ function canAccessPage(id){
   if(id==='detail')return true;
   if(!S.user||!pageModuleEnabled(id))return false;
   var runtimeDecision=runtimePermissionDecision(runtimePagePermissionCode(id));
+  if(id==='apmbonus')return runtimeDecision!==false&&activeDataEnvironment()==='production'&&!S.demoLogin&&['accountant','ceo'].indexOf(currentRoleKey())>-1&&canAccessPage('reports');
   if(id==='hrbridge')return runtimeDecision!==false&&['hr','accountant','ceo'].indexOf(currentRoleKey())>-1;
   if(runtimeDecision!==null)return runtimeDecision;
   if(id==='orgchart'){
@@ -12602,7 +12609,7 @@ function canAccessPage(id){
 }
 function applyRolePermissions(){
   if(!S.user)return;
-  var ids={hrbridge:'nav-hrbridge',newreq:'nav-newreq',expenses:'nav-expenses',approvals:'nav-approvals',notif:'nav-notif',shareholder:'nav-shareholder',invoices:'nav-invoices',bills:'nav-bills',recv:'nav-recv',vouchers:'nav-voucher',reports:'nav-rpt',ledger:'nav-ldg',accounts:'nav-acc',compliance:'nav-compliance',users:'nav-users',orgchart:'nav-orgchart',health:'nav-health',settings:'nav-settings'};
+  var ids={apmbonus:'nav-apmbonus',hrbridge:'nav-hrbridge',newreq:'nav-newreq',expenses:'nav-expenses',approvals:'nav-approvals',notif:'nav-notif',shareholder:'nav-shareholder',invoices:'nav-invoices',bills:'nav-bills',recv:'nav-recv',vouchers:'nav-voucher',reports:'nav-rpt',ledger:'nav-ldg',accounts:'nav-acc',compliance:'nav-compliance',users:'nav-users',orgchart:'nav-orgchart',health:'nav-health',settings:'nav-settings'};
   Object.keys(ids).forEach(function(page){
     var node=el(ids[page]);
     if(node){
@@ -16389,6 +16396,7 @@ window.returnToPortalModules=function(){
   location.href=url.toString();
 };
 function clearFinanceLoginState(){
+  if(window.FinanceApmBonusWorkbench)window.FinanceApmBonusWorkbench.dispose();
   INCOME_SUBMISSION_PENDING={};INCOME_SUBMISSION_RUNNING={};INCOME_RECOVERED_DRAFTS={};FINANCE_MEMBER_PENDING_CONFIRMATIONS=Object.create(null);
   clearDocumentArchiveRetryForCurrentIdentity();
   clearFinanceMegaRemittance();
@@ -16775,13 +16783,16 @@ function normalizeRequestEntityDept(eid,dc){
   return {ok:true,eid:eid,dc:dc,deptEntity:deptEnt||''};
 }
 var financeWorkspaceNavigationRevision=0;
-var PT={hrbridge:'人資付款交接',dashboard:'經營決策儀表板',newreq:'新增申請',expenses:'放款申請',detail:'申請單詳情',approvals:'簽核管理',vouchers:'傳票查詢',shareholder:'股東 / 公司間往來',invoices:'開立發票',bills:'申請繳費單',recv:'收款情形',reports:'財務報表',ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',orgchart:'人員主管圖',health:'系統健檢',settings:'系統設定'};
+var PT={apmbonus:'季度獎金核對',hrbridge:'人資付款交接',dashboard:'經營決策儀表板',newreq:'新增申請',expenses:'放款申請',detail:'申請單詳情',approvals:'簽核管理',vouchers:'傳票查詢',shareholder:'股東 / 公司間往來',invoices:'開立發票',bills:'申請繳費單',recv:'收款情形',reports:'財務報表',ledger:'部門分類帳',accounts:'會計科目',compliance:'會計合規',notif:'通知中心',users:'人員管理',orgchart:'人員主管圖',health:'系統健檢',settings:'系統設定'};
 window.nav=function(id,btn){
   return guardedNav(id,btn);
 };
 async function guardedNav(id,btn){
   var navigationRevision=++financeWorkspaceNavigationRevision,identity=financeReauthenticationIdentity(),identityEpoch=financeAuthIdentityEpoch;
   function currentNavigation(){return navigationRevision===financeWorkspaceNavigationRevision&&identity===financeReauthenticationIdentity()&&identityEpoch===financeAuthIdentityEpoch&&!financeWorkspaceIdentityBlocked;}
+  if(S.page==='apmbonus'&&window.FinanceApmBonusWorkbench){
+    if(!await window.FinanceApmBonusWorkbench.beforeLeave()||!currentNavigation())return;
+  }
   var leavingApplicantRevision=S.page==='newreq'&&isExpenseApplicantRevisionMode()&&id!=='newreq';
   if(shouldPromptUnsavedNewReq(id)){
     var choice=await confirmLeaveNewReq();
@@ -16814,6 +16825,7 @@ async function guardedNav(id,btn){
     APPROVAL_WAIT_TIMER_ID=null;
   }
   if(id!=='detail')clearFinanceMegaRemittance('detail');
+  if(window.FinanceApmBonusWorkbench)window.FinanceApmBonusWorkbench.dispose();
   if(window.FinanceHrBridge)window.FinanceHrBridge.dispose();
   if(S.page==='users'&&id!=='users'&&window.FinancePersonnelWorkspace)FinancePersonnelWorkspace.suspend();
   if(id!=='detail')S.prev=S.page;S.page=id;
@@ -16826,6 +16838,11 @@ async function guardedNav(id,btn){
   if(id==='hrbridge'&&window.FinanceHrBridge){
     if(S.demoLogin||!hasSupabase())pg.textContent='請使用正式帳號登入後查看人資付款交接。';
     else {var hrBridgeIdentity=S.user.id,hrBridgeTenant=currentTenantId(),hrBridgeRole=S.user.role,hrBridgeEpoch=S.authEpoch,hrBridgeEnvironment=activeDataEnvironment();window.FinanceHrBridge.mount(pg,{client:getSb(),userId:hrBridgeIdentity,role:hrBridgeRole,accounts:ACCTS,departments:DEPTS,isCurrent:function(){return S.page==='hrbridge'&&S.user&&S.user.id===hrBridgeIdentity&&currentTenantId()===hrBridgeTenant&&S.user.role===hrBridgeRole&&S.authEpoch===hrBridgeEpoch&&activeDataEnvironment()===hrBridgeEnvironment&&!S.demoLogin&&canAccessPage('hrbridge');},afterPost:function(){return refreshRemoteData();}});}
+  }
+  if(id==='apmbonus'&&window.FinanceApmBonusWorkbench){
+    var apmBonusIdentity=financeMegaIdentity();
+    if(!apmBonusIdentity||!hasSupabase()||activeDataEnvironment()!=='production')pg.textContent='請以具核對權限的正式帳號登入。';
+    else window.FinanceApmBonusWorkbench.mount(pg,{client:getSb(),isCurrent:function(){return S.page==='apmbonus'&&apmBonusIdentity===financeMegaIdentity()&&activeDataEnvironment()==='production'&&canAccessPage('apmbonus');}});
   }
   if(id==='dashboard')buildDash();
   if(id==='expenses')buildExp();

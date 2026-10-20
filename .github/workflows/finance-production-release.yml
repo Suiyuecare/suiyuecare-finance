@@ -394,6 +394,7 @@ jobs:
           cp "$RUNNER_TEMP/candidate-app.js" "$BUNDLE/candidate-app.js"
           cp www/release-manifest.json "$BUNDLE/local-release-manifest.json"
           cp scripts/finance_production_release_guard.js "$BUNDLE/release-tools/scripts/"
+          cp scripts/finance_apm_source_manifest.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_production_db_preflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_production_db_postflight.sql "$BUNDLE/release-tools/scripts/"
           cp scripts/finance_production_db_fingerprint.sql "$BUNDLE/release-tools/scripts/"
@@ -733,6 +734,9 @@ jobs:
               'select version from supabase_migrations.schema_migrations order by version') > "${output}.csv"
             tail -n +2 "${output}.csv" | sed '/^$/d' > "$output"
             rm "${output}.csv"
+            (cd "$TOOLS" && supabase db query --linked --output csv --file scripts/finance_apm_source_manifest.sql) > "${output}.apm-sources.csv"
+            tail -n +2 "${output}.apm-sources.csv" | sed '/^$/d' > "${output}.apm-sources.txt"
+            rm "${output}.apm-sources.csv"
           }
           run_gate() {
             local source="$1"
@@ -2063,6 +2067,8 @@ jobs:
           (cd "$TOOLS" && supabase db query --linked --output csv \
             'select version from supabase_migrations.schema_migrations order by version') > "$RUNNER_TEMP/promotion-ledger.csv"
           tail -n +2 "$RUNNER_TEMP/promotion-ledger.csv" | sed '/^$/d' > "$RUNNER_TEMP/promotion-ledger.txt"
+          (cd "$TOOLS" && supabase db query --linked --output csv --file scripts/finance_apm_source_manifest.sql) > "$RUNNER_TEMP/promotion-ledger.apm-sources.csv"
+          tail -n +2 "$RUNNER_TEMP/promotion-ledger.apm-sources.csv" | sed '/^$/d' > "$RUNNER_TEMP/promotion-ledger.txt.apm-sources.txt"
           node "$GUARD" verify-ledger --mode post \
             --ledger "$RUNNER_TEMP/promotion-ledger.txt" \
             --migration-dir "$TOOLS/supabase/migrations" --release-phase "$RELEASE_PHASE" \

@@ -50,17 +50,26 @@ function read(relativePath) {
 const config = read('supabase/config.toml');
 const workflow = read('.github/workflows/stability-gate.yml');
 const releaseGuide = read('docs/RELEASE_GATES.md');
-const migrations = fs.readdirSync(MIGRATIONS_DIR)
+const allMigrations = fs.readdirSync(MIGRATIONS_DIR)
   .filter((name) => name.endsWith('.sql'))
   .sort();
+// This reviewed additive batch was prepared before two newer production repairs.
+// Validate the exact complete batch, then retain every pre-existing baseline
+// suffix assertion below. Unknown migrations are never removed by this filter.
+const APM_ADDITIVE_BATCH = Object.freeze(Object.fromEntries(require('./finance_production_release_guard').APM_SOURCE_REMOTE_MANIFEST.map(item => [item.sourceFile,item.sha256])));
+for (const [file, hash] of Object.entries(APM_ADDITIVE_BATCH)) {
+  check('APM additive migration is present and matches reviewed SHA-256: '+file,
+    allMigrations.includes(file) && crypto.createHash('sha256').update(read('supabase/migrations/'+file)).digest('hex') === hash);
+}
+const migrations = allMigrations.filter(name => !Object.hasOwn(APM_ADDITIVE_BATCH, name));
 
-check('migration lineage is present', migrations.length > 0);
+check('migration lineage is present', allMigrations.length > 0);
 check('migration versions are canonical and strictly ordered',
-  migrations.every((name, index) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name)
-    && (index === 0 || name.slice(0, 14) > migrations[index - 1].slice(0, 14))));
+  allMigrations.every((name, index) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name)
+    && (index === 0 || name.slice(0, 14) > allMigrations[index - 1].slice(0, 14))));
 check('every migration in the adopted lineage is non-empty',
-  migrations.every((name) => fs.statSync(path.join(MIGRATIONS_DIR, name)).size > 0),
-  migrations.filter((name) => fs.statSync(path.join(MIGRATIONS_DIR, name)).size === 0).join(', '));
+  allMigrations.every((name) => fs.statSync(path.join(MIGRATIONS_DIR, name)).size > 0),
+  allMigrations.filter((name) => fs.statSync(path.join(MIGRATIONS_DIR, name)).size === 0).join(', '));
 
 const first = migrations[0] || '';
 const firstSql = first ? read(`supabase/migrations/${first}`) : '';

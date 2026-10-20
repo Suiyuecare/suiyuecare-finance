@@ -631,3 +631,11 @@ supabase/.temp
 !scripts/finance_org_google_repair_snapshot_postflight.sql
 !scripts/finance_org_google_repair_snapshot_fingerprint.sql
 !scripts/finance_org_google_repair_snapshot_canary.sql
+!scripts/test_apm_finance_workbench.mjs
+!scripts/test_apm_finance_workbench_browser.mjs
+!scripts/test_apm_finance_mount_browser.mjs
+!scripts/test_apm_finance_release_manifest.mjs
+!scripts/finance_apm_source_manifest.sql
+!scripts/apm-native-test-runtime.mjs
+!scripts/test_apm_fresh_auth_native.mjs
+!docs/apm-finance-workbench-20261020.md
