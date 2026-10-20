@@ -112,6 +112,8 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm exec playwright install --with-deps chromium webkit
+      - name: Verify APM quarterly bonus desktop and mobile workbench
+        run: pnpm test:apm-bonus-workbench-browser
       - name: Configure private disposable PostgreSQL for browser concurrency
         env:
           FINANCE_NATIVE_PG_CONFIG: ${{ runner.temp }}/finance-history-summary-pg.json

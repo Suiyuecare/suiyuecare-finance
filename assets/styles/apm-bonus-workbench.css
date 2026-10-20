@@ -1,0 +1,26 @@
+.apm-bonus-workbench{max-width:1120px;margin:auto;min-width:0;color:#332d28;font-family:var(--font-sans);line-height:1.6}
+.apm-bonus-workbench h1{font-size:26px;line-height:1.3;margin:0 0 6px}.apm-bonus-workbench h2{font-size:20px;margin:0 0 12px}.apm-bonus-workbench h3{font-size:17px;margin:0}
+.apm-bonus-heading,.apm-bonus-item-head,.apm-bonus-actions,.apm-bonus-tabs{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.apm-bonus-heading{margin-bottom:16px}.apm-bonus-heading p,.apm-bonus-note{color:#716457;font-size:14px}.apm-bonus-note{margin:10px 0}
+.apm-bonus-tools{max-width:440px;margin:16px 0}.apm-bonus-tabs{justify-content:flex-start;margin:20px 0;gap:8px}
+.apm-bonus-workbench .apm-bonus-tabs button[aria-pressed=true]{background:var(--br)!important;border-color:var(--br)!important;color:#fff!important}
+.apm-bonus-workbench button,.apm-bonus-workbench input,.apm-bonus-workbench select,.apm-bonus-workbench summary,.apm-bonus-dialog button{min-height:44px!important;font-size:15px}
+.apm-bonus-workbench select{height:44px!important}
+.apm-bonus-workbench button,.apm-bonus-dialog button{padding:10px 16px;white-space:normal;line-height:1.4;max-width:100%}
+.apm-bonus-workbench .btn-p{color:#fff}.apm-bonus-workbench button:disabled{opacity:.55;cursor:not-allowed}
+.apm-bonus-workbench :focus-visible,.apm-bonus-dialog :focus-visible{outline:3px solid var(--brd);outline-offset:3px}
+.apm-bonus-section{padding:20px;margin:16px 0}.apm-bonus-section:not(.card){padding:0}
+.apm-bonus-item{padding:20px;margin:12px 0}.apm-bonus-item-head{margin-bottom:12px}.apm-bonus-item-head strong{font-size:22px;font-variant-numeric:tabular-nums}
+.apm-bonus-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.apm-bonus-field{display:grid;gap:6px;font-weight:600;font-size:14px;min-width:0;margin:12px 0}
+.apm-bonus-field input,.apm-bonus-field textarea,.apm-bonus-field select{font-weight:400;min-width:0;max-width:100%;font-size:16px}.apm-bonus-field textarea{resize:vertical;padding:12px}
+.apm-bonus-workbench fieldset{border:1px solid #eedfc8;border-radius:12px;padding:14px;min-width:0;margin:16px 0}.apm-bonus-workbench legend{padding:0 6px;font-weight:600}
+.apm-bonus-account-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:320px;overflow:auto}
+.apm-bonus-check{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;margin:10px 0}.apm-bonus-check input[type=checkbox]{width:20px;height:20px;min-height:20px!important;flex:0 0 20px;appearance:auto}
+.apm-bonus-actions{justify-content:flex-start;margin-top:16px}.apm-bonus-workbench details{margin-top:12px}.apm-bonus-workbench summary{cursor:pointer;font-weight:600;padding:8px 0}
+.apm-bonus-workbench dl{font-size:14px;display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px;margin:12px 0}.apm-bonus-workbench dd{margin:0;overflow-wrap:anywhere}.apm-bonus-workbench dt{color:#716457}
+.apm-bonus-history{padding:14px 0;border-top:1px solid #eedfc8}.apm-bonus-history span{display:block;font-variant-numeric:tabular-nums}
+.apm-bonus-error{color:#8a1010;background:#fff1ef;padding:12px;border-radius:8px;margin:12px 0}.apm-bonus-workbench [aria-invalid=true]{border-color:#8a1010}
+.apm-bonus-workbench [data-apm-status]{padding:0;overflow-wrap:anywhere}.apm-bonus-workbench [data-apm-status]:not(:empty){padding:12px 16px;background:var(--brxxl);border:1px solid #eedfc8;border-radius:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.apm-bonus-workbench [data-apm-original-detail]{padding:12px 0;color:#7a4500;overflow-wrap:anywhere}.apm-bonus-workbench [hidden]{display:none!important}
+.apm-bonus-dialog{margin:auto;border:1px solid #eedfc8;border-radius:16px;padding:24px;max-width:min(480px,calc(100vw - 32px));color:#332d28;font-family:var(--font-sans)}.apm-bonus-dialog::backdrop{background:rgba(40,30,20,.4)}.apm-bonus-dialog p{margin-top:12px;line-height:1.6}
+@media(max-width:600px){.apm-bonus-workbench h1{font-size:23px}.apm-bonus-section,.apm-bonus-item{padding:16px}.apm-bonus-grid,.apm-bonus-account-list{grid-template-columns:minmax(0,1fr)}.apm-bonus-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}.apm-bonus-tabs button{padding:10px 5px;font-size:13px}.apm-bonus-workbench dl{grid-template-columns:minmax(0,1fr);gap:3px}.apm-bonus-workbench dd{margin-bottom:8px}.apm-bonus-actions button{width:100%;justify-content:center}.apm-bonus-item-head strong{font-size:20px}.apm-bonus-heading{align-items:flex-start}}

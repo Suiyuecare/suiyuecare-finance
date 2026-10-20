@@ -6,6 +6,16 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
+// MCP assigned production ledger versions; these are not local source timestamps.
+// Both identities and exact UTF-8 statement bytes remain sealed for every release.
+const APM_SOURCE_REMOTE_MANIFEST = Object.freeze([
+  Object.freeze({sourceFile:'20261019043031_apm_metrics_verified_snapshots_addon.sql',remoteVersion:'20261020022748',sha256:'ef85f6cec586b185f6320794a5e55756d6a5d7d940939df4c6f2442be796bb99'}),
+  Object.freeze({sourceFile:'20261020011825_apm_correction_receipts.sql',remoteVersion:'20261020022750',sha256:'ff0394b8809d80cde90192d1a3d57f61b90c12b28c0cd509f0349bdd9d9bf105'}),
+  Object.freeze({sourceFile:'20261020014611_apm_receipt_evidence_guard.sql',remoteVersion:'20261020022751',sha256:'3e19f9bb64b2a3644f8ec95124c45d5ad0ecd229611979c89261721699c95b36'}),
+  Object.freeze({sourceFile:'20261020021355_apm_finance_workbench_ui.sql',remoteVersion:'20261020023444',sha256:'360ea7f8e267e872328cc6e16a2eed1f8ca121bf43fd5ca375987903caf19325'}),
+  Object.freeze({sourceFile:'20261020024107_apm_fresh_command_authorization.sql',remoteVersion:'20261020025210',sha256:'947580737d2266c00a90276bdbcf93591062f116f3764731cf848710163017b8'})
+]);
+
 const PRODUCTION_CATALOG = Object.freeze({
   supabaseProjectRef: 'udtlppnrugmtzhigdsxo',
   vercelOrgId: 'team_LGag47eU8tKbsK6ixAmVa5Uq',
@@ -508,7 +518,8 @@ function assertProductionLedgerBaseline(remote, baseline = PRODUCTION_BASELINE_L
       || ledgerSha256(baselineVersions) !== baseline.sha256) {
     fail('remote production migration baseline differs from the reviewed immutable ledger');
   }
-  const unexpected = remote.filter((version) => version >= MIGRATION_V1 && !REVIEWED_MIGRATION_CATALOG.includes(version));
+  const unexpected = remote.filter((version) => version >= MIGRATION_V1 && !REVIEWED_MIGRATION_CATALOG.includes(version)
+    && !APM_SOURCE_REMOTE_MANIFEST.some(item => item.remoteVersion === version));
   if (unexpected.length) fail(`remote ledger contains an unreviewed post-baseline migration: ${unexpected.join(',')}`);
   return true;
 }
@@ -516,6 +527,23 @@ function assertReviewedAdoptedMigrations(remote) {
   const missing = REVIEWED_POST_BASELINE_MIGRATIONS.filter((version) => !remote.includes(version));
   if (missing.length) {
     fail(`remote ledger is missing a reviewed adopted migration: ${missing.join(',')}`);
+  }
+  return true;
+}
+function verifyApmProductionSources(ledgerPath, directory, sourceManifestPath = ledgerPath + '.apm-sources.txt') {
+  const remote = readLedgerVersions(ledgerPath);
+  const expected = APM_SOURCE_REMOTE_MANIFEST;
+  for (const item of expected) {
+    if (!remote.includes(item.remoteVersion)) fail('APM source manifest is missing the exact production ledger version: ' + item.remoteVersion);
+    if (remote.includes(item.sourceFile.slice(0,14))) fail('APM source timestamp must not masquerade as the production ledger version');
+    const source = path.join(directory,item.sourceFile);
+    if (!fs.existsSync(source) || sha256File(source) !== item.sha256) fail('APM local source differs from the sealed production mapping: ' + item.sourceFile);
+    assertCliAtomicMigration(fs.readFileSync(source,'utf8'),item.sourceFile);
+  }
+  if (!fs.existsSync(sourceManifestPath)) fail('APM live ledger statement hash evidence is missing');
+  const rows = fs.readFileSync(sourceManifestPath,'utf8').trim().split(/\r?\n/);
+  if (rows.length !== expected.length || rows.some((row,i) => row !== expected[i].remoteVersion + ':' + expected[i].sha256)) {
+    fail('APM live ledger statement hashes do not match the exact ordered production source manifest');
   }
   return true;
 }
@@ -3320,6 +3348,7 @@ function verifyReceipt(receiptPath, deploymentPath, manifestPath, indexPath, can
 function manifestSha(file) { return sha256File(file); }
 
 const api = {
+  APM_SOURCE_REMOTE_MANIFEST, verifyApmProductionSources,
   PERSONNEL_CONFLICT_MIGRATIONS,
   PERSONNEL_RECEIPT_MIGRATIONS,
   PROCUREMENT_ACTION_MIGRATIONS,
@@ -3414,8 +3443,15 @@ if (require.main === module) {
   try {
     const command = process.argv[2];
     if (command === 'validate-target') validateTarget(process.env, arg('candidate-sha'), arg('release-phase'), arg('migration-versions'), arg('project-ref'));
-    else if (command === 'classify-ledger') process.stdout.write(`${classifyLedger(arg('ledger'), arg('migration-dir'), arg('release-phase'), arg('migration-versions'))}\n`);
-    else if (command === 'verify-ledger') verifyLedger(arg('mode'), arg('ledger'), arg('migration-dir'), arg('release-phase'), arg('migration-versions'));
+    else if (command === 'classify-ledger') {
+      verifyApmProductionSources(arg('ledger'),arg('migration-dir'));
+      process.stdout.write(`${classifyLedger(arg('ledger'), arg('migration-dir'), arg('release-phase'), arg('migration-versions'))}\n`);
+    }
+    else if (command === 'verify-ledger') {
+      verifyApmProductionSources(arg('ledger'),arg('migration-dir'));
+      verifyLedger(arg('mode'), arg('ledger'), arg('migration-dir'), arg('release-phase'), arg('migration-versions'));
+    }
+    else if (command === 'verify-apm-sources') verifyApmProductionSources(arg('ledger'),arg('migration-dir'));
     else if (command === 'prepare-audit-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'), arg('output'), arg('migration-versions'), arg('fingerprint'), arg('authenticated-canary'), arg('audit-postflight'));
     else if (command === 'prepare-cases-rehearsal') prepareAuditBatchRehearsal(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('fingerprint'),arg('authenticated-canary'),arg('case-postflight'),RELEASE_PHASE_DATABASE_CASES,arg('case-canary'));
     else if (command === 'prepare-cases-apply') prepareAuditBatchApply(arg('migration-dir'),arg('output'),arg('migration-versions'),arg('ledger'),arg('case-postflight'),PRODUCTION_BASELINE_LEDGER,RELEASE_PHASE_DATABASE_CASES);
