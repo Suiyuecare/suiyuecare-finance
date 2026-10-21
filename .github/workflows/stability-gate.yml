@@ -51,9 +51,7 @@ jobs:
       - name: Prove the protected production release cannot bypass DB rehearsal or candidate verification
         run: pnpm release:production-contract
 
-      - name: Reject incomplete source and known incident regressions before build
-        run: pnpm release:preflight
-
+      # release:build runs the complete preflight before producing or sealing any artifact.
       - name: Build and verify the exact Vercel candidate
         run: pnpm release:build
 

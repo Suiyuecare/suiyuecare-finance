@@ -141,7 +141,6 @@ jobs:
             --migration-versions "$MIGRATION_VERSIONS" \
             --project-ref "$FINANCE_PRODUCTION_SUPABASE_PROJECT_REF"
           pnpm install --frozen-lockfile --ignore-scripts
-          pnpm release:preflight
 
       - name: Configure private disposable PostgreSQL for browser concurrency
         env:
@@ -336,6 +335,7 @@ jobs:
           set -euo pipefail
           pnpm dlx vercel@59.3.0 pull --yes --environment=production
           node -e 'const f=require("./.vercel/project.json"); if(f.orgId!==process.env.VERCEL_ORG_ID||f.projectId!==process.env.VERCEL_PROJECT_ID) throw new Error("pulled Vercel link differs from immutable catalog")'
+          # vercel.json invokes release:build, which must finish the complete preflight before building.
           pnpm dlx vercel@59.3.0 build --prod --standalone
           pnpm release:verify-artifact
 

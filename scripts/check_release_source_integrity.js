@@ -1348,9 +1348,13 @@ for (const requiredDoc of REQUIRED_RELEASE_FILES.filter((file) => /^docs\/[^/]+$
 const workflow = fs.existsSync(path.join(ROOT, '.github/workflows/stability-gate.yml'))
   ? fs.readFileSync(path.join(ROOT, '.github/workflows/stability-gate.yml'), 'utf8')
   : '';
-check('CI runs source and root-cause gates before build',
-  workflow.indexOf('pnpm release:preflight') > -1
-    && workflow.indexOf('pnpm release:preflight') < workflow.indexOf('pnpm release:build'));
+const releaseGate = workflow.slice(workflow.indexOf('  release-gate:'), workflow.indexOf('  interaction-gate:'));
+check('CI runs the complete preflight once through the exact verified build chain',
+  pkg && pkg.scripts && pkg.scripts['release:build'] === EXPECTED_RELEASE_SCRIPTS['release:build']
+    && (releaseGate.match(/^\s+run: pnpm release:build\s*$/gm) || []).length === 1
+    && !releaseGate.includes('pnpm release:preflight')
+    && !releaseGate.includes('node scripts/build_www.js')
+    && !releaseGate.includes('continue-on-error'));
 const interactionGate = workflow.slice(workflow.indexOf('  interaction-gate:'));
 check('CI runs invoice binding browser coverage after installing browsers in the interaction gate',
   interactionGate.indexOf('pnpm test:invoice-item-bind-browser') > interactionGate.indexOf('pnpm exec playwright install')
@@ -1372,10 +1376,10 @@ check('CI requires native protected-phase bill batch parity on its disposable Po
 check('CI requires desktop/tablet/mobile bill batch browser coverage',
   interactionGate.includes('pnpm test:personal-bill-batch-history-browser')
     && interactionGate.indexOf('pnpm exec playwright install')>=0);
-check('CI explicitly runs the environment isolation contract before preflight and build',
-  workflow.indexOf('pnpm release:environment-isolation') > -1
-    && workflow.indexOf('pnpm release:environment-isolation') < workflow.indexOf('pnpm release:preflight')
-    && workflow.indexOf('pnpm release:preflight') < workflow.indexOf('pnpm release:build'));
+check('CI explicitly runs environment isolation before the build that requires the complete preflight',
+  releaseGate.indexOf('pnpm release:environment-isolation') > -1
+    && releaseGate.indexOf('pnpm release:environment-isolation') < releaseGate.indexOf('pnpm release:build')
+    && pkg && pkg.scripts && pkg.scripts['release:build'] === EXPECTED_RELEASE_SCRIPTS['release:build']);
 check('CI candidate is an explicit offline preview build',
   /FINANCE_BUILD_TARGET:\s*preview/.test(workflow));
 check('CI does not claim an unsupported clean-slate database replay',

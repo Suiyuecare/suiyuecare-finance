@@ -851,7 +851,6 @@ const required = [
   'RELEASE_CONFIRMATION: ${{ inputs.confirmation }}',
   'test "$RELEASE_CONFIRMATION" = "PROMOTE FINANCE PRODUCTION"',
   '--release-phase "$RELEASE_PHASE"',
-  'pnpm release:preflight',
   'vercel@59.3.0 build --prod --standalone',
   'deploy --prebuilt --prod --skip-domain',
   '--meta "financeCandidateSha=$CANDIDATE_SHA"',
@@ -952,7 +951,37 @@ assert.ok(candidateAt >= 0 && databaseAt > candidateAt && promoteAt > databaseAt
 const candidateJob = workflow.slice(candidateAt, databaseAt);
 const databaseJob = workflow.slice(databaseAt, promoteAt);
 const promoteJob = workflow.slice(promoteAt);
-assert.match(candidateJob, /pnpm release:preflight[\s\S]+vercel@59\.3\.0 build --prod --standalone[\s\S]+pnpm release:verify-artifact[\s\S]+deploy --prebuilt --prod --skip-domain[\s\S]+verify-frontend-contract[\s\S]+verify-vercel-target[\s\S]+create-receipt[\s\S]+upload-artifact/);
+const releasePackage = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const releaseVercel = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8'));
+const stabilityWorkflow = fs.readFileSync(path.join(root, '.github/workflows/stability-gate.yml'), 'utf8');
+const prReleaseJob = stabilityWorkflow.slice(stabilityWorkflow.indexOf('  release-gate:'), stabilityWorkflow.indexOf('  interaction-gate:'));
+function assertMandatoryPreflightBuildChain(scripts, vercelConfig, prJob, productionJob) {
+  assert.equal(scripts['release:build'], 'pnpm release:preflight && node scripts/build_www.js && node scripts/check_release_artifact.js --write-manifest && pnpm release:verify-artifact', 'every release build must finish the full preflight before building, sealing and verifying');
+  assert.equal(vercelConfig.buildCommand, 'pnpm release:build', 'Vercel must invoke the same mandatory preflight build chain');
+  assert.equal(vercelConfig.outputDirectory, 'www');
+  assert.equal((prJob.match(/^\s+run: pnpm release:build\s*$/gm) || []).length, 1, 'PR candidate must invoke the mandatory build exactly once');
+  assert.match(prJob, /- name: Build and verify the exact Vercel candidate\n\s+run: pnpm release:build\n/, 'PR build must be unconditional and fail closed');
+  assert.doesNotMatch(prJob, /pnpm release:preflight|node scripts\/build_www\.js|continue-on-error/, 'PR candidate cannot duplicate or bypass its mandatory build preflight');
+  const buildStepStart = productionJob.indexOf('      - name: Build and fully verify exact production artifact\n');
+  const deployStepStart = productionJob.indexOf('      - name: Deploy unaliased candidate and inspect immutable Vercel target\n');
+  assert.ok(buildStepStart >= 0 && deployStepStart > buildStepStart, 'production build must run before unaliased candidate deployment');
+  const buildStep = productionJob.slice(buildStepStart, deployStepStart);
+  assert.equal((buildStep.match(/^\s+pnpm dlx vercel@59\.3\.0 build --prod --standalone\s*$/gm) || []).length, 1, 'production must use the exact pinned Vercel build without command overrides');
+  assert.doesNotMatch(buildStep, /\bif:|continue-on-error|--local-config|--cwd|--build-env|--build-command|--ignore-command|--ignore-build-step|\|\|\s*true/, 'production cannot skip, override or ignore the mandatory build');
+  assert.doesNotMatch(productionJob, /pnpm release:preflight|node scripts\/build_www\.js/, 'production candidate runs the complete preflight through Vercel build exactly once');
+}
+assertMandatoryPreflightBuildChain(releasePackage.scripts, releaseVercel, prReleaseJob, candidateJob);
+for (const invalidBuild of [
+  'node scripts/build_www.js && pnpm release:preflight',
+  releasePackage.scripts['release:build'].replace('pnpm release:preflight && ', ''),
+  releasePackage.scripts['release:build'].replace('pnpm release:preflight', 'pnpm release:preflight || true'),
+  releasePackage.scripts['release:build'].replace(' && pnpm release:verify-artifact', '')
+]) assert.throws(() => assertMandatoryPreflightBuildChain({...releasePackage.scripts, 'release:build': invalidBuild}, releaseVercel, prReleaseJob, candidateJob), 'missing, reordered, ignored or unverified preflight/build must fail closed');
+assert.throws(() => assertMandatoryPreflightBuildChain(releasePackage.scripts, {...releaseVercel, buildCommand: 'node scripts/build_www.js'}, prReleaseJob, candidateJob), 'Vercel build override must fail closed');
+assert.throws(() => assertMandatoryPreflightBuildChain(releasePackage.scripts, releaseVercel, prReleaseJob.replace('run: pnpm release:build', 'if: false\n        run: pnpm release:build'), candidateJob), 'conditional PR build must fail closed');
+assert.throws(() => assertMandatoryPreflightBuildChain(releasePackage.scripts, releaseVercel, prReleaseJob, candidateJob.replace('build --prod --standalone\n', 'build --prod --standalone --local-config bypass.json\n')), 'production local build configuration override must fail closed');
+assert.throws(() => assertMandatoryPreflightBuildChain(releasePackage.scripts, releaseVercel, prReleaseJob, candidateJob.replace('build --prod --standalone\n', 'build --prod --standalone || true\n')), 'production build failure cannot be ignored');
+assert.match(candidateJob, /validate-target[\s\S]+pnpm install --frozen-lockfile --ignore-scripts[\s\S]+vercel@59\.3\.0 build --prod --standalone[\s\S]+pnpm release:verify-artifact[\s\S]+deploy --prebuilt --prod --skip-domain[\s\S]+verify-frontend-contract[\s\S]+verify-vercel-target[\s\S]+create-receipt[\s\S]+upload-artifact/);
 assert.match(candidateJob, /frontend-app-path[\s\S]+candidate-app\.js[\s\S]+cmp -s "www\/\$APP_ASSET_PATH" "\$RUNNER_TEMP\/candidate-app\.js"[\s\S]+cp "\$RUNNER_TEMP\/candidate-app\.js" "\$BUNDLE\/candidate-app\.js"/, 'candidate must read back the exact deployed app asset and seal its bytes');
 assert.doesNotMatch(candidateJob, /supabase db push|vercel@59\.3\.0 promote/);
 assert.match(databaseJob, /needs: candidate/);
@@ -1266,7 +1295,8 @@ for(const job of [databaseJob,promoteJob])for(const line of job.split('\n').filt
  assert.equal(evaluated.status,line.includes('= "database_approval_search_20260914"')&&!line.includes('!= "database_approval_search_20260914"')?0:1,'approval search executes only its read-only canaries: '+line);
 }
 const browserAt=candidateJob.indexOf('pnpm exec playwright install --with-deps chromium');
-assert.ok(browserAt>candidateJob.indexOf('pnpm release:preflight')&&browserAt<candidateJob.indexOf('vercel@59.3.0 build --prod'));
+const candidateValidationAt=candidateJob.indexOf('node scripts/finance_production_release_guard.js validate-target');
+assert.ok(candidateValidationAt>=0&&browserAt>candidateValidationAt&&browserAt<candidateJob.indexOf('vercel@59.3.0 build --prod'), 'distinct browser/native gates run after exact source/target validation and before the build preflight, artifact verification and deployment');
 assert.ok(candidateJob.includes('FINANCE_BROWSER_CHANNEL: chromium'));
 for(const test of ['check_admin_action_browser.cjs','check_shareholder_invoice_ocr_browser.cjs','check_personnel_login_browser.cjs','check_human_accounting_browser_20261002.cjs'])assert.ok(candidateJob.indexOf('node scripts/'+test)>browserAt&&candidateJob.indexOf('node scripts/'+test)<candidateJob.indexOf('vercel@59.3.0 build --prod'));
 
