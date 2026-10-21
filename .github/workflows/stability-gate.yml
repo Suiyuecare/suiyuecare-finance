@@ -51,9 +51,7 @@ jobs:
       - name: Prove the protected production release cannot bypass DB rehearsal or candidate verification
         run: pnpm release:production-contract
 
-      - name: Reject incomplete source and known incident regressions before build
-        run: pnpm release:preflight
-
+      # release:build runs the complete preflight before producing or sealing any artifact.
       - name: Build and verify the exact Vercel candidate
         run: pnpm release:build
 
@@ -177,6 +175,8 @@ jobs:
           FINANCE_HISTORY_NATIVE_REQUIRED=1 pnpm test:personal-history-identity-once
           FINANCE_INVOICE_NATIVE_REQUIRED=1 pnpm test:invoice-batch-bulk
           FINANCE_BILL_APPROVAL_NATIVE_REQUIRED=1 pnpm test:bill-approval-bulk
+          FINANCE_INVOICE_APPROVAL_NATIVE_REQUIRED=1 pnpm test:invoice-approval-bulk
+          node scripts/check_approval_committed_feedback_browser_20261021.cjs
           pnpm test:taipei2-applicant-confirm-browser
           pnpm test:income-rpc-http
           pnpm test:income-recovery-storage-browser
@@ -205,6 +205,8 @@ jobs:
           path: |
             /tmp/finance-invoice-batch-bulk-20261014
             /tmp/finance-bill-approval-bulk-20261015
+            /tmp/finance-invoice-approval-bulk-20261021
+            /tmp/finance-approval-committed-feedback-browser-20261021
             /tmp/finance-taipei2-applicant-confirm-browser-20261015
             /tmp/finance-income-rpc-http-20261014
             /tmp/finance-income-recovery-storage-browser

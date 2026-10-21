@@ -193,10 +193,10 @@ function setup(){
       financeMutationRpcWithAmbiguousRetry:async (_name,_args,_count,_readback,_context,_meta,callRpc)=>({response:await callRpc()}),
       normalizeSettingValue:value=>value,num:value=>Number(value)||0,
       reloadInvoicesByIds:async()=>false,setTopSyncStatus:()=>{},approvalSetReconcilePending:()=>{},
-      refreshApprovalAfterCommittedAction:async()=>true,clearIncomeActionContext:()=>{},
+      refreshApprovalAfterCommittedAction:async()=>true,clearIncomeActionContext:()=>{},approvalRowsMarkPending:()=>{},incomeSubmissionIdentity:()=> 'fixture-identity',incomeSubmissionIdentityCurrent:value=>value==='fixture-identity',withOperationTimeout:promise=>promise,
       invoiceBatchActionRows:()=>{throw Error('explicit rows must be used');}
     };
-    vm.createContext(c);vm.runInContext(source('invoiceActiveStepTransaction'),c);
+    vm.createContext(c);vm.runInContext(['readbackApprovalStepMutation','reportCommittedApprovalFollowup','committedApprovalSyncNotice','committedApprovalFeedbackMessage','publishCommittedApprovalFeedback','completeCommittedApprovalUi','finishCommittedApprovalAction','invoiceActiveStepTransaction'].map(name=>source(name)).join('\n'),c);
     for(const expectedIds of [group3,group4]){
       const selected=rows.filter(row=>expectedIds.includes(row.id));
       const expected=Object.fromEntries(selected.map(row=>[row.id,{row_version:1,step_index:2}]));

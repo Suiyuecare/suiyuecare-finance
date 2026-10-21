@@ -631,3 +631,16 @@ supabase/.temp
 !scripts/finance_org_google_repair_snapshot_postflight.sql
 !scripts/finance_org_google_repair_snapshot_fingerprint.sql
 !scripts/finance_org_google_repair_snapshot_canary.sql
+
+# Invoice approval atomic release and committed feedback verification
+!scripts/check_invoice_approval_bulk_20261021.cjs
+!scripts/test_invoice_approval_bulk_release_batch.mjs
+!scripts/fixtures/finance_invoice_approval_fixture_20261021.cjs
+!scripts/fixtures/finance_invoice_approval_live_catalog_20261021.json
+!scripts/check_approval_committed_feedback.cjs
+!scripts/check_approval_committed_feedback_browser_20261021.cjs
+!scripts/check_approval_hydration_recovery.cjs
+!scripts/finance_invoice_approval_bulk_preflight.sql
+!scripts/finance_invoice_approval_bulk_postflight.sql
+!scripts/finance_invoice_approval_bulk_fingerprint.sql
+!scripts/finance_invoice_approval_bulk_canary.sql

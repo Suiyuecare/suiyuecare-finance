@@ -36,7 +36,7 @@ function fixture(opts={}){
    return {...file,url:'',bucket:'finance-attachments',path:'bills/test/FICT-BILL-001/bill_approval/uploaded.pdf',storagePath:'bills/test/FICT-BILL-001/bill_approval/uploaded.pdf'};},
   cleanupUploadedSupabaseAttachments:async(groups,label)=>{trace.cleanup.push({groups:clone(groups),label});return 0;},
   attachmentUploadError:(message,meta)=>Object.assign(new Error(message),meta),formatStorageUploadError:e=>e.message||String(e),
-  incomeActionContext:()=>({key:'fictional-idempotent-key'}),clearIncomeActionContext(){},readbackApprovalStepMutation(){},
+  incomeActionContext:()=>({key:'fictional-idempotent-key'}),clearIncomeActionContext(){},approvalRowsMarkPending(){},incomeSubmissionIdentity:()=>identity,incomeSubmissionIdentityCurrent:value=>value===identity,withOperationTimeout:promise=>promise,setTopSyncStatus(){},
   financeMutationRpcWithAmbiguousRetry:async(name,args,length,readback,context,meta,call)=>({response:await call()}),
   getSb:()=>({rpc:async(name,args)=>{trace.rpc.push({name,args:clone(args)});if(opts.rpcError)return {error:opts.rpcError};
    for(const row of c.BILLS){row.steps[1]={...row.steps[1],a:'approved',n:'虛構會計',files:clone(args.p_files)};row.rowVersion++;}return {data:{ok:true,count:c.BILLS.length}};},storage:{from:bucket=>({createSignedUrl:async(p,expiry,options)=>{trace.signs.push({bucket,path:p,expiry,options});return {data:{signedUrl:origin+'/storage/v1/object/sign/'+bucket+'/'+p+'?token=fictional-only'}};}})}}),
@@ -53,13 +53,19 @@ function fixture(opts={}){
  const names=['approvalHistoryIncomeWriteBlocked','rejectApprovalHistoryIncomeWrite','currentFinanceAuthUserId','fileExt','fileToAttachment','readStepFiles','approvalActionPayload','approvalActionValidation','approvalActionValidationError','approvalActionPreflight',
   'uploadAttachmentWithTrackedTimeout','uploadAttachmentsToSupabase','canActStep','canActBill','billCreatedBucket','billGroupKey','approvalHistoryExactGroupRows','billGroupRows','billGroupLeader','billGroupTotal','billGroupCount','billGroupNo',
   'approvalRowVersion','approvalFrozenExpectedState','approvalExpectedStepIds','approvalExpectedPayloadForKind','approvalFreezeExpectedSteps','approvalExpectedVersionsValid','approvalFrozenExpectedSteps','approvalValidatedExpectedSteps','approvalFreezeModalExpectedSteps','approvalModalExpectedSteps','billExpectedStepPayload',
-  'billAttachmentFailure','uploadBillActionFiles','billActiveStepTransaction','approveBillGroupCore','returnBillGroupCore','rejectBillGroupCore','approvalContentVersionChangedError','approvalContentVersionFriendlyError','cleanupApprovalFilesAfterDefiniteFailure','attachmentDownloadHealthKey','stepAttachmentHtml','wrapApprovalActionLock','withActionFeedback','wrapActionFeedback','installActionFeedbackWrappers'];
+  'readbackApprovalStepMutation','approvalStepMutationReadbackMatches','reportCommittedApprovalFollowup','committedApprovalSyncNotice','committedApprovalFeedbackMessage','publishCommittedApprovalFeedback','completeCommittedApprovalUi','finishCommittedApprovalAction','billAttachmentFailure','uploadBillActionFiles','billActiveStepTransaction','approveBillGroupCore','returnBillGroupCore','rejectBillGroupCore','approvalContentVersionChangedError','approvalContentVersionFriendlyError','cleanupApprovalFilesAfterDefiniteFailure','attachmentDownloadHealthKey','stepAttachmentHtml','wrapApprovalActionLock','withActionFeedback','wrapActionFeedback','installActionFeedbackWrappers'];
  vm.runInContext(names.map(fn).join('\n')+'\n'+range('window.apprApproveBill=async function(','window.submitProcurementPaymentInfo='),c);
  vm.runInContext(range('function findAttachmentOwner(','function currentUserDownloadIds(')+range('function attachmentSignedDownloadUrl(','function storagePublicUrl(')+range('function attachmentDownloadFileName(','function stepAttachmentHtml('),c);
  c.approvalFreezeModalExpectedSteps('bill',c.BILLS);for(const name of ['apprApproveBill','apprReturnPreviousBill','apprRejectBill'])c.wrapApprovalActionLock(name);c.installActionFeedbackWrappers();
  return {c,bill,input,dom,trace,setIdentity:value=>{identity=value;c.S.user.authUserId=value;}};
 }
 (async()=>{
+ for(const action of ['apprApproveBill','apprReturnPreviousBill','apprRejectBill']){
+  const local=fixture();local.c.buildBills=()=>{throw Error('fictional committed render crash');};
+  let recovery=0;local.c.scheduleRemoteRecovery=()=>{recovery++;};
+  await local.c[action](local.bill.id);
+  check(action+' acknowledged receipt survives caller rendering error through the actual feedback and lock wrappers',local.trace.rpc.length===1&&local.trace.feedback.length===0&&local.trace.failures.length===0&&recovery===1&&!local.c.APPROVAL_ACTION_IN_FLIGHT['bill:'+local.bill.id]);
+ }
  let f=fixture();await f.c.apprApproveBill(f.bill.id);
  check('actual FileReader and upload coordinator receive selected generated PDF bytes',f.trace.reads.length===1&&f.trace.uploads[0].file.url.startsWith('data:application/pdf;base64,')&&f.trace.uploads[0].ctx.recordType==='bills'&&f.trace.uploads[0].ctx.kind==='bill_approval');
  const call=f.trace.rpc[0];check('actual bill v2 RPC receives uploaded path, original version and active actor',call.name==='finance_bill_act_active_step_v2'&&call.args.p_files.length===1&&call.args.p_files[0].path.endsWith('uploaded.pdf')&&!call.args.p_files[0].url&&call.args.p_expected_steps[f.bill.id].row_version===7&&call.args.p_expected_steps[f.bill.id].finance_user_id==='FICT-ACCOUNTANT'&&call.args.p_data_environment==='test');

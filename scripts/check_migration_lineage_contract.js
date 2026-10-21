@@ -24,8 +24,8 @@ const EXPENSE_STATUS_HOTFIX = '20260831043517_expense_submit_derived_status.sql'
 const FINAL_ACCOUNTANT_SELF_POST_HOTFIX = '20260901024020_final_accountant_self_post.sql';
 const FORMAL_CASHIER_REPAIR = '20260901073241_assign_ceo_cashier_and_reassign_pending_cashier.sql';
 const FORMAL_CASHIER_SELF_DISBURSEMENT = '20260901081807_allow_formal_cashier_self_disbursement.sql';
-const {AUDIT_MIGRATIONS,CASE_MIGRATIONS,UTILITY_MIGRATIONS,REPORT_MIGRATIONS,AMOUNT_SEARCH_MIGRATIONS,REPORTING_INTEGRITY_MIGRATIONS,AUDIT_READINESS_MIGRATIONS,EMPLOYEE_RELIABILITY_MIGRATIONS,HISTORY_PERFORMANCE_MIGRATIONS,READ_LATENCY_MIGRATIONS,AR_MAPPING_MIGRATIONS,AUDIT_REMEDIATION_MIGRATIONS,APPROVAL_SEARCH_MIGRATIONS,HISTORY_SUMMARY_MIGRATIONS,INVOICE_READ_SCOPE_MIGRATIONS,AR_READ_SCOPE_MIGRATIONS,HR_BRIDGE_MIGRATIONS,AUDIT_SECURITY_MIGRATIONS,HR_DIRECTORY_EXPORT_MIGRATIONS,REVENUE_REPAIR_MIGRATIONS,OPERATIONAL_STABILITY_MIGRATIONS,DEMO_PASSWORD_RETIREMENT_MIGRATIONS,AUDIT_CONTROLS_20260927_MIGRATIONS,HR_CONTRACTOR_MIGRATIONS,PORTAL_SESSION_MIGRATIONS,EXTERNAL_LABOR_MIGRATIONS,ATTACHMENT_CLAIM_MIGRATIONS,ATTACHMENT_STAGED_CLEANUP_MIGRATIONS,HUMAN_FLOAT_MIGRATIONS,INCOME_RECONCILE_MIGRATIONS,INVOICE_REVENUE_RESULT_MIGRATIONS,PERSONNEL_CONFLICT_MIGRATIONS,PERSONNEL_RECEIPT_MIGRATIONS,PROCUREMENT_ACTION_MIGRATIONS,APPLICANT_WITHDRAW_MIGRATIONS,PURCHASE_FINAL_AMOUNT_MIGRATIONS,INVOICE_ITEM_BIND_MIGRATIONS,INVOICE_ITEM_BIND_SOURCE_SHA256,PERSONAL_HISTORY_MIGRATIONS,PERSONAL_HISTORY_PERMISSION_MIGRATIONS,BILL_BATCH_BULK_MIGRATIONS,BILL_BATCH_BULK_SOURCE_SHA256,INVOICE_BATCH_APPROVAL_MIGRATIONS,INVOICE_BATCH_APPROVAL_SOURCE_SHA256,PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS,PERSONAL_HISTORY_IDENTITY_ONCE_SOURCE_SHA256,PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS,PERSONAL_BILL_BATCH_HISTORY_SOURCE_SHA256,BOUNDED_LOGOUT_MIGRATIONS,BOUNDED_LOGOUT_SOURCE_SHA256,INVOICE_BATCH_BULK_MIGRATIONS,INVOICE_BATCH_BULK_SOURCE_SHA256,BILL_APPROVAL_BULK_MIGRATIONS,BILL_APPROVAL_BULK_SOURCE_SHA256,APPROVAL_TASKS_VERIFIED_SESSION_MIGRATIONS,APPROVAL_TASKS_VERIFIED_SESSION_SOURCE_SHA256,BANK_FEE_CLASSIFICATION_MIGRATIONS,BANK_FEE_CLASSIFICATION_SOURCE_SHA256,MEGA_REMITTANCE_MIGRATIONS,MEGA_REMITTANCE_SOURCE_SHA256,REMITTANCE_HISTORY_MIGRATIONS,REMITTANCE_HISTORY_SOURCE_SHA256,REMITTANCE_BOUNDARY_MIGRATIONS,REMITTANCE_BOUNDARY_SOURCE_SHA256}=require('./finance_production_release_guard');
-const CURRENT_RELEASE_TAIL_MIGRATIONS = [...OPERATIONAL_STABILITY_MIGRATIONS, ...DEMO_PASSWORD_RETIREMENT_MIGRATIONS,...AUDIT_CONTROLS_20260927_MIGRATIONS,...HR_CONTRACTOR_MIGRATIONS,...PORTAL_SESSION_MIGRATIONS,...EXTERNAL_LABOR_MIGRATIONS,...ATTACHMENT_CLAIM_MIGRATIONS,...ATTACHMENT_STAGED_CLEANUP_MIGRATIONS,...HUMAN_FLOAT_MIGRATIONS,...INCOME_RECONCILE_MIGRATIONS,...INVOICE_REVENUE_RESULT_MIGRATIONS,...PERSONNEL_CONFLICT_MIGRATIONS,...PERSONNEL_RECEIPT_MIGRATIONS,...PROCUREMENT_ACTION_MIGRATIONS,...APPLICANT_WITHDRAW_MIGRATIONS,...PURCHASE_FINAL_AMOUNT_MIGRATIONS,...INVOICE_ITEM_BIND_MIGRATIONS,...PERSONAL_HISTORY_MIGRATIONS,...PERSONAL_HISTORY_PERMISSION_MIGRATIONS,...BILL_BATCH_BULK_MIGRATIONS,...INVOICE_BATCH_APPROVAL_MIGRATIONS,...PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS,...PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS,...BOUNDED_LOGOUT_MIGRATIONS,...INVOICE_BATCH_BULK_MIGRATIONS,...BILL_APPROVAL_BULK_MIGRATIONS,...APPROVAL_TASKS_VERIFIED_SESSION_MIGRATIONS,...BANK_FEE_CLASSIFICATION_MIGRATIONS,...MEGA_REMITTANCE_MIGRATIONS,...REMITTANCE_HISTORY_MIGRATIONS,...REMITTANCE_BOUNDARY_MIGRATIONS];
+const {AUDIT_MIGRATIONS,CASE_MIGRATIONS,UTILITY_MIGRATIONS,REPORT_MIGRATIONS,AMOUNT_SEARCH_MIGRATIONS,REPORTING_INTEGRITY_MIGRATIONS,AUDIT_READINESS_MIGRATIONS,EMPLOYEE_RELIABILITY_MIGRATIONS,HISTORY_PERFORMANCE_MIGRATIONS,READ_LATENCY_MIGRATIONS,AR_MAPPING_MIGRATIONS,AUDIT_REMEDIATION_MIGRATIONS,APPROVAL_SEARCH_MIGRATIONS,HISTORY_SUMMARY_MIGRATIONS,INVOICE_READ_SCOPE_MIGRATIONS,AR_READ_SCOPE_MIGRATIONS,HR_BRIDGE_MIGRATIONS,AUDIT_SECURITY_MIGRATIONS,HR_DIRECTORY_EXPORT_MIGRATIONS,REVENUE_REPAIR_MIGRATIONS,OPERATIONAL_STABILITY_MIGRATIONS,DEMO_PASSWORD_RETIREMENT_MIGRATIONS,AUDIT_CONTROLS_20260927_MIGRATIONS,HR_CONTRACTOR_MIGRATIONS,PORTAL_SESSION_MIGRATIONS,EXTERNAL_LABOR_MIGRATIONS,ATTACHMENT_CLAIM_MIGRATIONS,ATTACHMENT_STAGED_CLEANUP_MIGRATIONS,HUMAN_FLOAT_MIGRATIONS,INCOME_RECONCILE_MIGRATIONS,INVOICE_REVENUE_RESULT_MIGRATIONS,PERSONNEL_CONFLICT_MIGRATIONS,PERSONNEL_RECEIPT_MIGRATIONS,PROCUREMENT_ACTION_MIGRATIONS,APPLICANT_WITHDRAW_MIGRATIONS,PURCHASE_FINAL_AMOUNT_MIGRATIONS,INVOICE_ITEM_BIND_MIGRATIONS,INVOICE_ITEM_BIND_SOURCE_SHA256,PERSONAL_HISTORY_MIGRATIONS,PERSONAL_HISTORY_PERMISSION_MIGRATIONS,BILL_BATCH_BULK_MIGRATIONS,BILL_BATCH_BULK_SOURCE_SHA256,INVOICE_BATCH_APPROVAL_MIGRATIONS,INVOICE_BATCH_APPROVAL_SOURCE_SHA256,PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS,PERSONAL_HISTORY_IDENTITY_ONCE_SOURCE_SHA256,PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS,PERSONAL_BILL_BATCH_HISTORY_SOURCE_SHA256,BOUNDED_LOGOUT_MIGRATIONS,BOUNDED_LOGOUT_SOURCE_SHA256,INVOICE_BATCH_BULK_MIGRATIONS,INVOICE_BATCH_BULK_SOURCE_SHA256,BILL_APPROVAL_BULK_MIGRATIONS,BILL_APPROVAL_BULK_SOURCE_SHA256,APPROVAL_TASKS_VERIFIED_SESSION_MIGRATIONS,APPROVAL_TASKS_VERIFIED_SESSION_SOURCE_SHA256,BANK_FEE_CLASSIFICATION_MIGRATIONS,BANK_FEE_CLASSIFICATION_SOURCE_SHA256,MEGA_REMITTANCE_MIGRATIONS,MEGA_REMITTANCE_SOURCE_SHA256,REMITTANCE_HISTORY_MIGRATIONS,REMITTANCE_HISTORY_SOURCE_SHA256,REMITTANCE_BOUNDARY_MIGRATIONS,REMITTANCE_BOUNDARY_SOURCE_SHA256,INVOICE_APPROVAL_BULK_MIGRATIONS,INVOICE_APPROVAL_BULK_SOURCE_SHA256}=require('./finance_production_release_guard');
+const CURRENT_RELEASE_TAIL_MIGRATIONS = [...OPERATIONAL_STABILITY_MIGRATIONS, ...DEMO_PASSWORD_RETIREMENT_MIGRATIONS,...AUDIT_CONTROLS_20260927_MIGRATIONS,...HR_CONTRACTOR_MIGRATIONS,...PORTAL_SESSION_MIGRATIONS,...EXTERNAL_LABOR_MIGRATIONS,...ATTACHMENT_CLAIM_MIGRATIONS,...ATTACHMENT_STAGED_CLEANUP_MIGRATIONS,...HUMAN_FLOAT_MIGRATIONS,...INCOME_RECONCILE_MIGRATIONS,...INVOICE_REVENUE_RESULT_MIGRATIONS,...PERSONNEL_CONFLICT_MIGRATIONS,...PERSONNEL_RECEIPT_MIGRATIONS,...PROCUREMENT_ACTION_MIGRATIONS,...APPLICANT_WITHDRAW_MIGRATIONS,...PURCHASE_FINAL_AMOUNT_MIGRATIONS,...INVOICE_ITEM_BIND_MIGRATIONS,...PERSONAL_HISTORY_MIGRATIONS,...PERSONAL_HISTORY_PERMISSION_MIGRATIONS,...BILL_BATCH_BULK_MIGRATIONS,...INVOICE_BATCH_APPROVAL_MIGRATIONS,...PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS,...PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS,...BOUNDED_LOGOUT_MIGRATIONS,...INVOICE_BATCH_BULK_MIGRATIONS,...BILL_APPROVAL_BULK_MIGRATIONS,...APPROVAL_TASKS_VERIFIED_SESSION_MIGRATIONS,...BANK_FEE_CLASSIFICATION_MIGRATIONS,...MEGA_REMITTANCE_MIGRATIONS,...REMITTANCE_HISTORY_MIGRATIONS,...REMITTANCE_BOUNDARY_MIGRATIONS,...INVOICE_APPROVAL_BULK_MIGRATIONS];
 const HUMAN_ACCOUNTING_AUTHORITY = '20260902054834_preserve_human_accounting_authority_v1.sql';
 const SCHEMA_QUALIFIED_CONDITIONAL_EXPRESSION =
   /"?pg_catalog"?\s*\.\s*"?(?:coalesce|nullif|greatest|least)"?\s*\(/i;
@@ -303,14 +303,14 @@ check('HR directory postflight pins source body, private table boundaries, and s
     && /if \(select count\(\*\)[\s\S]+p\.proname like 'hr_directory_%'[\s\S]+p\.proname='finance_hr_directory_transport'\)\)<>3 then/.test(hrDirectoryPostflightSql)
     && !hrDirectoryPostflightSql.includes('select * from public.employees'));
 check('revenue repair is the exact predecessor of operational stability',REVENUE_REPAIR_MIGRATIONS.join(',')==='20260924074010'&&migrations.slice(-CURRENT_RELEASE_TAIL_MIGRATIONS.length-REVENUE_REPAIR_MIGRATIONS.length,-CURRENT_RELEASE_TAIL_MIGRATIONS.length).join(',')==='20260924074010_finance_e8_g1101_home_care_revenue_repair_v1.sql');
-check('reviewed controls, attachment cleanup, human float, and income reconciliation are the exact ordered final suffix',CURRENT_RELEASE_TAIL_MIGRATIONS.join(',')==='20260924155142,20260925170000,20260927152432,20260927153326,20260927175827,20260927180005,20260927180201,20260928090000,20261001030323,20261001202434,20261002035707,20261002130327,20261002151725,20261003042021,20261003044426,20261005035438,20261005173534,20261006153719,20261008031845,20261008055528,20261008090000,20261008100000,20261010120000,20261010130000,20261012112652,20261013091000,20261014123017,20261014123427,20261015060930,20261015172658,20261016043221,20261018074245,20261019032213,20261019063423,20261019063700'&&migrations.slice(-CURRENT_RELEASE_TAIL_MIGRATIONS.length).join(',')==='20260924155142_finance_operational_stability_v1.sql,20260925170000_finance_retire_demo_password_v1.sql,20260927152432_finance_audit_controls_v1.sql,20260927153326_finance_payroll_accrual_v1.sql,20260927175827_finance_hr_native_contractor_bridge.sql,20260927180005_finance_hr_contractor_settlement_caption.sql,20260927180201_finance_portal_session_logout.sql,20260928090000_finance_external_labor_v1.sql,20261001030323_fix_attachment_claim_path_lookup.sql,20261001202434_finance_attachment_owner_staged_cleanup_select_v3.sql,20261002035707_finance_human_accounting_float_residue_20261002.sql,20261002130327_finance_income_reconcile_submission_v1.sql,20261002151725_finance_invoice_revenue_result_v1.sql,20261003042021_finance_personnel_save_conflict_nonretry_v1.sql,20261003044426_finance_member_save_reliable_receipt_v1.sql,20261005035438_procurement_specialized_action_guard_v1.sql,20261005173534_applicant_withdraw_bill_invoice_v1.sql,20261006153719_purchase_final_amount_exact_lock_v1.sql,20261008031845_finance_bind_expense_invoice_item_v1.sql,20261008055528_finance_personal_document_history_v1.sql,20261008090000_finance_personal_history_permission_guard_v1.sql,20261008100000_finance_bill_batch_bulk_insert_v1.sql,20261010120000_finance_invoice_batch_approval_notification_v1.sql,20261010130000_finance_personal_invoice_batch_history_v1.sql,20261012112652_finance_personal_history_identity_once_v1.sql,20261013091000_finance_personal_bill_batch_history_v1.sql,20261014123017_finance_bounded_global_logout.sql,20261014123427_finance_invoice_batch_bulk_insert_v2.sql,20261015060930_finance_bill_approval_bulk_v1.sql,20261015172658_finance_approval_tasks_verified_session_v1.sql,20261016043221_finance_bank_fee_classification_v1.sql,20261018074245_finance_mega_remittance_private_v1.sql,20261019032213_finance_remittance_export_history_v1.sql,20261019063423_finance_remittance_namespace_boundary_v1.sql,20261019063700_finance_org_google_repair_snapshot_v1.sql');
+check('reviewed controls, attachment cleanup, human float, and income reconciliation are the exact ordered final suffix',CURRENT_RELEASE_TAIL_MIGRATIONS.join(',')==='20260924155142,20260925170000,20260927152432,20260927153326,20260927175827,20260927180005,20260927180201,20260928090000,20261001030323,20261001202434,20261002035707,20261002130327,20261002151725,20261003042021,20261003044426,20261005035438,20261005173534,20261006153719,20261008031845,20261008055528,20261008090000,20261008100000,20261010120000,20261010130000,20261012112652,20261013091000,20261014123017,20261014123427,20261015060930,20261015172658,20261016043221,20261018074245,20261019032213,20261019063423,20261019063700,20261021050618'&&migrations.slice(-CURRENT_RELEASE_TAIL_MIGRATIONS.length).join(',')==='20260924155142_finance_operational_stability_v1.sql,20260925170000_finance_retire_demo_password_v1.sql,20260927152432_finance_audit_controls_v1.sql,20260927153326_finance_payroll_accrual_v1.sql,20260927175827_finance_hr_native_contractor_bridge.sql,20260927180005_finance_hr_contractor_settlement_caption.sql,20260927180201_finance_portal_session_logout.sql,20260928090000_finance_external_labor_v1.sql,20261001030323_fix_attachment_claim_path_lookup.sql,20261001202434_finance_attachment_owner_staged_cleanup_select_v3.sql,20261002035707_finance_human_accounting_float_residue_20261002.sql,20261002130327_finance_income_reconcile_submission_v1.sql,20261002151725_finance_invoice_revenue_result_v1.sql,20261003042021_finance_personnel_save_conflict_nonretry_v1.sql,20261003044426_finance_member_save_reliable_receipt_v1.sql,20261005035438_procurement_specialized_action_guard_v1.sql,20261005173534_applicant_withdraw_bill_invoice_v1.sql,20261006153719_purchase_final_amount_exact_lock_v1.sql,20261008031845_finance_bind_expense_invoice_item_v1.sql,20261008055528_finance_personal_document_history_v1.sql,20261008090000_finance_personal_history_permission_guard_v1.sql,20261008100000_finance_bill_batch_bulk_insert_v1.sql,20261010120000_finance_invoice_batch_approval_notification_v1.sql,20261010130000_finance_personal_invoice_batch_history_v1.sql,20261012112652_finance_personal_history_identity_once_v1.sql,20261013091000_finance_personal_bill_batch_history_v1.sql,20261014123017_finance_bounded_global_logout.sql,20261014123427_finance_invoice_batch_bulk_insert_v2.sql,20261015060930_finance_bill_approval_bulk_v1.sql,20261015172658_finance_approval_tasks_verified_session_v1.sql,20261016043221_finance_bank_fee_classification_v1.sql,20261018074245_finance_mega_remittance_private_v1.sql,20261019032213_finance_remittance_export_history_v1.sql,20261019063423_finance_remittance_namespace_boundary_v1.sql,20261019063700_finance_org_google_repair_snapshot_v1.sql,20261021050618_finance_invoice_approval_bulk_v1.sql');
 for(const[version,sha256]of Object.entries(require('./finance_production_release_guard').AUDIT_CONTROLS_20260927_SOURCE_SHA256)){
  const filename=migrations.find(name=>name.startsWith(version+'_'));
  check('new controls source matches reviewed SHA-256: '+version,!!filename&&crypto.createHash('sha256').update(fs.readFileSync(path.join(MIGRATIONS_DIR,filename))).digest('hex')===sha256);
 }
 check('personal history identity-once is the reviewed exact predecessor of bill batch history',
   PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS.join(',')==='20261012112652'
-    && migrations.at(-11)==='20261012112652_finance_personal_history_identity_once_v1.sql'
+    && migrations.at(-11-INVOICE_APPROVAL_BULK_MIGRATIONS.length)==='20261012112652_finance_personal_history_identity_once_v1.sql'
     && PERSONAL_HISTORY_IDENTITY_ONCE_SOURCE_SHA256['20261012112652']==='168b2e3fc604f3193450cefdb59412567f061801f747441dc071f00a9f264e2d');
 for(const[version,sha256]of Object.entries(PERSONAL_HISTORY_IDENTITY_ONCE_SOURCE_SHA256)){
   const file=migrations.find(name=>name.startsWith(version+'_'));
@@ -320,25 +320,25 @@ for(const[version,sha256]of Object.entries(PERSONAL_HISTORY_IDENTITY_ONCE_SOURCE
 }
 check('personal bill batch history is the reviewed exact predecessor of bounded logout',
   PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS.join(',')==='20261013091000'
-    && migrations.at(-10)==='20261013091000_finance_personal_bill_batch_history_v1.sql');
+    && migrations.at(-10-INVOICE_APPROVAL_BULK_MIGRATIONS.length)==='20261013091000_finance_personal_bill_batch_history_v1.sql');
 for(const[version,sha256]of Object.entries(PERSONAL_BILL_BATCH_HISTORY_SOURCE_SHA256)){
   const file=migrations.find(name=>name.startsWith(version+'_'));
   check('personal bill batch history source matches reviewed SHA-256: '+version,
     !!file&&crypto.createHash('sha256').update(read('supabase/migrations/'+file)).digest('hex')===sha256);
   if(file)require('./finance_production_release_guard').assertCliAtomicMigration(read('supabase/migrations/'+file),file);
 }
-check('bounded logout is the reviewed exact predecessor of invoice bulk',BOUNDED_LOGOUT_MIGRATIONS.join(',')==='20261014123017'&&migrations.at(-9)==='20261014123017_finance_bounded_global_logout.sql');
+check('bounded logout is the reviewed exact predecessor of invoice bulk',BOUNDED_LOGOUT_MIGRATIONS.join(',')==='20261014123017'&&migrations.at(-9-INVOICE_APPROVAL_BULK_MIGRATIONS.length)==='20261014123017_finance_bounded_global_logout.sql');
 for(const[version,sha]of Object.entries(BOUNDED_LOGOUT_SOURCE_SHA256)){const name=migrations.find(name=>name.startsWith(version+'_'));check('bounded logout source is sealed: '+version,Boolean(name)&&crypto.createHash('sha256').update(read('supabase/migrations/'+name)).digest('hex')===sha);}
 check('invoice bulk is the reviewed predecessor of bill approval bulk',
   INVOICE_BATCH_BULK_MIGRATIONS.join(',')==='20261014123427'
-    && migrations.at(-8)==='20261014123427_finance_invoice_batch_bulk_insert_v2.sql');
+    && migrations.at(-8-INVOICE_APPROVAL_BULK_MIGRATIONS.length)==='20261014123427_finance_invoice_batch_bulk_insert_v2.sql');
 for(const[version,sha256]of Object.entries(INVOICE_BATCH_BULK_SOURCE_SHA256)){
   const file=migrations.find(name=>name.startsWith(version+'_'));
   check('invoice batch bulk source matches reviewed SHA-256: '+version,
     !!file&&/^[0-9a-f]{64}$/.test(sha256)&&crypto.createHash('sha256').update(read('supabase/migrations/'+file)).digest('hex')===sha256);
   if(file)require('./finance_production_release_guard').assertCliAtomicMigration(read('supabase/migrations/'+file),file);
 }
-check('bill approval bulk is the reviewed predecessor of verified-session task reads', BILL_APPROVAL_BULK_MIGRATIONS.join(',')==='20261015060930' && migrations.at(-7)==='20261015060930_finance_bill_approval_bulk_v1.sql');
+check('bill approval bulk is the reviewed predecessor of verified-session task reads', BILL_APPROVAL_BULK_MIGRATIONS.join(',')==='20261015060930' && migrations.at(-7-INVOICE_APPROVAL_BULK_MIGRATIONS.length)==='20261015060930_finance_bill_approval_bulk_v1.sql');
 for(const[version,sha256]of Object.entries(BILL_APPROVAL_BULK_SOURCE_SHA256)){
   const file=migrations.find(name=>name.startsWith(version+'_'));
   check('bill approval bulk source matches reviewed SHA-256: '+version,
@@ -381,37 +381,37 @@ for(const[version,sha256]of Object.entries(require('./finance_production_release
  const filename=migrations.find(name=>name.startsWith(version+'_'));
  check('personnel save source matches reviewed SHA-256: '+version,!!filename&&crypto.createHash('sha256').update(fs.readFileSync(path.join(MIGRATIONS_DIR,filename))).digest('hex')===sha256);
 }
-check('verified-session task reads are the reviewed predecessor of bank fee classification', APPROVAL_TASKS_VERIFIED_SESSION_MIGRATIONS.join(',')==='20261015172658' && migrations.at(-6)==='20261015172658_finance_approval_tasks_verified_session_v1.sql');
+check('verified-session task reads are the reviewed predecessor of bank fee classification', APPROVAL_TASKS_VERIFIED_SESSION_MIGRATIONS.join(',')==='20261015172658' && migrations.at(-6-INVOICE_APPROVAL_BULK_MIGRATIONS.length)==='20261015172658_finance_approval_tasks_verified_session_v1.sql');
 for(const [version,sha256] of Object.entries(APPROVAL_TASKS_VERIFIED_SESSION_SOURCE_SHA256)){
  const file=migrations.find(name=>name.startsWith(version+'_'));
  check('verified-session task migration source matches reviewed SHA-256: '+version,!!file&&crypto.createHash('sha256').update(read('supabase/migrations/'+file)).digest('hex')===sha256);
  if(file)require('./finance_production_release_guard').assertCliAtomicMigration(read('supabase/migrations/'+file),file);
 }
 
-check('bank fee classification is the reviewed predecessor of Mega remittance', BANK_FEE_CLASSIFICATION_MIGRATIONS.join(',')==='20261016043221' && migrations.at(-5)==='20261016043221_finance_bank_fee_classification_v1.sql');
+check('bank fee classification is the reviewed predecessor of Mega remittance', BANK_FEE_CLASSIFICATION_MIGRATIONS.join(',')==='20261016043221' && migrations.at(-5-INVOICE_APPROVAL_BULK_MIGRATIONS.length)==='20261016043221_finance_bank_fee_classification_v1.sql');
 for(const [version,sha256] of Object.entries(BANK_FEE_CLASSIFICATION_SOURCE_SHA256)){
  const file=migrations.find(name=>name.startsWith(version+'_'));
  check('bank fee classification migration source matches reviewed SHA-256: '+version,!!file&&crypto.createHash('sha256').update(read('supabase/migrations/'+file)).digest('hex')===sha256);
  if(file)require('./finance_production_release_guard').assertCliAtomicMigration(read('supabase/migrations/'+file),file);
 }
 
-check('Mega remittance is the reviewed predecessor of history exports', MEGA_REMITTANCE_MIGRATIONS.join(',')==='20261018074245' && migrations.at(-4)==='20261018074245_finance_mega_remittance_private_v1.sql');
+check('Mega remittance is the reviewed predecessor of history exports', MEGA_REMITTANCE_MIGRATIONS.join(',')==='20261018074245' && migrations.at(-4-INVOICE_APPROVAL_BULK_MIGRATIONS.length)==='20261018074245_finance_mega_remittance_private_v1.sql');
 for(const [version,sha256] of Object.entries(MEGA_REMITTANCE_SOURCE_SHA256)){
  const file=migrations.find(name=>name.startsWith(version+'_'));
  check('Mega remittance migration source matches reviewed SHA-256: '+version,!!file&&crypto.createHash('sha256').update(read('supabase/migrations/'+file)).digest('hex')===sha256);
  if(file)require('./finance_production_release_guard').assertCliAtomicMigration(read('supabase/migrations/'+file),file);
 }
 
-check("Remittance history is the reviewed predecessor of the namespace and org repair batch",REMITTANCE_HISTORY_MIGRATIONS.join(",")==="20261019032213" && migrations.at(-3)==="20261019032213_finance_remittance_export_history_v1.sql");
+check("Remittance history is the reviewed predecessor of the namespace and org repair batch",REMITTANCE_HISTORY_MIGRATIONS.join(",")==="20261019032213" && migrations.at(-3-INVOICE_APPROVAL_BULK_MIGRATIONS.length)==="20261019032213_finance_remittance_export_history_v1.sql");
 for(const [version,sha256] of Object.entries(REMITTANCE_HISTORY_SOURCE_SHA256)){
  const file=migrations.find(name=>name.startsWith(version+"_"));
  check("Remittance history source seal "+version,!!file && crypto.createHash("sha256").update(fs.readFileSync(path.join(MIGRATIONS_DIR,file))).digest("hex")===sha256);
 }
 
 
-check('remittance namespace and org repair are the exact reviewed final batch',
+check('remittance namespace and org repair are the exact reviewed predecessor of invoice approval bulk',
   REMITTANCE_BOUNDARY_MIGRATIONS.join(',')==='20261019063423,20261019063700'
-    && migrations.slice(-REMITTANCE_BOUNDARY_MIGRATIONS.length).join(',')
+    && migrations.slice(-REMITTANCE_BOUNDARY_MIGRATIONS.length-INVOICE_APPROVAL_BULK_MIGRATIONS.length,-INVOICE_APPROVAL_BULK_MIGRATIONS.length).join(',')
       ==='20261019063423_finance_remittance_namespace_boundary_v1.sql,20261019063700_finance_org_google_repair_snapshot_v1.sql');
 check('remittance boundary source seals cover exactly the reviewed two versions',
   Object.keys(REMITTANCE_BOUNDARY_SOURCE_SHA256).sort().join(',')===REMITTANCE_BOUNDARY_MIGRATIONS.join(',')
@@ -422,6 +422,28 @@ for(const [version,sha256] of Object.entries(REMITTANCE_BOUNDARY_SOURCE_SHA256))
   check('remittance boundary migration source matches reviewed SHA-256: '+version,
     !!file&&crypto.createHash('sha256').update(fs.readFileSync(path.join(MIGRATIONS_DIR,file))).digest('hex')===sha256);
   if(file)require('./finance_production_release_guard').assertCliAtomicMigration(read('supabase/migrations/'+file),file);
+}
+
+
+check('invoice approval bulk is the exact reviewed final migration',
+  INVOICE_APPROVAL_BULK_MIGRATIONS.join(',')==='20261021050618'
+    && migrations.slice(-INVOICE_APPROVAL_BULK_MIGRATIONS.length).join(',')
+      ==='20261021050618_finance_invoice_approval_bulk_v1.sql');
+check('invoice approval bulk source seal covers exactly the reviewed version',
+  Object.keys(INVOICE_APPROVAL_BULK_SOURCE_SHA256).join(',')==='20261021050618'
+    && INVOICE_APPROVAL_BULK_SOURCE_SHA256['20261021050618']==='e731c60d3518d1bffff4c8a85c891bf0fa387290c93ebbaf3f71665b9da8570c');
+for(const [version,sha256] of Object.entries(INVOICE_APPROVAL_BULK_SOURCE_SHA256)){
+  const file=migrations.find(name=>name.startsWith(version+'_'));
+  const sql=file?read('supabase/migrations/'+file):'';
+  check('invoice approval bulk migration source matches reviewed SHA-256: '+version,
+    !!file&&crypto.createHash('sha256').update(sql).digest('hex')===sha256);
+  if(file)require('./finance_production_release_guard').assertCliAtomicMigration(sql,file);
+  const definitions=[...sql.matchAll(/CREATE OR REPLACE FUNCTION ([^\n]+)[\s\S]*?AS \$function\$([\s\S]*?)\$function\$/g)];
+  check('invoice approval bulk successor changes exactly the reviewed atomic function body',
+    definitions.length===1
+      && definitions[0][1].startsWith('public.finance_invoice_act_active_step_v2(')
+      && crypto.createHash('md5').update(definitions[0][2]).digest('hex')==='b8f16d4644a5bfbe367a97c671937001'
+      && sql.includes("md5(p.prosrc) is distinct from 'ad103c477833a5a1d94e7fced1913831'"));
 }
 
 process.stdout.write(`\nAdopted migration lineage: ${passed}/${passed + failed} passed.\n`);

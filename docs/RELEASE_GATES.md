@@ -277,3 +277,30 @@ hashes; earlier database phases continue to check their original hashes and all
 existing authority checks remain in place. Applying this release
 does not replay a previous user's approval; the original approver must act on
 the existing batch after deployment.
+
+### Invoice approval and completion feedback (2026-10-21)
+
+`database_invoice_approval_bulk_20261021` accepts only migration
+`20261021050618`, sealed by SHA-256 in the release guard. It preserves the
+existing RPC, sorted row locks, actor authorization, version checks, triggers
+and idempotent result. Validated updates are prepared in an array and written
+with one statement, so each batch history and notification summary is refreshed
+once. The phase is database-only, with rollback rehearsal, atomic migration and
+ledger, exact authority/trigger checks and unchanged production alias. Release
+the same reviewed commit through `frontend_compat` afterward; that phase
+requires the installed migration and its read-only postflight/canary.
+
+`test:invoice-approval-bulk` executes actual SQL. PR and protected-release CI
+require native PostgreSQL, an 8-second statement timeout and a 4-second capacity
+budget for 95/190/500 invoices, including dense histories and pre-existing rows.
+It also verifies shared attachments, concurrent calls, replay, stale versions,
+unauthorized actors and complete rollback on late failure or timeout. PGlite
+functional tests cannot substitute for native timing/concurrency evidence.
+
+Frontend gates separately verify a confirmed approval receipt, exact document
+readback and pending-list hydration. Partial-list recovery, unknown outcomes,
+cross-identity continuations and post-commit UI/notification exceptions are
+covered, with actual-index Chromium/WebKit tests at desktop and mobile widths.
+An approved step is not a claim that payment or ledger posting is complete.
+No test or deployment signs existing employee documents, and synthetic timings
+are not presented as production end-to-end latency.

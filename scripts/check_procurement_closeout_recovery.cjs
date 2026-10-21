@@ -92,7 +92,7 @@ function context(request = row()) {
   });
   vm.createContext(c);
   vm.runInContext(fs.readFileSync(path.join(root, 'assets/engines/attachment-engine.js'), 'utf8'), c);
-  load(c, ['financeAttachmentEngine', 'normalizeFileMeta', 'normalizeFiles', 'uniqueAttachments', 'attachmentStoragePath', 'attachmentIsReceiptEvidence', 'escAttr', 'financeInlineJsString', 'withOperationTimeout',
+  load(c, ['reportCommittedApprovalFollowup', 'committedApprovalSyncNotice', 'committedApprovalFeedbackMessage','publishCommittedApprovalFeedback','completeCommittedApprovalUi', 'financeAttachmentEngine', 'normalizeFileMeta', 'normalizeFiles', 'uniqueAttachments', 'attachmentStoragePath', 'attachmentIsReceiptEvidence', 'escAttr', 'financeInlineJsString', 'withOperationTimeout',
     'purchaseActualAmount', 'purchaseEstimatedAmount', 'purchaseVarianceAmount', 'purchaseFinalAmount', 'expensePostingAmount', 'purchaseHasFinalEvidence', 'purchaseReadyForFinalAccounting',
     'purchaseVoucherAmountCents', 'assertPurchaseAccountingLinesMatchActual',
     'procurementRequiresDedicatedAction', 'procurementDedicatedActionMessage', 'procurementEvidenceCandidates', 'procurementEvidenceScope', 'procurementEvidenceCurrent', 'procurementEvidenceEntries',
