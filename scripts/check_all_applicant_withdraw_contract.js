@@ -301,12 +301,8 @@ check('invoice management search and history batch route are present in the page
   index.includes('id="invoice-manage-search"')
   && index.includes('id="invoice-manage-list"')
   && index.includes('window.openIncomeBatchManagement=function(kind,id)'));
-check('all income approval/edit handlers reject personal history and withdrawal alone requires exact own proof',
-  ['apprApproveBill', 'apprReturnPreviousBill', 'apprRejectBill', 'apprApproveInv', 'apprReturnPreviousInv', 'apprRejectInv',
-    'submitReceiptReview', 'approveReceiptReview', 'returnReceiptReview'].every(name =>
-    new RegExp('window\\.' + name + '=async function\\([^)]*\\)\\{\\s*if\\(rejectApprovalHistoryIncomeWrite\\(').test(index))
-  && /window\.saveEntityDeptOverride=async function\(kind,id\)\{\s*if\(\(kind==='bill'\|\|kind==='invoice'\)\&\&rejectApprovalHistoryIncomeWrite/.test(index)
-  && /approvalHistoryIncomeWriteBlocked[\s\S]*approvalHistoryWithdrawalRows/.test(namedFunction('withdrawIncomeDocument')));
+check('income withdrawal alone retains exact own-history proof',
+  /approvalHistoryIncomeWriteBlocked[\s\S]*approvalHistoryWithdrawalRows/.test(namedFunction('withdrawIncomeDocument')));
 const routeStart = index.indexOf('window.openIncomeBatchManagement=function(kind,id){');
 const routeEnd = index.indexOf('\n};', routeStart) + 3;
 vm.runInContext(index.slice(routeStart, routeEnd), context);
@@ -501,6 +497,25 @@ check('unknown electronic labor state fails closed until verified',
   !context.canWithdrawRequest(labor));
 
 async function runActions() {
+  // Exercise the shipped handlers instead of requiring the history guard to be
+  // the first lexical statement. A local receipt declaration must not weaken
+  // the test: any read, upload, or mutation beyond the guard is unavailable.
+  const guardCalls = [];
+  const historyOnly = vm.createContext({ window: {}, rejectApprovalHistoryIncomeWrite: (...args) => { guardCalls.push(args); return true; } });
+  const historyHandlers = ['apprApproveBill', 'apprReturnPreviousBill', 'apprRejectBill', 'apprApproveInv', 'apprReturnPreviousInv', 'apprRejectInv', 'submitReceiptReview', 'approveReceiptReview', 'returnReceiptReview', 'saveEntityDeptOverride'];
+  for (const name of historyHandlers) {
+    const start = index.indexOf('window.' + name + '=async function(');
+    if (start < 0) throw new Error('Missing actual history handler ' + name);
+    const end = index.indexOf('\n};', start) + 3;
+    vm.runInContext(index.slice(start, end), historyOnly);
+    const cases = name === 'saveEntityDeptOverride' ? [['bill', 'history-row'], ['invoice', 'history-row']] : [['history-row']];
+    for (const args of cases) {
+      guardCalls.length = 0;
+      await historyOnly.window[name](...args);
+      check(name + ' refuses personal history before any data or mutation access' + (name === 'saveEntityDeptOverride' ? ' (' + args[0] + ')' : ''),
+        guardCalls.length === 1 && guardCalls[0].includes('history-row'));
+    }
+  }
   allow('bill', [row('bill-1', { batchCount: 2 }), row('bill-2', { batchCount: 2 })]);
   await context.withdrawIncomeDocument('bill', 'bill-1');
   check('bill withdrawal sends exactly one RPC with every batch id',
