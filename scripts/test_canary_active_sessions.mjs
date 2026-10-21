@@ -150,6 +150,15 @@ try {
       identity_scope_preserved:true,live_latency_proven:false}
   });
   assert.equal(domains.get(billApprovalBulkContract.result.canary),billApprovalBulkContract.domain);
+  const invoiceApprovalBulkContract=Object.freeze({
+    filename:'finance_invoice_approval_bulk_canary.sql',
+    marker:'invoice_approval_bulk_canary_result',
+    domain:'invoice_approval_bulk',
+    result:{canary:'readonly_invoice_approval_bulk_v1',ok:true,rolled_back:true,
+      identity_scope_preserved:true,live_latency_proven:false}
+  });
+  assert.equal(domains.get(invoiceApprovalBulkContract.result.canary),invoiceApprovalBulkContract.domain);
+  let invoiceApprovalBulkVerified=0;
   const bankFeeClassificationContract=Object.freeze({
     filename:'finance_bank_fee_classification_canary.sql',
     marker:'bank_fee_classification_canary_result',
@@ -294,6 +303,39 @@ try {
       verifyNegative([{[billApprovalBulkContract.marker]:billApprovalBulkContract.result},{[billApprovalBulkContract.marker]:billApprovalBulkContract.result}]);
       billApprovalBulkVerified++;
       pass('bill approval bulk actual final SQL has its exact reviewed marker/domain and rejects altered flags, wrong canary, wrong marker and duplicate results');
+    }
+    if(name===invoiceApprovalBulkContract.filename){
+      const rows=actualResults.flatMap(result=>result.rows||[]);
+      assert.equal(rows.length,1,'invoice approval bulk final SQL must emit exactly one result row');
+      assert.equal(rows[0].marker,'FINANCE_INVOICE_APPROVAL_BULK_CANARY_ROLLED_BACK');
+      assert.deepEqual(rows[0][invoiceApprovalBulkContract.marker],invoiceApprovalBulkContract.result,
+        'actual invoice approval bulk SQL preserves exact identity, rollback and unproven-live-latency flags');
+      assert.match(source,/begin isolation level repeatable read read only;/);
+      assert.match(source,/auth\.uid\(\) is not null then raise exception 'Invoice approval canary requires no staff identity'/);
+      assert.match(source,/perform public\.finance_invoice_act_active_step_v2\(array\['__readonly_invoice_approval_canary__'\],'approve','__readonly_invoice_approval_canary__',null,'\[\]',null,'\{\}','\{\}','production'\);\s*exception when insufficient_privilege then denied:=true;/);
+      assert.match(source,/if not denied then raise exception 'Anonymous invoice approval was not denied' using errcode='23514';end if;/);
+      assert.match(source,/-- FINANCE_AUTHENTICATED_CANARY_CORE_END\s*rollback;\s*-- FINANCE_AUTHENTICATED_CANARY_ROLLBACK_CHECK_BEGIN/);
+      assert.match(source,/current_setting\('transaction_read_only'\)='on' then raise exception 'Invoice approval canary remains open'/);
+      assert.doesNotMatch(source,/set_config\s*\(\s*'request\.jwt\.|set\s+(?:local\s+)?role\s+(?:authenticated|service_role)|(?:insert\s+into|update|delete\s+from|truncate\s+(?:table\s+)?)\s*(?:auth\.|public\.|private\.)/i,
+        'invoice approval canary must not impersonate staff or mutate identity/business rows');
+      const negative=join(outputDir,'invoice-approval-bulk-negative.json');
+      const verifyNegative=payload=>{
+        fs.writeFileSync(negative,JSON.stringify(payload));
+        assert.throws(()=>guard.verifyReportsCanary(negative,invoiceApprovalBulkContract.domain));
+      };
+      for(const flag of ['ok','rolled_back','identity_scope_preserved','live_latency_proven']){
+        verifyNegative([{[invoiceApprovalBulkContract.marker]:{...invoiceApprovalBulkContract.result,[flag]:!invoiceApprovalBulkContract.result[flag]}}]);
+        const missing={...invoiceApprovalBulkContract.result};delete missing[flag];
+        verifyNegative([{[invoiceApprovalBulkContract.marker]:missing}]);
+        verifyNegative([{[invoiceApprovalBulkContract.marker]:{...invoiceApprovalBulkContract.result,[flag]:String(invoiceApprovalBulkContract.result[flag])}}]);
+      }
+      verifyNegative([{[invoiceApprovalBulkContract.marker]:{...invoiceApprovalBulkContract.result,canary:'wrong-canary'}}]);
+      verifyNegative([{wrong_marker:invoiceApprovalBulkContract.result}]);
+      verifyNegative([{[invoiceApprovalBulkContract.marker]:invoiceApprovalBulkContract.result},{[invoiceApprovalBulkContract.marker]:invoiceApprovalBulkContract.result}]);
+      for(const other of [billApprovalBulkContract.domain,invoiceBulkContract.domain])
+        assert.throws(()=>guard.verifyReportsCanary(file,other),'invoice approval result cannot satisfy another protected domain');
+      invoiceApprovalBulkVerified++;
+      pass('invoice approval bulk actual SQL preserves anonymous/read-only/rollback safeguards and rejects changed, missing or mistyped flags, wrong canary/marker/domain and duplicates');
     }
     if(name===bankFeeClassificationContract.filename){
       const rows=actualResults.flatMap(result=>result.rows||[]);
@@ -481,14 +523,15 @@ try {
   assert.equal(billHistoryVerified,1,'the reviewed bill batch file must be explicitly covered exactly once');
   assert.equal(invoiceBulkVerified,1,'the reviewed invoice bulk file must be explicitly covered exactly once');
   assert.equal(billApprovalBulkVerified,1,'the reviewed bill approval bulk file must be explicitly covered exactly once');
+  assert.equal(invoiceApprovalBulkVerified,1,'the reviewed invoice approval bulk file must be explicitly covered exactly once');
   assert.equal(verifiedSessionTasksVerified,1,'the reviewed verified-session tasks file must be explicitly covered exactly once');
   assert.equal(bankFeeClassificationVerified,1,'the reviewed bank fee classification file must be explicitly covered exactly once');
   assert.equal(megaRemittanceVerified,1,'the reviewed Mega remittance file must be explicitly covered exactly once');
   assert.equal(remittanceHistoryVerified,1,'the reviewed Remittance history file must be explicitly covered exactly once');
   for(const [domain,count] of boundaryCanariesVerified)assert.equal(count,1,domain+' complete final SQL is covered exactly once');
-  assert.equal(verified-[...boundaryCanariesVerified.values()].reduce((a,b)=>a+b,0)-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-boundedVerified-verifiedSessionTasksVerified-bankFeeClassificationVerified-megaRemittanceVerified-remittanceHistoryVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
+  assert.equal(verified-[...boundaryCanariesVerified.values()].reduce((a,b)=>a+b,0)-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-invoiceApprovalBulkVerified-boundedVerified-verifiedSessionTasksVerified-bankFeeClassificationVerified-megaRemittanceVerified-remittanceHistoryVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
   assert.equal(boundedVerified,1,'bounded logout exact final SQL is covered once');
-  assert.equal(verified,50,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, verified-session tasks, bank fee classification, Mega remittance, remittance history, remittance boundary and org Google repair results are covered');
+  assert.equal(verified,51,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, invoice approval bulk, verified-session tasks, bank fee classification, Mega remittance, remittance history, remittance boundary and org Google repair results are covered');
   // Versioned canaries deliberately retain their old filenames for archived
   // phases, so they are outside the generic *canary.sql discovery above.
   const attachmentSuccessor=fs.readFileSync(new URL('finance_audit_security_canary_20261015.sql',scripts),'utf8');
@@ -511,6 +554,6 @@ try {
   rejectAttachmentResult([{wrong_marker:attachmentExpected}]);
   rejectAttachmentResult([...attachmentRows,...attachmentRows]);
   pass('versioned bill-attachment audit successor final SQL retains exact authority/rollback flags and rejects altered flags, wrong canary/marker and duplicates');
-  pass('all 39 original final SQL results and reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, verified-session tasks, bank fee classification, Mega remittance, remittance history, remittance boundary and org Google repair results satisfy their protected release parsers');
+  pass('all 39 original final SQL results and reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, invoice approval bulk, verified-session tasks, bank fee classification, Mega remittance, remittance history, remittance boundary and org Google repair results satisfy their protected release parsers');
 } finally {fs.rmSync(outputDir,{recursive:true,force:true});await outputDb.close();}
 console.log(`OK: ${checks} canary active-session checks`);

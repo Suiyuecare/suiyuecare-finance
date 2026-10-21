@@ -37,9 +37,10 @@ for(const width of [1440,390]){const ctx=await browser.newContext({viewport:{wid
  const csvB=Buffer.from('buyer,identifier_type,desc,amount,total,rate\n虛構CSV乙,電子發票,乙明細,200,200,0\n');
  await page.locator('#bfile').setInputFiles([{name:'甲.csv',mimeType:'text/csv',buffer:csvA},{name:'乙.csv',mimeType:'text/csv',buffer:csvB}]);
  eq(await run('S.bUploadPendingFiles.length'),2,'browser file picker queues both CSV files '+width);
- await run(`(async function(){S.demoLogin=true;guardSubmissionIdentityDirectory=async()=>true;window.__alerts=[];try{await issueBatchCore();}finally{S.demoLogin=false;}return true;})()`);
+ await run(`(async function(){var previousDemoLogin=S.demoLogin;S.demoLogin=true;guardSubmissionIdentityDirectory=async()=>true;window.__alerts=[];try{await issueBatchCore();}finally{S.demoLogin=previousDemoLogin;}return true;})()`);
  ok((await run('window.__alerts.join(" ")')).includes('尚有表格檔未匯入'),'pending spreadsheets block submit before any write '+width);
  eq(await run('window.__writes'),[],'pending spreadsheets never dispatch a business write '+width);
+ eq(await run('S.demoLogin&&!!incomeSubmissionIdentity()'),true,'pending spreadsheet fixture restores original local identity '+width);
  await run('productModuleEnabled=()=>false;true');ok(await page.locator('#inv-batch-ai-button').isVisible(),'CSV import remains available with OCR disabled '+width);
  const ocrCount=await run('window.__ocrRequests.length');await page.locator('#inv-batch-ai-button').click();await page.waitForFunction(()=>document.querySelectorAll('#btbody tr').length===6&&document.getElementById('batch-pl').textContent.includes('已累加'));
  eq(await run('S.bRows.slice(4).map(r=>[r.buyer,r.desc,r.total])'),[['虛構CSV甲','甲明細',100],['虛構CSV乙','乙明細',200]],'two CSV files append to the same application on real desktop/mobile DOM '+width);
