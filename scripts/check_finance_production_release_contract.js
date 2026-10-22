@@ -35,7 +35,7 @@ assert.deepEqual(guard.REVIEWED_POST_BASELINE_MIGRATIONS, ['20260828015718', '20
 assert.deepEqual(guard.REVIEWED_MIGRATION_CATALOG, [
   '20260826070814', '20260826155840', '20260827052447', '20260828015718',
   '20260831042040', '20260831043517', '20260901024020', '20260901073241',
-  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS, ...guard.OPERATIONAL_STABILITY_MIGRATIONS, ...guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, ...guard.AUDIT_CONTROLS_20260927_MIGRATIONS, ...guard.HR_CONTRACTOR_MIGRATIONS, ...guard.PORTAL_SESSION_MIGRATIONS, ...guard.EXTERNAL_LABOR_MIGRATIONS, ...guard.ATTACHMENT_CLAIM_MIGRATIONS, ...guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS, ...guard.HUMAN_FLOAT_MIGRATIONS, ...guard.INCOME_RECONCILE_MIGRATIONS, ...guard.INVOICE_REVENUE_RESULT_MIGRATIONS, ...guard.PERSONNEL_CONFLICT_MIGRATIONS, ...guard.PERSONNEL_RECEIPT_MIGRATIONS, ...guard.PROCUREMENT_ACTION_MIGRATIONS, ...guard.APPLICANT_WITHDRAW_MIGRATIONS, ...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS, ...guard.INVOICE_ITEM_BIND_MIGRATIONS, ...guard.PERSONAL_HISTORY_MIGRATIONS, ...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS, ...guard.BILL_BATCH_BULK_MIGRATIONS, ...guard.INVOICE_BATCH_APPROVAL_MIGRATIONS, ...guard.PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS, ...guard.PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS, ...guard.BOUNDED_LOGOUT_MIGRATIONS, ...guard.INVOICE_BATCH_BULK_MIGRATIONS, ...guard.BILL_APPROVAL_BULK_MIGRATIONS, ...guard.INVOICE_APPROVAL_BULK_MIGRATIONS, ...guard.APPROVAL_TASKS_VERIFIED_SESSION_MIGRATIONS, ...guard.BANK_FEE_CLASSIFICATION_MIGRATIONS, ...guard.MEGA_REMITTANCE_MIGRATIONS, ...guard.REMITTANCE_HISTORY_MIGRATIONS, ...guard.REMITTANCE_BOUNDARY_MIGRATIONS
+  '20260901081807', '20260902054834', ...guard.AUDIT_MIGRATIONS, ...guard.CASE_MIGRATIONS, ...guard.UTILITY_MIGRATIONS, ...guard.REPORT_MIGRATIONS, ...guard.AMOUNT_SEARCH_MIGRATIONS, ...guard.REPORTING_INTEGRITY_MIGRATIONS, ...guard.AUDIT_READINESS_MIGRATIONS, ...guard.EMPLOYEE_RELIABILITY_MIGRATIONS, ...guard.HISTORY_PERFORMANCE_MIGRATIONS, ...guard.READ_LATENCY_MIGRATIONS, ...guard.AR_MAPPING_MIGRATIONS, ...guard.AUDIT_REMEDIATION_MIGRATIONS, ...guard.APPROVAL_SEARCH_MIGRATIONS, ...guard.HISTORY_SUMMARY_MIGRATIONS, ...guard.INVOICE_READ_SCOPE_MIGRATIONS, ...guard.HR_BRIDGE_MIGRATIONS, ...guard.AUDIT_SECURITY_MIGRATIONS, ...guard.HR_DIRECTORY_EXPORT_MIGRATIONS, ...guard.REVENUE_REPAIR_MIGRATIONS, ...guard.OPERATIONAL_STABILITY_MIGRATIONS, ...guard.DEMO_PASSWORD_RETIREMENT_MIGRATIONS, ...guard.AUDIT_CONTROLS_20260927_MIGRATIONS, ...guard.HR_CONTRACTOR_MIGRATIONS, ...guard.PORTAL_SESSION_MIGRATIONS, ...guard.EXTERNAL_LABOR_MIGRATIONS, ...guard.ATTACHMENT_CLAIM_MIGRATIONS, ...guard.ATTACHMENT_STAGED_CLEANUP_MIGRATIONS, ...guard.HUMAN_FLOAT_MIGRATIONS, ...guard.INCOME_RECONCILE_MIGRATIONS, ...guard.INVOICE_REVENUE_RESULT_MIGRATIONS, ...guard.PERSONNEL_CONFLICT_MIGRATIONS, ...guard.PERSONNEL_RECEIPT_MIGRATIONS, ...guard.PROCUREMENT_ACTION_MIGRATIONS, ...guard.APPLICANT_WITHDRAW_MIGRATIONS, ...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS, ...guard.INVOICE_ITEM_BIND_MIGRATIONS, ...guard.PERSONAL_HISTORY_MIGRATIONS, ...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS, ...guard.BILL_BATCH_BULK_MIGRATIONS, ...guard.INVOICE_BATCH_APPROVAL_MIGRATIONS, ...guard.PERSONAL_HISTORY_IDENTITY_ONCE_MIGRATIONS, ...guard.PERSONAL_BILL_BATCH_HISTORY_MIGRATIONS, ...guard.BOUNDED_LOGOUT_MIGRATIONS, ...guard.INVOICE_BATCH_BULK_MIGRATIONS, ...guard.BILL_APPROVAL_BULK_MIGRATIONS, ...guard.INVOICE_APPROVAL_BULK_MIGRATIONS, ...guard.APPROVAL_TASKS_VERIFIED_SESSION_MIGRATIONS, ...guard.BANK_FEE_CLASSIFICATION_MIGRATIONS, ...guard.MEGA_REMITTANCE_MIGRATIONS, ...guard.REMITTANCE_HISTORY_MIGRATIONS, ...guard.REMITTANCE_BOUNDARY_MIGRATIONS, ...guard.ADOPTED_APM_MIGRATIONS
 ]);
 assert.deepEqual(guard.APPLICANT_WITHDRAW_SOURCE_SHA256,{
   '20261005173534':'aa3ebaf3a098c83709de7e04c4a048c9cfb0881e42a4f8bb586caebe66e14b9f'
@@ -302,11 +302,13 @@ try {
   fs.appendFileSync(ledger,guard.REMITTANCE_BOUNDARY_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/invoice approval bulk transaction/);
   fs.appendFileSync(ledger,guard.INVOICE_APPROVAL_BULK_MIGRATIONS.join('\n')+'\n');
+  assert.throws(()=>guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),/every exact adopted APM migration/);
+  fs.appendFileSync(ledger,guard.ADOPTED_APM_MIGRATIONS.join('\n')+'\n');
   fs.writeFileSync(ledger,fs.readFileSync(ledger,'utf8').trim().split('\n').sort().join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger,migrationDir,'frontend_compat','none',baseline),'compat');
   const pinnedPersonnelDir=path.join(attachmentClaimTemp,'personnel-source-pin');
   fs.mkdirSync(pinnedPersonnelDir);
-  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS,...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS,...guard.INVOICE_BATCH_BULK_MIGRATIONS]){
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS,...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS,...guard.INVOICE_BATCH_BULK_MIGRATIONS,...guard.ADOPTED_APM_MIGRATIONS]){
     const filename=fs.readdirSync(migrationDir).find(name=>name.startsWith(version+'_'));
     fs.copyFileSync(path.join(migrationDir,filename),path.join(pinnedPersonnelDir,filename));
   }
@@ -1655,12 +1657,14 @@ assert.equal(guard.classifyLedger(ledger,migrations,guard.RELEASE_PHASE_DATABASE
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/personal history permission guard/);
   fs.appendFileSync(ledger,guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS.join('\n')+'\n');
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/personnel migration file is missing/);
-  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS,...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS,...guard.INVOICE_BATCH_BULK_MIGRATIONS]){
+  for(const version of [...guard.PERSONNEL_CONFLICT_MIGRATIONS,...guard.PERSONNEL_RECEIPT_MIGRATIONS,...guard.APPLICANT_WITHDRAW_MIGRATIONS,...guard.PURCHASE_FINAL_AMOUNT_MIGRATIONS,...guard.INVOICE_ITEM_BIND_MIGRATIONS,...guard.PERSONAL_HISTORY_MIGRATIONS,...guard.PERSONAL_HISTORY_PERMISSION_MIGRATIONS,...guard.INVOICE_BATCH_BULK_MIGRATIONS,...guard.ADOPTED_APM_MIGRATIONS]){
     const filename=fs.readdirSync(path.join(root,'supabase/migrations')).find(name=>name.startsWith(version+'_'));
     fs.copyFileSync(path.join(root,'supabase/migrations',filename),path.join(migrations,filename));
   }
   assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/invoice batch bulk transaction/);
   fs.appendFileSync(ledger,guard.INVOICE_BATCH_BULK_MIGRATIONS.join('\n')+'\n');
+  assert.throws(()=>guard.classifyLedger(ledger,migrations,'frontend_compat','none',syntheticBaseline),/every exact adopted APM migration/);
+  fs.appendFileSync(ledger,guard.ADOPTED_APM_MIGRATIONS.join('\n')+'\n');
   assert.equal(guard.classifyLedger(ledger, migrations, 'frontend_compat', 'none', syntheticBaseline), 'compat');
   guard.verifyLedger('pre', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
   guard.verifyLedger('post', ledger, migrations, 'frontend_compat', 'none', syntheticBaseline);
@@ -2301,6 +2305,7 @@ try {
   writeLedger([...prior,invoiceApprovalBulkVersion]);
   assert.equal(guard.classifyLedger(ledger,directory,invoiceApprovalBulkPhase,invoiceApprovalBulkVersion,baseline),'applied');
   const tampered=path.join(invoiceApprovalBulkTemp,'tampered'); fs.mkdirSync(tampered);
+  for(const filename of Object.values(guard.ADOPTED_APM_FILENAMES))fs.copyFileSync(path.join(directory,filename),path.join(tampered,filename));
   const filename=fs.readdirSync(directory).find(name=>name.startsWith(invoiceApprovalBulkVersion+'_'));
   const source=fs.readFileSync(path.join(directory,filename),'utf8');
   assert.equal(crypto.createHash('sha256').update(source).digest('hex'),guard.INVOICE_APPROVAL_BULK_SOURCE_SHA256[invoiceApprovalBulkVersion]);
@@ -2320,6 +2325,38 @@ try {
   const apply=path.join(invoiceApprovalBulkTemp,'apply.sql');
   guard.prepareAuditBatchApply(directory,apply,invoiceApprovalBulkVersion,ledger,scripts('finance_invoice_approval_bulk_postflight.sql'),baseline,invoiceApprovalBulkPhase);
   assert.match(fs.readFileSync(apply,'utf8'),/^begin;[\s\S]+finance_invoice_act_active_step_v2[\s\S]+insert into supabase_migrations\.schema_migrations[\s\S]+commit;/);
+  const adoptedVersions=['20261020022748','20261020022750','20261020022751','20261020023444','20261020025210'];
+  assert.deepEqual(guard.ADOPTED_APM_MIGRATIONS,adoptedVersions);
+  for(const adoptedVersion of adoptedVersions){
+    assert.throws(()=>guard.migrationPhase(adoptedVersion),'adopted sources must never become executable batches');
+    assert.throws(()=>guard.releasePlan(invoiceApprovalBulkPhase,adoptedVersion));
+    assert.throws(()=>guard.readAuditBatch(directory,adoptedVersion,invoiceApprovalBulkPhase));
+    const adoptedFile=guard.ADOPTED_APM_FILENAMES[adoptedVersion];
+    const exact=fs.readFileSync(path.join(directory,adoptedFile));
+    assert.equal(crypto.createHash('sha256').update(exact).digest('hex'),guard.ADOPTED_APM_SOURCE_SHA256[adoptedVersion]);
+    // The SQL byte seal and existence are necessary even when the remote version is known.
+    const ownFile=path.join(tampered,adoptedFile);
+    fs.writeFileSync(ownFile,Buffer.concat([exact,Buffer.from('\n-- drift')]));
+    assert.throws(()=>guard.classifyLedger(ledger,tampered,invoiceApprovalBulkPhase,invoiceApprovalBulkVersion,baseline),/adopted APM migration source differs/);
+    fs.unlinkSync(ownFile);
+    assert.throws(()=>guard.classifyLedger(ledger,tampered,invoiceApprovalBulkPhase,invoiceApprovalBulkVersion,baseline),/adopted APM migration file is missing/);
+    fs.writeFileSync(ownFile,exact);
+  }
+  assert.throws(()=>guard.migrationPhase(adoptedVersions.join(',')));
+  writeLedger([...prior,'20261020030000'].sort());
+  assert.throws(()=>guard.classifyLedger(ledger,directory,invoiceApprovalBulkPhase,invoiceApprovalBulkVersion,baseline),/unreviewed post-baseline migration/);
+  writeLedger(prior);
+  const rehearsalSql=fs.readFileSync(rehearsal,'utf8'),applySql=fs.readFileSync(apply,'utf8');
+  const adoptionMarker="select 'FINANCE_APM_ADOPTION_POSTFLIGHT_OK'::text as result;";
+  for(const [source,count] of [[rehearsalSql,3],[applySql,2]]){
+    assert.equal(source.split(adoptionMarker).length-1,count,'exact adoption catalog is checked in-transaction before/after and after rollback');
+    assert(source.indexOf(adoptionMarker)<source.indexOf('CREATE OR REPLACE FUNCTION public.finance_invoice_act_active_step_v2'));
+    assert(source.lastIndexOf(adoptionMarker)>source.indexOf("select 'FINANCE_INVOICE_APPROVAL_BULK_POSTFLIGHT_OK' as marker;"));
+    assert.doesNotMatch(source,/CREATE(?: OR REPLACE)? FUNCTION finance_apm_private\./i,'never replay adopted source');
+    assert.equal((source.match(/insert into supabase_migrations\.schema_migrations\(version,statements,name,created_by\) values/g)||[]).length,1,'only the reviewed invoice migration may be inserted');
+  }
+  assert(rehearsalSql.lastIndexOf(adoptionMarker)>rehearsalSql.indexOf('rollback to savepoint finance_release_migration;'));
+  assert(fs.readFileSync(path.join(invoiceApprovalBulkTemp,'readonly.sql'),'utf8').includes(adoptionMarker));
   const canaryPath=path.join(invoiceApprovalBulkTemp,'canary.json');
   const result={canary:'readonly_invoice_approval_bulk_v1',ok:true,rolled_back:true,identity_scope_preserved:true,live_latency_proven:false};
   const writeCanary=value=>fs.writeFileSync(canaryPath,JSON.stringify({rows:[{invoice_approval_bulk_canary_result:value}]}));
@@ -2513,6 +2550,8 @@ try {
   writeLedger([...prior,historyVersion,...guard.REMITTANCE_BOUNDARY_MIGRATIONS]);
   assert.throws(()=>guard.verifyLedger('post',ledger,directory,'frontend_compat','none',baseline),/invoice approval bulk transaction/);
   writeLedger([...prior,historyVersion,...guard.REMITTANCE_BOUNDARY_MIGRATIONS,...guard.INVOICE_APPROVAL_BULK_MIGRATIONS]);
+  assert.throws(()=>guard.verifyLedger('post',ledger,directory,'frontend_compat','none',baseline),/every exact adopted APM migration/);
+  writeLedger([...prior,historyVersion,...guard.REMITTANCE_BOUNDARY_MIGRATIONS,...guard.ADOPTED_APM_MIGRATIONS,...guard.INVOICE_APPROVAL_BULK_MIGRATIONS]);
   assert.equal(guard.verifyLedger('post',ledger,directory,'frontend_compat','none',baseline),true);
   const filename=fs.readdirSync(directory).find(name=>name.startsWith(historyVersion+'_'));
   const source=fs.readFileSync(path.join(directory,filename),'utf8');
@@ -2570,6 +2609,8 @@ try{
  assert.equal(guard.classifyLedger(ledger,directory,boundaryPhase,boundaryVersion,baseline),'applied');
  assert.throws(()=>guard.verifyLedger('post',ledger,directory,'frontend_compat','none',baseline),/invoice approval bulk transaction/);
  write([...prior,...boundaryVersions,...guard.INVOICE_APPROVAL_BULK_MIGRATIONS]);
+ assert.throws(()=>guard.verifyLedger('post',ledger,directory,'frontend_compat','none',baseline),/every exact adopted APM migration/);
+ write([...prior,...boundaryVersions,...guard.ADOPTED_APM_MIGRATIONS,...guard.INVOICE_APPROVAL_BULK_MIGRATIONS]);
  assert.equal(guard.verifyLedger('post',ledger,directory,'frontend_compat','none',baseline),true);
  const tampered=path.join(boundaryTemp,'tampered');fs.mkdirSync(tampered);
  for(const version of boundaryVersions){
@@ -2621,3 +2662,21 @@ assert.match(requiredDependencyBlock,/verify-reports-canary --domain org_google_
 assert.match(requiredDependencyBlock,/promotion-required-full-compatibility.sql/);
 assert.match(requiredDependencyBlock,/prepare-phase-query[\s\S]*--release-phase frontend_compat --migration-versions none/);
 console.log('PASS atomic remittance boundary and organization repair publication contracts');
+
+// Adoption is exact source/catalog validation, not a new deployment phase.
+for(const filename of ['finance_apm_adoption_postflight.sql','check_apm_adoption_postflight_20261022.cjs','fixtures/finance_apm_adoption_fixture_20261022.cjs','fixtures/finance_apm_adoption_catalog_20261022.json']){
+  assert(candidateJob.includes('scripts/'+filename),'adoption tool is sealed in the same candidate: '+filename);
+  for(const checker of ['check_release_artifact.js','check_release_source_integrity.js'])assert(fs.readFileSync(path.join(root,'scripts',checker),'utf8').includes("'scripts/"+filename+"'"));
+  assert(fs.readFileSync(path.join(root,'.vercelignore'),'utf8').includes('!scripts/'+filename));
+}
+const apmGateAt=databaseJob.indexOf('finance-apm-adoption-preflight.sql');
+assert(apmGateAt>databaseJob.indexOf('PHASE_STATE="$(node "$GUARD" classify-ledger'));
+assert(apmGateAt<databaseJob.indexOf('prepare-invoice-approval-bulk-apply'));
+assert.match(databaseJob,/if test "\$RELEASE_PHASE" = "frontend_compat" \|\| test "\$RELEASE_PHASE" = "database_invoice_approval_bulk_20261021"; then[\s\S]+finance-apm-adoption-preflight.sql/);
+const beforePromotionApm=promoteJob.indexOf('promotion-required-apm-adoption.sql');
+const actualPromotion=promoteJob.indexOf('vercel@59.3.0 promote "$DEPLOYMENT_URL" --yes');
+const afterPromotionApm=promoteJob.indexOf('production-apm-adoption-postflight.sql');
+assert(beforePromotionApm>=0&&beforePromotionApm<actualPromotion&&afterPromotionApm>actualPromotion,'exact adoption gate surrounds actual alias promotion');
+assert.match(promoteJob.slice(afterPromotionApm),/supabase db query --linked --file "\$RUNNER_TEMP\/production-apm-adoption-postflight.sql" --output json/);
+assert(JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).scripts['release:preflight'].endsWith('&& pnpm test:apm-adoption'));
+console.log('PASS exact adopted APM source, no-replay and transaction/promotion catalog contracts');

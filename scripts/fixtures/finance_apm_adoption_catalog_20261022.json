@@ -1,0 +1,1381 @@
+{
+  "schema": {
+    "acl": "{postgres=UC/postgres,authenticated=U/postgres,service_role=U/postgres}",
+    "name": "finance_apm_private",
+    "owner": "postgres",
+    "anon_usage": false,
+    "service_role_usage": true,
+    "authenticated_usage": true
+  },
+  "tables": [
+    {
+      "acl": "{postgres=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "commands",
+      "owner": "postgres",
+      "grants": [
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "tenant_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "actor_id",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "payload_hash",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "result",
+          "type": "jsonb",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "not_null": true
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX commands_pkey ON finance_apm_private.commands USING btree (tenant_id, actor_id, request_id)"
+      ],
+      "policies": null,
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "commands_pkey",
+          "definition": "PRIMARY KEY (tenant_id, actor_id, request_id)"
+        }
+      ]
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "correction_proposals",
+      "owner": "postgres",
+      "grants": [
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "not_null": true
+        },
+        {
+          "name": "tenant_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "obligation_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "correction_batch_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "correction_source_hash",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "original_batch_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "reversal_voucher_id",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "refund",
+          "type": "jsonb",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "proposed_by",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "reference",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "source_evidence",
+          "type": "jsonb",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "evidence_hash",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "not_null": true
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX apm_correction_obligation ON finance_apm_private.correction_proposals USING btree (obligation_id)",
+        "CREATE INDEX apm_correction_tenant ON finance_apm_private.correction_proposals USING btree (tenant_id, created_at DESC)",
+        "CREATE UNIQUE INDEX apm_reversal_voucher_once ON finance_apm_private.correction_proposals USING btree (reversal_voucher_id)",
+        "CREATE UNIQUE INDEX correction_proposals_correction_batch_id_key ON finance_apm_private.correction_proposals USING btree (correction_batch_id)",
+        "CREATE UNIQUE INDEX correction_proposals_pkey ON finance_apm_private.correction_proposals USING btree (id)"
+      ],
+      "policies": null,
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "correction_proposals_correction_batch_id_key",
+          "definition": "UNIQUE (correction_batch_id)"
+        },
+        {
+          "name": "correction_proposals_correction_source_hash_check",
+          "definition": "CHECK ((correction_source_hash ~ '^[0-9a-f]{64}$'::text))"
+        },
+        {
+          "name": "correction_proposals_obligation_id_fkey",
+          "definition": "FOREIGN KEY (obligation_id) REFERENCES finance_hr_private.finance_hr_obligations(obligation_id)"
+        },
+        {
+          "name": "correction_proposals_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "correction_proposals_reversal_voucher_id_fkey",
+          "definition": "FOREIGN KEY (reversal_voucher_id) REFERENCES vouchers(id)"
+        }
+      ]
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "correction_receipts",
+      "owner": "postgres",
+      "grants": [
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "not_null": true
+        },
+        {
+          "name": "proposal_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "receipt",
+          "type": "jsonb",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "verified_by",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "not_null": true
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX correction_receipts_pkey ON finance_apm_private.correction_receipts USING btree (id)",
+        "CREATE UNIQUE INDEX correction_receipts_proposal_id_key ON finance_apm_private.correction_receipts USING btree (proposal_id)"
+      ],
+      "policies": null,
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "correction_receipts_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "correction_receipts_proposal_id_fkey",
+          "definition": "FOREIGN KEY (proposal_id) REFERENCES finance_apm_private.correction_proposals(id)"
+        },
+        {
+          "name": "correction_receipts_proposal_id_key",
+          "definition": "UNIQUE (proposal_id)"
+        }
+      ]
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "mapping_decisions",
+      "owner": "postgres",
+      "grants": [
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "mapping_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "decision",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "actor_id",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "reference",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "not_null": true
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX mapping_decisions_pkey ON finance_apm_private.mapping_decisions USING btree (mapping_id, decision)"
+      ],
+      "policies": null,
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "mapping_decisions_decision_check",
+          "definition": "CHECK ((decision = ANY (ARRAY['verified'::text, 'revoked'::text])))"
+        },
+        {
+          "name": "mapping_decisions_mapping_id_fkey",
+          "definition": "FOREIGN KEY (mapping_id) REFERENCES finance_apm_private.metric_mappings(id)"
+        },
+        {
+          "name": "mapping_decisions_pkey",
+          "definition": "PRIMARY KEY (mapping_id, decision)"
+        }
+      ]
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "metric_mappings",
+      "owner": "postgres",
+      "grants": [
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "not_null": true
+        },
+        {
+          "name": "tenant_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "apm_company_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "apm_department_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "entity_id",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "department_code",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "account_codes",
+          "type": "text[]",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "reference",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "created_by",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "not_null": true
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX metric_mappings_pkey ON finance_apm_private.metric_mappings USING btree (id)",
+        "CREATE INDEX metric_mappings_scope ON finance_apm_private.metric_mappings USING btree (apm_company_id, apm_department_id)"
+      ],
+      "policies": null,
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "metric_mappings_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ]
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "metric_snapshots",
+      "owner": "postgres",
+      "grants": [
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "mapping_id",
+          "type": "uuid",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "year",
+          "type": "integer",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "quarter",
+          "type": "integer",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "preview_hash",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "source_evidence",
+          "type": "jsonb",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "snapshot",
+          "type": "jsonb",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "approved_by",
+          "type": "text",
+          "default": null,
+          "not_null": true
+        },
+        {
+          "name": "approved_at",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "not_null": true
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX metric_snapshots_mapping ON finance_apm_private.metric_snapshots USING btree (mapping_id)",
+        "CREATE UNIQUE INDEX metric_snapshots_mapping_id_year_quarter_key ON finance_apm_private.metric_snapshots USING btree (mapping_id, year, quarter)",
+        "CREATE UNIQUE INDEX metric_snapshots_pkey ON finance_apm_private.metric_snapshots USING btree (id)"
+      ],
+      "policies": null,
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "metric_snapshots_mapping_id_fkey",
+          "definition": "FOREIGN KEY (mapping_id) REFERENCES finance_apm_private.metric_mappings(id)"
+        },
+        {
+          "name": "metric_snapshots_mapping_id_year_quarter_key",
+          "definition": "UNIQUE (mapping_id, year, quarter)"
+        },
+        {
+          "name": "metric_snapshots_pkey",
+          "definition": "PRIMARY KEY (id)"
+        }
+      ]
+    }
+  ],
+  "triggers": [
+    {
+      "name": "immutable",
+      "type": 27,
+      "table": "commands",
+      "schema": "finance_apm_private",
+      "enabled": "O",
+      "function": "finance_apm_private.immutable()",
+      "definition": "CREATE TRIGGER immutable BEFORE DELETE OR UPDATE ON finance_apm_private.commands FOR EACH ROW EXECUTE FUNCTION finance_apm_private.immutable()"
+    },
+    {
+      "name": "immutable",
+      "type": 27,
+      "table": "correction_proposals",
+      "schema": "finance_apm_private",
+      "enabled": "O",
+      "function": "finance_apm_private.immutable()",
+      "definition": "CREATE TRIGGER immutable BEFORE DELETE OR UPDATE ON finance_apm_private.correction_proposals FOR EACH ROW EXECUTE FUNCTION finance_apm_private.immutable()"
+    },
+    {
+      "name": "immutable",
+      "type": 27,
+      "table": "correction_receipts",
+      "schema": "finance_apm_private",
+      "enabled": "O",
+      "function": "finance_apm_private.immutable()",
+      "definition": "CREATE TRIGGER immutable BEFORE DELETE OR UPDATE ON finance_apm_private.correction_receipts FOR EACH ROW EXECUTE FUNCTION finance_apm_private.immutable()"
+    },
+    {
+      "name": "immutable",
+      "type": 27,
+      "table": "mapping_decisions",
+      "schema": "finance_apm_private",
+      "enabled": "O",
+      "function": "finance_apm_private.immutable()",
+      "definition": "CREATE TRIGGER immutable BEFORE DELETE OR UPDATE ON finance_apm_private.mapping_decisions FOR EACH ROW EXECUTE FUNCTION finance_apm_private.immutable()"
+    },
+    {
+      "name": "immutable",
+      "type": 27,
+      "table": "metric_mappings",
+      "schema": "finance_apm_private",
+      "enabled": "O",
+      "function": "finance_apm_private.immutable()",
+      "definition": "CREATE TRIGGER immutable BEFORE DELETE OR UPDATE ON finance_apm_private.metric_mappings FOR EACH ROW EXECUTE FUNCTION finance_apm_private.immutable()"
+    },
+    {
+      "name": "immutable",
+      "type": 27,
+      "table": "metric_snapshots",
+      "schema": "finance_apm_private",
+      "enabled": "O",
+      "function": "finance_apm_private.immutable()",
+      "definition": "CREATE TRIGGER immutable BEFORE DELETE OR UPDATE ON finance_apm_private.metric_snapshots FOR EACH ROW EXECUTE FUNCTION finance_apm_private.immutable()"
+    },
+    {
+      "name": "apm_receipt_ledger_guard",
+      "type": 31,
+      "table": "ledger_entries",
+      "schema": "public",
+      "enabled": "O",
+      "function": "finance_apm_private.guard_receipt_ledger()",
+      "definition": "CREATE TRIGGER apm_receipt_ledger_guard BEFORE INSERT OR DELETE OR UPDATE ON public.ledger_entries FOR EACH ROW EXECUTE FUNCTION finance_apm_private.guard_receipt_ledger()"
+    },
+    {
+      "name": "apm_receipt_voucher_guard",
+      "type": 27,
+      "table": "vouchers",
+      "schema": "public",
+      "enabled": "O",
+      "function": "finance_apm_private.guard_receipt_voucher()",
+      "definition": "CREATE TRIGGER apm_receipt_voucher_guard BEFORE DELETE OR UPDATE ON public.vouchers FOR EACH ROW EXECUTE FUNCTION finance_apm_private.guard_receipt_voucher()"
+    }
+  ],
+  "functions": [
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "active",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.active(m finance_apm_private.metric_mappings)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nAS $function$\n select exists(select 1 from finance_apm_private.mapping_decisions d where d.mapping_id=m.id and d.decision='verified')\n and not exists(select 1 from finance_apm_private.mapping_decisions d where d.mapping_id=m.id and d.decision='revoked')\n$function$\n",
+      "source_md5": "b364887b7345a2dee2c1653d7fb57df0",
+      "volatility": "s",
+      "return_type": "boolean",
+      "anon_execute": false,
+      "argument_types": "finance_apm_private.metric_mappings",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "m finance_apm_private.metric_mappings",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "b12723c0509cbcdaa9bc27711fd79641"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "actor",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.actor(entity text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE\n SET search_path TO ''\nAS $function$\ndeclare a jsonb;begin\n if not public.finance_auth_session_active() then raise exception 'FINANCE_APM_FORBIDDEN' using errcode='42501';end if;\n a:=private.finance_reporting_actor_v1(entity,'production');\n if public.current_finance_role() not in('accountant','ceo') or (a->>'canEditWorkpaper')::boolean is distinct from true then raise exception 'FINANCE_APM_FORBIDDEN' using errcode='42501';end if;\n return a;end $function$\n",
+      "source_md5": "02c969b6cebca8baa50126056025d06b",
+      "volatility": "s",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "entity text",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "b9ac2cf4d6cf9e16154ba793015e8d17"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "canonical",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.canonical(j jsonb)\n RETURNS text\n LANGUAGE plpgsql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\ndeclare v text;begin\n case jsonb_typeof(j)\n when 'object' then select '{'||coalesce(string_agg(to_jsonb(key)::text||':'||finance_apm_private.canonical(value),',' order by key collate \"C\"),'')||'}' into v from jsonb_each(j);\n when 'array' then select '['||coalesce(string_agg(finance_apm_private.canonical(value),',' order by n),'')||']' into v from jsonb_array_elements(j) with ordinality a(value,n);\n when 'number' then v:=trim_scale((j#>>'{}')::numeric)::text;\n else v:=j::text;end case;return v;end $function$\n",
+      "source_md5": "10c63236e9ce08d606ffc9cc20048d2a",
+      "volatility": "i",
+      "return_type": "text",
+      "anon_execute": false,
+      "argument_types": "jsonb",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "j jsonb",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "8cddd74b5216caa17adc3cef2518cae1"
+    },
+    {
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "name": "command",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.command(cmd text, p jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare before_actor jsonb;after_actor jsonb;result jsonb;m finance_apm_private.metric_mappings;c text;\nbegin\n before_actor:=finance_apm_private.fresh_actor(p->>'entityId');\n result:=finance_apm_private.command_before_fresh_authorization(cmd,p);\n -- Separate SQL commands inside a VOLATILE function obtain a fresh snapshot;\n -- this must not be replaced by a STABLE helper or a cached pre-lock record.\n after_actor:=finance_apm_private.fresh_actor(p->>'entityId');\n if after_actor->>'actorId' is distinct from before_actor->>'actorId' or after_actor->>'tenantId' is distinct from before_actor->>'tenantId' then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n if cmd in('mapping.verify','mapping.revoke') and after_actor->>'role'<>'ceo' then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n if cmd<>'list' then\n  select * into m from finance_apm_private.metric_mappings where id=coalesce(nullif(p->>'mappingId',''),result->>'mappingId')::uuid and tenant_id=(after_actor->>'tenantId')::uuid and entity_id=p->>'entityId';\n  if m.id is null then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n  perform private.finance_reporting_department_v1(m.tenant_id,m.entity_id,m.department_code);\n  foreach c in array m.account_codes loop perform private.finance_reporting_account_v1(m.tenant_id,c);end loop;\n  if cmd in('mapping.verify','snapshot.preview','snapshot.approve') and not finance_apm_private.active(m) then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n  if cmd='snapshot.approve' and not exists(\n   select 1 from finance_apm_private.commands x join public.finance_users f on f.tenant_id=x.tenant_id and f.id=x.actor_id\n   where x.tenant_id=m.tenant_id and x.actor_id<>after_actor->>'actorId' and f.active and f.role in('accountant','ceo') and f.auth_user_id is not null\n    and x.result->>'previewHash'=p->>'previewHash' and x.result->'evidence'->>'mappingId'=m.id::text\n    and x.result->'evidence'->>'year'=p->>'year' and x.result->'evidence'->>'quarter'=p->>'quarter'\n  ) then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n end if;\n return result;\nend $function$\n",
+      "source_md5": "83efc5d9cfd9b789d3f8943887b4c213",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text, jsonb",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "cmd text, p jsonb",
+      "service_role_execute": false,
+      "authenticated_execute": true,
+      "definition_md5": "3efc36b939ed2b19fb5e695ff0a490cd"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "command_before_fresh_authorization",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.command_before_fresh_authorization(cmd text, p jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare a jsonb;t uuid;u text;m finance_apm_private.metric_mappings;c text;begin\n -- Reauthorize before every replay. Old receipts do not restore revoked access.\n a:=finance_apm_private.actor(p->>'entityId');t:=(a->>'tenantId')::uuid;u:=a->>'actorId';\n if cmd='mapping.propose' then\n  perform private.finance_reporting_department_v1(t,p->>'entityId',p->>'departmentCode');\n  if jsonb_typeof(p->'accountCodes')='array' then\n   for c in select jsonb_array_elements_text(p->'accountCodes') loop perform private.finance_reporting_account_v1(t,c);end loop;\n  end if;\n elsif cmd in('mapping.verify','snapshot.preview','snapshot.approve') then\n  select * into m from finance_apm_private.metric_mappings where id=(p->>'mappingId')::uuid and tenant_id=t and entity_id=p->>'entityId';\n  if m.id is null then raise exception 'FINANCE_APM_FORBIDDEN' using errcode='42501';end if;\n  perform private.finance_reporting_department_v1(t,m.entity_id,m.department_code);\n  foreach c in array m.account_codes loop perform private.finance_reporting_account_v1(t,c);end loop;\n  if cmd='snapshot.approve' and not exists(\n   select 1 from finance_apm_private.commands x join public.finance_users f on f.tenant_id=x.tenant_id and f.id=x.actor_id\n   where x.tenant_id=t and x.actor_id<>u and f.active and f.role in('accountant','ceo') and f.auth_user_id is not null\n    and x.result->>'previewHash'=p->>'previewHash' and x.result->'evidence'->>'mappingId'=m.id::text\n    and x.result->'evidence'->>'year'=p->>'year' and x.result->'evidence'->>'quarter'=p->>'quarter'\n  ) then raise exception 'FINANCE_APM_INDEPENDENT_REVIEW_REQUIRED' using errcode='42501';end if;\n end if;\n return finance_apm_private.command_before_workbench(cmd,p);\nend $function$\n",
+      "source_md5": "69f3890b65dd66a1be332cd5571db7c7",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text, jsonb",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "cmd text, p jsonb",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "fb09dd191eda4ba311417a9414b9c3bd"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "command_before_workbench",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.command_before_workbench(cmd text, p jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare a jsonb;t uuid;u text;rid uuid;h text;old finance_apm_private.commands;m finance_apm_private.metric_mappings;\n result jsonb;ev jsonb;snap jsonb;sid uuid;y integer;q integer;i integer;codes text[];\nbegin\n if jsonb_typeof(p) is distinct from 'object' or octet_length(p::text)>65536 or cmd<>all(array['mapping.propose','mapping.verify','mapping.revoke','snapshot.preview','snapshot.approve','list']) then raise exception 'FINANCE_APM_INPUT_INVALID';end if;\n if exists(select 1 from jsonb_object_keys(p) k where k<>all(array['requestId','entityId','mappingId','apmCompanyId','apmDepartmentId','departmentCode','accountCodes','reference','year','quarter','previewHash'])) then raise exception 'FINANCE_APM_INPUT_INVALID';end if;\n a:=finance_apm_private.actor(p->>'entityId');t:=(a->>'tenantId')::uuid;u:=a->>'actorId';\n if cmd='list' then\n  return jsonb_build_object('mappings',coalesce((select jsonb_agg(to_jsonb(x)||jsonb_build_object('verified',finance_apm_private.active(x))) from finance_apm_private.metric_mappings x where x.tenant_id=t and x.entity_id=p->>'entityId'),'[]'));\n end if;\n rid:=(p->>'requestId')::uuid;if rid is null then raise exception 'FINANCE_APM_REQUEST_REQUIRED';end if;\n h:=finance_apm_private.hash(jsonb_build_object('command',cmd,'payload',p));\n perform pg_advisory_xact_lock(hashtextextended(t::text||u||rid::text,831));\n select * into old from finance_apm_private.commands where tenant_id=t and actor_id=u and request_id=rid;\n if old.request_id is not null then if old.payload_hash<>h then raise exception 'FINANCE_APM_REPLAY_CONFLICT';end if;return old.result;end if;\n if cmd='mapping.propose' then\n  if jsonb_typeof(p->'accountCodes') is distinct from 'array' or jsonb_array_length(p->'accountCodes') not between 1 and 50\n   or exists(select 1 from jsonb_array_elements(p->'accountCodes') x where jsonb_typeof(x)<>'string' or (x#>>'{}')!~'^4[0-9A-Za-z_-]{0,19}$') then raise exception 'FINANCE_APM_REVENUE_ACCOUNTS_REQUIRED';end if;\n  select array_agg(distinct x order by x) into codes from jsonb_array_elements_text(p->'accountCodes') x;\n  if cardinality(codes)<>jsonb_array_length(p->'accountCodes') or length(btrim(coalesce(p->>'reference',''))) not between 10 and 1000\n   or (p->>'apmCompanyId')::uuid is null or (p->>'apmDepartmentId')::uuid is null then raise exception 'FINANCE_APM_MAPPING_INVALID';end if;\n  if not exists(select 1 from public.system_settings s cross join lateral jsonb_array_elements(case when jsonb_typeof(s.value)='array' then s.value else '[]' end) d\n   where s.tenant_id=t and s.key='departments' and d->>'c'=p->>'departmentCode') then raise exception 'FINANCE_APM_DEPARTMENT_UNVERIFIED';end if;\n  insert into finance_apm_private.metric_mappings(tenant_id,apm_company_id,apm_department_id,entity_id,department_code,account_codes,reference,created_by)\n   values(t,(p->>'apmCompanyId')::uuid,(p->>'apmDepartmentId')::uuid,p->>'entityId',p->>'departmentCode',codes,btrim(p->>'reference'),u) returning * into m;\n  result:=jsonb_build_object('mappingId',m.id,'status','pending_verification');\n else\n  select * into m from finance_apm_private.metric_mappings where id=(p->>'mappingId')::uuid and tenant_id=t and entity_id=p->>'entityId';\n  if m.id is null then raise exception 'FINANCE_APM_FORBIDDEN' using errcode='42501';end if;\n  perform pg_advisory_xact_lock(hashtextextended(m.apm_company_id::text||m.apm_department_id::text,832));\n  if cmd in('mapping.verify','mapping.revoke') then\n   if public.current_finance_role()<>'ceo' or (cmd='mapping.verify' and m.created_by=u) then raise exception 'FINANCE_APM_INDEPENDENT_REVIEW_REQUIRED' using errcode='42501';end if;\n   if length(btrim(coalesce(p->>'reference',''))) not between 10 and 1000 then raise exception 'FINANCE_APM_REFERENCE_REQUIRED';end if;\n   if cmd='mapping.verify' and exists(select 1 from finance_apm_private.metric_mappings x where x.apm_company_id=m.apm_company_id and x.apm_department_id=m.apm_department_id and x.id<>m.id and finance_apm_private.active(x)) then raise exception 'FINANCE_APM_MAPPING_CONFLICT';end if;\n   insert into finance_apm_private.mapping_decisions(mapping_id,decision,actor_id,reference) values(m.id,case cmd when 'mapping.verify' then 'verified' else 'revoked' end,u,btrim(p->>'reference'));\n   result:=jsonb_build_object('mappingId',m.id,'status',case cmd when 'mapping.verify' then 'verified' else 'revoked' end);\n  else\n   y:=(p->>'year')::integer;q:=(p->>'quarter')::integer;\n   if y is null or q is null then raise exception 'FINANCE_APM_PERIOD_INVALID';end if;\n   -- Same lock domain and order as canonical ledger/period-close writes.\n   for i in 0..2 loop perform pg_advisory_xact_lock(hashtextextended('finance_period|'||t::text||'|production|'||m.entity_id||'|'||to_char(make_date(y,(q-1)*3+1,1)+make_interval(months=>i),'YYYY-MM'),0));end loop;\n   ev:=finance_apm_private.evidence(m,y,q);h:=finance_apm_private.hash(ev);\n   if cmd='snapshot.preview' then result:=jsonb_build_object('previewHash',h,'evidence',ev);\n   else\n    if p->>'previewHash' is distinct from h then raise exception 'FINANCE_APM_SOURCE_CHANGED' using errcode='40001';end if;\n    if exists(select 1 from finance_apm_private.metric_snapshots where mapping_id=m.id and year=y and quarter=q) then raise exception 'FINANCE_APM_SNAPSHOT_EXISTS';end if;\n    sid:=gen_random_uuid();snap:=jsonb_build_object('snapshotId',sid,'metricKey','quarterly_closed_revenue_twd','value',ev->'value','currency','TWD',\n     'scope',jsonb_build_object('kind','department','companyId',m.apm_company_id,'departmentId',m.apm_department_id),\n     'period',jsonb_build_object('year',y,'quarter',q,'startDate',ev->'startDate','endDate',ev->'endDate'),'closedAt',clock_timestamp());\n    snap:=snap||jsonb_build_object('hash',finance_apm_private.hash(snap));\n    insert into finance_apm_private.metric_snapshots(id,mapping_id,year,quarter,preview_hash,source_evidence,snapshot,approved_by) values(sid,m.id,y,q,h,ev,snap,u);\n    result:=jsonb_build_object('status','approved','snapshot',snap);\n   end if;\n  end if;\n end if;\n -- Recompute command hash: the preview hash is a different domain.\n insert into finance_apm_private.commands values(t,u,rid,finance_apm_private.hash(jsonb_build_object('command',cmd,'payload',p)),result,clock_timestamp());\n return result;\nend $function$\n",
+      "source_md5": "b15cbc26ca100bada6f86e7f0dd78d1d",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text, jsonb",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "cmd text, p jsonb",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "07cb6b2063dad2ec417c65ea2384704a"
+    },
+    {
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "name": "correction_command",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.correction_command(cmd text, p jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare before_actor public.finance_users;after_actor public.finance_users;result jsonb;o finance_hr_private.finance_hr_obligations;proposal finance_apm_private.correction_proposals;\nbegin\n before_actor:=public.current_finance_user();\n result:=finance_apm_private.correction_command_before_fresh_authorization(cmd,p);\n if not finance_apm_private.fresh_session() then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n after_actor:=public.current_finance_user();\n if auth.uid() is null or after_actor.id is null or after_actor.auth_user_id is distinct from auth.uid() or after_actor.active is distinct from true or after_actor.role not in('accountant','ceo') or after_actor.id is distinct from before_actor.id or after_actor.tenant_id is distinct from before_actor.tenant_id then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n if cmd='list' then\n  if exists(select 1 from jsonb_array_elements(result->'proposals')x join finance_hr_private.finance_hr_obligations f on f.obligation_id=(x->>'obligation_id')::uuid where not finance_hr_private.finance_hr_reader(f.tenant_id,f.source_employer_id,after_actor.id)) then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n else\n  if cmd='verify' then\n   select * into proposal from finance_apm_private.correction_proposals where id=(p->>'proposalId')::uuid;\n   select * into o from finance_hr_private.finance_hr_obligations where obligation_id=proposal.obligation_id;\n  else select * into o from finance_hr_private.finance_hr_obligations where obligation_id=(p->>'obligationId')::uuid;end if;\n  if o.obligation_id is null or o.tenant_id is distinct from after_actor.tenant_id or not finance_hr_private.finance_hr_reader(o.tenant_id,o.source_employer_id,after_actor.id) then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n end if;\n return result;\nend $function$\n",
+      "source_md5": "c4b259722e2689eb54a13cc4a0efe0fa",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text, jsonb",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "cmd text, p jsonb",
+      "service_role_execute": false,
+      "authenticated_execute": true,
+      "definition_md5": "4c547fc8d89e1eb167d37ed9ebe9c7e9"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "correction_command_before_fresh_authorization",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.correction_command_before_fresh_authorization(cmd text, p jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare a public.finance_users;o finance_hr_private.finance_hr_obligations;proposal finance_apm_private.correction_proposals;\n old finance_apm_private.commands;req uuid;h text;ev jsonb;receipt jsonb;result jsonb;receipt_id uuid:=gen_random_uuid();begin\n if jsonb_typeof(p) is distinct from 'object' or octet_length(p::text)>32768 or cmd<>all(array['propose','verify','list'])\n  or exists(select 1 from jsonb_object_keys(p) k where k<>all(array['requestId','obligationId','correctionBatchId','correctionSourceHash','originalBatchId','reversalVoucherId','refund','reference','proposalId'])) then raise exception 'FINANCE_APM_CORRECTION_INPUT_INVALID';end if;\n if not public.finance_auth_session_active() then raise exception 'FINANCE_APM_FORBIDDEN' using errcode='42501';end if;\n a:=public.current_finance_user();\n if auth.uid() is null or a.auth_user_id is distinct from auth.uid() or not a.active or a.role not in('accountant','ceo') then raise exception 'FINANCE_APM_FORBIDDEN' using errcode='42501';end if;\n if cmd='list' then\n  return jsonb_build_object('proposals',coalesce((select jsonb_agg(to_jsonb(c)||jsonb_build_object('receipt',(select receipt from finance_apm_private.correction_receipts where proposal_id=c.id)) order by c.created_at desc)\n   from finance_apm_private.correction_proposals c join finance_hr_private.finance_hr_obligations x on x.obligation_id=c.obligation_id\n   where c.tenant_id=a.tenant_id and finance_hr_private.finance_hr_reader(x.tenant_id,x.source_employer_id,a.id)),'[]'));\n end if;\n if cmd='verify' then select * into proposal from finance_apm_private.correction_proposals where id=(p->>'proposalId')::uuid and tenant_id=a.tenant_id;\n  select * into o from finance_hr_private.finance_hr_obligations where obligation_id=proposal.obligation_id;\n else select * into o from finance_hr_private.finance_hr_obligations where obligation_id=(p->>'obligationId')::uuid;end if;\n if o.obligation_id is null or o.tenant_id<>a.tenant_id or not finance_hr_private.finance_hr_reader(o.tenant_id,o.source_employer_id,a.id) then raise exception 'FINANCE_APM_FORBIDDEN' using errcode='42501';end if;\n req:=(p->>'requestId')::uuid;\n if req is null or length(btrim(coalesce(p->>'reference',''))) not between 10 and 1000 then raise exception 'FINANCE_APM_CORRECTION_REFERENCE_REQUIRED';end if;\n h:=finance_apm_private.hash(jsonb_build_object('correctionCommand',cmd,'payload',p));\n perform pg_advisory_xact_lock(hashtextextended(a.tenant_id::text||a.id||req::text,831));\n perform pg_advisory_xact_lock(hashtextextended(o.obligation_id::text,617));\n select * into old from finance_apm_private.commands where tenant_id=a.tenant_id and actor_id=a.id and request_id=req;\n if found then if old.payload_hash<>h then raise exception 'FINANCE_APM_REPLAY_CONFLICT';end if;return old.result;end if;\n if cmd='propose' then\n  if (p->>'correctionBatchId')::uuid is null or (p->>'originalBatchId')::uuid is null or p->>'correctionBatchId'=p->>'originalBatchId'\n   or coalesce(p->>'correctionSourceHash','')!~'^[0-9a-f]{64}$' or jsonb_typeof(p->'refund') is distinct from 'object'\n   or (select count(*) from jsonb_object_keys(p->'refund'))<>4 or exists(select 1 from jsonb_object_keys(p->'refund') k where k<>all(array['status','amountCents','reference','sha256']))\n   or p->'refund'->>'status' is distinct from 'settled' or p->'refund'->>'amountCents' is distinct from o.total_net_cents::text\n   or length(btrim(coalesce(p->'refund'->>'reference',''))) not between 10 and 500 or coalesce(p->'refund'->>'sha256','')!~'^[0-9a-f]{64}$'\n  then raise exception 'FINANCE_APM_REFUND_EVIDENCE_REQUIRED';end if;\n  ev:=finance_apm_private.correction_evidence(o,p->>'reversalVoucherId');\n  insert into finance_apm_private.correction_proposals(tenant_id,obligation_id,correction_batch_id,correction_source_hash,original_batch_id,reversal_voucher_id,refund,proposed_by,reference,source_evidence,evidence_hash)\n   values(a.tenant_id,o.obligation_id,(p->>'correctionBatchId')::uuid,p->>'correctionSourceHash',(p->>'originalBatchId')::uuid,p->>'reversalVoucherId',p->'refund',a.id,btrim(p->>'reference'),ev,finance_apm_private.hash(ev)) returning * into proposal;\n  result:=jsonb_build_object('proposalId',proposal.id,'status','pending_independent_verification');\n else\n  if proposal.proposed_by=a.id then raise exception 'FINANCE_APM_INDEPENDENT_REVIEW_REQUIRED' using errcode='42501';end if;\n  ev:=finance_apm_private.correction_evidence(o,proposal.reversal_voucher_id);\n  if finance_apm_private.hash(ev)<>proposal.evidence_hash then raise exception 'FINANCE_APM_SOURCE_CHANGED' using errcode='40001';end if;\n  receipt:=jsonb_build_object('schemaVersion',1,'kind','finance_bonus_reversal','receiptId',receipt_id,'correctionBatchId',proposal.correction_batch_id,\n   'correctionSourceHash',proposal.correction_source_hash,'originalBatchId',proposal.original_batch_id,'obligationId',o.obligation_id,'flowId',o.flow_id,'sourceEmployerId',o.source_employer_id,\n   'originalSettlementHash',o.source_hash,'originalVoucherId',ev->'originalVoucherId','reversalVoucherId',proposal.reversal_voucher_id,'originalNetCents',o.total_net_cents,\n   'ledgerHash',proposal.evidence_hash,'refund',proposal.refund,'proposedBy',proposal.proposed_by,'verifiedBy',a.id,'verifiedAt',clock_timestamp());\n  receipt:=receipt||jsonb_build_object('receiptHash',finance_apm_private.hash(receipt));\n  insert into finance_apm_private.correction_receipts(id,proposal_id,receipt,verified_by) values(receipt_id,proposal.id,receipt,a.id);\n  result:=jsonb_build_object('status','verified','receipt',receipt);\n end if;\n insert into finance_apm_private.commands values(a.tenant_id,a.id,req,h,result,clock_timestamp());return result;end $function$\n",
+      "source_md5": "86a70b2235cdc8d98c8b4103c754abaf",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text, jsonb",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "cmd text, p jsonb",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "28658f7a8bf0e6c44979f046c290556c"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "correction_evidence",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.correction_evidence(o finance_hr_private.finance_hr_obligations, reversal_id text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$declare id text;begin\n for id in select v.id from public.vouchers v where v.id=reversal_id or exists(select 1 from finance_hr_private.finance_hr_voucher_claims c where c.obligation_id=o.obligation_id and c.voucher_id=v.id)order by v.id loop\n  perform pg_advisory_xact_lock(hashtextextended('apm-voucher:'||id,847));\n end loop;return finance_apm_private.correction_evidence_before_lock(o,reversal_id);end $function$\n",
+      "source_md5": "8ad22f53dfd4aefd732cded3b6fc7f2b",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "finance_hr_private.finance_hr_obligations, text",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "o finance_hr_private.finance_hr_obligations, reversal_id text",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "164ea65778b79603238f9f9a7a80db80"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "correction_evidence_before_lock",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.correction_evidence_before_lock(o finance_hr_private.finance_hr_obligations, reversal_id text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare original public.vouchers;reversal public.vouchers;before_rows jsonb;after_rows jsonb;ev jsonb;begin\n select v.* into original from finance_hr_private.finance_hr_voucher_claims c join public.vouchers v on v.id=c.voucher_id where c.obligation_id=o.obligation_id;\n select * into reversal from public.vouchers where id=reversal_id;\n if original.id is null or reversal.id is null or reversal.id=original.id or original.tenant_id<>o.tenant_id or reversal.tenant_id<>o.tenant_id\n  or original.entity_id<>o.legal_entity_code or reversal.entity_id<>o.legal_entity_code or original.data_environment<>'production' or reversal.data_environment<>'production'\n  or original.posted is distinct from true or reversal.posted is distinct from true or original.posted_at is null or reversal.posted_at is null\n  or original.voided_at is not null or reversal.voided_at is not null or reversal.adjusts_voucher_no is distinct from original.no\n  or original.total<>o.total_net_cents/100.0 or reversal.total<>original.total\n  or not exists(select 1 from finance_hr_private.finance_hr_events where obligation_id=o.obligation_id and action='bank_disbursement' and actor_system='finance')\n then raise exception 'FINANCE_APM_REAL_SETTLEMENT_AND_REVERSAL_REQUIRED';end if;\n select jsonb_agg(to_jsonb(t) order by t.account_code,t.department_code) into before_rows from (\n  select account_code,coalesce(department_code,'') department_code,sum(debit) debit,sum(credit) credit from public.ledger_entries\n  where tenant_id=o.tenant_id and entity_id=o.legal_entity_code and data_environment='production' and voided_at is null and voucher_no=original.no\n  group by account_code,coalesce(department_code,'')) t;\n select jsonb_agg(to_jsonb(t) order by t.account_code,t.department_code) into after_rows from (\n  select account_code,coalesce(department_code,'') department_code,sum(credit) debit,sum(debit) credit from public.ledger_entries\n  where tenant_id=o.tenant_id and entity_id=o.legal_entity_code and data_environment='production' and voided_at is null and voucher_no=reversal.no\n  group by account_code,coalesce(department_code,'')) t;\n if before_rows is null or before_rows is distinct from after_rows then raise exception 'FINANCE_APM_REVERSAL_LEDGER_MISMATCH';end if;\n if (select sum((x->>'debit')::numeric) from jsonb_array_elements(before_rows) x)<>original.total\n  or (select sum((x->>'credit')::numeric) from jsonb_array_elements(before_rows) x)<>original.total then raise exception 'FINANCE_APM_REVERSAL_LEDGER_MISMATCH';end if;\n ev:=jsonb_build_object('originalVoucherId',original.id,'reversalVoucherId',reversal.id,'originalVoucher',to_jsonb(original),'reversalVoucher',to_jsonb(reversal),'reversedLines',before_rows);\n return ev;end $function$\n",
+      "source_md5": "f672643407caef019db7ad4b4511fa54",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "finance_hr_private.finance_hr_obligations, text",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "o finance_hr_private.finance_hr_obligations, reversal_id text",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "caa7eb8c384a8e5fb8aa571e3b17bba9"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "name": "correction_export",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.correction_export(receipt_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare r finance_apm_private.correction_receipts;p finance_apm_private.correction_proposals;o finance_hr_private.finance_hr_obligations;begin\n select * into r from finance_apm_private.correction_receipts where id=receipt_id;\n select * into p from finance_apm_private.correction_proposals where id=r.proposal_id;\n select * into o from finance_hr_private.finance_hr_obligations where obligation_id=p.obligation_id;\n if r.id is null or finance_apm_private.hash(finance_apm_private.correction_evidence(o,p.reversal_voucher_id))<>p.evidence_hash then raise exception 'FINANCE_APM_RECEIPT_UNAVAILABLE';end if;\n return r.receipt;end $function$\n",
+      "source_md5": "11344948c92dce7f1bce9daadf3d1749",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "uuid",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "receipt_id uuid",
+      "service_role_execute": true,
+      "authenticated_execute": false,
+      "definition_md5": "8a6ca1b5bca4bdd766093f465cff81a6"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "evidence",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.evidence(m finance_apm_private.metric_mappings, y integer, q integer)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare first_day date;last_day date;closes jsonb;ledger jsonb;total numeric;begin\n if y not between 2000 and 2200 or q not between 1 and 4 then raise exception 'FINANCE_APM_PERIOD_INVALID';end if;\n first_day:=make_date(y,(q-1)*3+1,1);last_day:=(first_day+interval '3 months')::date;\n if last_day>current_date then raise exception 'FINANCE_APM_PERIOD_NOT_ENDED';end if;\n if not finance_apm_private.active(m) then raise exception 'FINANCE_APM_MAPPING_UNVERIFIED';end if;\n select jsonb_agg(to_jsonb(c) order by c.period) into closes from public.period_closes c\n where c.tenant_id=m.tenant_id and c.entity_id=m.entity_id and c.data_environment='production'\n and c.period between to_char(first_day,'YYYY-MM') and to_char(last_day-1,'YYYY-MM') and c.status='closed';\n if jsonb_array_length(coalesce(closes,'[]'))<>3 or (select count(distinct c->>'period') from jsonb_array_elements(coalesce(closes,'[]')) c)<>3 then raise exception 'FINANCE_APM_CLOSED_QUARTER_REQUIRED';end if;\n select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'),coalesce(sum(l.credit-l.debit),0) into ledger,total\n from public.ledger_entries l where l.tenant_id=m.tenant_id and l.entity_id=m.entity_id and l.data_environment='production'\n and l.department_code=m.department_code and l.account_code=any(m.account_codes)\n and l.entry_date>=first_day and l.entry_date<last_day and l.voided_at is null\n and coalesce(l.source_type,'') not in('period_close','closing_entry','year_end_close');\n if total<0 or total>999999999999 or total<>round(total,4) then raise exception 'FINANCE_APM_REVENUE_RANGE';end if;\n return jsonb_build_object('mappingId',m.id,'year',y,'quarter',q,'startDate',first_day,'endDate',last_day-1,'value',total,\n  'closeHash',finance_apm_private.hash(closes),'ledgerHash',finance_apm_private.hash(ledger),'ledgerCount',jsonb_array_length(ledger),'accountCodes',m.account_codes);\nend $function$\n",
+      "source_md5": "92fab29352f30ffa1b157b858535e250",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "finance_apm_private.metric_mappings, integer, integer",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "m finance_apm_private.metric_mappings, y integer, q integer",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "0a53ecffe3da895bb13ab49edb2e60a4"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "name": "export_snapshots",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.export_snapshots()\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare s finance_apm_private.metric_snapshots;m finance_apm_private.metric_mappings;ev jsonb;result jsonb:='[]';begin\n if (select count(*) from finance_apm_private.metric_snapshots)>500 then raise exception 'FINANCE_APM_EXPORT_LIMIT';end if;\n for s in select * from finance_apm_private.metric_snapshots order by approved_at,id loop\n  select * into m from finance_apm_private.metric_mappings where id=s.mapping_id;\n  if not finance_apm_private.active(m) then continue;end if;\n  begin ev:=finance_apm_private.evidence(m,s.year,s.quarter);exception when sqlstate 'P0001' then continue;end;\n  if finance_apm_private.hash(ev)=s.preview_hash then result:=result||jsonb_build_array(s.snapshot);end if;\n end loop;\n return jsonb_build_object('generatedAt',clock_timestamp(),'snapshots',result);\nend $function$\n",
+      "source_md5": "625b4f9c6f70b72b62f721eefa399d46",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "",
+      "service_role_execute": true,
+      "authenticated_execute": false,
+      "definition_md5": "94e218b79ceb365e1906ac582e9cf36f"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "fresh_actor",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.fresh_actor(entity text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare a public.finance_users; scope jsonb;\nbegin\n if not finance_apm_private.fresh_session() then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n a:=public.current_finance_user();\n if auth.uid() is null or a.id is null or a.auth_user_id is distinct from auth.uid() or a.active is distinct from true or a.role not in('accountant','ceo') then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n scope:=private.finance_reporting_actor_v1(entity,'production');\n if scope->>'actorId' is distinct from a.id or scope->>'tenantId' is distinct from a.tenant_id::text or (scope->>'canEditWorkpaper')::boolean is distinct from true then raise exception 'FINANCE_APM_AUTHORITY_CHANGED' using errcode='42501';end if;\n return scope||jsonb_build_object('role',a.role);\nend $function$\n",
+      "source_md5": "31c2babbba2e418b712a314a7e5c9f42",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "entity text",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "1d838f4f3fcd81847780c6cf2c52a04e"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "fresh_session",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.fresh_session()\n RETURNS boolean\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare sid uuid;begin\n begin sid:=nullif(auth.jwt()->>'session_id','')::uuid;exception when invalid_text_representation then return false;end;\n if sid is null or auth.uid() is null or not public.finance_auth_session_active() then return false;end if;\n return exists(select 1 from auth.sessions s where s.id=sid and s.user_id=auth.uid() and(s.not_after is null or s.not_after>clock_timestamp()));\nend $function$\n",
+      "source_md5": "cd6c185ad897c594a895347f662bfd2a",
+      "volatility": "v",
+      "return_type": "boolean",
+      "anon_execute": false,
+      "argument_types": "",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "a70bdd1344d049dcd895f0969119a856"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "guard_receipt_ledger",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.guard_receipt_ledger()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$declare v record;begin\n for v in select x.id from public.vouchers x where(tg_op<>'INSERT'and x.tenant_id=old.tenant_id and x.entity_id=old.entity_id and x.data_environment=old.data_environment and x.no=old.voucher_no)or(tg_op<>'DELETE'and x.tenant_id=new.tenant_id and x.entity_id=new.entity_id and x.data_environment=new.data_environment and x.no=new.voucher_no)order by x.id loop\n  perform pg_advisory_xact_lock(hashtextextended('apm-voucher:'||v.id,847));\n  if finance_apm_private.receipt_evidence_locked(v.id)then raise exception 'FINANCE_APM_RECEIPT_EVIDENCE_IMMUTABLE'using errcode='55000';end if;\n end loop;if tg_op='DELETE'then return old;end if;return new;end $function$\n",
+      "source_md5": "8c17e525dadd00ee7e4cb9e40b80bb6a",
+      "volatility": "v",
+      "return_type": "trigger",
+      "anon_execute": false,
+      "argument_types": "",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "7204392a17ade7802c680709ed1746e6"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "guard_receipt_voucher",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.guard_receipt_voucher()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$begin\n perform pg_advisory_xact_lock(hashtextextended('apm-voucher:'||old.id,847));\n if finance_apm_private.receipt_evidence_locked(old.id)then raise exception 'FINANCE_APM_RECEIPT_EVIDENCE_IMMUTABLE'using errcode='55000';end if;\n if tg_op='DELETE'then return old;end if;return new;end $function$\n",
+      "source_md5": "3aa4173afa8b10b58d83b24084111b4c",
+      "volatility": "v",
+      "return_type": "trigger",
+      "anon_execute": false,
+      "argument_types": "",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "a62876b4eb5c3f16925646df28194d40"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "hash",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.hash(j jsonb)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO ''\nAS $function$\n select encode(sha256(convert_to(finance_apm_private.canonical(j),'UTF8')),'hex')\n$function$\n",
+      "source_md5": "dc8e1e85b1678c28342694ab44c1a88f",
+      "volatility": "i",
+      "return_type": "text",
+      "anon_execute": false,
+      "argument_types": "jsonb",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "j jsonb",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "df36afaa34224745f294d64e4c8e79ad"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "immutable",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.immutable()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nbegin raise exception 'FINANCE_APM_IMMUTABLE' using errcode='42501';end $function$\n",
+      "source_md5": "1c8bdd83fc82ad3b7e60e43f9ad5d424",
+      "volatility": "v",
+      "return_type": "trigger",
+      "anon_execute": false,
+      "argument_types": "",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "f7edb5c1c8ae86fd1c7477a01f2b194a"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "name": "receipt_evidence_locked",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.receipt_evidence_locked(voucher_id text)\n RETURNS boolean\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n select exists(select 1 from finance_apm_private.correction_receipts r where r.receipt->>'originalVoucherId'=voucher_id or r.receipt->>'reversalVoucherId'=voucher_id)\n$function$\n",
+      "source_md5": "707aaf1fe912501ff6378ecd8ef02f9e",
+      "volatility": "v",
+      "return_type": "boolean",
+      "anon_execute": false,
+      "argument_types": "text",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "voucher_id text",
+      "service_role_execute": false,
+      "authenticated_execute": false,
+      "definition_md5": "729306b171a68a645394b42981fed7f8"
+    },
+    {
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "name": "workbench",
+      "owner": "postgres",
+      "schema": "finance_apm_private",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION finance_apm_private.workbench(entity text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare a public.finance_users;authz jsonb;t uuid;e jsonb;entities jsonb:='[]';departments jsonb:='[]';accounts jsonb:='[]';\n mappings jsonb:='[]';periods jsonb:='[]';previews jsonb:='[]';snapshots jsonb:='[]';obligations jsonb:='[]';proposals jsonb:='[]';\n o finance_hr_private.finance_hr_obligations;v public.vouchers;original public.vouchers;reversals jsonb;ev jsonb;paid boolean;begin\n if not public.finance_auth_session_active() then raise exception 'FINANCE_APM_FORBIDDEN' using errcode='42501';end if;\n a:=public.current_finance_user();t:=a.tenant_id;\n if auth.uid() is null or a.auth_user_id is distinct from auth.uid() or not a.active or a.role not in('accountant','ceo') then raise exception 'FINANCE_APM_FORBIDDEN' using errcode='42501';end if;\n for e in select x from public.system_settings s cross join lateral jsonb_array_elements(case when jsonb_typeof(s.value)='array' then s.value else '[]' end) x where s.tenant_id=t and s.key='entities' loop\n  if e->>'active'='false' then continue;end if;\n  begin authz:=finance_apm_private.actor(e->>'id');exception when insufficient_privilege then continue;end;\n  entities:=entities||jsonb_build_array(jsonb_build_object('id',e->>'id','name',coalesce(e->>'full',e->>'n',e->>'s',e->>'id')));\n end loop;\n if jsonb_array_length(entities)>100 then raise exception 'FINANCE_APM_WORKBENCH_LIMIT';end if;\n if entity is not null then\n  authz:=finance_apm_private.actor(entity);\n  if not exists(select 1 from jsonb_array_elements(entities) x where x->>'id'=entity) then raise exception 'FINANCE_APM_FORBIDDEN' using errcode='42501';end if;\n  select coalesce(jsonb_agg(jsonb_build_object('code',d->>'c','name',coalesce(d->>'n',d->>'name',d->>'c')) order by d->>'c'),'[]') into departments\n   from public.system_settings s cross join lateral jsonb_array_elements(case when jsonb_typeof(s.value)='array' then s.value else '[]' end) d\n   where s.tenant_id=t and s.key='departments' and exists(select 1 from public.finance_department_units u join public.finance_department_entity_scopes scope on scope.tenant_id=u.tenant_id and scope.unit_id=u.id and scope.active where u.tenant_id=t and u.active and u.is_posting_unit and u.code=d->>'c' and scope.entity_code=entity);\n  select coalesce(jsonb_agg(jsonb_build_object('code',coalesce(d->>'c',d->>'code'),'name',coalesce(d->>'n',d->>'name',d->>'c',d->>'code')) order by coalesce(d->>'c',d->>'code')),'[]') into accounts\n   from public.system_settings s cross join lateral jsonb_array_elements(case when jsonb_typeof(s.value)='array' then s.value else '[]' end) d\n   where s.tenant_id=t and s.key='accounts' and coalesce(d->>'c',d->>'code')~'^4[0-9A-Za-z_-]{0,19}$' and d->>'active' is distinct from 'false';\n  select coalesce(jsonb_agg(to_jsonb(m)||jsonb_build_object('active',finance_apm_private.active(m),'proposerName',(select f.name from public.finance_users f where f.tenant_id=t and f.id=m.created_by),\n    'decisions',coalesce((select jsonb_agg(jsonb_build_object('decision',d.decision,'actorName',f.name,'at',d.created_at,'reference',d.reference)) from finance_apm_private.mapping_decisions d left join public.finance_users f on f.tenant_id=t and f.id=d.actor_id where d.mapping_id=m.id),'[]')) order by m.created_at desc),'[]') into mappings from finance_apm_private.metric_mappings m where m.tenant_id=t and m.entity_id=entity;\n  select coalesce(jsonb_agg(jsonb_build_object('year',y,'quarter',q) order by y desc,q desc),'[]') into periods from (\n   select substring(period,1,4)::integer y,((substring(period,6,2)::integer-1)/3+1) q\n   from public.period_closes where tenant_id=t and entity_id=entity and data_environment='production' and status='closed' and period~'^[0-9]{4}-(0[1-9]|1[0-2])$'\n   group by 1,2 having count(distinct period)=3 and (make_date(substring(min(period),1,4)::integer,((substring(min(period),6,2)::integer-1)/3)*3+1,1)+interval '3 months')::date<=current_date\n  ) complete;\n  select coalesce(jsonb_agg(jsonb_build_object('id',x.request_id,'actorId',x.actor_id,'actorName',f.name,'createdAt',x.created_at,'previewHash',x.result->'previewHash','evidence',x.result->'evidence') order by x.created_at desc),'[]') into previews\n   from finance_apm_private.commands x join finance_apm_private.metric_mappings m on m.id::text=x.result->'evidence'->>'mappingId' join public.finance_users f on f.id=x.actor_id and f.tenant_id=t\n   where x.tenant_id=t and m.tenant_id=t and m.entity_id=entity and x.result ? 'previewHash' and f.active and f.role in('accountant','ceo') and finance_apm_private.active(m)\n    and not exists(select 1 from finance_apm_private.metric_snapshots s where s.mapping_id=m.id and s.year::text=x.result->'evidence'->>'year' and s.quarter::text=x.result->'evidence'->>'quarter');\n  select coalesce(jsonb_agg(jsonb_build_object('snapshot',s.snapshot,'approvedAt',s.approved_at,'approvedBy',(select f.name from public.finance_users f where f.tenant_id=t and f.id=s.approved_by),'mappingId',m.id) order by s.approved_at desc),'[]') into snapshots\n   from finance_apm_private.metric_snapshots s join finance_apm_private.metric_mappings m on m.id=s.mapping_id where m.tenant_id=t and m.entity_id=entity;\n  if (select count(*) from finance_hr_private.finance_hr_obligations x where x.tenant_id=t and x.legal_entity_code=entity and x.kind='bonus' and finance_hr_private.finance_hr_reader(t,x.source_employer_id,a.id))>200 then raise exception 'FINANCE_APM_WORKBENCH_LIMIT';end if;\n  for o in select * from finance_hr_private.finance_hr_obligations x where x.tenant_id=t and x.legal_entity_code=entity and x.kind='bonus' and finance_hr_private.finance_hr_reader(t,x.source_employer_id,a.id) order by x.created_at desc loop\n   select x.* into original from public.vouchers x join finance_hr_private.finance_hr_voucher_claims c on c.voucher_id=x.id where c.obligation_id=o.obligation_id;\n   paid:=exists(select 1 from finance_hr_private.finance_hr_events x where x.obligation_id=o.obligation_id and x.action='bank_disbursement' and x.actor_system='finance');reversals:='[]';\n   if paid and original.id is not null then\n    for v in select * from public.vouchers x where x.tenant_id=t and x.entity_id=entity and x.data_environment='production' and x.adjusts_voucher_no=original.no and x.posted and x.voided_at is null\n     and not exists(select 1 from finance_apm_private.correction_proposals c where c.reversal_voucher_id=x.id) order by x.no loop\n     begin ev:=finance_apm_private.correction_evidence(o,v.id);exception when sqlstate 'P0001' then continue;end;\n     reversals:=reversals||jsonb_build_array(jsonb_build_object('id',v.id,'number',v.no,'total',v.total));\n    end loop;\n   end if;\n   obligations:=obligations||jsonb_build_array(jsonb_build_object('id',o.obligation_id,'flowId',o.flow_id,'period',o.period,'payDate',o.pay_date,'status',o.status,'paid',paid,'totalNetCents',o.total_net_cents,'originalVoucherNumber',original.no,'reversals',reversals));\n  end loop;\n  select coalesce(jsonb_agg(jsonb_build_object('id',p.id,'obligationId',p.obligation_id,'period',ob.period,'proposerId',p.proposed_by,'proposerName',(select f.name from public.finance_users f where f.tenant_id=t and f.id=p.proposed_by),'createdAt',p.created_at,'reference',p.reference,'refund',p.refund,'originalBatchId',p.original_batch_id,'correctionBatchId',p.correction_batch_id,'correctionSourceHash',p.correction_source_hash,'reversalVoucherNumber',voucher.no,'receipt',r.receipt,'verifierName',(select f.name from public.finance_users f where f.tenant_id=t and f.id=r.verified_by)) order by p.created_at desc),'[]') into proposals\n   from finance_apm_private.correction_proposals p join finance_hr_private.finance_hr_obligations ob on ob.obligation_id=p.obligation_id join public.vouchers voucher on voucher.id=p.reversal_voucher_id left join finance_apm_private.correction_receipts r on r.proposal_id=p.id\n   where p.tenant_id=t and ob.legal_entity_code=entity and finance_hr_private.finance_hr_reader(t,ob.source_employer_id,a.id);\n end if;\n if jsonb_array_length(mappings)>200 or jsonb_array_length(previews)>500 or jsonb_array_length(snapshots)>500 or jsonb_array_length(proposals)>200 then raise exception 'FINANCE_APM_WORKBENCH_LIMIT';end if;\n return jsonb_build_object('actor',jsonb_build_object('id',a.id,'name',a.name,'role',a.role),'entityId',entity,'entities',entities,'departments',departments,'accounts',accounts,'mappings',mappings,'periods',periods,'previews',previews,'snapshots',snapshots,'obligations',obligations,'corrections',proposals);\nend $function$\n",
+      "source_md5": "a912537c83d37b3dc9d037e9f7211af9",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text",
+      "public_execute": false,
+      "security_definer": true,
+      "identity_arguments": "entity text",
+      "service_role_execute": false,
+      "authenticated_execute": true,
+      "definition_md5": "d8aa23e77713f2cfa3b07d22cf840ed9"
+    },
+    {
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "name": "finance_apm_correction_command",
+      "owner": "postgres",
+      "schema": "public",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_apm_correction_command(command text, payload jsonb)\n RETURNS jsonb\n LANGUAGE sql\n SET search_path TO ''\nAS $function$select finance_apm_private.correction_command(command,payload)$function$\n",
+      "source_md5": "cff1e085bf9118b6d1df2a32140a2073",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text, jsonb",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "command text, payload jsonb",
+      "service_role_execute": false,
+      "authenticated_execute": true,
+      "definition_md5": "a5ca6d40f99abdad38c64e7a0f3d936b"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "name": "finance_apm_correction_export",
+      "owner": "postgres",
+      "schema": "public",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_apm_correction_export(receipt_id uuid)\n RETURNS jsonb\n LANGUAGE sql\n SET search_path TO ''\nAS $function$select finance_apm_private.correction_export(receipt_id)$function$\n",
+      "source_md5": "31649ea16a538a35bb5c1f882dcefec9",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "uuid",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "receipt_id uuid",
+      "service_role_execute": true,
+      "authenticated_execute": false,
+      "definition_md5": "abcf76631837bbed5d05aae59709a0d1"
+    },
+    {
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "name": "finance_apm_metrics_command",
+      "owner": "postgres",
+      "schema": "public",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_apm_metrics_command(command text, payload jsonb)\n RETURNS jsonb\n LANGUAGE sql\n SET search_path TO ''\nAS $function$select finance_apm_private.command(command,payload)$function$\n",
+      "source_md5": "68f03a7386e22763707b3513f9bee0e8",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text, jsonb",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "command text, payload jsonb",
+      "service_role_execute": false,
+      "authenticated_execute": true,
+      "definition_md5": "3634f0003938c4340180351fd08d8d3d"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "name": "finance_apm_metrics_export",
+      "owner": "postgres",
+      "schema": "public",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_apm_metrics_export()\n RETURNS jsonb\n LANGUAGE sql\n SET search_path TO ''\nAS $function$select finance_apm_private.export_snapshots()$function$\n",
+      "source_md5": "abcfce9c642b01058eadccd2c5fa9d38",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "",
+      "service_role_execute": true,
+      "authenticated_execute": false,
+      "definition_md5": "a3779b7f2b8d204db5afbebdd29ba530"
+    },
+    {
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "name": "finance_apm_workbench",
+      "owner": "postgres",
+      "schema": "public",
+      "settings": [
+        "search_path=\"\""
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.finance_apm_workbench(entity_id text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE sql\n SET search_path TO ''\nAS $function$select finance_apm_private.workbench(entity_id)$function$\n",
+      "source_md5": "fac4fef36a783946402a4dc4641c4411",
+      "volatility": "v",
+      "return_type": "jsonb",
+      "anon_execute": false,
+      "argument_types": "text",
+      "public_execute": false,
+      "security_definer": false,
+      "identity_arguments": "entity_id text",
+      "service_role_execute": false,
+      "authenticated_execute": true,
+      "definition_md5": "c5c1860378f34857090a82d2f9465a4f"
+    }
+  ],
+  "captured_at": "2026-10-22T06:02:54.041802+00:00",
+  "ledger": [
+    {
+      "version": "20261020022748",
+      "name": "apm_metrics_verified_snapshots_addon",
+      "statement_count": 1,
+      "statement_md5": "94e1567b5f580ba4320ffa8f0c0f97be",
+      "statement_sha256": "ef85f6cec586b185f6320794a5e55756d6a5d7d940939df4c6f2442be796bb99",
+      "file": "20261020022748_apm_metrics_verified_snapshots_addon.sql"
+    },
+    {
+      "version": "20261020022750",
+      "name": "apm_correction_receipts",
+      "statement_count": 1,
+      "statement_md5": "1fe5fa52e044f568a2ea00a9fd17c085",
+      "statement_sha256": "ff0394b8809d80cde90192d1a3d57f61b90c12b28c0cd509f0349bdd9d9bf105",
+      "file": "20261020022750_apm_correction_receipts.sql"
+    },
+    {
+      "version": "20261020022751",
+      "name": "apm_receipt_evidence_guard",
+      "statement_count": 1,
+      "statement_md5": "d1efa91509acab7f9fdcea22b9cec107",
+      "statement_sha256": "3e19f9bb64b2a3644f8ec95124c45d5ad0ecd229611979c89261721699c95b36",
+      "file": "20261020022751_apm_receipt_evidence_guard.sql"
+    },
+    {
+      "version": "20261020023444",
+      "name": "apm_finance_workbench_ui",
+      "statement_count": 1,
+      "statement_md5": "2c78227c17792fba366a356971bff203",
+      "statement_sha256": "360ea7f8e267e872328cc6e16a2eed1f8ca121bf43fd5ca375987903caf19325",
+      "file": "20261020023444_apm_finance_workbench_ui.sql"
+    },
+    {
+      "version": "20261020025210",
+      "name": "apm_fresh_command_authorization",
+      "statement_count": 1,
+      "statement_md5": "dbb30b16245ac206f3f21e8982debf86",
+      "statement_sha256": "947580737d2266c00a90276bdbcf93591062f116f3764731cf848710163017b8",
+      "file": "20261020025210_apm_fresh_command_authorization.sql"
+    }
+  ],
+  "project_id": "udtlppnrugmtzhigdsxo",
+  "provenance": "Read-only live catalog; all 26 final bodies byte-equal to ordered CREATE/RENAME definitions from the five exact ledger sources."
+}

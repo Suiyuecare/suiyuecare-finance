@@ -166,6 +166,22 @@ const BILL_APPROVAL_BULK_MIGRATIONS=Object.freeze(['20261015060930']);
 const BILL_APPROVAL_BULK_SOURCE_SHA256=Object.freeze({'20261015060930':'508f8f557db6cd9b57e86ba029505038565424b6658afa59af8471b708209272'});
 const RELEASE_PHASE_DATABASE_BILL_APPROVAL_BULK='database_bill_approval_bulk_20261015';
 const INVOICE_APPROVAL_BULK_MIGRATIONS=Object.freeze(['20261021050618']);
+// Adopted from the exact existing production ledger; these are prerequisites, never a release batch.
+const ADOPTED_APM_MIGRATIONS=Object.freeze(['20261020022748','20261020022750','20261020022751','20261020023444','20261020025210']);
+const ADOPTED_APM_SOURCE_SHA256=Object.freeze({
+  '20261020022748':'ef85f6cec586b185f6320794a5e55756d6a5d7d940939df4c6f2442be796bb99',
+  '20261020022750':'ff0394b8809d80cde90192d1a3d57f61b90c12b28c0cd509f0349bdd9d9bf105',
+  '20261020022751':'3e19f9bb64b2a3644f8ec95124c45d5ad0ecd229611979c89261721699c95b36',
+  '20261020023444':'360ea7f8e267e872328cc6e16a2eed1f8ca121bf43fd5ca375987903caf19325',
+  '20261020025210':'947580737d2266c00a90276bdbcf93591062f116f3764731cf848710163017b8'
+});
+const ADOPTED_APM_FILENAMES=Object.freeze({
+  '20261020022748':'20261020022748_apm_metrics_verified_snapshots_addon.sql',
+  '20261020022750':'20261020022750_apm_correction_receipts.sql',
+  '20261020022751':'20261020022751_apm_receipt_evidence_guard.sql',
+  '20261020023444':'20261020023444_apm_finance_workbench_ui.sql',
+  '20261020025210':'20261020025210_apm_fresh_command_authorization.sql'
+});
 const INVOICE_APPROVAL_BULK_SOURCE_SHA256=Object.freeze({'20261021050618':'e731c60d3518d1bffff4c8a85c891bf0fa387290c93ebbaf3f71665b9da8570c'});
 const RELEASE_PHASE_DATABASE_INVOICE_APPROVAL_BULK='database_invoice_approval_bulk_20261021';
 const INVOICE_BATCH_BULK_MIGRATIONS=Object.freeze(['20261014123427']);
@@ -259,7 +275,8 @@ const REVIEWED_MIGRATION_CATALOG = Object.freeze([
   ...BANK_FEE_CLASSIFICATION_MIGRATIONS,
   ...MEGA_REMITTANCE_MIGRATIONS,
   ...REMITTANCE_HISTORY_MIGRATIONS,
-  ...REMITTANCE_BOUNDARY_MIGRATIONS
+  ...REMITTANCE_BOUNDARY_MIGRATIONS,
+  ...ADOPTED_APM_MIGRATIONS
 ]);
 const RELEASE_PHASE_FRONTEND_COMPAT = 'frontend_compat';
 const RELEASE_PHASE_DATABASE_V3 = 'database_v3';
@@ -525,6 +542,14 @@ function assertReviewedAdoptedMigrations(remote) {
   }
   return true;
 }
+function assertAdoptedApmSources(directory, local) {
+  for (const version of ADOPTED_APM_MIGRATIONS) {
+    const filename=ADOPTED_APM_FILENAMES[version];
+    if (!local.includes(filename)) fail('adopted APM migration file is missing or renamed: '+version);
+    if (sha256File(path.join(directory,filename))!==ADOPTED_APM_SOURCE_SHA256[version])
+      fail('adopted APM migration source differs from reviewed production bytes: '+version);
+  }
+}
 function classifyLedger(ledgerPath, directory, releasePhase, versionsText, baseline = PRODUCTION_BASELINE_LEDGER) {
   const plan = releasePlan(releasePhase, versionsText);
   const requested = migrationPhase(versionsText);
@@ -601,6 +626,7 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
     const target = INVOICE_APPROVAL_BULK_MIGRATIONS[0];
     const prerequisites = REVIEWED_MIGRATION_CATALOG.filter(version => version < target);
     if (prerequisites.some(version => !remote.includes(version))) fail('Invoice approval bulk phase requires every reviewed prerequisite migration');
+    assertAdoptedApmSources(directory,local);
     const filename = local.find(name => name.startsWith(target + '_'));
     if (!filename) fail('Invoice approval bulk migration file is missing');
     if (sha256File(path.join(directory, filename)) !== INVOICE_APPROVAL_BULK_SOURCE_SHA256[target])
@@ -1076,6 +1102,8 @@ function classifyLedger(ledgerPath, directory, releasePhase, versionsText, basel
       const filename=local.find(name=>name.startsWith(version+'_'));
       if(sha256File(path.join(directory,filename))!==INVOICE_APPROVAL_BULK_SOURCE_SHA256[version])fail('Invoice approval bulk migration source differs from sealed SHA256: '+version);
     }
+    if(ADOPTED_APM_MIGRATIONS.some(version=>!remote.includes(version)))fail('frontend_compat requires every exact adopted APM migration');
+    assertAdoptedApmSources(directory,local);
     return 'compat';
   }
   if (plan.releasePhase === RELEASE_PHASE_DATABASE_HUMAN_ACCOUNTING) {
@@ -1822,6 +1850,12 @@ rollback;
 `);
   return true;
 }
+function adoptedApmPostflight(referencePath){
+  const sourcePath=path.join(path.dirname(referencePath),'finance_apm_adoption_postflight.sql');
+  const source=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),path.basename(sourcePath));
+  assertCliAtomicMigration(source,'adopted APM postflight');
+  return source;
+}
 function prepareBillBatchBulkRehearsal(directory,outputPath,versionsText,ledgerPath,
   fingerprintPath,canaryPath,preflightPath,postflightPath,
   baseline=PRODUCTION_BASELINE_LEDGER,phase=RELEASE_PHASE_DATABASE_BILL_BATCH_BULK){
@@ -1842,6 +1876,7 @@ function prepareBillBatchBulkRehearsal(directory,outputPath,versionsText,ledgerP
   const postflight=phase===RELEASE_PHASE_DATABASE_REMITTANCE_BOUNDARY?remittanceBoundaryGate(postflightPath,'postflight'):stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
   assertCliAtomicMigration(preflight,`${phaseLabel} preflight`);
   assertCliAtomicMigration(postflight,`${phaseLabel} postflight`);
+  const adoption=phase===RELEASE_PHASE_DATABASE_INVOICE_APPROVAL_BULK?adoptedApmPostflight(postflightPath):'';
   const canary=authenticatedCanarySections(canaryPath);
   if(phase===RELEASE_PHASE_DATABASE_REMITTANCE_BOUNDARY){
     const org=authenticatedCanarySections(path.join(path.dirname(canaryPath),'finance_org_google_repair_snapshot_canary.sql'));
@@ -1856,7 +1891,7 @@ function prepareBillBatchBulkRehearsal(directory,outputPath,versionsText,ledgerP
     const name=item.filename.replace(/^\d{14}_/,'').replace(/\.sql$/,'');
     return `insert into supabase_migrations.schema_migrations(version,statements,name,created_by) values (${sqlLiteral(item.version)},array[${quote}${item.source.trimEnd()}${quote}]::text[],${sqlLiteral(name)},'github-actions');`;
   }).join('\n');
-  if([source,fingerprint,preflight,postflight,canary.core,canary.rollbackCheck,ledgerInsert]
+  if([source,fingerprint,preflight,postflight,adoption,canary.core,canary.rollbackCheck,ledgerInsert]
       .some(value=>value.includes(tag)))fail(`${phaseLabel} rehearsal tag collision`);
   writeExclusive(outputPath,`begin isolation level repeatable read;
 set local lock_timeout='5s';
@@ -1871,6 +1906,7 @@ begin
   end if;
 end;
 ${tag};
+${adoption}
 ${preflight}
 create temporary table finance_release_fingerprint_before on commit drop as
 ${fingerprint}
@@ -1878,9 +1914,11 @@ savepoint finance_release_migration;
 ${source}
 ${ledgerInsert}
 ${postflight}
+${adoption}
 ${canary.core}
 rollback to savepoint finance_release_migration;
 ${canary.rollbackCheck}
+${adoption}
 create temporary table finance_release_fingerprint_after on commit drop as
 ${fingerprint}
 do ${tag}
@@ -2679,6 +2717,7 @@ rollback;
 function prepareAuditBatchApply(directory,outputPath,versionsText,ledgerPath,postflightPath,baseline=PRODUCTION_BASELINE_LEDGER,releasePhase=RELEASE_PHASE_DATABASE_AUDIT,profilePostflightPath=null) {
   const postflight=releasePhase===RELEASE_PHASE_DATABASE_REMITTANCE_BOUNDARY?remittanceBoundaryGate(postflightPath,'postflight'):releasePhase===RELEASE_PHASE_DATABASE_ATTACHMENT_CLAIM?attachmentClaimPostflightChain(postflightPath,profilePostflightPath):releasePhase===RELEASE_PHASE_DATABASE_EXTERNAL_LABOR?externalLaborPostflightChain(postflightPath,profilePostflightPath):releasePhase===RELEASE_PHASE_DATABASE_PORTAL_SESSION?portalSessionPostflightChain(postflightPath,profilePostflightPath):releasePhase===RELEASE_PHASE_DATABASE_HR_CONTRACTOR?hrContractorPostflightChain(postflightPath,profilePostflightPath):releasePhase===RELEASE_PHASE_DATABASE_AUDIT_CONTROLS_20260927?completeFinancePostflightChain(postflightPath,profilePostflightPath,true,true):releasePhase===RELEASE_PHASE_DATABASE_REVENUE_REPAIR?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_AUDIT_SECURITY?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_HR_BRIDGE?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_AR_READ_SCOPE?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_HISTORY_SUMMARY?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_APPROVAL_SEARCH?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true,true):releasePhase===RELEASE_PHASE_DATABASE_AUDIT_REMEDIATION?reportsPostflightChain(postflightPath,profilePostflightPath,true,true,true,true,true,true,true,true):[RELEASE_PHASE_DATABASE_REPORTS,RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase)?reportsPostflightChain(postflightPath,profilePostflightPath,[RELEASE_PHASE_DATABASE_AMOUNT_SEARCH,RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_REPORTING_INTEGRITY,RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_AUDIT_READINESS,RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_EMPLOYEE_RELIABILITY,RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_HISTORY_PERFORMANCE,RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),[RELEASE_PHASE_DATABASE_READ_LATENCY,RELEASE_PHASE_DATABASE_AR_MAPPING].includes(releasePhase),releasePhase===RELEASE_PHASE_DATABASE_AR_MAPPING):stripPsqlDirectives(fs.readFileSync(postflightPath,'utf8'),path.basename(postflightPath));
   assertCliAtomicMigration(postflight,'audit postflight');
+  const adoption=releasePhase===RELEASE_PHASE_DATABASE_INVOICE_APPROVAL_BULK?adoptedApmPostflight(postflightPath):'';
   const batch=releasePhase===RELEASE_PHASE_DATABASE_REVENUE_REPAIR?pendingRevenueRepairBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_AUDIT_SECURITY?pendingAuditSecurityBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_HR_BRIDGE?pendingHrBridgeBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_AR_READ_SCOPE?pendingArReadScopeBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_INVOICE_READ_SCOPE?pendingInvoiceReadScopeBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_HISTORY_SUMMARY?pendingHistorySummaryBatch(directory,versionsText,ledgerPath,baseline):releasePhase===RELEASE_PHASE_DATABASE_APPROVAL_SEARCH?pendingApprovalSearchBatch(directory,versionsText,ledgerPath,baseline):readAuditBatch(directory,versionsText,releasePhase);
   verifyLedger('pre',ledgerPath,directory,releasePhase,versionsText,baseline);
   const remote=readLedgerVersions(ledgerPath);
@@ -2703,8 +2742,10 @@ begin
   end if;
 end;
 ${tag};
+${adoption}
 ${parts.join('\n')}
 ${postflight}
+${adoption}
 commit;
 `);
   return true;
@@ -2810,7 +2851,7 @@ function preparePhaseQuery(sourcePath, outputPath, releasePhase, versionsText) {
       fail('Invoice approval bulk phase requires its exact sealed postflight');
     const postflight=stripPsqlDirectives(fs.readFileSync(sourcePath,'utf8'),sourceName);
     assertCliAtomicMigration(postflight,'invoice approval bulk postflight');
-    writeExclusive(outputPath,`begin read only;\nset local statement_timeout='60s';\n${postflight}\nrollback;\n`);
+    writeExclusive(outputPath,`begin read only;\nset local statement_timeout='60s';\n${postflight}\n${adoptedApmPostflight(sourcePath)}\nrollback;\n`);
     return true;
   }
   if(plan.releasePhase===RELEASE_PHASE_DATABASE_INVOICE_BATCH_BULK){
@@ -3384,6 +3425,7 @@ const api = {
   BILL_APPROVAL_BULK_MIGRATIONS, BILL_APPROVAL_BULK_SOURCE_SHA256,
   RELEASE_PHASE_DATABASE_BILL_APPROVAL_BULK, prepareBillApprovalBulkRehearsal,
   INVOICE_APPROVAL_BULK_MIGRATIONS, INVOICE_APPROVAL_BULK_SOURCE_SHA256,
+  ADOPTED_APM_MIGRATIONS, ADOPTED_APM_SOURCE_SHA256, ADOPTED_APM_FILENAMES, assertAdoptedApmSources,
   RELEASE_PHASE_DATABASE_INVOICE_APPROVAL_BULK, prepareInvoiceApprovalBulkRehearsal,
   INVOICE_BATCH_BULK_MIGRATIONS, INVOICE_BATCH_BULK_SOURCE_SHA256,
   RELEASE_PHASE_DATABASE_INVOICE_BATCH_BULK, prepareInvoiceBatchBulkRehearsal,

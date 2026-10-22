@@ -644,3 +644,9 @@ supabase/.temp
 !scripts/finance_invoice_approval_bulk_postflight.sql
 !scripts/finance_invoice_approval_bulk_fingerprint.sql
 !scripts/finance_invoice_approval_bulk_canary.sql
+
+# Exact adopted APM catalog and negative release checks.
+!scripts/finance_apm_adoption_postflight.sql
+!scripts/fixtures/finance_apm_adoption_fixture_20261022.cjs
+!scripts/fixtures/finance_apm_adoption_catalog_20261022.json
+!scripts/check_apm_adoption_postflight_20261022.cjs
