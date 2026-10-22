@@ -120,6 +120,12 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
 
   'supabase/migrations/20261015060930_finance_bill_approval_bulk_v1.sql',
   'supabase/migrations/20261021050618_finance_invoice_approval_bulk_v1.sql',
+  'supabase/migrations/20261020022748_apm_metrics_verified_snapshots_addon.sql',
+  'supabase/migrations/20261020022750_apm_correction_receipts.sql',
+  'supabase/migrations/20261020022751_apm_receipt_evidence_guard.sql',
+  'supabase/migrations/20261020023444_apm_finance_workbench_ui.sql',
+  'supabase/migrations/20261020025210_apm_fresh_command_authorization.sql',
+
   'scripts/fixtures/finance_bill_approval_fixture_20261015.cjs',
   'scripts/fixtures/finance_invoice_approval_fixture_20261021.cjs',
   'scripts/fixtures/finance_bill_approval_live_catalog_20261015.json',
@@ -135,6 +141,11 @@ const REQUIRED_RELEASE_FILES = Object.freeze([
   'scripts/finance_invoice_approval_bulk_preflight.sql',
   'scripts/finance_bill_approval_bulk_postflight.sql',
   'scripts/finance_invoice_approval_bulk_postflight.sql',
+  'scripts/finance_apm_adoption_postflight.sql',
+  'scripts/fixtures/finance_apm_adoption_fixture_20261022.cjs',
+  'scripts/fixtures/finance_apm_adoption_catalog_20261022.json',
+  'scripts/check_apm_adoption_postflight_20261022.cjs',
+
   'scripts/finance_bill_approval_bulk_fingerprint.sql',
   'scripts/finance_invoice_approval_bulk_fingerprint.sql',
   'scripts/finance_bill_approval_bulk_canary.sql',
@@ -690,6 +701,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   'test:approval-tasks-verified-session': 'node scripts/check_taipei2_google_identity_repair_20261015.cjs && node scripts/test_approval_tasks_verified_session_release_batch.mjs',
   'test:taipei2-applicant-confirm-browser': 'node scripts/check_taipei2_applicant_confirm_browser_20261015.cjs',
   'test:bill-approval-bulk': 'node scripts/check_bill_approval_bulk_20261015.cjs && node scripts/test_bill_approval_bulk_release_batch.mjs',
+  'test:apm-adoption': 'node scripts/check_apm_adoption_postflight_20261022.cjs',
   'test:approval-committed-feedback': 'node scripts/check_approval_committed_feedback.cjs',
   'test:invoice-approval-bulk': 'node scripts/check_invoice_approval_bulk_20261021.cjs && node scripts/test_invoice_approval_bulk_release_batch.mjs',
   'test:invoice-batch-bulk': 'node scripts/check_invoice_batch_bulk_insert_20261014.cjs',
@@ -767,7 +779,7 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
   "test:finance-ui-interactions": "node scripts/check_finance_ui_interaction_browser.cjs",
   'test:hr-bridge-release': 'node scripts/test_hr_bridge_release_batch.mjs',
   'test:hr-bridge-browser': 'HR_BRIDGE_BROWSER=1 node scripts/test_hr_private_bridge.mjs',
-  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:invoice-item-review && pnpm test:invoice-item-bind-sql && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor && pnpm test:submission-cashier-preflight && pnpm test:attachment-claim-migration && pnpm test:human-accounting-float && pnpm test:invoice-revenue-result && pnpm test:formal-resumable-upload && pnpm test:personnel-save && pnpm test:procurement-closeout && pnpm test:purchase-final-amount && pnpm test:all-applicant-withdraw && pnpm test:personal-history && pnpm test:bill-batch-bulk && pnpm test:invoice-batch-approval && pnpm test:portal-projection-postflight && pnpm test:personal-history-identity-once && pnpm test:personal-bill-batch-history && pnpm test:bill-form-attachments && pnpm test:finance-oauth-account-guard && pnpm test:invoice-batch-bulk && pnpm test:bill-approval-bulk && pnpm test:approval-tasks-verified-session && pnpm test:bank-fee-review && pnpm test:bank-fee-classification && pnpm test:mega-remittance && pnpm test:approval-committed-feedback && pnpm test:invoice-approval-bulk",
+  'release:preflight': "pnpm release:source-integrity && pnpm release:environment-isolation && pnpm release:migration-lineage && pnpm release:production-contract && pnpm release:root-cause-regressions && pnpm test:workflow-simplification && pnpm test:audit-remediation && pnpm test:database-cases && pnpm test:financial-reporting && pnpm test:amount-search && pnpm test:bill-attachments && pnpm test:reporting-integrity && pnpm test:audit-readiness && pnpm test:employee-reliability && pnpm test:history-performance && pnpm test:dashboard-readiness && pnpm test:draft-readiness && pnpm test:read-latency && pnpm test:ar-mapping && pnpm test:audit-remediation-20260914 && pnpm test:approval-search-20260914 && pnpm test:history-summary && pnpm test:invoice-read-scope && pnpm test:invoice-item-review && pnpm test:invoice-item-bind-sql && pnpm test:hr-bridge && pnpm test:hr-bridge-release && pnpm test:hr-voucher-posting && pnpm test:hr-accounting-privacy && pnpm test:ar-read-scope && pnpm test:audit-security && pnpm test:revenue-repair-release && pnpm test:operational-stability-release && pnpm test:demo-password-retirement && pnpm test:audit-controls-20260927 && pnpm test:hr-contractor && pnpm test:portal-session && pnpm test:external-labor && pnpm test:submission-cashier-preflight && pnpm test:attachment-claim-migration && pnpm test:human-accounting-float && pnpm test:invoice-revenue-result && pnpm test:formal-resumable-upload && pnpm test:personnel-save && pnpm test:procurement-closeout && pnpm test:purchase-final-amount && pnpm test:all-applicant-withdraw && pnpm test:personal-history && pnpm test:bill-batch-bulk && pnpm test:invoice-batch-approval && pnpm test:portal-projection-postflight && pnpm test:personal-history-identity-once && pnpm test:personal-bill-batch-history && pnpm test:bill-form-attachments && pnpm test:finance-oauth-account-guard && pnpm test:invoice-batch-bulk && pnpm test:bill-approval-bulk && pnpm test:approval-tasks-verified-session && pnpm test:bank-fee-review && pnpm test:bank-fee-classification && pnpm test:mega-remittance && pnpm test:approval-committed-feedback && pnpm test:invoice-approval-bulk && pnpm test:apm-adoption",
   'test:finance-oauth-account-guard': 'node scripts/check_finance_oauth_account_guard_20261013.cjs',
   'test:finance-oauth-account-guard-browser': 'node scripts/check_finance_oauth_account_guard_browser_20261013.cjs',
   'release:verify-artifact': 'node scripts/check_release_artifact.js --verify-manifest && node scripts/check_finance_login_account_switch_contract.js && node scripts/check_receipt_attachment_dedup_and_labor_tax.js',
@@ -775,6 +787,10 @@ const EXPECTED_RELEASE_SCRIPTS = Object.freeze({
 });
 
 const VERCEL_BUILD_REQUIRED_SCRIPTS = Object.freeze([
+  'scripts/finance_apm_adoption_postflight.sql',
+  'scripts/fixtures/finance_apm_adoption_fixture_20261022.cjs',
+  'scripts/fixtures/finance_apm_adoption_catalog_20261022.json',
+  'scripts/check_apm_adoption_postflight_20261022.cjs',
   'scripts/check_mega_remittance_engine.cjs',
   'scripts/check_mega_remittance_source.cjs',
   'scripts/check_mega_remittance_adapter.cjs',

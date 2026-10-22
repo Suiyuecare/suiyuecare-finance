@@ -7,6 +7,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {pgcrypto} from '@electric-sql/pglite/contrib/pgcrypto';
 import guard from './finance_production_release_guard.js';
 import fixture from './fixtures/finance_invoice_approval_fixture_20261021.cjs';
+import apm from './fixtures/finance_apm_adoption_fixture_20261022.cjs';
 import base from './fixtures/finance_invoice_batch_fixture_20261014.cjs';
 import extra from './fixtures/finance_bill_approval_live_catalog_20261015.json' with {type:'json'};
 const db=new PGlite({extensions:{pgcrypto}}),dir=await fs.mkdtemp(path.join(os.tmpdir(),'finance-bill-approval-release-'));
@@ -50,11 +51,13 @@ const authorityDriftMutations=[
 ];
 try {
  await fixture.setup(db);
+ await apm.setupAdoptedApm(db);
  const batch=await fixture.seed(db,3,'invoice-release-seed-20261021');
  eq(batch.count,3,'release fixture must contain existing fictional invoices');
  await base.identity(db,{user:null});
  await db.exec('alter table supabase_migrations.schema_migrations add column statements text[], add column created_by text;');
  for(const v of prior)await db.query('insert into supabase_migrations.schema_migrations(version,name) values($1,$2)',[v,'synthetic_predecessor']);
+ await apm.seedLedger(db);
  const ledger=path.join(dir,'ledger.txt');await fs.writeFile(ledger,prior.join('\n')+'\n');
  const fingerprint=async()=>(await db.query(await readGate('fingerprint'))).rows[0].fingerprint;
  const dataFingerprint=async()=>{
@@ -89,7 +92,33 @@ try {
  eq(await functionState(),originalFunctions,'rehearsal restores signing and actor helper sources, owners, settings and ACLs');
  eq(await dataFingerprint(),originalData,'rehearsal never alters documents, receipts, identities, history or notifications');
  eq((await db.query('select count(*)::int n from supabase_migrations.schema_migrations where version=$1',[version])).rows[0].n,0);
+ const adoptionMarker="select 'FINANCE_APM_ADOPTION_POSTFLIGHT_OK'::text as result;";
+ const adoptionState=async()=>{
+  const postflight=(await fs.readFile(path.join(root,'scripts/finance_apm_adoption_postflight.sql'),'utf8')).replace(/^\\set ON_ERROR_STOP on\r?\n/,'');
+  await db.exec(postflight);
+  return (await db.query('select version,name,statements from supabase_migrations.schema_migrations where version=any($1::text[]) order by version',[guard.ADOPTED_APM_MIGRATIONS])).rows;
+ };
+ const adoptedBefore=await adoptionState();
  const apply=await render('apply');
+ eq(apply.split(adoptionMarker).length-1,2,'adoption authority is checked before mutation and after mutation inside the atomic apply');
+ for(const mutation of [
+  "update supabase_migrations.schema_migrations set statements=array['different'] where version='20261020022748'",
+  'grant execute on function public.finance_apm_metrics_command(text,jsonb) to anon',
+  'alter table public.vouchers disable trigger apm_receipt_voucher_guard',
+  'alter table public.ledger_entries disable trigger apm_receipt_ledger_guard'
+ ]){
+  // Emulate drift after the external readonly gate but before the actual transaction.
+  const drifted=apply.replace("do $finance_audit_ledger_guard$",mutation+";\ndo $finance_audit_ledger_guard$");
+  await rejects(()=>db.exec(drifted),/APM adoption .* drifted/);await db.exec('rollback');
+  eq(await functionState(),originalFunctions,'adoption drift rejects invoice DDL before any commit');
+  eq(await dataFingerprint(),originalData,'adoption rejection leaves documents and accounting untouched');
+  eq(await adoptionState(),adoptedBefore,'failed adoption check restores the exact prior ledger');
+ }
+ const afterDdlDrift=apply.replace("select 'FINANCE_INVOICE_APPROVAL_BULK_POSTFLIGHT_OK' as marker;",()=>"alter table public.vouchers disable trigger apm_receipt_voucher_guard;");
+ await rejects(()=>db.exec(afterDdlDrift),/APM adoption trigger drifted/);await db.exec('rollback');
+ eq(await functionState(),originalFunctions,'post-mutation adoption drift rolls back DDL and new ledger');
+ eq(await adoptionState(),adoptedBefore,'post-mutation adoption drift restores adopted receipts guard');
+
  assert.match(apply,/begin;[\s\S]+pg_advisory_xact_lock[\s\S]+lock table supabase_migrations.schema_migrations[\s\S]+insert into supabase_migrations.schema_migrations[\s\S]+commit;/);checks++;
  // The exact sealed postflight must participate in the same atomic transaction as DDL and ledger.
  const failed=apply.replace("select 'FINANCE_INVOICE_APPROVAL_BULK_POSTFLIGHT_OK' as marker;",()=>"do $$begin raise exception 'synthetic_postflight_failure';end $$;");
