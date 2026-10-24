@@ -25,8 +25,16 @@ with relations as (
     coalesce(pg_catalog.md5(pg_catalog.pg_get_expr(p.polwithcheck, p.polrelid)), '') as column_acl
   from pg_catalog.pg_policy p
   where p.polrelid in (pg_catalog.to_regclass('public.payee_bank_accounts'), pg_catalog.to_regclass('public.draft_requests'))
+), routines as (
+  select p.oid::pg_catalog.regprocedure::text as signature, p.prosecdef::text as kind,
+    coalesce(p.proacl::text, '') as acl, coalesce(p.proconfig::text, '') as options,
+    pg_catalog.md5(p.prosrc) as column_acl
+  from pg_catalog.pg_proc p
+  where p.oid in (pg_catalog.to_regprocedure('public.post_adjustment_voucher(text,text,jsonb,date)'),
+    pg_catalog.to_regprocedure('public.reverse_voucher(text,text,date)'))
 ), all_metadata as (
   select * from relations union all select * from storage_policies union all select * from table_policies
+  union all select * from routines
 )
 select pg_catalog.md5(coalesce(pg_catalog.string_agg(
   pg_catalog.concat_ws('|', signature, kind, acl, options, column_acl), E'\n' order by signature), '')) as fingerprint
