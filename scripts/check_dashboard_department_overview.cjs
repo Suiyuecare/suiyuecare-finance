@@ -16,6 +16,7 @@ const nodes={},context={S:{dashMonth:'2026-08',dashPeriodMode:'month',dashDeptSo
 context.gE=id=>context.ENTS.find(e=>e.id===id)||{};
 vm.createContext(context);
 const run=code=>vm.runInContext(code,context);
+run((at=>source.slice(at,source.indexOf('\n',at)))(source.indexOf('function financeInlineJsString(')));
 const functions=['dashValidMonth','ensureDashboardState','dashMetricSeed','dashMetricAdd','dashMetricFinish','dashMetricDelta','dashMergeMetrics','dashDepartmentMetrics','dashSortRows','dashSafeCompanyColor','dashDepartmentGroups','dashDepartmentCenterKind','dashMarginText','dashMobileMetricRow','dashboardRenderDepartments'];
 run(functions.map(extract).join('\n'));
 run(source.split('\n').find(line=>line.startsWith('window.resetDashPeriod=function')));

@@ -10,7 +10,7 @@ function deferredFixture(options={}){
  const c=fixture(options);Object.assign(c,{FINANCE_DEFERRED_DOCUMENT_SOURCES:{},sourceCompleteness:{},surfaces:[],canAccessPage:p=>c.forbiddenPage!==p,escAttr:String});
  c.S.user.role='section_chief';c.S.page='dashboard';c.S.demoLogin=false;
  c.setApprovalSourceCompleteness=(table,value)=>c.sourceCompleteness[table]=value;
- vm.runInContext(['resetDeferredFinanceDocumentSources','financeDocumentSourcesForPage','financeDeferredDocumentState','financeDocumentSourceReady','financeDeferredDocumentResult','financeDeferredDocumentStatusHtml','financeDocumentRows','loadDeferredFinanceDocumentSource','ensureDeferredFinanceDocumentSources','approvalRemoteSourceResultComplete'].map(extract).join('\n'),c);
+ vm.runInContext(['financeInlineJsString','resetDeferredFinanceDocumentSources','financeDocumentSourcesForPage','financeDeferredDocumentState','financeDocumentSourceReady','financeDeferredDocumentResult','financeDeferredDocumentStatusHtml','financeDocumentRows','loadDeferredFinanceDocumentSource','ensureDeferredFinanceDocumentSources','approvalRemoteSourceResultComplete'].map(extract).join('\n'),c);
  c.refreshDeferredFinanceDocumentSurface=table=>c.surfaces.push(table);
  const retry=source.slice(source.indexOf('window.retryDeferredFinanceDocumentSource='),source.indexOf('\n};',source.indexOf('window.retryDeferredFinanceDocumentSource='))+3);vm.runInContext(retry,c);
  return c;

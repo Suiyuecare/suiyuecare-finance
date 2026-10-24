@@ -334,7 +334,7 @@ async function main(){
   {
     const selected={name:'passbook.jpg',type:'image/jpeg',size:123};
     const statuses=[];let applied=0;
-    const c={S:{nrRevisionConfirmationPending:false,nrPassbookFile:null},OPENAI_INVOICE_OCR_ENDPOINT:'https://example.invalid/ocr',SUPABASE_ANON_KEY:'fixture',
+    const c={S:{nrRevisionConfirmationPending:false,nrPassbookFile:null},OPENAI_INVOICE_OCR_ENDPOINT:'https://example.invalid/ocr',SUPABASE_ANON_KEY:'fixture',invoiceOcrRequestHeaders:async()=>({'Content-Type':'application/json',Authorization:'Bearer fixture-staff-session'}),
       employeeAcceptedFiles:files=>files,isExpenseApplicantRevisionMode:()=>false,renderEmployeePassbookFile(){},productModuleEnabled:()=>true,
       setPassbookStatus:text=>statuses.push(text),fileToAttachment:async()=>({url:'data:image/jpeg;base64,QQ=='}),
       fetch:async()=>({ok:true,json:async()=>({bank:'fictional'})}),applyPassbookInfo:()=>applied++,ocrErrorMessage:error=>error.message,
@@ -350,7 +350,7 @@ async function main(){
   {
     const first=deferred(),a={name:'old.jpg',type:'image/jpeg'},b={name:'new.jpg',type:'image/jpeg'};
     const statuses=[];let applied=0,fetchCount=0;
-    const c={S:{nrRevisionConfirmationPending:false,nrPassbookFile:null},OPENAI_INVOICE_OCR_ENDPOINT:'https://example.invalid/ocr',SUPABASE_ANON_KEY:'fixture',
+    const c={S:{nrRevisionConfirmationPending:false,nrPassbookFile:null},OPENAI_INVOICE_OCR_ENDPOINT:'https://example.invalid/ocr',SUPABASE_ANON_KEY:'fixture',invoiceOcrRequestHeaders:async()=>({'Content-Type':'application/json',Authorization:'Bearer fixture-staff-session'}),
       employeeAcceptedFiles:files=>files,isExpenseApplicantRevisionMode:()=>false,renderEmployeePassbookFile(){},productModuleEnabled:()=>true,
       setPassbookStatus:text=>statuses.push(text),fileToAttachment:async()=>({url:'data:image/jpeg;base64,QQ=='}),
       fetch:()=>++fetchCount===1?first.promise:Promise.resolve({ok:true,json:async()=>({bank:'new'})}),

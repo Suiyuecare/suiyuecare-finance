@@ -159,6 +159,15 @@ try {
   });
   assert.equal(domains.get(invoiceApprovalBulkContract.result.canary),invoiceApprovalBulkContract.domain);
   let invoiceApprovalBulkVerified=0;
+  const securityHardeningContract=Object.freeze({
+    filename:'finance_security_hardening_canary.sql',
+    marker:'security_hardening_canary_result',
+    domain:'security_hardening',
+    result:{canary:'readonly_security_hardening_v1',ok:true,rolled_back:true,
+      staff_identity_used:false,business_mutation_performed:false}
+  });
+  assert.equal(domains.get(securityHardeningContract.result.canary),securityHardeningContract.domain);
+  let securityHardeningVerified=0;
   const bankFeeClassificationContract=Object.freeze({
     filename:'finance_bank_fee_classification_canary.sql',
     marker:'bank_fee_classification_canary_result',
@@ -336,6 +345,31 @@ try {
         assert.throws(()=>guard.verifyReportsCanary(file,other),'invoice approval result cannot satisfy another protected domain');
       invoiceApprovalBulkVerified++;
       pass('invoice approval bulk actual SQL preserves anonymous/read-only/rollback safeguards and rejects changed, missing or mistyped flags, wrong canary/marker/domain and duplicates');
+    }
+    if(name===securityHardeningContract.filename){
+      const rows=actualResults.flatMap(result=>result.rows||[]);
+      assert.deepEqual(rows,[{marker:'FINANCE_SECURITY_HARDENING_CANARY_ROLLED_BACK',[securityHardeningContract.marker]:securityHardeningContract.result}],
+        'security hardening final SQL emits exactly its reviewed marker and no-identity/no-mutation flags');
+      assert.match(source,/begin isolation level repeatable read read only;/);
+      assert.match(source,/auth\.uid\(\) is not null then raise exception 'Security hardening canary requires no staff identity'/);
+      assert.match(source,/-- FINANCE_AUTHENTICATED_CANARY_CORE_END\s*rollback;\s*-- FINANCE_AUTHENTICATED_CANARY_ROLLBACK_CHECK_BEGIN/);
+      assert.match(source,/current_setting\('transaction_read_only'\)='on' then raise exception 'Security hardening canary remains open'/);
+      assert.doesNotMatch(source,/set_config\s*\(\s*'request\.jwt\.|set\s+(?:local\s+)?role\s+(?:authenticated|service_role|anon)|(?:insert\s+into|update|delete\s+from|truncate\s+(?:table\s+)?)\s*(?:auth\.|public\.|private\.|storage\.)/i,
+        'security hardening canary inspects privileges without impersonating or mutating');
+      const negative=join(outputDir,'security-hardening-negative.json');
+      const verifyNegative=payload=>{fs.writeFileSync(negative,JSON.stringify(payload));assert.throws(()=>guard.verifyReportsCanary(negative,securityHardeningContract.domain));};
+      for(const flag of ['ok','rolled_back','staff_identity_used','business_mutation_performed']){
+        verifyNegative([{[securityHardeningContract.marker]:{...securityHardeningContract.result,[flag]:!securityHardeningContract.result[flag]}}]);
+        const missing={...securityHardeningContract.result};delete missing[flag];verifyNegative([{[securityHardeningContract.marker]:missing}]);
+        verifyNegative([{[securityHardeningContract.marker]:{...securityHardeningContract.result,[flag]:String(securityHardeningContract.result[flag])}}]);
+      }
+      verifyNegative([{[securityHardeningContract.marker]:{...securityHardeningContract.result,canary:'wrong-canary'}}]);
+      verifyNegative([{wrong_marker:securityHardeningContract.result}]);
+      verifyNegative([{[securityHardeningContract.marker]:securityHardeningContract.result},{[securityHardeningContract.marker]:securityHardeningContract.result}]);
+      for(const other of [invoiceApprovalBulkContract.domain,bankFeeClassificationContract.domain])
+        assert.throws(()=>guard.verifyReportsCanary(file,other),'security hardening result cannot satisfy another protected domain');
+      securityHardeningVerified++;
+      pass('security hardening actual SQL keeps read-only/no-identity/rollback safeguards and rejects changed, missing or mistyped flags, wrong canary/marker/domain and duplicates');
     }
     if(name===bankFeeClassificationContract.filename){
       const rows=actualResults.flatMap(result=>result.rows||[]);
@@ -524,14 +558,15 @@ try {
   assert.equal(invoiceBulkVerified,1,'the reviewed invoice bulk file must be explicitly covered exactly once');
   assert.equal(billApprovalBulkVerified,1,'the reviewed bill approval bulk file must be explicitly covered exactly once');
   assert.equal(invoiceApprovalBulkVerified,1,'the reviewed invoice approval bulk file must be explicitly covered exactly once');
+  assert.equal(securityHardeningVerified,1,'the reviewed security hardening file must be explicitly covered exactly once');
   assert.equal(verifiedSessionTasksVerified,1,'the reviewed verified-session tasks file must be explicitly covered exactly once');
   assert.equal(bankFeeClassificationVerified,1,'the reviewed bank fee classification file must be explicitly covered exactly once');
   assert.equal(megaRemittanceVerified,1,'the reviewed Mega remittance file must be explicitly covered exactly once');
   assert.equal(remittanceHistoryVerified,1,'the reviewed Remittance history file must be explicitly covered exactly once');
   for(const [domain,count] of boundaryCanariesVerified)assert.equal(count,1,domain+' complete final SQL is covered exactly once');
-  assert.equal(verified-[...boundaryCanariesVerified.values()].reduce((a,b)=>a+b,0)-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-invoiceApprovalBulkVerified-boundedVerified-verifiedSessionTasksVerified-bankFeeClassificationVerified-megaRemittanceVerified-remittanceHistoryVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
+  assert.equal(verified-[...boundaryCanariesVerified.values()].reduce((a,b)=>a+b,0)-identityOnceVerified-billHistoryVerified-invoiceBulkVerified-billApprovalBulkVerified-invoiceApprovalBulkVerified-securityHardeningVerified-boundedVerified-verifiedSessionTasksVerified-bankFeeClassificationVerified-megaRemittanceVerified-remittanceHistoryVerified,39,'all original protected authenticated/report/finalize/utility/permission/bill-batch/invoice-batch final SQL results remain covered');
   assert.equal(boundedVerified,1,'bounded logout exact final SQL is covered once');
-  assert.equal(verified,51,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, invoice approval bulk, verified-session tasks, bank fee classification, Mega remittance, remittance history, remittance boundary and org Google repair results are covered');
+  assert.equal(verified,52,'the 39 original results plus the exact reviewed identity-once, bill batch, invoice bulk, bounded logout, bill approval bulk, invoice approval bulk, security hardening, verified-session tasks, bank fee classification, Mega remittance, remittance history, remittance boundary and org Google repair results are covered');
   // Versioned canaries deliberately retain their old filenames for archived
   // phases, so they are outside the generic *canary.sql discovery above.
   const attachmentSuccessor=fs.readFileSync(new URL('finance_audit_security_canary_20261015.sql',scripts),'utf8');

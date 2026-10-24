@@ -21,7 +21,8 @@ const helperNames=[
  'accountingUtilityBillDetected','accountingLaborFeeDetected','accountingManualFieldNames','accountingLineManualFields','accountingLineFieldIsHuman',
  'accountingDecimalAmount','lazyHasValue','normalizeLazyTaxMode','lazyTaxMode','lazyAmountParts','requestTaxAmount','requestGrossAmount','requestNetTaxSplit',
  'requestLedgerPostedAt','requestPostingLocked','requestApprovalStepCompleted','approvedStepCount','requestWorkflowStepCount',
- 'advanceOriginalAmount','advanceActualAmount','advanceSettlementInfo','expensePostingAmount','accountingLineIsSystemFee','principalAccountingLines'
+ 'advanceOriginalAmount','advanceActualAmount','advanceSettlementInfo','expensePostingAmount','accountingLineIsSystemFee','principalAccountingLines',
+ 'escAttr','financeInlineJsString'
 ];
 // The release owner may extract entry construction to a named real helper.
 // Keep this list explicit so an absent implementation fails, never substitutes

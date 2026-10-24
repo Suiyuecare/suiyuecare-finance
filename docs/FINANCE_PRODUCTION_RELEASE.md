@@ -1,5 +1,11 @@
 # Finance 受保護正式發布
 
+## 2026-10-24 權限與附件安全加固
+
+本次唯一新版本為 `20261024100000_finance_security_hardening_v1.sql`，phase 固定 `database_security_hardening_20261024`、`migration_versions=20261024100000`。只變更權限、view 選項與 RLS 政策，不讀取、新增、修改或刪除任何營運單、傳票、分類帳或附件資料：收回 `anon`／`authenticated` 對 `ledger_entries`、`vouchers` 的 INSERT／UPDATE／DELETE／TRUNCATE（含欄位授權），入帳仍只走 SECURITY DEFINER RPC；`finance_production_ledger_entries`／`finance_test_ledger_entries` 若存在則改為 `security_invoker` 並收回匿名讀取；在已驗證的 `finance_attachments_select_verified_tenant_metadata_v2` 存在時才移除舊的資料夾全域讀取政策 `finance attachment read scoped`；`payee_bank_accounts` 加上必須為已驗證財務身分的 restrictive 政策；`draft_requests` 新增／修改加上擁有者必須是呼叫者本人的 restrictive 政策。
+
+migration 與唯讀 preflight 會先掃描 `public`、`private`、`logout_private` 與 `finance_*` schema：只要有以呼叫者權限執行、且會寫入 `ledger_entries` 或 `vouchers` 的函式或 trigger，就以 `55000` 停止，正式庫維持原狀。仍由本文件規定的 `Finance Protected Production Release` 人工流程執行：exact ledger 與來源 SHA 核對、交易內演練並回滾比對指紋、原子套用 SQL 與 ledger，再跑 postflight 與無身分唯讀 canary。此 phase 會提升同一封存前台；正式網域讀回驗證完成後，才部署要求已驗證財務身分的 `parse-invoice-openai` Edge Function（保留 gateway JWT 驗證），並以公開 anon key 呼叫確認回應 401。後續 `frontend_compat=none` 的候選也必須具備此版。
+
 ## 2026-10-13 繳費單個人清單整批檢視
 
 本次唯一新版本為 `20261013091000_finance_personal_bill_batch_history_v1.sql`，phase 固定 `database_personal_bill_batch_history_20261013`、`migration_versions=20261013091000`。只修改個人單據唯讀摘要／明細，不更新營運單、原單號、簽核快照或權限。依正式批次及同公司／狀態／流程分組，缺強申請人識別的舊單逐張保留，發票既有分組不變。

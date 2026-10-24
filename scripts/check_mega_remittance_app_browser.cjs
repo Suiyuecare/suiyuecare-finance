@@ -115,7 +115,7 @@ async function browserCase(engine,width,origin){
       closeAppr();closeModal('m-detail');clearFinanceMegaRemittance();
       await nav('newreq',null);
     })()`);
-    await page.locator('#nr-content button[onclick="nrT(\'hr_expense_request\')"]').click();
+    await page.locator('#nr-content button[onclick=\'nrT("hr_expense_request")\']').click();
     equal(await scope('({type:S.nrType,item:S.hrItem,payment:S.nrPay,privacy:S.hrPrivacyMode})'),{type:'hr_expense_request',item:'salary_50',payment:'bank',privacy:true},importLabel+' visible request-type control opens the permitted salary import form');
     const imported=await scope(`(async function(){
       var source=[['序位','銀行別','銀行代號','分行名稱','銀行帳號','金額','備註'],['1','臺灣銀行','0040123','虛構分行','000000001234',1200,'虛構資料']];
