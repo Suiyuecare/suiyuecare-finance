@@ -1,9 +1,42 @@
 \set ON_ERROR_STOP on
 
--- Catalog only: privileges, view options and Storage policy names. No business rows.
+-- Catalog only: privileges, routine metadata, view options and policy names. No business rows.
 do $security_hardening_postflight$
-declare role_name text; v pg_catalog.regclass;
+declare role_name text; v pg_catalog.regclass; offenders text; item record; routine pg_catalog.regprocedure;
 begin
+  for item in select * from (values
+    ('public.post_adjustment_voucher(text,text,jsonb,date)', '71651cad4f5d74b901939b08afe5f824'),
+    ('public.reverse_voucher(text,text,date)', '07e84ca7824b43ea09a15675432a6ab8')
+  ) reviewed(signature, body_md5) loop
+    routine := pg_catalog.to_regprocedure(item.signature);
+    if routine is null or not exists (
+      select 1 from pg_catalog.pg_proc p
+      where p.oid = routine and p.prosecdef
+        and p.proconfig = array['search_path=""']::text[]
+        and pg_catalog.md5(p.prosrc) = item.body_md5
+        and pg_catalog.has_table_privilege(p.proowner, 'public.vouchers', 'INSERT,UPDATE')
+        and pg_catalog.has_table_privilege(p.proowner, 'public.ledger_entries', 'INSERT')
+    ) or not pg_catalog.has_function_privilege('authenticated', routine, 'EXECUTE')
+       or pg_catalog.has_function_privilege('anon', routine, 'EXECUTE') then
+      raise exception 'Adjustment voucher RPC is not the reviewed owner-rights version: %', item.signature
+        using errcode = '55000';
+    end if;
+  end loop;
+  select pg_catalog.string_agg(p.oid::pg_catalog.regprocedure::text, ', ' order by p.oid::pg_catalog.regprocedure::text)
+  into offenders
+  from pg_catalog.pg_proc p
+  join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+  where (n.nspname in ('public', 'private', 'logout_private') or n.nspname like 'finance\_%')
+    and p.prokind = 'f'
+    and not p.prosecdef
+    and (p.prosrc ~* '(insert[[:space:]]+into|update|delete[[:space:]]+from)[[:space:]]+("?public"?[[:space:]]*\.[[:space:]]*)?"?(ledger_entries|vouchers)"?([^[:alnum:]_]|$)'
+      or p.prosrc ~* 'from[[:space:]]+("?public"?[[:space:]]*\.[[:space:]]*)?"?(ledger_entries|vouchers)"?([^[:alnum:]_][^;]*)?\mfor[[:space:]]+(update|share|no[[:space:]]+key[[:space:]]+update|key[[:space:]]+share)\M')
+    and (pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')
+      or p.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype);
+  if offenders is not null then
+    raise exception 'Caller-rights routine writes ledger_entries or vouchers: %', offenders
+      using errcode = '55000';
+  end if;
   foreach role_name in array array['anon', 'authenticated'] loop
     if pg_catalog.has_table_privilege(role_name, 'public.ledger_entries', 'INSERT,UPDATE,DELETE,TRUNCATE')
        or pg_catalog.has_table_privilege(role_name, 'public.vouchers', 'INSERT,UPDATE,DELETE,TRUNCATE')

@@ -461,16 +461,26 @@ check('security hardening is the exact reviewed final migration',
       ==='20261024100000_finance_security_hardening_v1.sql');
 check('security hardening source seal covers exactly the reviewed version',
   Object.keys(SECURITY_HARDENING_SOURCE_SHA256).join(',')==='20261024100000'
-    && SECURITY_HARDENING_SOURCE_SHA256['20261024100000']==='d9982de29f586bef60f0a3e518b3c165a8ee8b7e3065bc40d7b33f5abd8aff5d');
+    && SECURITY_HARDENING_SOURCE_SHA256['20261024100000']==='85a2fabc880275bd2a9aaac8daefbf1fbb787c9574a57ab637ea7bcc562cfe3e');
 for(const [version,sha256] of Object.entries(SECURITY_HARDENING_SOURCE_SHA256)){
   const file=migrations.find(name=>name.startsWith(version+'_'));
   const sql=file?read('supabase/migrations/'+file):'';
   check('security hardening migration source matches reviewed SHA-256: '+version,
     !!file&&crypto.createHash('sha256').update(sql).digest('hex')===sha256);
   if(file)require('./finance_production_release_guard').assertCliAtomicMigration(sql,file);
-  check('security hardening changes privileges, view options and one policy without defining functions or touching rows',
-    !/create\s+(?:or\s+replace\s+)?function/i.test(sql)
-      && !/(?:^|;)\s*(?:insert\s+into|update\s+\S+\s+set|delete\s+from|truncate)\b/im.test(sql)
+  // The only routines it defines are the two reviewed adjustment RPCs, moved to
+  // owner rights after an exact baseline body check; outside their bodies it
+  // touches no row.
+  const outsideBodies=sql.replace(/as \$function\$[\s\S]*?\$function\$;/g,()=>'as $function$$function$;');
+  const definedRoutines=[...sql.matchAll(/create\s+(?:or\s+replace\s+)?function\s+([a-z_.]+)\(/gi)].map(match=>match[1]).join(',');
+  check('security hardening changes privileges, view options, one policy and two reviewed RPCs without touching rows',
+    definedRoutines==='public.post_adjustment_voucher,public.reverse_voucher'
+      && (outsideBodies.match(/\nsecurity definer\nset search_path = ''\nas \$function\$\$function\$;/g)||[]).length===2
+      && sql.includes("('post_adjustment_voucher', 'public.post_adjustment_voucher(text,text,jsonb,date)', '64a7c3f64e03baf89a357d21c7e6caa0')")
+      && sql.includes("('reverse_voucher', 'public.reverse_voucher(text,text,date)', '989c5af145cb9675bb30cc8019b9b1cc')")
+      && sql.indexOf('$adjustment_baseline$')<sql.indexOf('create or replace function public.post_adjustment_voucher(')
+      && /revoke all on function public\.post_adjustment_voucher\(text,text,jsonb,date\), public\.reverse_voucher\(text,text,date\) from public, anon;/.test(sql)
+      && !/(?:^|;)\s*(?:insert\s+into|update\s+\S+\s+set|delete\s+from|truncate)\b/im.test(outsideBodies)
       && sql.includes('drop policy if exists "finance attachment read scoped" on storage.objects;')
       && /revoke insert, update, delete, truncate on table public\.ledger_entries, public\.vouchers\s+from public, anon, authenticated;/.test(sql));
 }
