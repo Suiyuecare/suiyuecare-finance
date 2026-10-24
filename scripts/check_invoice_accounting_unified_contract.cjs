@@ -51,6 +51,7 @@ const context = vm.createContext({
   activeCanAct: false, currentRole: 'employee', postingLocked: false, ledgerExists: false,
   amountAllowed: true, subjectAllowed: true,
 });
+vm.runInContext((at => html.slice(at, html.indexOf('\n', at)))(html.indexOf('function financeInlineJsString(')), context);
 load(context, 'function requestFeeBearer(', 'function selectedBankType(');
 load(context, 'function requestStoredBankFeeAmount(', 'function requestCashPostedAt(');
 load(context, 'function expenseInvoiceReviewGroups(', 'window.toggleExpenseInvoiceDetailRow=');

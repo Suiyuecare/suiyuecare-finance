@@ -100,7 +100,7 @@ check('decimal arithmetic retains legitimate third decimal and human values',
   &&runtime.normalizeAccountingLine({grossAmount:123.459,taxAmount:0.003,debitAccount:'6205',creditAccount:'1112'},
     {type:'payment_request',dc:'A1000'},0).netAmount===123.456);
 
-const amountInput=new Function('escAttr','num',functionSource('accountingLineAmountInput')+'\nreturn accountingLineAmountInput;')(
+const amountInput=new Function('escAttr','num',functionSource('financeInlineJsString')+'\n'+functionSource('accountingLineAmountInput')+'\nreturn accountingLineAmountInput;')(
   value=>String(value),value=>Number(value||0)
 );
 check('accounting review inputs show three decimal amounts without rounding',
