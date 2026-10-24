@@ -1,5 +1,13 @@
 # Finance 受保護正式發布
 
+## 2026-10-24 中央入口單一登入（Portal → Finance）
+
+本次唯一新版本為 `20261024210000_finance_portal_handoff_v1.sql`，phase 固定 `database_portal_handoff_20261024`、`migration_versions=20261024210000`，必須在安全加固版之後。只新增私有 schema `portal_handoff_private.consumed`（強制 RLS、無任何角色權限）與兩個僅 `service_role` 可執行的 SECURITY DEFINER 函式 `finance_portal_handoff_consume`／`finance_portal_handoff_finalize`；不取代任何已封存的登入、登出或身分函式，不讀取、新增、修改或刪除營運資料，也不建立任何 Auth 帳號。
+
+中央入口（`login.suiyuecare.com`）以專用 `FINANCE_PORTAL_SIGNING_SECRET` 簽出 60 秒、一次性 `jti` 的身分聲明，POST 到 `https://finance.suiyuecare.com/api/auth/handoff`。路由檢查來源網域與簽章後，由 consume 函式以 Google sub 加已驗證 Email 對應唯一既有 Auth 使用者，且必須綁定有效 `finance_users`；同一 `jti` 重放、或聲明時間不晚於該員最近一次統一登出截止點時一律拒絕。路由以 magic link 交換本人 Finance 工作階段後，再以本人權杖呼叫 `portal_session_status` 並以 finalize 複核登出與在職狀態，任何一步失敗即撤銷剛建立的工作階段。Vercel Production 需另設 `FINANCE_PORTAL_SIGNING_SECRET`（與入口同值，至少 32 bytes）及僅伺服器端的 `FINANCE_SUPABASE_SERVICE_ROLE_KEY`；兩者都不得出現在瀏覽器建置。
+
+仍由本文件規定的人工流程執行：exact ledger 與來源 SHA 核對、交易內演練並回滾比對指紋、原子套用 SQL 與 ledger、postflight 與無身分唯讀 canary。此 phase 會提升同一封存前台與其 `/api/auth/handoff` 路由；正式網域讀回後，以 GET 必須 405、外部來源 POST 必須 403 驗證路由已上線。入口網站必須在此 phase 完成後才可部署會計簽章交接，否則員工會被導向尚未存在的接收端。後續 `frontend_compat=none` 的候選也必須具備此版。
+
 ## 2026-10-24 權限與附件安全加固
 
 本次唯一新版本為 `20261024100000_finance_security_hardening_v1.sql`，phase 固定 `database_security_hardening_20261024`、`migration_versions=20261024100000`。只變更權限、view 選項與 RLS 政策，不讀取、新增、修改或刪除任何營運單、傳票、分類帳或附件資料：收回 `anon`／`authenticated` 對 `ledger_entries`、`vouchers` 的 INSERT／UPDATE／DELETE／TRUNCATE（含欄位授權），入帳仍只走 SECURITY DEFINER RPC；`finance_production_ledger_entries`／`finance_test_ledger_entries` 若存在則改為 `security_invoker` 並收回匿名讀取；在已驗證的 `finance_attachments_select_verified_tenant_metadata_v2` 存在時才移除舊的資料夾全域讀取政策 `finance attachment read scoped`；`payee_bank_accounts` 加上必須為已驗證財務身分的 restrictive 政策；`draft_requests` 新增／修改加上擁有者必須是呼叫者本人的 restrictive 政策。

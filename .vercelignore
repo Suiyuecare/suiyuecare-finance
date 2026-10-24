@@ -658,3 +658,11 @@ supabase/.temp
 !scripts/finance_security_hardening_postflight.sql
 !scripts/finance_security_hardening_fingerprint.sql
 !scripts/finance_security_hardening_canary.sql
+
+# 2026-10-24 Portal -> Finance signed handoff release and regression verification
+!scripts/check_portal_handoff_20261024.cjs
+!scripts/test_portal_handoff_release_batch.mjs
+!scripts/finance_portal_handoff_preflight.sql
+!scripts/finance_portal_handoff_postflight.sql
+!scripts/finance_portal_handoff_fingerprint.sql
+!scripts/finance_portal_handoff_canary.sql
