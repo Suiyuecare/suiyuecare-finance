@@ -1,8 +1,18 @@
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const allowedOrigins = (Deno.env.get("FINANCE_OCR_ALLOWED_ORIGINS") || "https://finance.suiyuecare.com")
+  .split(",").map((origin) => origin.trim()).filter(Boolean);
+// A 50 MB attachment is about 67M base64 characters; anything larger is refused before OpenAI is called.
+const MAX_DATA_URL_CHARS = 70_000_000;
+
+function corsHeadersFor(req: Request): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    Vary: "Origin",
+  };
+  const origin = req.headers.get("origin") || "";
+  if (allowedOrigins.includes(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  return headers;
+}
 
 type InvoiceRequest = {
   fileName?: string;
@@ -11,11 +21,28 @@ type InvoiceRequest = {
   mode?: "invoice" | "expense_items" | "passbook" | "hr_expense_items" | "hr_labor_fee";
 };
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status: number, cors: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...cors, "Content-Type": "application/json" },
   });
+}
+
+// The caller's own JWT must resolve to an active, Google-verified Finance user with a live
+// session. An anon-key bearer has no auth.uid() and therefore returns no user.
+async function verifiedFinanceUserId(req: Request) {
+  const match = /^Bearer\s+(\S+)$/i.exec(req.headers.get("authorization") || "");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!match || !supabaseUrl || !anonKey) return "";
+  const res = await fetch(`${supabaseUrl}/rest/v1/rpc/current_finance_user_id`, {
+    method: "POST",
+    headers: { apikey: anonKey, Authorization: `Bearer ${match[1]}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!res.ok) return "";
+  const value = await res.json();
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function outputText(payload: any) {
@@ -83,14 +110,25 @@ async function getOpenAIKey() {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const cors = corsHeadersFor(req);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, cors);
+
+  if (!(await verifiedFinanceUserId(req))) return json({ error: "請以有效的財務系統帳號登入後再辨識" }, 401, cors);
+  if (Number(req.headers.get("content-length") || 0) > MAX_DATA_URL_CHARS + 4096)
+    return json({ error: "檔案過大，無法辨識" }, 413, cors);
 
   const apiKey = await getOpenAIKey();
-  if (!apiKey) return json({ error: "Missing OPENAI_API_KEY secret or Vault key" }, 500);
+  if (!apiKey) return json({ error: "Missing OPENAI_API_KEY secret or Vault key" }, 500, cors);
 
-  const body = (await req.json()) as InvoiceRequest;
-  if (!body.dataUrl) return json({ error: "Missing dataUrl" }, 400);
+  let body: InvoiceRequest;
+  try {
+    body = (await req.json()) as InvoiceRequest;
+  } catch {
+    return json({ error: "Invalid JSON body" }, 400, cors);
+  }
+  if (typeof body.dataUrl !== "string" || !body.dataUrl.startsWith("data:")) return json({ error: "Missing dataUrl" }, 400, cors);
+  if (body.dataUrl.length > MAX_DATA_URL_CHARS) return json({ error: "檔案過大，無法辨識" }, 413, cors);
 
   const mime = (body.mime || "").toLowerCase();
   const fileName = body.fileName || "upload";
@@ -307,12 +345,13 @@ Deno.serve(async (req) => {
   });
 
   const payload = await openaiRes.json();
-  if (!openaiRes.ok) return json({ error: payload.error?.message || "OpenAI request failed" }, 502);
+  if (!openaiRes.ok) return json({ error: payload.error?.message || "OpenAI request failed" }, 502, cors);
 
   try {
     const parsed = parseModelJson(outputText(payload));
-    return json(isPassbook ? { passbook: parsed } : isHrLabor ? { hr_labor: parsed } : isHrExpense ? { hr_expense: parsed } : { invoice: parsed });
+    return json(isPassbook ? { passbook: parsed } : isHrLabor ? { hr_labor: parsed } : isHrExpense ? { hr_expense: parsed } : { invoice: parsed }, 200, cors);
   } catch (err) {
-    return json({ error: "OpenAI returned non-JSON output", detail: err instanceof Error ? err.message : String(err), raw: outputText(payload) }, 502);
+    // The raw model text can echo document contents (ID or bank numbers); it is never returned.
+    return json({ error: "OpenAI returned non-JSON output", detail: err instanceof Error ? err.message : String(err) }, 502, cors);
   }
 });

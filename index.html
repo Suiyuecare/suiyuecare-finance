@@ -1517,13 +1517,14 @@ body.finance-identity-syncing button[onclick*="submitShareholderTxn"]{
 // optional CDN must not hold the login or approval workspace behind it.
 var FINANCE_DOCUMENT_LIBRARY_READS={};
 function ensureFinanceDocumentLibrary(kind){
-  var specs={xlsx:{url:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',label:'Excel',ready:function(){return window.XLSX&&window.XLSX.read&&window.XLSX.utils;}},pdf:{url:'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js',label:'PDF',ready:function(){return window.PDFLib&&window.PDFLib.PDFDocument;}}};
+  // Integrity values equal the dist files inside the npm registry tarballs; a changed CDN response is refused.
+  var specs={xlsx:{url:'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',integrity:'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw',label:'Excel',ready:function(){return window.XLSX&&window.XLSX.read&&window.XLSX.utils;}},pdf:{url:'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js',integrity:'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI',label:'PDF',ready:function(){return window.PDFLib&&window.PDFLib.PDFDocument;}}};
   var spec=specs[kind];
   if(!spec)return Promise.reject(new Error('不支援的文件格式'));
   if(spec.ready())return Promise.resolve();
   if(FINANCE_DOCUMENT_LIBRARY_READS[kind])return FINANCE_DOCUMENT_LIBRARY_READS[kind];
   var script=document.createElement('script'),timer;
-  script.src=spec.url;script.async=true;script.dataset.financeDocumentLibrary=kind;
+  script.src=spec.url;script.integrity=spec.integrity;script.crossOrigin='anonymous';script.async=true;script.dataset.financeDocumentLibrary=kind;
   var pending=new Promise(function(resolve,reject){
     function fail(){reject(new Error(spec.label+' 元件讀取失敗，請確認網路後重試；原始資料仍保留。'));}
     script.onload=function(){if(spec.ready())resolve();else fail();};
@@ -3136,6 +3137,14 @@ var FINANCE_BUILD_TARGET='__FINANCE_BUILD_TARGET__';
 var SUPABASE_URL='__FINANCE_SUPABASE_URL__';
 var SUPABASE_ANON_KEY='__FINANCE_SUPABASE_ANON_KEY__';
 var OPENAI_INVOICE_OCR_ENDPOINT=SUPABASE_URL?SUPABASE_URL+'/functions/v1/parse-invoice-openai':'';
+// The OCR Edge Function accepts only a verified staff session; the public anon key alone is refused.
+async function invoiceOcrRequestHeaders(){
+  var client=getSb();
+  var session=client?await withOperationTimeout(client.auth.getSession(),'確認辨識身分',12000):null;
+  var token=session&&!session.error&&session.data&&session.data.session&&session.data.session.access_token;
+  if(!token)throw new Error('登入資料已失效，請重新登入後再辨識');
+  return {'Content-Type':'application/json','Authorization':'Bearer '+token,apikey:SUPABASE_ANON_KEY};
+}
 var SUPABASE_ATTACHMENT_BUCKET='finance-attachments';
 var PRODUCTION_APP_URL='https://finance.suiyuecare.com/';
 var PRODUCTION_APP_HOST='finance.suiyuecare.com';
@@ -4326,6 +4335,7 @@ function setDataEnvironment(env){
   FINANCE_DATA_ENV=env===DATA_ENV_TEST&&canUseTestEnvironment()?DATA_ENV_TEST:DATA_ENV_PRODUCTION;
   if(allowLocalPersistence())safeJsonSet(DATA_ENV_KEY,FINANCE_DATA_ENV);
 }
+window.setDataEnvironment=setDataEnvironment;
 function dataEnvLabel(env){return (env||activeDataEnvironment())===DATA_ENV_TEST?'測試資料':'正式資料';}
 function publicRuntimeLabel(){
   return isProductionRuntime()&&!canUseTestEnvironment()?'正式系統':dataEnvLabel();
@@ -6527,7 +6537,7 @@ function advanceFinalAccountingHtml(r,prefix){
   var fp=(r&&r.formPayload)||{};
   var selected=fp.advanceFinalDebitAccount||advanceDefaultFinalDebitCode();
   var original=advanceOriginalAmount(r);
-  return'<div class="fg"><label class="fl">最後實際支出金額 *</label><input type="number" min="0" id="'+prefix+'-amt" value="'+(advanceActualAmount(r)||'')+'" placeholder="請依最後發票與 Excel 明細填寫" oninput="renderAdvanceSettlementPreview('+original+',\''+prefix+'\')"></div>'
+  return'<div class="fg"><label class="fl">最後實際支出金額 *</label><input type="number" min="0" id="'+prefix+'-amt" value="'+(advanceActualAmount(r)||'')+'" placeholder="請依最後發票與 Excel 明細填寫" oninput="renderAdvanceSettlementPreview('+original+','+financeInlineJsString(prefix)+')"></div>'
     +(advanceUsesUtilityAccountingLines(r)?'<div class="fg"><label class="fl">最後認列費用科目</label><div style="font-size:12px;color:#334155">依會計覆核明細逐筆入帳</div><div style="font-size:10px;color:#8b7358;margin-top:3px">請在會計明細調整各筆科目；水費、電費全額列費用，其他項目保留各自稅額。</div></div>':'<div class="fg"><label class="fl">最後認列費用科目 *</label><select id="'+prefix+'-dr">'+advanceFinalAccountOptions(selected,r&&r.eid,r&&r.dc)+'</select><div style="font-size:10px;color:#8b7358;margin-top:3px">預支申請送出時先以 1191 暫付款控管；最後會計入帳時，三表改依本欄費用科目與最後憑據金額認列。</div></div>')
     +'<div id="'+prefix+'-settlement-preview" style="font-size:11px;color:#334155;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:7px;margin-bottom:7px">多退少補：依最後金額自動計算</div>'
     +'<label style="display:flex;gap:6px;align-items:flex-start;font-size:11px;color:#334155;margin-bottom:7px"><input id="'+prefix+'-settlement-confirm" type="checkbox" style="width:auto;margin-top:2px">我已確認實體憑據收回，且多退少補現金已完成（退回公司或公司補匯）</label>';
@@ -7117,7 +7127,7 @@ function financeDeferredDocumentStatusHtml(table){
   var state=financeDeferredDocumentState(table),label={expense_requests:'申請紀錄',invoices:'發票紀錄',bills:'繳費紀錄'}[table]||'單據紀錄';
   var text=state.status==='loading'?'正在讀取完整'+label+'，總數尚待確認。':state.status==='error'?'完整'+label+'尚未讀取完成；目前不能確認總數。':'完整'+label+'尚未載入；可先辦理申請與查看已確認的待辦。';
   return '<div class="rw-notice'+(state.status==='error'?' error':'')+'" role="status" aria-busy="'+(state.status==='loading'?'true':'false')+'"><span>'+escAttr(text)+'</span>'
-    +(state.status==='loading'?'':' <button type="button" class="btn-g" style="min-height:44px" onclick="retryDeferredFinanceDocumentSource(\''+table+'\')">'+(state.status==='error'?'重試讀取紀錄':'讀取完整紀錄')+'</button>')+'</div>';
+    +(state.status==='loading'?'':' <button type="button" class="btn-g" style="min-height:44px" onclick="retryDeferredFinanceDocumentSource('+financeInlineJsString(table)+')">'+(state.status==='error'?'重試讀取紀錄':'讀取完整紀錄')+'</button>')+'</div>';
 }
 function financeDocumentRows(table){return {expense_requests:REQS,invoices:INVS,bills:BILLS}[table]||[];}
 function refreshDeferredFinanceDocumentSurface(table){
@@ -7608,6 +7618,7 @@ async function refreshApprovalOrgAdminRuntime(client,reason,options){
   state.promise=performApprovalOrgAdminRuntimeRead(client,reason,state);
   try{return await state.promise;}finally{state.promise=null;}
 }
+window.refreshApprovalOrgAdminRuntime=refreshApprovalOrgAdminRuntime;
 async function performApprovalOrgAdminRuntimeRead(client,reason,state){
   function current(){return ORG_ADMIN_READ_STATE===state&&state.identity===financeStartupReadIdentity()&&(!state.isCurrent||state.isCurrent());}
   client=client||getSb();
@@ -10748,6 +10759,7 @@ async function refreshRemoteData(reason,payload){
   remoteRefreshPromise=refresh;
   return refresh;
 }
+window.refreshRemoteData=refreshRemoteData;
 function applyRealtimeSystemSettingValue(key,value){
   if(!isFinanceRuntimeSettingKey(key))return false;
   value=normalizeSettingValue(value);
@@ -12160,7 +12172,7 @@ function opsRunbookHtml(){
 function opsEventsHtml(){
   var rows=(OPS_EVENTS||[]).slice(0,20);
   var pending=opsEventsPendingRemoteAudit().length;
-  return'<section class="health-flat-section"><div class="health-flat-head"><div><div class="health-flat-title">維運事件紀錄</div><div class="health-flat-subtitle">記錄送單攔截、健檢結果與報表可信度警告；正式環境會同步寫入 compliance audit log。</div></div><div class="health-flat-actions"><span class="badge b-gray">'+(OPS_EVENTS||[]).length+' 筆</span>'+(pending?'<button class="btn-g" onclick="retryOpsRemoteAuditEvents()">重試遠端留痕 '+pending+'</button>':'')+'</div></div>'+(rows.length?'<div class="health-list-scroll"><table class="health-list-table health-event-table"><thead><tr><th>時間／事件</th><th>等級</th><th>遠端留痕</th><th>內容</th><th>事件編號</th></tr></thead><tbody>'+rows.map(function(e){return'<tr><td><div class="health-item-name">'+escAttr(e.title||'事件')+'</div><div class="health-item-code">'+escAttr(String(e.time||'').slice(0,19).replace('T',' '))+' · '+escAttr(e.user||'系統')+' · '+escAttr(e.dataEnv||'')+' · '+escAttr(e.page||'')+'</div></td><td><span class="badge '+opsSeverityBadge(e.severity)+'">'+opsSeverityLabel(e.severity)+'</span></td><td><span class="badge '+opsRemoteAuditBadge(e.remoteAuditStatus)+'">'+opsRemoteAuditLabel(e.remoteAuditStatus)+'</span></td><td class="health-result-cell">'+escAttr(e.detail||'')+(e.remoteAuditError?'<div class="health-remote-error">遠端留痕：'+escAttr(e.remoteAuditError)+'</div>':'')+(e.remoteAuditStatus==='failed'?'<button class="btn-s health-row-action" onclick="retryOpsEventRemoteAudit(\''+attr(e.id)+'\')">重試此筆</button>':'')+'</td><td class="health-event-id">'+escAttr(e.id||'')+'</td></tr>';}).join('')+'</tbody></table></div>':'<div class="health-empty-row">尚無維運事件</div>')+'</section>';
+  return'<section class="health-flat-section"><div class="health-flat-head"><div><div class="health-flat-title">維運事件紀錄</div><div class="health-flat-subtitle">記錄送單攔截、健檢結果與報表可信度警告；正式環境會同步寫入 compliance audit log。</div></div><div class="health-flat-actions"><span class="badge b-gray">'+(OPS_EVENTS||[]).length+' 筆</span>'+(pending?'<button class="btn-g" onclick="retryOpsRemoteAuditEvents()">重試遠端留痕 '+pending+'</button>':'')+'</div></div>'+(rows.length?'<div class="health-list-scroll"><table class="health-list-table health-event-table"><thead><tr><th>時間／事件</th><th>等級</th><th>遠端留痕</th><th>內容</th><th>事件編號</th></tr></thead><tbody>'+rows.map(function(e){return'<tr><td><div class="health-item-name">'+escAttr(e.title||'事件')+'</div><div class="health-item-code">'+escAttr(String(e.time||'').slice(0,19).replace('T',' '))+' · '+escAttr(e.user||'系統')+' · '+escAttr(e.dataEnv||'')+' · '+escAttr(e.page||'')+'</div></td><td><span class="badge '+opsSeverityBadge(e.severity)+'">'+opsSeverityLabel(e.severity)+'</span></td><td><span class="badge '+opsRemoteAuditBadge(e.remoteAuditStatus)+'">'+opsRemoteAuditLabel(e.remoteAuditStatus)+'</span></td><td class="health-result-cell">'+escAttr(e.detail||'')+(e.remoteAuditError?'<div class="health-remote-error">遠端留痕：'+escAttr(e.remoteAuditError)+'</div>':'')+(e.remoteAuditStatus==='failed'?'<button class="btn-s health-row-action" onclick="retryOpsEventRemoteAudit('+financeInlineJsString(e.id)+')">重試此筆</button>':'')+'</td><td class="health-event-id">'+escAttr(e.id||'')+'</td></tr>';}).join('')+'</tbody></table></div>':'<div class="health-empty-row">尚無維運事件</div>')+'</section>';
 }
 window.exportOpsDiagnostics=function(){
   var payload={generatedAt:new Date().toISOString(),user:S.user?{email:S.user.email,name:S.user.n,role:currentRoleKey()}:null,page:S.page||'',dataEnvironment:activeDataEnvironment(),tenantId:currentTenantId(),runtime:{href:location.href,hasSupabase:hasSupabase(),demo:!!S.demoLogin},productization:productizationReadinessRows(),customization:customizationDiagnosticsPayload(),modules:normalizeProductModules(PRODUCT_MODULES),health:SYSTEM_HEALTH_STATE,opsEvents:(OPS_EVENTS||[]).slice(0,200)};
@@ -16553,6 +16565,7 @@ function initDeptSel(id,eid,preferredDc){
   }
   refreshSearchableSelect(e);
 }
+window.initDeptSel=initDeptSel;
 function deptSelectRowsForPreferred(preferredDc,eid,includeUnavailablePreferred){
   var rows=DEPTS.filter(function(d){return departmentSelectableForEntity(d,eid,true);});
   var preferred=preferredDc?gD(preferredDc):null;
@@ -16658,7 +16671,7 @@ function entityDeptEditorHtml(kind,id,eid,dc){
   var deptOptions=deptSelectRowsForPreferred(dc,eid,true).map(function(d){return'<option value="'+escAttr(d.c)+'" '+(d.c===dc?'selected':'')+' '+(d.selectionUnavailable?'disabled':'')+'>'+'　'.repeat(Math.max(0,d.lv-1))+escAttr(d.c+' '+d.n+(d.selectionUnavailable?'（不適用目前法人，請重新選擇）':''))+'</option>';}).join('');
   return'<div class="entity-dept-editor" style="margin:10px 12px;padding:10px;border:1px solid #efd7b8;border-radius:9px;background:#fffaf2">'
     +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><div><div style="font-size:12px;font-weight:750;color:#334155">法人與組別調整</div><div style="font-size:10px;color:#8b7358;margin-top:2px">會計與執行長可修正單據歸屬；整批單會同步更新同批所有明細。</div></div><button class="btn-p" style="font-size:11px;padding:6px 10px" onclick="saveEntityDeptOverride('+financeInlineJsString(kind)+','+financeInlineJsString(id)+')">儲存</button></div>'
-    +'<div class="fr2" style="gap:8px"><div class="fg" style="margin:0"><label class="fl">法人</label><select id="'+entId+'" onchange="syncDeptOptionsForEntity(\''+entId+'\',\''+deptId+'\')">'+entOptions+'</select></div><div class="fg" style="margin:0"><label class="fl">組別 / 部門</label><select id="'+deptId+'">'+deptOptions+'</select></div></div>'
+    +'<div class="fr2" style="gap:8px"><div class="fg" style="margin:0"><label class="fl">法人</label><select id="'+entId+'" onchange="syncDeptOptionsForEntity('+financeInlineJsString(entId)+','+financeInlineJsString(deptId)+')">'+entOptions+'</select></div><div class="fg" style="margin:0"><label class="fl">組別 / 部門</label><select id="'+deptId+'">'+deptOptions+'</select></div></div>'
     +'</div>';
 }
 function entityDeptDbErrorText(res){
@@ -17669,7 +17682,7 @@ function rowsFromMap(map){
   return Object.keys(map).map(function(k){return map[k];}).filter(function(r){return Math.abs(r.v)>=0.005;}).sort(function(a,b){return Math.abs(b.v)-Math.abs(a.v);});
 }
 function traceButton(kind,key,label){
-  return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openReportTraceModal(\''+kind+'\',\''+String(key||'').replace(/'/g,'\\\'')+'\')">'+(label||'追溯')+'</button>';
+  return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openReportTraceModal('+financeInlineJsString(kind)+','+financeInlineJsString(key||'')+')">'+(label||'追溯')+'</button>';
 }
 function reqsFor(eid,period,doneOnly){
   return REQS.filter(function(r){return inActiveDataEnvironment(r)&&inEntity(eid,r,'req')&&inPeriod(r.date,period)&&(!doneOnly||isReqDone(r));});
@@ -18113,10 +18126,10 @@ window.openReportTraceModal=function(kind,key){
   var label=(rows[0]&&acctLabel(rows[0].ac,rows[0].an))||(key||traceKindLabel(kind));
   var title=el('m-voucher-title');if(title)title.textContent=traceKindLabel(kind);
   function sourceAction(r){
-    if(r.source.type==='request')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openDetail(\''+r.source.id+'\')">申請</button>';
+    if(r.source.type==='request')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openDetail('+financeInlineJsString(r.source.id)+')">申請</button>';
     if(r.source.type==='invoice')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="closeAppr();nav(\'invoices\',null)">發票</button>';
-    if(r.source.type==='shareholder')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+r.source.id+'\')">股東傳票</button>';
-    if(r.voucher)return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+r.voucher.id+'\')">傳票</button>';
+    if(r.source.type==='shareholder')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById('+financeInlineJsString(r.source.id)+')">股東傳票</button>';
+    if(r.voucher)return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById('+financeInlineJsString(r.voucher.id)+')">傳票</button>';
     return'<span style="font-size:10px;color:#94a3b8">—</span>';
   }
   function rowHtml(r){
@@ -18128,7 +18141,7 @@ window.openReportTraceModal=function(kind,key){
       +'<td style="text-align:right;font-family:var(--font-sans);color:#1a5010">'+(r.dr?fmt(r.dr):'—')+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);color:#8a1010">'+(r.cr?fmt(r.cr):'—')+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);font-weight:650;color:var(--brtxt)">'+fmt(r.amount)+'</td>'
-      +'<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+sourceAction(r)+(v?'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+v.id+'\')">詳情</button>':'')+'</div></td></tr>';
+      +'<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+sourceAction(r)+(v?'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById('+financeInlineJsString(v.id)+')">詳情</button>':'')+'</div></td></tr>';
   }
   el('m-voucher-body').innerHTML=
     '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-bottom:12px">'
@@ -18890,7 +18903,7 @@ function normalizeAccountingLine(line,r,i){
 function accountingLineAmountInput(prefix,i,field,value,utilityBill){
   var label={netAmount:'未稅/費用',taxAmount:'進項稅額',grossAmount:'含稅'}[field]||field;
   var key={netAmount:'net',taxAmount:'tax',grossAmount:'gross'}[field]||field;
-  return '<input'+(utilityBill?' data-utility-bill="true"':'')+(utilityBill&&field==='taxAmount'?' readonly aria-readonly="true"':'')+' id="'+prefix+'-'+key+'-'+i+'" type="number" min="0" step="any" value="'+escAttr(num(value))+'" aria-label="'+label+'" title="'+label+'" style="width:112px;max-width:100%;text-align:right;font-family:var(--font-sans);font-weight:750;font-size:12px;padding:6px 8px" oninput="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onblur="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')" onchange="syncAccountingLineAmountInputs(\''+prefix+'\','+i+',\''+field+'\')">';
+  return '<input'+(utilityBill?' data-utility-bill="true"':'')+(utilityBill&&field==='taxAmount'?' readonly aria-readonly="true"':'')+' id="'+prefix+'-'+key+'-'+i+'" type="number" min="0" step="any" value="'+escAttr(num(value))+'" aria-label="'+label+'" title="'+label+'" style="width:112px;max-width:100%;text-align:right;font-family:var(--font-sans);font-weight:750;font-size:12px;padding:6px 8px" oninput="syncAccountingLineAmountInputs('+financeInlineJsString(prefix)+','+i+','+financeInlineJsString(field)+')" onblur="syncAccountingLineAmountInputs('+financeInlineJsString(prefix)+','+i+','+financeInlineJsString(field)+')" onchange="syncAccountingLineAmountInputs('+financeInlineJsString(prefix)+','+i+','+financeInlineJsString(field)+')">';
 }
 window.syncAccountingLineAmountInputs=function(prefix,i,field){
   var netEl=el(prefix+'-net-'+i),taxEl=el(prefix+'-tax-'+i),grossEl=el(prefix+'-gross-'+i);
@@ -19007,7 +19020,7 @@ function accountingLinesHtml(r,editable,title){
       +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'netAmount',utilityBill?line.grossAmount:line.netAmount,utilityBill):fmt(line.netAmount))+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans)">'+(amountEditable?accountingLineAmountInput(prefix,i,'taxAmount',utilityBill?0:line.taxAmount,utilityBill):fmt(line.taxAmount))+'</td>'
       +'<td style="text-align:right;font-family:var(--font-sans);font-weight:650">'+(amountEditable?accountingLineAmountInput(prefix,i,'grossAmount',line.grossAmount,utilityBill):fmt(line.grossAmount))+'</td>'
-      +'<td>'+(subjectEditable?'<select id="'+prefix+'-dr-'+i+'" style="font-size:11px" onchange="syncAccountingLineSubjectTax(\''+prefix+'\','+i+')">'+accountOptionsHtml(line.debitAccount,'debit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-dr">'+escAttr(line.debitAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.debitAccountName)+'</div>')+proposedHtml+'<div id="'+prefix+'-review-'+i+'" style="font-size:10px;color:#9a5b13;margin-top:3px'+(line.accountingReviewNote?'':';display:none')+'">'+(line.accountingReviewNote?'待會計覆核：'+escAttr(line.accountingReviewNote):'')+'</div></td>'
+      +'<td>'+(subjectEditable?'<select id="'+prefix+'-dr-'+i+'" style="font-size:11px" onchange="syncAccountingLineSubjectTax('+financeInlineJsString(prefix)+','+i+')">'+accountOptionsHtml(line.debitAccount,'debit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-dr">'+escAttr(line.debitAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.debitAccountName)+'</div>')+proposedHtml+'<div id="'+prefix+'-review-'+i+'" style="font-size:10px;color:#9a5b13;margin-top:3px'+(line.accountingReviewNote?'':';display:none')+'">'+(line.accountingReviewNote?'待會計覆核：'+escAttr(line.accountingReviewNote):'')+'</div></td>'
       +'<td>'+(posted&&r.type==='petty_cash_request'&&!pettyIsInitial(r)?'<span class="acct-cr">1111</span><div style="font-size:10px;color:#64748b">零用金核銷；補足另貸 1112</div>':(subjectEditable?'<select id="'+prefix+'-cr-'+i+'" style="font-size:11px">'+accountOptionsHtml(line.creditAccount,'credit',r&&r.dc,r&&r.eid)+'</select>':'<span class="acct-cr">'+escAttr(line.creditAccount)+'</span><div style="font-size:10px;color:#64748b;margin-top:2px">'+escAttr(line.creditAccountName)+'（系統鎖定）</div>'))+'</td>'
       +'</tr>';
   }).join('');
@@ -19113,7 +19126,7 @@ function expenseInvoiceReviewHtml(r,embedded){
       +g.items.map(function(item,i){return'<tr><td style="text-align:center;color:#94a3b8">'+(i+1)+'</td><td><div style="font-weight:750;color:#334155">'+escAttr(item.item)+'</div></td><td>'+escAttr(item.qty||'—')+' '+escAttr(item.unitName||'')+'</td><td>'+fmt(item.unitPrice||0)+'</td><td style="text-align:right">'+fmt(item.net||0)+'</td><td style="text-align:right">'+fmt(item.tax||0)+'</td><td style="text-align:right;font-weight:800">'+fmt(item.total||0)+'</td></tr>';}).join('')
       +'</tbody></table></div></div>';
     return '<tr>'
-      +'<td><button type="button" class="finance-invoice-expand" aria-controls="'+rid+'" aria-expanded="false" onclick="toggleExpenseInvoiceDetailRow(\''+rid+'\')">#'+(idx+1)+' 明細</button></td>'
+      +'<td><button type="button" class="finance-invoice-expand" aria-controls="'+rid+'" aria-expanded="false" onclick="toggleExpenseInvoiceDetailRow('+financeInlineJsString(rid)+')">#'+(idx+1)+' 明細</button></td>'
       +'<td>'+escAttr(g.date||'—')+'</td>'
       +'<td><div style="font-family:var(--font-sans);font-weight:800;color:#334155">'+escAttr(g.no||'—')+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">'+(g.file?'來源：'+escAttr(g.file):'點開看細項')+'</div></td>'
       +'<td style="text-align:right;font-weight:900;color:#3b2410">'+fmt(g.total||0)+'</td>'
@@ -19203,7 +19216,7 @@ function expenseInvoiceAccountingReviewHtml(r,editable,title,prefix){
     var specialCredit=posted&&r.type==='petty_cash_request'&&!pettyIsInitial(r)&&side==='credit';
     var control=!line?'<span class="invoice-accounting-unmatched-label">'+(postedLinesUnverified?'無法核對；請見正式傳票':'待會計核對品項與科目')+'</span>'
       :specialCredit?'<span class="acct-cr">1111</span><small>零用金核銷；補足另貸 1112</small>'
-      :subjectEditable?'<select id="'+prefix+'-'+field+'-'+i+'" aria-label="'+label+'"'+(side==='debit'?' onchange="syncAccountingLineSubjectTax(\''+prefix+'\','+i+')"':'')+'>'+accountOptionsHtml(account,side,r&&r.dc,r&&r.eid)+'</select>'
+      :subjectEditable?'<select id="'+prefix+'-'+field+'-'+i+'" aria-label="'+label+'"'+(side==='debit'?' onchange="syncAccountingLineSubjectTax('+financeInlineJsString(prefix)+','+i+')"':'')+'>'+accountOptionsHtml(account,side,r&&r.dc,r&&r.eid)+'</select>'
       :'<span class="'+(side==='debit'?'acct-dr':'acct-cr')+'">'+escAttr(account||'—')+'</span><small>'+escAttr(name||'')+'</small>';
     var extra='';
     if(line&&side==='debit'){
@@ -20061,7 +20074,7 @@ function dashboardRenderTrend(bundle){
   var ticks=[];for(var t=0;t<5;t++){var value=max-(max-min)*t/4,ty=y(value);ticks.push('<line x1="'+pad.l+'" x2="'+(width-pad.r)+'" y1="'+ty.toFixed(1)+'" y2="'+ty.toFixed(1)+'" class="dash-svg-grid"></line><text x="'+(pad.l-10)+'" y="'+(ty+4).toFixed(1)+'" class="dash-svg-label" text-anchor="end">'+escAttr(dashCompactAmount(value))+'</text>');}
   var zeroY=y(0),axis=rows.map(function(r,i){return'<text x="'+x(i).toFixed(1)+'" y="'+(height-12)+'" class="dash-svg-month" text-anchor="middle">'+escAttr(r.month.slice(2).replace('-','/'))+'</text>';}).join('');
   var svg='<div class="dash-trend-scroll"><svg class="dash-trend-svg" style="min-width:'+width+'px" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="'+escAttr('收入、支出與淨利月度趨勢，共 '+rows.length+' 個月')+'">'+ticks.join('')+'<line x1="'+pad.l+'" x2="'+(width-pad.r)+'" y1="'+zeroY.toFixed(1)+'" y2="'+zeroY.toFixed(1)+'" class="dash-svg-zero"></line>'+series('revenue','收入','#2f7654')+series('expense','支出','#c7782c')+series('net','淨利','#6f5a49')+axis+'</svg></div>';
-  var monthButtons='<div class="dash-trend-months" aria-label="選擇月份查看數字">'+rows.map(function(r){var on=r.month===S.dashTrendFocus;return'<button type="button" class="dash-trend-month '+(on?'on':'')+'" onclick="setDashTrendFocus(\''+escAttr(r.month)+'\')" aria-pressed="'+(on?'true':'false')+'"><span>'+escAttr(r.month.slice(2).replace('-','/'))+'</span><b class="'+(r.net<0?'loss':'')+'">'+escAttr(dashCompactAmount(r.net))+'</b></button>';}).join('')+'</div>';
+  var monthButtons='<div class="dash-trend-months" aria-label="選擇月份查看數字">'+rows.map(function(r){var on=r.month===S.dashTrendFocus;return'<button type="button" class="dash-trend-month '+(on?'on':'')+'" onclick="setDashTrendFocus('+financeInlineJsString(r.month)+')" aria-pressed="'+(on?'true':'false')+'"><span>'+escAttr(r.month.slice(2).replace('-','/'))+'</span><b class="'+(r.net<0?'loss':'')+'">'+escAttr(dashCompactAmount(r.net))+'</b></button>';}).join('')+'</div>';
   var focus=rows.find(function(r){return r.month===S.dashTrendFocus;})||rows[rows.length-1];
   var detail='<div class="dash-trend-detail" aria-live="polite"><strong>'+escAttr(dashMonthText(focus.month))+'</strong><span>收入 <b class="income">'+fmt(focus.revenue)+'</b></span><span>支出 <b class="expense">'+fmt(focus.expense)+'</b></span><span>淨利 <b class="'+(focus.net<0?'loss':'profit')+'">'+fmt(focus.net)+'</b></span></div>';
   box.innerHTML=svg+monthButtons+detail;
@@ -20124,7 +20137,7 @@ function dashboardRenderDepartments(bundle){
   if(legend)legend.innerHTML=groups.length?'<span class="dash-company-legend-title">公司色彩</span>'+groups.map(function(group){return'<span class="dash-company-chip" data-company-id="'+escAttr(group.eid)+'" style="--dash-company-color:'+group.color+'" title="'+escAttr(group.label)+'"><i></i><span>'+escAttr(group.short)+'</span><small>'+group.rows.length+' 部門</small></span>';}).join(''):'<span class="dash-company-legend-empty">所選期間沒有公司部門資料</span>';
   if(body)body.innerHTML=groups.map(function(group){
     var groupHead='<tr class="dash-company-group-row" data-company-id="'+escAttr(group.eid)+'" style="--dash-company-color:'+group.color+'"><th colspan="7" scope="rowgroup"><div class="dash-company-group-heading"><div class="dash-company-group-identity"><span class="dash-company-dot"></span><div><strong>'+escAttr(group.label)+'</strong><small>顯示 '+group.visibleRows.length+' / '+group.rows.length+' 個部門</small></div></div><span class="dash-company-group-total">全部部門小計</span><div class="dash-company-metric-totals"><span>收入 <b class="income">'+fmt(group.revenue)+'</b></span><span>支出 <b class="expense">'+fmt(group.expense)+'</b></span><span>淨利 <b class="'+(group.net<0?'loss':'profit')+'">'+fmt(group.net)+'</b></span></div></div></th></tr>';
-    var rows=group.visibleRows.map(function(r){return'<tr class="dash-department-row" data-company-id="'+escAttr(group.eid)+'" data-department-code="'+escAttr(r.dc)+'" style="--dash-company-color:'+group.color+'"><td><div class="dash-department-cell"><span class="dash-company-dot"></span><span><strong>'+escAttr(r.label)+'</strong><small>'+escAttr(r.dc)+'</small></span></div></td><td class="money income">'+fmt(r.revenue)+'</td><td class="money expense">'+fmt(r.expense)+'</td><td class="money '+(r.net<0?'loss':'profit')+'">'+fmt(r.net)+'</td><td class="money">'+dashMarginText(r.margin)+'</td><td>'+dashTableChange(r)+'</td><td><button type="button" class="btn-g" onclick="openDashboardDepartment(\''+escAttr(r.eid)+'\',\''+escAttr(r.dc)+'\')">查看來源</button></td></tr>';}).join('');
+    var rows=group.visibleRows.map(function(r){return'<tr class="dash-department-row" data-company-id="'+escAttr(group.eid)+'" data-department-code="'+escAttr(r.dc)+'" style="--dash-company-color:'+group.color+'"><td><div class="dash-department-cell"><span class="dash-company-dot"></span><span><strong>'+escAttr(r.label)+'</strong><small>'+escAttr(r.dc)+'</small></span></div></td><td class="money income">'+fmt(r.revenue)+'</td><td class="money expense">'+fmt(r.expense)+'</td><td class="money '+(r.net<0?'loss':'profit')+'">'+fmt(r.net)+'</td><td class="money">'+dashMarginText(r.margin)+'</td><td>'+dashTableChange(r)+'</td><td><button type="button" class="btn-g" onclick="openDashboardDepartment('+financeInlineJsString(r.eid)+','+financeInlineJsString(r.dc)+')">查看來源</button></td></tr>';}).join('');
     return groupHead+rows;
   }).join('')||'<tr><td colspan="7" class="dash-empty">所選期間沒有部門收入或費用分錄。</td></tr>';
   if(mobile)mobile.innerHTML=groups.map(function(group){return'<section class="dash-mobile-company-group" data-company-id="'+escAttr(group.eid)+'" style="--dash-company-color:'+group.color+'" aria-label="'+escAttr(group.label)+'"><div class="dash-mobile-company-heading"><div class="dash-company-group-identity"><span class="dash-company-dot"></span><div><strong>'+escAttr(group.label)+'</strong><small>'+group.visibleRows.length+' / '+group.rows.length+' 個部門</small></div></div><span>全部部門小計</span><div class="dash-company-metric-totals"><span>收入 <b class="income">'+fmt(group.revenue)+'</b></span><span>支出 <b class="expense">'+fmt(group.expense)+'</b></span><span>淨利 <b class="'+(group.net<0?'loss':'profit')+'">'+fmt(group.net)+'</b></span></div></div>'+group.visibleRows.map(function(r){return dashMobileMetricRow(r,'department');}).join('')+'</section>';}).join('')||'<div class="dash-empty dash-empty-state"><strong>所選期間沒有部門損益</strong><span>完成正式入帳後會顯示在這裡。</span></div>';
@@ -20377,7 +20390,7 @@ function renderLazyExpensePage(){
   setTimeout(function(){enhanceNewRequestSearchableSelects();updateNRRouteHealth();},0);
 }
 function nrTypeCardHtml(t){
-  return '<button class="step-type'+(S.nrType===t.id?' on':'')+'" onclick="nrT(\''+t.id+'\')" style="text-align:left">'
+  return '<button class="step-type'+(S.nrType===t.id?' on':'')+'" onclick="nrT('+financeInlineJsString(t.id)+')" style="text-align:left">'
     +'<div class="type-mark">'+nrTypeIcon(t.id)+'</div>'
     +'<div class="type-copy"><div class="type-title">'+t.n+'</div><div class="type-desc">'+t.d+'</div><div class="type-employee-note">'+requestTypeEmployeeNote(t.id)+'</div></div>'
     +'</button>';
@@ -20413,9 +20426,9 @@ function renderNR(){
     c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 1 — 選擇費用性質</span></div><div class="nr-type-grid" style="padding:12px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch">'+NR_TYPES.map(nrTypeCardHtml).join('')+'</div></div>';
   }else if(S.nrStep===2){
     if(S.nrType==='hr_expense_request'){
-      c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 2 — 選擇人事費用項目</span><button class="btn-g" onclick="nrBack(1)">← 返回</button></div><div style="padding:11px;display:flex;flex-direction:column;gap:8px">'+HR_ITEMS.map(function(x,i){return'<button class="step-type'+(S.hrItem===x.id?' on':'')+'" onclick="nrHrItem(\''+x.id+'\')" style="text-align:left;min-height:64px;width:100%;display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center"><div class="type-mark">'+(i+1)+'</div><div><div style="font-size:14px;font-weight:650;color:#263244">'+x.label+'</div><div style="font-size:11px;color:#8b7358;margin-top:4px">'+(x.hint||'整批人事費用明細')+'</div></div></button>';}).join('')+'</div></div>';
+      c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 2 — 選擇人事費用項目</span><button class="btn-g" onclick="nrBack(1)">← 返回</button></div><div style="padding:11px;display:flex;flex-direction:column;gap:8px">'+HR_ITEMS.map(function(x,i){return'<button class="step-type'+(S.hrItem===x.id?' on':'')+'" onclick="nrHrItem('+financeInlineJsString(x.id)+')" style="text-align:left;min-height:64px;width:100%;display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center"><div class="type-mark">'+(i+1)+'</div><div><div style="font-size:14px;font-weight:650;color:#263244">'+x.label+'</div><div style="font-size:11px;color:#8b7358;margin-top:4px">'+(x.hint||'整批人事費用明細')+'</div></div></button>';}).join('')+'</div></div>';
     }else{
-      c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 2 — 申請內容</span><button class="btn-g" onclick="nrBack(1)">← 返回</button></div><div style="padding:11px">'+(NR_REC[S.nrType]||[]).map(function(r){return'<button class="step-opt'+(S.nrRec===r.id?' on':'')+'" onclick="nrR(\''+r.id+'\')">'+r.l+'</button>';}).join('')+'</div></div>';
+      c.innerHTML='<div class="card"><div class="chd"><span class="cht">步驟 2 — 申請內容</span><button class="btn-g" onclick="nrBack(1)">← 返回</button></div><div style="padding:11px">'+(NR_REC[S.nrType]||[]).map(function(r){return'<button class="step-opt'+(S.nrRec===r.id?' on':'')+'" onclick="nrR('+financeInlineJsString(r.id)+')">'+r.l+'</button>';}).join('')+'</div></div>';
     }
   }else if(S.nrStep===3){
     if(!S.nrPay)S.nrPay='bank';
@@ -21404,6 +21417,7 @@ function applyLazySummary(){
     desc.value=names||'詳見附件明細表';
   }
 }
+window.applyLazySummary=applyLazySummary;
 function renderLazySheet(){
   var box=el('lazy-sheet');if(!box)return;
   // An unsent legacy draft may predate stable item identifiers. Never rekey
@@ -22034,7 +22048,7 @@ window.hrAnalyzePayroll=async function(){
       var att=await fileToAttachment(f);
       setLazyProgress(base+(35/S.nrFiles.length),'送出 OPENAI 分析… '+name);
       var laborMode=isLaborHrItem(S.hrItem)||/勞務|勞報|9A|9B/i.test(name);
-      var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_ANON_KEY},body:JSON.stringify({fileName:name,mime:f.type||f.mime,dataUrl:att.url,mode:laborMode?'hr_labor_fee':'hr_expense_items',fields:HR_DETAIL_COLS.concat(HR_BANK_TRANSFER_COLS).concat(['轉帳金額','匯款帳號'])})});
+      var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:await invoiceOcrRequestHeaders(),body:JSON.stringify({fileName:name,mime:f.type||f.mime,dataUrl:att.url,mode:laborMode?'hr_labor_fee':'hr_expense_items',fields:HR_DETAIL_COLS.concat(HR_BANK_TRANSFER_COLS).concat(['轉帳金額','匯款帳號'])})});
       var json=await res.json();if(!res.ok)throw new Error(json.error||'分析失敗');
       var ocrRows=hrRowsFromOcrData(json,name);
       if(!ocrRows.length)throw new Error('OPENAI 沒有讀到可回填的人事明細欄位');
@@ -22112,7 +22126,7 @@ window.lazyAnalyze=async function(){
     try{
       att=await fileToAttachment(f);
       setLazyProgress(base+(20/S.nrFiles.length),'上傳到解析服務… '+(i+1)+'/'+S.nrFiles.length+'（'+(f.name||f.n||'附件')+'）');
-      var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_ANON_KEY},body:JSON.stringify({fileName:f.name,mime:f.type,dataUrl:att.url,mode:'expense_items'})});
+      var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:await invoiceOcrRequestHeaders(),body:JSON.stringify({fileName:f.name,mime:f.type,dataUrl:att.url,mode:'expense_items'})});
       setLazyProgress(base+(75/S.nrFiles.length),'OpenAI 正在辨識… '+(i+1)+'/'+S.nrFiles.length+'（'+(f.name||f.n||'附件')+'）');
       var json=await res.json();if(!res.ok)throw new Error(json.error||'辨識失敗');
       all=all.concat(invoiceRowsFromOcr(json,f.name));
@@ -22423,7 +22437,7 @@ function receiptReviewWidgetHtml(r){
   if(!files.length)return '';
   var img=files.filter(attachmentLooksImage).length;
   var pdf=files.filter(attachmentLooksPdf).length;
-  return '<div class="receipt-review-card"><div><strong>憑據核對</strong><span>偵測到 '+files.length+' 份可檢視憑據'+(img?'，圖片 '+img+' 份':'')+(pdf?'，PDF '+pdf+' 份':'')+'。可放大、縮小與順時針旋轉。</span></div><button class="btn-p" onclick="openReceiptViewerForRequest(\''+r.id+'\')">開啟核對</button></div>';
+  return '<div class="receipt-review-card"><div><strong>憑據核對</strong><span>偵測到 '+files.length+' 份可檢視憑據'+(img?'，圖片 '+img+' 份':'')+(pdf?'，PDF '+pdf+' 份':'')+'。可放大、縮小與順時針旋轉。</span></div><button class="btn-p" onclick="openReceiptViewerForRequest('+financeInlineJsString(r.id)+')">開啟核對</button></div>';
 }
 window.openReceiptViewerForRequest=function(rid){
   var r=REQS.find(function(x){return x.id===rid;})||{};
@@ -22498,6 +22512,7 @@ function receiptViewerMediaLoaded(generation){
   }
   if(note)note.remove();
 }
+window.receiptViewerMediaLoaded=receiptViewerMediaLoaded;
 function receiptViewerProbeSettled(generation,verified){
   var probe=RECEIPT_VIEWER_PDF_PROBE_STATE;
   if(!probe||probe.generation!==generation||generation!==RECEIPT_VIEWER_RENDER_GENERATION)return;
@@ -22636,6 +22651,7 @@ async function renderReceiptViewer(){
     }
   }
 }
+window.renderReceiptViewer=renderReceiptViewer;
 function lazyExcelAttachment(files,meta){
   files=normalizeFiles(files||[]);
   meta=meta||{};
@@ -22948,7 +22964,7 @@ window.passbookFileChange=async function(inp){
   setPassbookStatus('正在辨識存摺封面…','#8b7358');
   try{
     var att=await fileToAttachment(file);
-    var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_ANON_KEY},body:JSON.stringify({fileName:file.name,mime:file.type,dataUrl:att.url,mode:'passbook'})});
+    var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:await invoiceOcrRequestHeaders(),body:JSON.stringify({fileName:file.name,mime:file.type,dataUrl:att.url,mode:'passbook'})});
     var json=await res.json();if(!res.ok)throw new Error(json.error||'存摺辨識失敗');
     if(S.nrPassbookFile!==file)return;
     applyPassbookInfo(json);
@@ -22999,7 +23015,7 @@ function procurementPaymentActionHtml(r,fullWidth,prefix){
     +'<div style="font-size:11px;color:#8b7358;line-height:1.5;background:#fff8ed;border:1px solid #efd7b8;border-radius:8px;padding:8px;margin-bottom:8px">'+note+'</div>'
     +'<div class="fr2"><div class="fg"><label class="fl">預估採購匯款金額 *</label><input type="number" min="0" id="'+prefix+'-pay-amt" value="'+escAttr(purchaseEstimatedAmount(r)||'')+'" placeholder="總務詢價後填寫"></div><div class="fg"><label class="fl">預計匯款日 *</label><input type="date" id="'+prefix+'-paydate" value="'+escAttr((r.expectedPayDate||todayIso()).replace(/\//g,'-'))+'"></div></div>'
     +'<div class="fg"><label class="fl">收款人 *</label><input id="'+prefix+'-payee" value="'+escAttr(r.payee||'')+'" placeholder="廠商或收款人"></div>'
-    +'<div class="fr3"><div class="fg"><label class="fl">銀行類別 *</label><select id="'+prefix+'-bank-type" onchange="procBankTypeChanged(\''+prefix+'\')"><option value="mega" '+(bankType==='mega'?'selected':'')+'>兆豐銀行</option><option value="other" '+(bankType==='other'?'selected':'')+'>非兆豐銀行</option></select></div><div class="fg"><label class="fl">銀行 *</label><input id="'+prefix+'-bank-name" value="'+escAttr(bankName)+'" placeholder="例：017 兆豐銀行 / 玉山銀行"></div><div class="fg"><label class="fl">分行 *</label><input id="'+prefix+'-bank-branch" value="'+escAttr(r.bankBranch||'')+'" placeholder="分行名稱"></div></div>'
+    +'<div class="fr3"><div class="fg"><label class="fl">銀行類別 *</label><select id="'+prefix+'-bank-type" onchange="procBankTypeChanged('+financeInlineJsString(prefix)+')"><option value="mega" '+(bankType==='mega'?'selected':'')+'>兆豐銀行</option><option value="other" '+(bankType==='other'?'selected':'')+'>非兆豐銀行</option></select></div><div class="fg"><label class="fl">銀行 *</label><input id="'+prefix+'-bank-name" value="'+escAttr(bankName)+'" placeholder="例：017 兆豐銀行 / 玉山銀行"></div><div class="fg"><label class="fl">分行 *</label><input id="'+prefix+'-bank-branch" value="'+escAttr(r.bankBranch||'')+'" placeholder="分行名稱"></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">帳號 *</label><input id="'+prefix+'-bank-no" value="'+escAttr(r.bankNo||'')+'" placeholder="銀行帳號"></div><div class="fg"><label class="fl">手續費</label><select id="'+prefix+'-fee-bearer"><option value="己方支出" '+((r.feeBearer||'己方支出')==='己方支出'?'selected':'')+'>己方支出</option><option value="對方支出" '+(r.feeBearer==='對方支出'?'selected':'')+'>對方支出</option></select></div></div>'
     +approvalActionFields(prefix+'-c',prefix+'-files',prefix+'-add-user',{excludeUserIds:approvalApplicantIds([r])})
     +'</div>';
@@ -23539,13 +23555,13 @@ function refundDetailValue(r,key){
 }
 function refundDetailInputHtml(r,i,key){
   var prop=refundDetailProp(key),val=refundDetailValue(r,key);
-  if(key==='original_type')return'<select onchange="refundEdit('+i+',\''+prop+'\',this.value)"><option value="">選擇</option>'+refundReferenceTypes().map(function(o){return'<option value="'+o+'" '+(r.originalReferenceType===o?'selected':'')+'>'+o+'</option>';}).join('')+'</select>';
-  if(key==='reason')return'<select onchange="refundEdit('+i+',\''+prop+'\',this.value)"><option value="">選擇</option>'+refundReasons().map(function(o){return'<option value="'+o+'" '+(r.reason===o?'selected':'')+'>'+o+'</option>';}).join('')+'</select>';
-  if(key==='method')return'<select onchange="refundEdit('+i+',\''+prop+'\',this.value)"><option value="銀行轉帳" '+(r.method!=='現金'?'selected':'')+'>銀行轉帳</option><option value="現金" '+(r.method==='現金'?'selected':'')+'>現金</option></select>';
-  if(['invoice_date','payment_date'].indexOf(key)>-1)return'<input type="date" value="'+escAttr(val||'')+'" onchange="refundEdit('+i+',\''+prop+'\',this.value)">';
-  if(['original_amount','receivable_amount','received_amount','refund_amount'].indexOf(key)>-1)return'<input type="number" min="0" step="1" value="'+escAttr(val||0)+'" placeholder="'+escAttr(refundDetailHint(key,''))+'" onchange="refundEdit('+i+',\''+prop+'\',this.value)">';
+  if(key==='original_type')return'<select onchange="refundEdit('+i+','+financeInlineJsString(prop)+',this.value)"><option value="">選擇</option>'+refundReferenceTypes().map(function(o){return'<option value="'+o+'" '+(r.originalReferenceType===o?'selected':'')+'>'+o+'</option>';}).join('')+'</select>';
+  if(key==='reason')return'<select onchange="refundEdit('+i+','+financeInlineJsString(prop)+',this.value)"><option value="">選擇</option>'+refundReasons().map(function(o){return'<option value="'+o+'" '+(r.reason===o?'selected':'')+'>'+o+'</option>';}).join('')+'</select>';
+  if(key==='method')return'<select onchange="refundEdit('+i+','+financeInlineJsString(prop)+',this.value)"><option value="銀行轉帳" '+(r.method!=='現金'?'selected':'')+'>銀行轉帳</option><option value="現金" '+(r.method==='現金'?'selected':'')+'>現金</option></select>';
+  if(['invoice_date','payment_date'].indexOf(key)>-1)return'<input type="date" value="'+escAttr(val||'')+'" onchange="refundEdit('+i+','+financeInlineJsString(prop)+',this.value)">';
+  if(['original_amount','receivable_amount','received_amount','refund_amount'].indexOf(key)>-1)return'<input type="number" min="0" step="1" value="'+escAttr(val||0)+'" placeholder="'+escAttr(refundDetailHint(key,''))+'" onchange="refundEdit('+i+','+financeInlineJsString(prop)+',this.value)">';
   var placeholders={original_no:'例：繳費單/發票/收款編號',invoice_no:'發票作廢必填',other_reason:'原因選其他時填寫',description:'例：113年5月照顧服務費重複匯款',calculation_note:'應退 = 實收 - 應收'};
-  return'<input value="'+escAttr(val||'')+'" placeholder="'+escAttr(refundDetailHint(key,placeholders[key]||''))+'" onchange="refundEdit('+i+',\''+prop+'\',this.value)">';
+  return'<input value="'+escAttr(val||'')+'" placeholder="'+escAttr(refundDetailHint(key,placeholders[key]||''))+'" onchange="refundEdit('+i+','+financeInlineJsString(prop)+',this.value)">';
 }
 function refundRowAmount(r){
   var explicit=num(r.refundAmount);
@@ -24504,7 +24520,7 @@ function renderLaborElectronicLines(){
   var depts=applicantDeptSelectRows('',requestEntity);
   box.innerHTML=S.nrLaborLines.map(function(line,i){
     var opts='<option value="">選擇支出部門</option>'+depts.map(function(d){return'<option value="'+escAttr(d.c)+'" '+(String(line.departmentCode||'')===String(d.c)?'selected':'')+'>'+escAttr(d.c+' '+d.n)+'</option>';}).join('');
-    var field=function(label,key,type,placeholder){return'<div class="fg"><label class="fl" for="labor-line-'+i+'-'+key+'">'+label+'</label><input id="labor-line-'+i+'-'+key+'" type="'+type+'" value="'+escAttr(line[key]||'')+'" placeholder="'+escAttr(placeholder||'')+'" oninput="laborElectronicEdit('+i+',\''+key+'\',this.value)"></div>';};
+    var field=function(label,key,type,placeholder){return'<div class="fg"><label class="fl" for="labor-line-'+i+'-'+key+'">'+label+'</label><input id="labor-line-'+i+'-'+key+'" type="'+type+'" value="'+escAttr(line[key]||'')+'" placeholder="'+escAttr(placeholder||'')+'" oninput="laborElectronicEdit('+i+','+financeInlineJsString(key)+',this.value)"></div>';};
     return'<div class="labor-line-card"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px"><strong style="font-size:12px">第 '+(i+1)+' 堂課</strong><button type="button" class="btn-g" onclick="laborElectronicDeleteLine('+i+')" aria-label="刪除第 '+(i+1)+' 堂課">刪除</button></div><div class="labor-line-grid">'
       +field('課程編號／期別 *','courseRef','text','例：2026-09-教學01')
       +field('課程類型 *','courseType','text','例：職能治療、照服課程')
@@ -24590,7 +24606,7 @@ function renderHrExpenseSheet(){
               +(branchValue||codeInfo.error?'<label for="'+branchId+'" style="display:block;padding:2px 5px;font-size:12px">分行代號</label><input id="'+branchId+'" data-hr-row="'+i+'" data-hr-col="分行代號" type="text" inputmode="numeric" style="font-size:12px" aria-label="第 '+(i+1)+' 列分行代號" value="'+escAttr(branchValue)+'" onchange="hrEdit('+i+',\'分行代號\',this.value)" onkeydown="hrSheetKey(event,'+i+',\'分行代號\')">':'')
               +(codeInfo.error?'<span id="'+bankId+'-error" role="alert" style="display:block;padding:4px 5px;color:#9f241c;font-size:12px">'+escAttr(codeInfo.error)+'</span>':'')+'</td>';
           }
-	      return'<td><input data-hr-row="'+i+'" data-hr-col="'+c+'" type="'+type+'" '+(type==='number'?'min="0" step="1"':'')+readonly+' value="'+escAttr(value)+'" '+(missing?'style="background:#fff1f2;box-shadow:inset 0 0 0 1px #fb7185"':'')+' onchange="hrEdit('+i+',\''+c+'\',this.value)" onkeydown="hrSheetKey(event,'+i+',\''+c+'\')"></td>';
+	      return'<td><input data-hr-row="'+i+'" data-hr-col="'+c+'" type="'+type+'" '+(type==='number'?'min="0" step="1"':'')+readonly+' value="'+escAttr(value)+'" '+(missing?'style="background:#fff1f2;box-shadow:inset 0 0 0 1px #fb7185"':'')+' onchange="hrEdit('+i+','+financeInlineJsString(c)+',this.value)" onkeydown="hrSheetKey(event,'+i+','+financeInlineJsString(c)+')"></td>';
 	    }).join('')+'<td style="width:30px;text-align:center"><button onclick="hrDel('+i+')" style="border:none;background:transparent;color:#94a3b8;cursor:pointer">×</button></td></tr>';
 	  }).join('');
   var transferFeeTotal=hrTransferFeeTotal(S.hrRows);
@@ -26597,8 +26613,8 @@ function renderDrafts(){
   if(!DRAFTS.length){box.innerHTML=statusHtml||'<div style="font-size:12px;color:#94a3b8;text-align:center;padding:10px">目前沒有暫存表單</div>';return;}
   box.innerHTML=statusHtml+DRAFTS.map(function(d){
     return'<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #f0e0c8;border-radius:8px;margin-bottom:6px;background:#fffaf3">'
-      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:650;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(d.title||requestTypeLabel(d.type))+'</div><div style="font-size:10px;color:#94a3b8">'+requestTypeLabel(d.type)+' · '+(d.amount?fmt(d.amount):'未填金額')+' · 附件 '+((d.files||[]).length)+' 個 · '+draftTime(d.updatedAt)+'</div></div>'
-      +'<button class="btn-g" onclick="openDraft(\''+d.id+'\')">繼續填寫</button><button class="btn-g" style="color:#8a1010" onclick="deleteDraft(\''+d.id+'\')">刪除</button>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:650;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(d.title||requestTypeLabel(d.type))+'</div><div style="font-size:10px;color:#94a3b8">'+escAttr(requestTypeLabel(d.type))+' · '+(d.amount?fmt(d.amount):'未填金額')+' · 附件 '+((d.files||[]).length)+' 個 · '+draftTime(d.updatedAt)+'</div></div>'
+      +'<button class="btn-g" onclick="openDraft('+financeInlineJsString(d.id)+')">繼續填寫</button><button class="btn-g" style="color:#8a1010" onclick="deleteDraft('+financeInlineJsString(d.id)+')">刪除</button>'
       +'</div>';
   }).join('');
 }
@@ -27181,7 +27197,7 @@ function rejectedBadgeHtml(){
   return '<span class="badge b-rej" style="font-size:9px;margin-left:4px">被駁回</span>';
 }
 function requestListRowHtml(r,openFn){
-  return'<tr class="'+(requestIsRejected(r)?'row-rejected':'')+'" style="cursor:pointer" onclick="'+openFn+'(\''+escAttr(r.id)+'\')">'
+  return'<tr class="'+(requestIsRejected(r)?'row-rejected':'')+'" style="cursor:pointer" onclick="'+openFn+'('+financeInlineJsString(r.id)+')">'
     +'<td>'+requestTypeCellHtml(r)+'</td>'
     +'<td style="font-weight:650;color:#334155">'+escAttr(requestDeptName(r))+'</td>'
     +'<td style="font-weight:650;color:#334155">'+escAttr(r.app||'—')+'</td>'
@@ -27383,7 +27399,7 @@ function ceoDecisionCenterHtml(period,eid){
   var rows=funding.slice(0,4).map(function(r){
     var e=gE(r.eid),d=gD(r.dc),issues=supervisorReviewIssues(r);
     var flags=issues.slice(0,2).map(function(x){return'<span class="badge '+(x.level==='high'?'b-rej':'b-wait')+'" style="font-size:9px">'+escAttr(x.label)+'</span>';}).join(' ');
-    return'<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f0e6d6;align-items:flex-start"><div style="min-width:0"><div style="font-size:12px;font-weight:800;color:#334155">'+escAttr(r.no)+' '+flags+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">'+escAttr(r.app)+' · '+escAttr(e.s)+' · '+escAttr(r.dc+' '+(d.n||''))+'</div><div style="font-size:10px;color:#8b7358;margin-top:3px">放款後現金流出 '+fmt(ceoCashImpactAmount(r))+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:900;color:#8a1010">'+fmt(requestReviewAmount(r))+'</div><button class="btn-g" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="openDetail(\''+r.id+'\')">檢視</button></div></div>';
+    return'<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f0e6d6;align-items:flex-start"><div style="min-width:0"><div style="font-size:12px;font-weight:800;color:#334155">'+escAttr(r.no)+' '+flags+'</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">'+escAttr(r.app)+' · '+escAttr(e.s)+' · '+escAttr(r.dc+' '+(d.n||''))+'</div><div style="font-size:10px;color:#8b7358;margin-top:3px">放款後現金流出 '+fmt(ceoCashImpactAmount(r))+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:900;color:#8a1010">'+fmt(requestReviewAmount(r))+'</div><button class="btn-g" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="openDetail('+financeInlineJsString(r.id)+')">檢視</button></div></div>';
   }).join('')||'<div style="font-size:12px;color:#94a3b8;padding:10px 0">目前沒有待出納放款的申請。</div>';
   return'<div class="card" style="margin-bottom:12px;border-color:#f0c982;background:#fffaf2">'
     +'<div class="chd"><span class="cht">執行長決策中心</span><span style="font-size:11px;color:#a08060">'+monthLabel(period)+'</span></div>'
@@ -27876,27 +27892,27 @@ window.openDetail=function(rid){
   var returnedMiddle=isRestrictedReturnedMiddleStep(r);
   var detailUpload='<div style="min-width:260px;max-width:420px;flex:1">'+approvalActionFields('detail-appr-c','detail-appr-files','detail-appr-add-user',{allowAddSign:!returnedMiddle,excludeUserIds:approvalApplicantIds([r])})+'</div>';
   var advanceFinalAmtField=r.type==='advance_request'?advanceFinalAccountingHtml(r,'detail-advance-final'):'';
-  var returnBtn=canActRequest(r)&&canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPrevious(\''+r.id+'\')">退回上一關</button>':'';
+  var returnBtn=canActRequest(r)&&canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPrevious('+financeInlineJsString(r.id)+')">退回上一關</button>':'';
   var approveLabel=returnedMiddle?'補件完成並繼續':(curStep&&curStep.rk==='cashier'?'出納放款並更新現金流':'核准此申請');
-  if(canActRequest(r)&&returnedMiddle)acts.push(detailUpload+'<button class="btn-p" onclick="doApprove(\''+r.id+'\')">補件完成並繼續</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">不通過</button>');
-  else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request'&&curStep&&curStep.rk==='procurement_payment')acts.push(procurementPaymentActionHtml(r,false,'detail-proc')+'<button class="btn-p" style="background:#0f766e" onclick="submitProcurementPaymentInfo(\''+r.id+'\',\'detail-proc\')">送出總務付款資料</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
-  else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request')acts.push('<div style="min-width:280px;max-width:520px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計銷帳與三表只會以這個實際金額入帳，預估金額只保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0.01" step="0.01" id="detail-proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+procurementExistingEvidenceHtml(r,'detail-proc')+approvalActionFields('detail-proc-c','detail-proc-files','detail-proc-add-user',{allowAddSign:false,excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#0f766e" onclick="submitProcurementActual(\''+r.id+'\',\'detail-proc\')">提交憑據與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc(\''+r.id+'\')">退回上一關</button>':''));
-  else if(canActRequest(r)&&r.status!=='pending_applicant_confirm'&&r.status!=='pending_voucher')acts.push(detailUpload+'<button class="btn-p" onclick="doApprove(\''+r.id+'\')">'+approveLabel+'</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ(\''+r.id+'\')">不通過</button>');
+  if(canActRequest(r)&&returnedMiddle)acts.push(detailUpload+'<button class="btn-p" onclick="doApprove('+financeInlineJsString(r.id)+')">補件完成並繼續</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ('+financeInlineJsString(r.id)+')">不通過</button>');
+  else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request'&&curStep&&curStep.rk==='procurement_payment')acts.push(procurementPaymentActionHtml(r,false,'detail-proc')+'<button class="btn-p" style="background:#0f766e" onclick="submitProcurementPaymentInfo('+financeInlineJsString(r.id)+',\'detail-proc\')">送出總務付款資料</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc('+financeInlineJsString(r.id)+')">退回上一關</button>':''));
+  else if(canActRequest(r)&&r.status==='pending_procurement'&&r.type==='purchase_request')acts.push('<div style="min-width:280px;max-width:520px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">採購完成後，請上傳發票或憑據，並填寫最後正確採購實際支出。會計銷帳與三表只會以這個實際金額入帳，預估金額只保留作比較。</div><div class="fg"><label class="fl">最終採購實際支出 *</label><input type="number" min="0.01" step="0.01" id="detail-proc-actual-amt" value="'+(purchaseActualAmount(r)||'')+'" placeholder="請依發票憑據填寫實際支出"></div>'+procurementExistingEvidenceHtml(r,'detail-proc')+approvalActionFields('detail-proc-c','detail-proc-files','detail-proc-add-user',{allowAddSign:false,excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#0f766e" onclick="submitProcurementActual('+financeInlineJsString(r.id)+',\'detail-proc\')">提交憑據與實際支出</button>'+(canReturnPreviousStep(r)?'<button class="btn-s" style="color:#9a5a00;border-color:#e6c18a" onclick="doReturnPreviousProc('+financeInlineJsString(r.id)+')">退回上一關</button>':''));
+  else if(canActRequest(r)&&r.status!=='pending_applicant_confirm'&&r.status!=='pending_voucher')acts.push(detailUpload+'<button class="btn-p" onclick="doApprove('+financeInlineJsString(r.id)+')">'+approveLabel+'</button>'+returnBtn+'<button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="doRejectQ('+financeInlineJsString(r.id)+')">不通過</button>');
   if(r.status==='pending_applicant_confirm'&&canActRequest(r)){
     if(curStep&&curStep.rk==='applicant_revision'){
-      acts.push('<div style="font-size:12px;color:#6a5840;line-height:1.65;max-width:480px">請開啟原申請表單修正用途、金額、匯款資訊或明細；原附件會保留，新附件只會追加。</div><button class="btn-p" style="background:#1a7040" onclick="openReturnedRequestEditor(\''+r.id+'\')">編輯原申請內容並補件</button><button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="cancelExpenseApplicantRevision(\''+r.id+'\')">不通過並結束本單</button>');
+      acts.push('<div style="font-size:12px;color:#6a5840;line-height:1.65;max-width:480px">請開啟原申請表單修正用途、金額、匯款資訊或明細；原附件會保留，新附件只會追加。</div><button class="btn-p" style="background:#1a7040" onclick="openReturnedRequestEditor('+financeInlineJsString(r.id)+')">編輯原申請內容並補件</button><button class="btn-s" style="color:#8a1010;border-color:#f0b0b0" onclick="cancelExpenseApplicantRevision('+financeInlineJsString(r.id)+')">不通過並結束本單</button>');
     }else{
       var applicantActionLabel=r.type==='purchase_request'?'確認收到採購商品':r.type==='advance_request'?'提交最後憑據與 Excel 明細':'確認已撥款';
-      acts.push((r.type==='advance_request'?'<div style="min-width:260px;max-width:460px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">請在此上傳最後實際花費的憑據照片或 PDF，以及即時 Excel 明細檔。兩種檔案都要上傳，會計才能核銷。</div>'+approvalActionFields('detail-appr-c','detail-appr-files','detail-appr-add-user',{excludeUserIds:approvalApplicantIds([r])})+'</div>':detailUpload)+'<button class="btn-p" style="background:#1a7040" onclick="doConfirmPay(\''+r.id+'\',this,\'detail-appr\')">'+applicantActionLabel+'</button>'+returnBtn);
+      acts.push((r.type==='advance_request'?'<div style="min-width:260px;max-width:460px;flex:1"><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-bottom:7px">請在此上傳最後實際花費的憑據照片或 PDF，以及即時 Excel 明細檔。兩種檔案都要上傳，會計才能核銷。</div>'+approvalActionFields('detail-appr-c','detail-appr-files','detail-appr-add-user',{excludeUserIds:approvalApplicantIds([r])})+'</div>':detailUpload)+'<button class="btn-p" style="background:#1a7040" onclick="doConfirmPay('+financeInlineJsString(r.id)+',this,\'detail-appr\')">'+applicantActionLabel+'</button>'+returnBtn);
     }
   }
   // FIX 1：會計確認後自動生成傳票
-  if(r.status==='pending_voucher'&&canActRequest(r))acts.push('<div style="min-width:260px;max-width:460px;flex:1">'+advanceFinalAmtField+approvalActionFields('detail-appr-c','detail-appr-files','detail-appr-add-user',{excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#1a4080" onclick="doConfirmVoucher(\''+r.id+'\',\'detail-appr\',\'detail-advance-final\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn);
+  if(r.status==='pending_voucher'&&canActRequest(r))acts.push('<div style="min-width:260px;max-width:460px;flex:1">'+advanceFinalAmtField+approvalActionFields('detail-appr-c','detail-appr-files','detail-appr-add-user',{excludeUserIds:approvalApplicantIds([r])})+'</div><button class="btn-p" style="background:#1a4080" onclick="doConfirmVoucher('+financeInlineJsString(r.id)+',\'detail-appr\',\'detail-advance-final\')">'+(r.type==='advance_request'?'確認實體憑據與多退少補 · 調整入帳':'確認憑據 · 自動切傳票')+'</button>'+returnBtn);
   var purchaseRecovery=purchaseFinalRecoveryHtml(r);if(purchaseRecovery&&canActRequest(r))acts=[purchaseRecovery+returnBtn];
   var revisionRecovery=expenseRevisionRecoveryHtml(r);if(revisionRecovery)acts=[revisionRecovery];
   var postingRecovery=expensePostingRecoveryHtml(r);if(postingRecovery)acts=[postingRecovery];
   var procurementRecovery=procurementSubmissionRecoveryHtml(r);if(procurementRecovery)acts=[procurementRecovery];
-  if(r.voucherId)acts.push('<button class="btn-g" onclick="showVoucherById(\''+r.voucherId+'\')">查看傳票 '+r.voucherId+'</button>');
+  if(r.voucherId)acts.push('<button class="btn-g" onclick="showVoucherById('+financeInlineJsString(r.voucherId)+')">查看傳票 '+r.voucherId+'</button>');
   if(!laborMarker&&requestCashPostedAt(r))acts.push(paymentConcernButtonHtml(r));
   if(laborMarker){
     var laborReady=!!laborState&&['reviewed','accrued','partially_paid','paid'].indexOf(laborState.status)>-1;
@@ -27926,7 +27942,7 @@ window.openDetail=function(rid){
   var lineAccountingTitle=accountingLinesTitleForRequest(r);
   var invoiceAccountingCard=expenseInvoiceAccountingReviewHtml(r,canEditAccountingLines,lineAccountingTitle,'detail-acct-line');
   var accountingCard=isFinance()
-    ?'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById(\''+r.voucherId+'\')">'+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+escAttr(r.dr)+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+escAttr(r.drN)+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+escAttr(r.cr)+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+escAttr(r.crN)+'</div></div></div>'+(feeAmt?'<div style="font-size:11px;color:#6a5840;margin-top:6px;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:6px">己方支出手續費會自動增加：Dr 6290 手續費 '+fmt(feeAmt)+'，Cr '+escAttr(r.cr)+' 銀行存款合計 '+fmt(r.amt+feeAmt)+'。</div>':'')+'<div style="font-size:11px;color:#94a3b8;margin-top:6px">提醒：數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
+    ?'<div class="card" style="padding:12px"><div style="font-size:12px;font-weight:500;margin-bottom:8px;color:#334155">自動入帳分錄 <span class="badge '+(r.status==='completed'?'b-ok':'b-gray')+'">'+(r.status==='completed'?'已寫入帳冊':'待完成')+'</span>'+(r.voucherId?' <button class="btn-g" style="margin-left:6px;font-size:10px" onclick="showVoucherById('+financeInlineJsString(r.voucherId)+')">'+r.voucherId+'</button>':'')+'</div><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:#eaf8d8;border-radius:8px;padding:8px;text-align:center;border:1px solid #b0e090"><div style="font-size:10px;color:#1a5010;margin-bottom:2px">借方</div><div class="acct-dr">'+escAttr(r.dr)+'</div><div style="font-size:11px;color:#1a5010;margin-top:2px">'+escAttr(r.drN)+'</div></div><div style="color:#e0d0b8;font-size:15px">→</div><div style="flex:1;background:#fde8e8;border-radius:8px;padding:8px;text-align:center;border:1px solid #f0b0b0"><div style="font-size:10px;color:#8a1010;margin-bottom:2px">貸方</div><div class="acct-cr">'+escAttr(r.cr)+'</div><div style="font-size:11px;color:#8a1010;margin-top:2px">'+escAttr(r.crN)+'</div></div></div>'+(feeAmt?'<div style="font-size:11px;color:#6a5840;margin-top:6px;background:var(--warm);border:1px solid #f0e0c8;border-radius:7px;padding:6px">己方支出手續費會自動增加：Dr 6290 手續費 '+fmt(feeAmt)+'，Cr '+escAttr(r.cr)+' 銀行存款合計 '+fmt(r.amt+feeAmt)+'。</div>':'')+'<div style="font-size:11px;color:#94a3b8;margin-top:6px">提醒：數字僅在所有簽核完成後才實際入帳，傳票同步自動生成</div></div>'
     :'<div class="card" style="padding:12px;background:#fff8ed;border-color:#efd7b8"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:5px">會計處理</div><div style="font-size:11px;color:#8b7358;line-height:1.7">這張單完成簽核後，會計會確認憑據與金流並由系統處理入帳。您不用填寫會計科目、分錄或傳票，只需要追蹤簽核狀態與補齊附件。</div></div>';
   if(laborMarker)accountingCard='<div class="card" style="padding:12px;background:#fff8ed;border-color:#efd7b8"><div style="font-size:12px;font-weight:650;color:#334155">電子勞報獨立入帳</div><div style="font-size:11px;color:#6a5840;line-height:1.7;margin-top:6px">本單顯示毛額申請，原表單的預設科目僅供送件分類，不代表已入帳。簽署、會計逐堂覆核、主管簽核與不同人確認後，才依服務列建立專用應計傳票；實際付款須另有銀行證據。</div></div>';
   var managerCard=(S.user&&['section_chief','dept_manager','admin_director','ceo','general_affairs'].indexOf(currentRoleKey())>-1)?'<div class="detail-full-row">'+supervisorReviewCardHtml(r,false)+'</div>':'';
@@ -28812,6 +28828,7 @@ function openApprovalTab(t){
     return{ok:true};
   });
 }
+window.openApprovalTab=openApprovalTab;
 window.openInvoiceBridgeWorklist=function(query,tab){
   S.apprQuery=String(query||'').trim();
   S.apprSelected={};
@@ -29626,7 +29643,7 @@ function approvalApplySearchSort(data){
 function approvalHeaderCell(field,label){
   if(approvalPersonalTab(S.aT))return '<th class="appr-col-'+field+'">'+label+'</th>';
   var st=approvalSortState(),on=st.field===field;
-  return '<th class="sort-th appr-col-'+field+(on?' active':'')+'" aria-sort="'+(on?(st.dir==='desc'?'descending':'ascending'):'none')+'"><button type="button" class="approval-sort-button" data-approval-sort="'+field+'" onclick="apprSort(\''+field+'\')" title="點一下依'+label+'排序">'+label+'<span class="finance-visually-hidden">'+(on?(st.dir==='desc'?'，目前由大到小':'，目前由小到大'):'，可排序')+'</span></button></th>';
+  return '<th class="sort-th appr-col-'+field+(on?' active':'')+'" aria-sort="'+(on?(st.dir==='desc'?'descending':'ascending'):'none')+'"><button type="button" class="approval-sort-button" data-approval-sort="'+field+'" onclick="apprSort('+financeInlineJsString(field)+')" title="點一下依'+label+'排序">'+label+'<span class="finance-visually-hidden">'+(on?(st.dir==='desc'?'，目前由大到小':'，目前由小到大'):'，可排序')+'</span></button></th>';
 }
 function approvalTableHeaderHtml(){
   return '<thead><tr><th class="appr-col-select">選取</th>'
@@ -29938,7 +29955,7 @@ function renderApprList(data){
     var rejectBadge=rejected?rejectedBadgeHtml():'';
     var withdrawBtn=S.aT==='mine'
       ?(kind==='req'
-        ?(canWithdrawRequest(r)?'<button class="btn-s" style="font-size:10px;padding:3px 7px;color:#8a1010;border-color:#f0b0b0" onclick="event.stopPropagation();withdrawRequest(\''+r.id+'\')">抽單</button>':(laborElectronicMarker(r)&&requestIsMine(r)&&isReqOpen(r)?'<span style="font-size:10px;color:#6e6259">開啟原單確認講師邀請狀態後可抽單</span>':''))
+        ?(canWithdrawRequest(r)?'<button class="btn-s" style="font-size:10px;padding:3px 7px;color:#8a1010;border-color:#f0b0b0" onclick="event.stopPropagation();withdrawRequest('+financeInlineJsString(r.id)+')">抽單</button>':(laborElectronicMarker(r)&&requestIsMine(r)&&isReqOpen(r)?'<span style="font-size:10px;color:#6e6259">開啟原單確認講師邀請狀態後可抽單</span>':''))
         :((kind==='bill'||kind==='inv')?incomeApplicantWithdrawButtonHtml(kind==='bill'?'bill':'invoice',r,false):''))
       :'';
     var invoiceCount=kind==='inv'&&item.approvalSummaryGroupKey?item.approvalExpectedRowCount:invoiceGroupCount(r);
@@ -29985,12 +30002,12 @@ function renderApprDraftList(){
     var applicant=d.applicant||fields['nr-app']||(S.user&&S.user.n)||'—';
     var dept=fields['nr-dc']||fields['nr-dept']||'—',deptName=((gD(dept)||{}).n)||dept;
     var summary=escAttr((d.title||requestTypeLabel(d.type))+' · 附件 '+((d.files||[]).length)+' 個 · '+draftTime(d.updatedAt));
-    return'<tr data-appr-key="draft:'+escAttr(d.id)+'" onclick="openApprovalDraft(\''+escAttr(d.id)+'\')">'
+    return'<tr data-appr-key="draft:'+escAttr(d.id)+'" onclick="openApprovalDraft('+financeInlineJsString(d.id)+')">'
       +'<td class="appr-col-select"><span style="color:#d8c8b2">—</span></td>'
       +'<td class="appr-col-formNo"><div class="approval-form-inline"><span class="mono-sub approval-form-number">暫存</span><span class="approval-form-badges"><span class="badge '+(TCSS[d.type]||'b-gray')+'">'+escAttr(requestTypeLabel(d.type))+'</span></span></div></td>'
       +'<td class="appr-col-dept" style="font-weight:650;color:#334155">'+escAttr(deptName||'—')+'</td>'
       +'<td class="appr-col-applicant" style="font-weight:650;color:#334155">'+escAttr(applicant)+'</td>'
-      +'<td class="appr-col-purpose"><div class="summary-cell" style="font-size:12px;color:#334155">'+summary+'</div><div style="margin-top:5px;display:flex;gap:5px;justify-content:center"><button class="btn-g" onclick="event.stopPropagation();openDraft(\''+escAttr(d.id)+'\')">繼續填寫</button><button class="btn-g" style="color:#8a1010" onclick="event.stopPropagation();deleteDraftFromApprovals(\''+escAttr(d.id)+'\')">刪除</button></div></td>'
+      +'<td class="appr-col-purpose"><div class="summary-cell" style="font-size:12px;color:#334155">'+summary+'</div><div style="margin-top:5px;display:flex;gap:5px;justify-content:center"><button class="btn-g" onclick="event.stopPropagation();openDraft('+financeInlineJsString(d.id)+')">繼續填寫</button><button class="btn-g" style="color:#8a1010" onclick="event.stopPropagation();deleteDraftFromApprovals('+financeInlineJsString(d.id)+')">刪除</button></div></td>'
       +'<td class="appr-col-amount" style="font-weight:800;color:#1f2a44">'+(d.amount?fmt(d.amount):'—')+'</td>'
       +'<td class="appr-col-applyDate date-cell">'+escAttr(approvalShortDate(fields['nr-date']||'—'))+'</td>'
       +'<td class="appr-col-payDate date-cell" style="color:#94a3b8">'+escAttr(approvalShortDate(fields['nr-paydate']||'—'))+'</td>'
@@ -31553,15 +31570,15 @@ function showDraftD(d){
   openApprModal();
   var fields=(d.state&&d.state.fields)||{};
   var amount=d.amount?fmt(d.amount):'未填金額';
-  var files=(d.files||[]).map(function(f){return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+String(f.name||f.n||'檔案').split('.').pop().toUpperCase()+'</span><span style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(f.name||f.n||'附件')+'</span></div>';}).join('')||'<span style="font-size:12px;color:#94a3b8">尚未上傳附件</span>';
+  var files=(d.files||[]).map(function(f){return'<div class="file-chip"><span style="font-size:9px;background:var(--brxl);color:var(--brtxt);padding:1px 4px;border-radius:3px">'+escAttr(String(f.name||f.n||'檔案').split('.').pop().toUpperCase())+'</span><span style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(f.name||f.n||'附件')+'</span></div>';}).join('')||'<span style="font-size:12px;color:#94a3b8">尚未上傳附件</span>';
   el('appr-inner').innerHTML='<div class="chd"><span class="cht">暫存表單詳情</span><button class="btn-g" onclick="closeAppr()">關閉</button></div>'
     +'<div style="padding:13px"><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:12px">'
-    +'<div class="sc"><div style="font-size:10px;color:#a08060;margin-bottom:3px">類型</div><div style="font-size:13px;font-weight:650;color:#334155">'+requestTypeLabel(d.type)+'</div></div>'
+    +'<div class="sc"><div style="font-size:10px;color:#a08060;margin-bottom:3px">類型</div><div style="font-size:13px;font-weight:650;color:#334155">'+escAttr(requestTypeLabel(d.type))+'</div></div>'
     +'<div class="sc"><div style="font-size:10px;color:#a08060;margin-bottom:3px">金額</div><div style="font-size:13px;font-weight:650;color:#334155">'+amount+'</div></div>'
     +'<div class="sc"><div style="font-size:10px;color:#a08060;margin-bottom:3px">申請人</div><div style="font-size:13px;font-weight:650;color:#334155">'+escAttr(d.applicant||fields['nr-app']||'未填')+'</div></div>'
     +'<div class="sc"><div style="font-size:10px;color:#a08060;margin-bottom:3px">更新時間</div><div style="font-size:13px;font-weight:650;color:#334155">'+draftTime(d.updatedAt)+'</div></div>'
     +'</div><div class="card" style="padding:10px;margin-bottom:10px"><div style="font-size:12px;font-weight:650;color:#334155;margin-bottom:7px">附件</div>'+files+'</div>'
-    +'<div style="display:flex;gap:7px"><button class="btn-p" onclick="openDraft(\''+d.id+'\')">繼續填寫</button><button class="btn-s" style="color:#8a1010" onclick="deleteDraftFromApprovals(\''+d.id+'\')">刪除暫存</button></div></div>';
+    +'<div style="display:flex;gap:7px"><button class="btn-p" onclick="openDraft('+financeInlineJsString(d.id)+')">繼續填寫</button><button class="btn-s" style="color:#8a1010" onclick="deleteDraftFromApprovals('+financeInlineJsString(d.id)+')">刪除暫存</button></div></div>';
 }
 window.deleteDraftFromApprovals=async function(id){
   return window.deleteDraft(id);
@@ -32590,10 +32607,10 @@ function accountingControlRecord(kind,row,reason,nextAction,amount){
 }
 function accountingControlActionHtml(rec){
   var id=String(rec.id||'').replace(/'/g,'\\\'');
-  if(rec.kind==='request'&&id)return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openDetail(\''+id+'\')">看單據</button>';
+  if(rec.kind==='request'&&id)return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openDetail('+financeInlineJsString(id)+')">看單據</button>';
   if(rec.kind==='invoice')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="nav(\'invoices\',null)">到發票</button>';
   if(rec.kind==='bill')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="nav(\'bills\',null)">到繳費單</button>';
-  if(rec.kind==='voucher'&&id)return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+id+'\')">看傳票</button>';
+  if(rec.kind==='voucher'&&id)return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById('+financeInlineJsString(id)+')">看傳票</button>';
   if(rec.kind==='ledger')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="nav(\'ledger\',null)">到分類帳</button>';
   if(rec.kind==='audit')return'<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="nav(\'compliance\',null)">看稽核</button>';
   return'<span style="font-size:10px;color:#94a3b8">—</span>';
@@ -33064,7 +33081,7 @@ function accountingPrioritySummaryHtml(buckets,active){
     if(!b||b.key==='none'){
       return '<div class="accounting-priority-item ok"><div class="accounting-priority-rank">OK</div><div><div class="accounting-priority-name">全部正常</div><div class="accounting-priority-next">維持例行關帳、憑證抽查與三表核對。</div></div><div class="accounting-priority-count">0 筆</div></div>';
     }
-    return '<div class="accounting-priority-item '+escAttr(b.tone||'')+'" onclick="setAccountingControlFocus(\''+escAttr(b.key)+'\')">'
+    return '<div class="accounting-priority-item '+escAttr(b.tone||'')+'" onclick="setAccountingControlFocus('+financeInlineJsString(b.key)+')">'
       +'<div class="accounting-priority-rank">'+(idx+1)+'</div>'
       +'<div><div class="accounting-priority-name">'+escAttr(b.label)+'</div><div class="accounting-priority-next">'+escAttr(b.nextAction||'先開啟清單逐筆確認')+'</div></div>'
       +'<div class="accounting-priority-count">'+num(b.count)+' 筆</div></div>';
@@ -33111,7 +33128,7 @@ function accountingExceptionWorklistHtml(buckets){
   var blockers=important.filter(function(item){return item.tone==='bad';}).reduce(function(sum,item){return sum+item.count;},0);
   var total=important.reduce(function(sum,item){return sum+item.count;},0);
   function itemHtml(item){
-    return '<div class="accounting-exception-item '+escAttr(item.tone||'')+'" onclick="setAccountingControlFocus(\''+escAttr(item.key)+'\')">'
+    return '<div class="accounting-exception-item '+escAttr(item.tone||'')+'" onclick="setAccountingControlFocus('+financeInlineJsString(item.key)+')">'
       +'<div class="accounting-exception-line"><div class="accounting-exception-name">'+escAttr(item.label)+'</div><div class="accounting-exception-count">'+num(item.count)+' 筆</div></div>'
       +'<div class="accounting-exception-desc">'+escAttr(item.nextAction||item.desc)+'</div>'
       +(item.total?'<div class="accounting-exception-desc" style="font-weight:900;color:#263244">'+fmt(item.total)+'</div>':'')
@@ -33174,7 +33191,7 @@ function accountingExceptionQueueHtml(buckets){
       +'<td><span class="accounting-control-priority '+escAttr(rec.priorityClass||'low')+'">'+escAttr(rec.priority||'追蹤')+'</span></td>'
       +'<td><div class="accounting-queue-source">'+escAttr(rec.reason||'—')+'</div><div class="accounting-queue-desc">'+escAttr(rec.nextAction||'先開啟清單逐筆確認')+'</div></td>'
       +'<td class="money">'+(rec.amount?fmt(rec.amount):'—')+'</td>'
-      +'<td><button class="btn-g" style="font-size:10px;padding:2px 7px;margin-right:4px" onclick="setAccountingControlFocus(\''+escAttr(rec.bucketKey||'pendingAccounting')+'\')">看分類</button>'+accountingControlActionHtml(rec)+'</td>'
+      +'<td><button class="btn-g" style="font-size:10px;padding:2px 7px;margin-right:4px" onclick="setAccountingControlFocus('+financeInlineJsString(rec.bucketKey||'pendingAccounting')+')">看分類</button>'+accountingControlActionHtml(rec)+'</td>'
     +'</tr>';
   }
   return '<div class="accounting-queue-panel">'
@@ -33192,7 +33209,7 @@ function renderAccountingControlCenter(eid,period){
   }
   var active=buckets.find(function(b){return b.key===S.accountingControlFocus;})||buckets[0];
   function card(b){
-    return '<div class="accounting-control-card '+(b.tone||'')+'" onclick="setAccountingControlFocus(\''+b.key+'\')">'
+    return '<div class="accounting-control-card '+(b.tone||'')+'" onclick="setAccountingControlFocus('+financeInlineJsString(b.key)+')">'
       +'<div class="accounting-control-label">'+escAttr(b.label)+'</div>'
       +'<div class="accounting-control-value">'+b.count+'<span style="font-size:12px;color:#94a3b8;margin-left:4px">筆</span></div>'
       +'<div class="accounting-control-sub">'+escAttr(b.sub)+'<br>'+escAttr(b.nextAction)+'</div>'
@@ -34375,7 +34392,7 @@ window.analyzeSingleInvoiceFile=async function(){
     var att=await fileToAttachment(file);
     var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_ANON_KEY},
+      headers:await invoiceOcrRequestHeaders(),
       body:JSON.stringify({fileName:att.n,mime:att.mime,dataUrl:att.url})
     });
     var data=await res.json();
@@ -34718,7 +34735,7 @@ window.analyzeBatchInvoiceUpload=async function(){
       }else{
         var att=await fileToAttachment(file);
         if(!batchInvoiceReadCurrent(file,generation,identity))return false;
-        var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_ANON_KEY},body:JSON.stringify({fileName:file.name,mime:file.type,dataUrl:att.url,mode:'invoice_batch'})});
+        var res=await fetch(OPENAI_INVOICE_OCR_ENDPOINT,{method:'POST',headers:await invoiceOcrRequestHeaders(),body:JSON.stringify({fileName:file.name,mime:file.type,dataUrl:att.url,mode:'invoice_batch'})});
         if(!batchInvoiceReadCurrent(file,generation,identity))return false;
         var data=await res.json();
         if(!batchInvoiceReadCurrent(file,generation,identity))return false;
@@ -35803,7 +35820,7 @@ function renderRecvFilterButtons(counts){
     {k:'paid',label:'已收',c:counts.paid}
   ];
   var box=el('recv-filter-buttons');if(!box)return;
-  box.innerHTML=items.map(function(x){var id=x.k==='pending_receipt_review'?'review':x.k;return'<button class="btn-g '+(f===x.k?'on':'')+'" id="rf-'+id+'" onclick="filterRecv(\''+x.k+'\',this)">'+x.label+' <span style="font-size:9px;background:'+(f===x.k?'var(--br)':'#e9dccd')+';color:'+(f===x.k?'#fff':'#6a5840')+';padding:1px 5px;border-radius:99px;margin-left:3px">'+x.c+'</span></button>';}).join('');
+  box.innerHTML=items.map(function(x){var id=x.k==='pending_receipt_review'?'review':x.k;return'<button class="btn-g '+(f===x.k?'on':'')+'" id="rf-'+id+'" onclick="filterRecv('+financeInlineJsString(x.k)+',this)">'+x.label+' <span style="font-size:9px;background:'+(f===x.k?'var(--br)':'#e9dccd')+';color:'+(f===x.k?'#fff':'#6a5840')+';padding:1px 5px;border-radius:99px;margin-left:3px">'+x.c+'</span></button>';}).join('');
 }
 function renderRecvDetail(){
   var f=S.recvF||'all';
@@ -35817,6 +35834,7 @@ function renderRecvDetail(){
   if(el('recv-list-title'))el('recv-list-title').textContent='發票收款';
   el('recv-detail').innerHTML=data.map(function(i){return recvInvoiceRowHtml(i,RECV);}).join('')||'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px;border:1.5px dashed #e0d0b8;border-radius:9px;margin:12px">沒有符合的發票收款資料</div>';
 }
+window.renderRecvDetail=renderRecvDetail;
 function recvInvoiceRowHtml(i,RECV){
   var rows=invoiceGroupRows(i),groupCount=rows.length,groupTotal=invoiceGroupTotal(i),leader=invoiceGroupLeader(i);
   var proof=receiptFilesForInvoiceRows(rows).length;
@@ -35833,7 +35851,7 @@ function recvInvoiceRowHtml(i,RECV){
   var receiptTarget=rows.find(function(row){return canActReceipt(row)&&['unpaid','partial'].includes(recvStatusKey(row));});
   var canUploadReceipt=!!receiptTarget&&S.user&&currentRoleKey()==='accountant';
   var canReviewReceipt=canActReceipt(leader)&&k==='pending_receipt_review'&&S.user&&currentRoleKey()==='ceo';
-  return'<div class="recv-item" data-mobile-record-card="receivable" onclick="showRecvInvoiceDetail(\''+leader.id+'\')" title="點開查看收款與傳票細節"><div class="recv-item-main"><div class="recv-item-title"><div style="font-size:12px;font-weight:650;color:#334155">'+financeBatchNumberHtml(title)+'</div><span class="badge '+cls+'">'+recvStatusShortLabel(leader)+'</span>'+(groupCount>1?'<span class="badge b-blue">整批 '+groupCount+' 張</span>'+unpaidBadge:'')+'</div><div class="recv-item-buyer">'+escAttr(buyer)+'</div><div class="recv-item-meta">'+proofText+' · '+escAttr(follow)+'</div></div><div class="recv-item-amount"><div>'+fmt(groupTotal)+'</div><small>'+escAttr(typeText)+'</small></div><div class="recv-item-actions">'+(canUploadReceipt?'<label onclick="event.stopPropagation()">上傳證明<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="event.stopPropagation();submitReceiptReview(\''+(receiptTarget?receiptTarget.id:leader.id)+'\',this)"></label>':'')+(canReviewReceipt?'<button class="btn-g" onclick="event.stopPropagation();approveReceiptReview(\''+leader.id+'\')">確認已收</button>':'')+'</div></div>';
+  return'<div class="recv-item" data-mobile-record-card="receivable" onclick="showRecvInvoiceDetail('+financeInlineJsString(leader.id)+')" title="點開查看收款與傳票細節"><div class="recv-item-main"><div class="recv-item-title"><div style="font-size:12px;font-weight:650;color:#334155">'+financeBatchNumberHtml(title)+'</div><span class="badge '+cls+'">'+recvStatusShortLabel(leader)+'</span>'+(groupCount>1?'<span class="badge b-blue">整批 '+groupCount+' 張</span>'+unpaidBadge:'')+'</div><div class="recv-item-buyer">'+escAttr(buyer)+'</div><div class="recv-item-meta">'+proofText+' · '+escAttr(follow)+'</div></div><div class="recv-item-amount"><div>'+fmt(groupTotal)+'</div><small>'+escAttr(typeText)+'</small></div><div class="recv-item-actions">'+(canUploadReceipt?'<label onclick="event.stopPropagation()">上傳證明<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="event.stopPropagation();submitReceiptReview('+financeInlineJsString((receiptTarget?receiptTarget.id:leader.id))+',this)"></label>':'')+(canReviewReceipt?'<button class="btn-g" onclick="event.stopPropagation();approveReceiptReview('+financeInlineJsString(leader.id)+')">確認已收</button>':'')+'</div></div>';
 }
 	function singleInvoiceDetailHtml(i){
 	  if(!i)return'';
@@ -35857,7 +35875,7 @@ function recvInvoiceRowHtml(i,RECV){
 	  if(!events.length)return'<div style="font-size:12px;color:#94a3b8;padding:12px;border:1.5px dashed #e0d0b8;border-radius:8px">目前尚無發票作廢、折讓、退款或重開事件。</div>';
 	  return'<div style="overflow-x:auto"><table style="min-width:960px"><thead><tr><th>日期</th><th>事件</th><th>事件號</th><th>原因</th><th style="text-align:right">金額</th><th>傳票</th><th>退款</th><th>操作</th></tr></thead><tbody>'+events.map(function(e){
 	    var refundable=e.status==='posted'&&e.settlementAccountCode==='2131'&&num(e.refundPayableAmount==null?e.total:e.refundPayableAmount)>num(e.refundAmount);
-	    return'<tr><td>'+escAttr(normDate(e.date)||'—')+'</td><td><span class="badge '+(e.type==='refund'?'b-blue':e.type==='void'?'b-wait':'b-purp')+'">'+invoiceLifecycleTypeLabel(e.type)+'</span></td><td style="font-family:var(--font-sans);color:#64748b">'+escAttr(e.no||'—')+'</td><td>'+escAttr(e.reason||'—')+'</td><td style="text-align:right;font-weight:650">'+fmt(e.total||e.refundAmount||0)+'</td><td>'+(e.voucherNo?'<button class="btn-s" style="font-size:11px;padding:5px 8px" onclick="showVoucherById(\''+(e.voucherId||e.voucherNo)+'\')">'+escAttr(e.voucherNo)+'</button>':'<span style="font-size:11px;color:#94a3b8">—</span>')+'</td><td>'+(e.refundVoucherNo?'<button class="btn-s" style="font-size:11px;padding:5px 8px" onclick="showVoucherById(\''+(e.refundVoucherId||e.refundVoucherNo)+'\')">'+escAttr(e.refundVoucherNo)+'</button>':(refundable?'<span class="badge b-wait">待退款</span>':'<span style="font-size:11px;color:#94a3b8">—</span>'))+'</td><td>'+(refundable&&canManageInvoiceLifecycle()?'<button class="btn-g" style="font-size:11px;padding:5px 8px;color:#8a1010" onclick="refundInvoiceLifecycleEvent(\''+e.id+'\')">登錄退款</button>':'<span style="font-size:11px;color:#94a3b8">—</span>')+'</td></tr>';
+	    return'<tr><td>'+escAttr(normDate(e.date)||'—')+'</td><td><span class="badge '+(e.type==='refund'?'b-blue':e.type==='void'?'b-wait':'b-purp')+'">'+invoiceLifecycleTypeLabel(e.type)+'</span></td><td style="font-family:var(--font-sans);color:#64748b">'+escAttr(e.no||'—')+'</td><td>'+escAttr(e.reason||'—')+'</td><td style="text-align:right;font-weight:650">'+fmt(e.total||e.refundAmount||0)+'</td><td>'+(e.voucherNo?'<button class="btn-s" style="font-size:11px;padding:5px 8px" onclick="showVoucherById('+financeInlineJsString((e.voucherId||e.voucherNo))+')">'+escAttr(e.voucherNo)+'</button>':'<span style="font-size:11px;color:#94a3b8">—</span>')+'</td><td>'+(e.refundVoucherNo?'<button class="btn-s" style="font-size:11px;padding:5px 8px" onclick="showVoucherById('+financeInlineJsString((e.refundVoucherId||e.refundVoucherNo))+')">'+escAttr(e.refundVoucherNo)+'</button>':(refundable?'<span class="badge b-wait">待退款</span>':'<span style="font-size:11px;color:#94a3b8">—</span>'))+'</td><td>'+(refundable&&canManageInvoiceLifecycle()?'<button class="btn-g" style="font-size:11px;padding:5px 8px;color:#8a1010" onclick="refundInvoiceLifecycleEvent('+financeInlineJsString(e.id)+')">登錄退款</button>':'<span style="font-size:11px;color:#94a3b8">—</span>')+'</td></tr>';
 	  }).join('')+'</tbody></table></div>';
 	}
 	function invoiceLifecycleActionsHtml(leader,groupCount,events){
@@ -35865,8 +35883,8 @@ function recvInvoiceRowHtml(i,RECV){
 	  if(groupCount>1)return'<div style="font-size:12px;color:#8b7358;background:#fff8ed;border:1px solid #ead8c2;border-radius:8px;padding:10px">整批發票請點入單張後分別作廢、折讓或退款，避免一個動作誤套整批。</div>';
 	  var hasVoid=events.some(function(e){return e.type==='void'&&e.status!=='voided';})||!!leader.voidedAt;
 	  return'<div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;margin-top:8px">'
-	    +(!hasVoid?'<button class="btn-s" style="color:#8a1010" onclick="voidInvoiceLifecycle(\''+leader.id+'\')">作廢發票</button>':'')
-	    +(!hasVoid?'<button class="btn-g" onclick="allowanceInvoiceLifecycle(\''+leader.id+'\')">開立折讓</button>':'')
+	    +(!hasVoid?'<button class="btn-s" style="color:#8a1010" onclick="voidInvoiceLifecycle('+financeInlineJsString(leader.id)+')">作廢發票</button>':'')
+	    +(!hasVoid?'<button class="btn-g" onclick="allowanceInvoiceLifecycle('+financeInlineJsString(leader.id)+')">開立折讓</button>':'')
 	    +'<button class="btn-g" onclick="refreshFinancePage()">重新整理</button>'
 	    +'</div>';
 	}
@@ -35968,7 +35986,7 @@ function recvLedgerTraceHtml(rows){
   return'<div style="overflow-x:auto"><table style="min-width:880px"><thead><tr><th>日期</th><th>傳票/來源</th><th>科目</th><th>摘要</th><th style="text-align:right">借方</th><th style="text-align:right">貸方</th><th>操作</th></tr></thead><tbody>'+rows.map(function(l){
     var ref=l.ref||l.reference_no||l.sourceNo||'—';
     var v=voucherByLedgerRef(ref)||l.voucher||null;
-    return'<tr><td>'+escAttr(normDate(l.date||l.entry_date||'')||'—')+'</td><td style="font-family:var(--font-sans);color:#64748b">'+escAttr(ref)+'</td><td><strong>'+escAttr(l.ac||l.account_code||'')+'</strong> '+escAttr(l.an||l.account_name||'')+'</td><td>'+escAttr(l.desc||l.description||'—')+'</td><td style="text-align:right;font-weight:650">'+(num(l.dr||l.debit)?fmt(l.dr||l.debit):'—')+'</td><td style="text-align:right;font-weight:650">'+(num(l.cr||l.credit)?fmt(l.cr||l.credit):'—')+'</td><td>'+(v?'<button class="btn-s" style="font-size:11px;padding:5px 8px" onclick="showVoucherById(\''+(v.id||v.no)+'\')">傳票詳情</button>':'<span style="font-size:11px;color:#94a3b8">分類帳</span>')+'</td></tr>';
+    return'<tr><td>'+escAttr(normDate(l.date||l.entry_date||'')||'—')+'</td><td style="font-family:var(--font-sans);color:#64748b">'+escAttr(ref)+'</td><td><strong>'+escAttr(l.ac||l.account_code||'')+'</strong> '+escAttr(l.an||l.account_name||'')+'</td><td>'+escAttr(l.desc||l.description||'—')+'</td><td style="text-align:right;font-weight:650">'+(num(l.dr||l.debit)?fmt(l.dr||l.debit):'—')+'</td><td style="text-align:right;font-weight:650">'+(num(l.cr||l.credit)?fmt(l.cr||l.credit):'—')+'</td><td>'+(v?'<button class="btn-s" style="font-size:11px;padding:5px 8px" onclick="showVoucherById('+financeInlineJsString((v.id||v.no))+')">傳票詳情</button>':'<span style="font-size:11px;color:#94a3b8">分類帳</span>')+'</td></tr>';
   }).join('')+'</tbody></table></div>';
 }
 window.showRecvInvoiceDetail=function(id){
@@ -35987,8 +36005,8 @@ window.showRecvInvoiceDetail=function(id){
   var proofCount=receiptFiles.length;
   var actionH='';
   captureReceiptReviewVersions(leader,'modal');
-  if(canActReceipt(leader)&&statusKey==='unpaid'&&S.user&&currentRoleKey()==='accountant')actionH='<label onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:9px;font-size:12px;font-weight:650;background:#e6f4d8;border:1px solid #b0e090;color:#1a5010;cursor:pointer">上傳收款證明<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="submitReceiptReview(\''+(receiptTarget?receiptTarget.id:leader.id)+'\',this)"></label>';
-  if(canActReceipt(leader)&&statusKey==='pending_receipt_review'&&S.user&&currentRoleKey()==='ceo')actionH='<button class="btn-p" style="background:#1a7040" onclick="approveReceiptReview(\''+leader.id+'\')">確認已收款入帳</button>';
+  if(canActReceipt(leader)&&statusKey==='unpaid'&&S.user&&currentRoleKey()==='accountant')actionH='<label onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:9px;font-size:12px;font-weight:650;background:#e6f4d8;border:1px solid #b0e090;color:#1a5010;cursor:pointer">上傳收款證明<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" multiple style="display:none" onchange="submitReceiptReview('+financeInlineJsString((receiptTarget?receiptTarget.id:leader.id))+',this)"></label>';
+  if(canActReceipt(leader)&&statusKey==='pending_receipt_review'&&S.user&&currentRoleKey()==='ceo')actionH='<button class="btn-p" style="background:#1a7040" onclick="approveReceiptReview('+financeInlineJsString(leader.id)+')">確認已收款入帳</button>';
   openApprModal();
   el('appr-inner').innerHTML=
 	    '<div style="padding:12px 14px;border-bottom:1px solid #f0e6d6;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--brxxl)"><div style="display:flex;align-items:center;gap:8px"><button onclick="closeAppr()" style="background:none;border:none;cursor:pointer;color:#c0a080;font-size:14px">←</button><div><div style="font-family:var(--font-sans);font-size:11px;color:#c0a080">'+financeBatchNumberHtml(invoiceGroupNo(leader),true)+'</div><div style="font-size:14px;font-weight:650;color:#334155">收款 / 傳票詳情 · '+escAttr(e.s||'')+(groupCount>1?' · 整批 '+groupCount+' 張':'')+'</div></div></div><span class="badge '+statusCls+'">'+recvStatusShortLabel(leader)+'</span></div>'
@@ -36501,7 +36519,7 @@ function renderShareholderList(){
   var rows=VOUCHERS.filter(function(v){return v.sourceType==='shareholder_transaction'||v.sourceType==='intercompany_transfer'||/^ICL\d{4}-/.test(v.id||v.no||'')||/^TXN-ICL\d{4}-/.test(v.reqId||'')||/^CAP\d{4}-/.test(v.id||v.no||'')||/^TXN-CAP\d{4}-/.test(v.reqId||'')||/^INV\d{4}-/.test(v.id||v.no||'')||/^TXN-INV\d{4}-/.test(v.reqId||'')||/^VCAP-/.test(v.id);}).slice(0,12);
   var box=el('sh-list'),cnt=el('sh-count');if(cnt)cnt.textContent=rows.length+' 筆';
   if(!box)return;
-  box.innerHTML=rows.length?rows.map(function(v){var tag=v.sourceType==='intercompany_transfer'?'<span class="badge b-blue">公司間</span>':'<span class="badge b-purp">股東</span>';return'<div style="padding:9px 0;border-bottom:1px solid #f0e6d6"><div style="display:flex;justify-content:space-between;gap:8px"><div><div style="font-size:12px;font-weight:650;color:#334155">'+v.no+' '+tag+'</div><div style="font-size:10px;color:#94a3b8">'+v.date+' · '+gE(v.eid).full+(v.pairVoucherNo?' · 對應傳票 '+v.pairVoucherNo:'')+'</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:650">'+fmt(v.total)+'</div><button class="btn-g" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="showVoucherById(\''+v.id+'\')">檢視</button></div></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:4px">'+v.desc+'</div></div>';}).join(''):'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px;border:1.5px dashed #e0d0b8;border-radius:9px">尚無股東或公司間往來傳票</div>';
+  box.innerHTML=rows.length?rows.map(function(v){var tag=v.sourceType==='intercompany_transfer'?'<span class="badge b-blue">公司間</span>':'<span class="badge b-purp">股東</span>';return'<div style="padding:9px 0;border-bottom:1px solid #f0e6d6"><div style="display:flex;justify-content:space-between;gap:8px"><div><div style="font-size:12px;font-weight:650;color:#334155">'+v.no+' '+tag+'</div><div style="font-size:10px;color:#94a3b8">'+v.date+' · '+gE(v.eid).full+(v.pairVoucherNo?' · 對應傳票 '+v.pairVoucherNo:'')+'</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:650">'+fmt(v.total)+'</div><button class="btn-g" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="showVoucherById('+financeInlineJsString(v.id)+')">檢視</button></div></div><div style="font-size:11px;color:#8b7358;line-height:1.5;margin-top:4px">'+v.desc+'</div></div>';}).join(''):'<div style="text-align:center;padding:28px;color:#94a3b8;font-size:12px;border:1.5px dashed #e0d0b8;border-radius:9px">尚無股東或公司間往來傳票</div>';
 }
 window.openRecvBatch=function(batchId){
   var RECV={paid:'b-ok',unpaid:'b-wait',partial:'b-blue',pending_receipt_review:'b-purp'};
@@ -36768,7 +36786,7 @@ function statementRankList(id,items,kind){
       escape:escAttr,
       format:fmt,
       traceActionHtml:function(actionKind,key){return traceButton(actionKind,key,'追溯');},
-      deptActionHtml:function(key){return '<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openStatementLedgerDept(\''+escAttr(key||'')+'\')">看分類帳</button>';}
+      deptActionHtml:function(key){return '<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openStatementLedgerDept('+financeInlineJsString(key||'')+')">看分類帳</button>';}
     });
     return;
   }
@@ -38028,7 +38046,7 @@ function renderSettingVersions(){
     box.innerHTML='<div class="chd"><span class="cht">系統設定版本紀錄</span><span style="font-size:10px;color:#94a3b8">尚無版本</span></div><div style="padding:12px;font-size:12px;color:#64748b">正式設定核准或直接套用後，系統會在這裡保存版本快照。</div>';
     return;
   }
-  box.innerHTML='<div class="chd"><span class="cht">系統設定版本紀錄</span><button class="btn-g" style="font-size:10px;padding:3px 8px" onclick="exportSettingVersions()">匯出版本</button></div><div style="padding:10px">'+rows.map(function(v){return'<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f0e6d6"><div style="min-width:0"><div style="font-size:12px;font-weight:650;color:#334155">'+escAttr(v.versionNo)+' · '+settingsTargetLabel(v.target)+'</div><div style="font-size:10px;color:#94a3b8">'+String(v.createdAt||'').slice(0,19).replace('T',' ')+' · 建立：'+escAttr(v.createdBy||'—')+' · 核准：'+escAttr(v.approvedBy||'—')+'</div><div style="font-size:11px;color:#6a5840;margin-top:3px">'+escAttr(v.summary||'')+'</div></div><button class="btn-s" style="font-size:10px;padding:3px 8px;align-self:center" onclick="downloadSettingVersion(\''+v.id+'\')">下載</button></div>';}).join('')+'</div>';
+  box.innerHTML='<div class="chd"><span class="cht">系統設定版本紀錄</span><button class="btn-g" style="font-size:10px;padding:3px 8px" onclick="exportSettingVersions()">匯出版本</button></div><div style="padding:10px">'+rows.map(function(v){return'<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f0e6d6"><div style="min-width:0"><div style="font-size:12px;font-weight:650;color:#334155">'+escAttr(v.versionNo)+' · '+settingsTargetLabel(v.target)+'</div><div style="font-size:10px;color:#94a3b8">'+String(v.createdAt||'').slice(0,19).replace('T',' ')+' · 建立：'+escAttr(v.createdBy||'—')+' · 核准：'+escAttr(v.approvedBy||'—')+'</div><div style="font-size:11px;color:#6a5840;margin-top:3px">'+escAttr(v.summary||'')+'</div></div><button class="btn-s" style="font-size:10px;padding:3px 8px;align-self:center" onclick="downloadSettingVersion('+financeInlineJsString(v.id)+')">下載</button></div>';}).join('')+'</div>';
 }
 window.downloadSettingVersion=function(id){
   var v=(SETTINGS_VERSIONS||[]).find(function(x){return x.id===id;});
@@ -38117,7 +38135,7 @@ function renderPendingSettings(){
   if(!pending.length||!S.user||!currentUserIsPermanentCeo()){box.style.display='none';box.innerHTML='';return;}
   box.style.display='block';
   var labels={entities:'法人資訊',departments:'部門資訊',accounts:'會計科目',bank_transfer_fees:'手續費金額',role_permissions:'層級權限',approval_routing_policy:'簽核金額門檻',product_modules:'模組販售設定',workflow_templates:'簽核流程模板',form_field_configs:'表單欄位設定',accounting_templates:'機構科目模板',customer_profiles:'導入設定檔',default_customer_profile_id:'預設導入設定檔'};
-  box.innerHTML='<div class="chd"><span class="cht">待執行長檢核的系統設定</span><span style="font-size:10px;color:#94a3b8">'+pending.length+' 筆</span></div><div style="padding:10px">'+pending.map(function(c){var isAcct=c.target==='accounts';return'<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f0e6d6"><div style="min-width:0"><div style="font-size:12px;font-weight:650;color:#334155">'+(labels[c.target]||c.target)+(isAcct?' <span class="badge b-purp">科目異動</span>':'')+'</div><div style="font-size:10px;color:#94a3b8">送出人：'+(c.submittedBy||'—')+' · '+String(c.time||'').slice(0,16).replace('T',' ')+'</div>'+(isAcct?'<div style="font-size:11px;color:#6a5840;line-height:1.6;margin-top:4px">原因：'+escAttr(c.reason||'—')+'<br>摘要：'+escAttr(c.summary||accountChangeSummaryText(c.changes||[]))+'</div><div style="font-size:10px;color:#94a3b8;margin-top:3px">'+(c.changes||[]).slice(0,4).map(function(x){return escAttr(x.detail||'');}).join('<br>')+((c.changes||[]).length>4?'<br>…':'')+'</div>':'')+'</div><div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-p" onclick="approvePendingSetting(\''+c.id+'\')">通過</button><button class="btn-s" onclick="rejectPendingSetting(\''+c.id+'\')">退回</button></div></div>';}).join('')+'</div>';
+  box.innerHTML='<div class="chd"><span class="cht">待執行長檢核的系統設定</span><span style="font-size:10px;color:#94a3b8">'+pending.length+' 筆</span></div><div style="padding:10px">'+pending.map(function(c){var isAcct=c.target==='accounts';return'<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f0e6d6"><div style="min-width:0"><div style="font-size:12px;font-weight:650;color:#334155">'+(labels[c.target]||c.target)+(isAcct?' <span class="badge b-purp">科目異動</span>':'')+'</div><div style="font-size:10px;color:#94a3b8">送出人：'+(c.submittedBy||'—')+' · '+String(c.time||'').slice(0,16).replace('T',' ')+'</div>'+(isAcct?'<div style="font-size:11px;color:#6a5840;line-height:1.6;margin-top:4px">原因：'+escAttr(c.reason||'—')+'<br>摘要：'+escAttr(c.summary||accountChangeSummaryText(c.changes||[]))+'</div><div style="font-size:10px;color:#94a3b8;margin-top:3px">'+(c.changes||[]).slice(0,4).map(function(x){return escAttr(x.detail||'');}).join('<br>')+((c.changes||[]).length>4?'<br>…':'')+'</div>':'')+'</div><div style="display:flex;gap:5px;flex-shrink:0"><button class="btn-p" onclick="approvePendingSetting('+financeInlineJsString(c.id)+')">通過</button><button class="btn-s" onclick="rejectPendingSetting('+financeInlineJsString(c.id)+')">退回</button></div></div>';}).join('')+'</div>';
 }
 window.approvePendingSetting=async function(id){
   if(!S.user||!currentUserIsPermanentCeo()){alert('只有執行長可以核准系統設定異動');return;}
@@ -38313,7 +38331,7 @@ function renderSettingAccts(){
     var selectionScope=normalizeAccountSelectionScope(a);
     var scopeStatus=selectionScope.mode==='restricted'?accountDeptScopeLabel(a.d,a).l:'目前全部公司／部門共用';
     var codeState=SETTINGS_EDIT?(isNew?'':' readonly'):' disabled';
-    return'<tr data-original-code="'+attr(a.c)+'"><td><input class="set-acct-c" value="'+attr(a.c)+'" title="'+(isNew?'請輸入新科目代碼':'已使用的科目代碼是歷史關聯鍵，不開放改寫')+'" style="width:82px;font-size:11px'+(isNew?'':';background:var(--warm)')+'"'+codeState+'></td><td><input class="set-acct-n" value="'+attr(a.n)+'" style="min-width:190px"'+settingsDisabled()+'>'+(requiredDefault?'<div style="font-size:10px;color:#8a4b0f;margin-top:3px">系統必要科目：可改名稱與預留範圍，不可停用</div>':'')+'</td><td><select class="set-acct-s"'+settingsDisabled()+'><option value="debit" '+(a.s==='debit'?'selected':'')+'>借方</option><option value="credit" '+(a.s==='credit'?'selected':'')+'>貸方</option></select></td><td><input class="set-acct-d" value="'+attr(a.d)+'" placeholder="all、A系、A1101、B11*" title="預留給未來公司／部門限制；目前不會縮小借貸科目選單" style="width:150px"'+settingsDisabled()+'><div style="font-size:10px;color:#8b7358;margin-top:3px">'+escAttr(scopeStatus)+'</div></td><td><input class="set-acct-on" type="checkbox" '+(a.on?'checked':'')+(requiredDefault?' disabled':settingsDisabled())+'></td>'+(SETTINGS_EDIT?'<td>'+(requiredDefault?'<span style="font-size:10px;color:#8a4b0f">必要科目</span>':'<button class="btn-g" style="color:#8a1010" onclick="deleteAcctSetting(\''+a.c+'\')">'+(isNew?'移除':'停用')+'</button>')+'</td>':'')+'</tr>';
+    return'<tr data-original-code="'+attr(a.c)+'"><td><input class="set-acct-c" value="'+attr(a.c)+'" title="'+(isNew?'請輸入新科目代碼':'已使用的科目代碼是歷史關聯鍵，不開放改寫')+'" style="width:82px;font-size:11px'+(isNew?'':';background:var(--warm)')+'"'+codeState+'></td><td><input class="set-acct-n" value="'+attr(a.n)+'" style="min-width:190px"'+settingsDisabled()+'>'+(requiredDefault?'<div style="font-size:10px;color:#8a4b0f;margin-top:3px">系統必要科目：可改名稱與預留範圍，不可停用</div>':'')+'</td><td><select class="set-acct-s"'+settingsDisabled()+'><option value="debit" '+(a.s==='debit'?'selected':'')+'>借方</option><option value="credit" '+(a.s==='credit'?'selected':'')+'>貸方</option></select></td><td><input class="set-acct-d" value="'+attr(a.d)+'" placeholder="all、A系、A1101、B11*" title="預留給未來公司／部門限制；目前不會縮小借貸科目選單" style="width:150px"'+settingsDisabled()+'><div style="font-size:10px;color:#8b7358;margin-top:3px">'+escAttr(scopeStatus)+'</div></td><td><input class="set-acct-on" type="checkbox" '+(a.on?'checked':'')+(requiredDefault?' disabled':settingsDisabled())+'></td>'+(SETTINGS_EDIT?'<td>'+(requiredDefault?'<span style="font-size:10px;color:#8a4b0f">必要科目</span>':'<button class="btn-g" style="color:#8a1010" onclick="deleteAcctSetting('+financeInlineJsString(a.c)+')">'+(isNew?'移除':'停用')+'</button>')+'</td>':'')+'</tr>';
   }).join('');
 }
 function renderSettingFees(){
@@ -38906,7 +38924,7 @@ function workflowRequestChipsHtml(template){
   return groups.map(function(g){
     return '<div style="margin-bottom:9px"><div style="font-size:10px;font-weight:900;color:#a08060;margin-bottom:5px">'+escAttr(g.title)+'</div><div class="workflow-request-chips">'+g.types.map(function(t){
       var on=(template.appliesTo||[]).indexOf(t)>-1;
-      return'<button type="button" class="workflow-chip '+(on?'on':'')+'" onclick="toggleWorkflowRequestType(\''+attr(t)+'\')" '+(!SETTINGS_EDIT?'disabled':'')+'>'+escAttr(workflowRequestTypeLabel(t))+'</button>';
+      return'<button type="button" class="workflow-chip '+(on?'on':'')+'" onclick="toggleWorkflowRequestType('+financeInlineJsString(t)+')" '+(!SETTINGS_EDIT?'disabled':'')+'>'+escAttr(workflowRequestTypeLabel(t))+'</button>';
     }).join('')+'</div></div>';
   }).join('');
 }
@@ -38931,7 +38949,7 @@ function workflowFormCardHtml(type){
   var activeSteps=template?(template.steps||[]).filter(function(s){return s.required!==false;}).length:0;
   var routeCount=template?(template.conditionalRoutes||[]).filter(function(r){return r&&r.enabled!==false;}).length:0;
   var status=fails?'b-wait':(warns?'b-purp':'b-ok');
-  return '<button type="button" class="workflow-form-card '+(type===workflowSelectedFormType()?'on':'')+'" onclick="selectWorkflowForm(\''+attr(type)+'\')">'
+  return '<button type="button" class="workflow-form-card '+(type===workflowSelectedFormType()?'on':'')+'" onclick="selectWorkflowForm('+financeInlineJsString(type)+')">'
     +'<div class="workflow-form-card-head"><div><div class="workflow-form-card-title">'+escAttr(workflowRequestTypeLabel(type))+'</div><div class="workflow-form-card-meta">'+escAttr(type)+'</div></div><span class="badge '+status+'">'+(fails?'需修正':(warns?'有提醒':'正常'))+'</span></div>'
     +'<div class="workflow-form-card-meta">'+escAttr(template?(template.name+' / '+template.id):'尚未指定流程')+'</div>'
     +'<div class="workflow-form-card-stats"><span class="badge b-blue">'+activeSteps+' 關</span><span class="badge b-gray">'+routeCount+' 條件路線</span><span class="badge '+(template&&template.enabled!==false?'b-ok':'b-gray')+'">'+(template&&template.enabled!==false?'啟用':'未啟用')+'</span></div>'
@@ -38948,7 +38966,7 @@ function workflowRouteTabsHtml(template){
   if(current!=='default'&&!routes.some(function(r){return r.id===current;}))WORKFLOW_EDITOR_SELECTED_ROUTE='default';
   return '<div class="workflow-route-tabs">'
     +'<button type="button" class="workflow-route-tab '+(WORKFLOW_EDITOR_SELECTED_ROUTE==='default'?'on':'')+'" onclick="selectWorkflowRoute(\'default\')">預設路線</button>'
-    +routes.map(function(r){return'<button type="button" class="workflow-route-tab '+(r.id===WORKFLOW_EDITOR_SELECTED_ROUTE?'on':'')+'" onclick="selectWorkflowRoute(\''+attr(r.id)+'\')">'+escAttr(r.label||'條件路線')+'</button>';}).join('')
+    +routes.map(function(r){return'<button type="button" class="workflow-route-tab '+(r.id===WORKFLOW_EDITOR_SELECTED_ROUTE?'on':'')+'" onclick="selectWorkflowRoute('+financeInlineJsString(r.id)+')">'+escAttr(r.label||'條件路線')+'</button>';}).join('')
     +(SETTINGS_EDIT?'<button type="button" class="btn-g" onclick="addWorkflowConditionalRoute()">+ 新增條件路線</button>':'')
     +'</div>';
 }
@@ -38958,7 +38976,7 @@ function workflowRoutePanelHtml(template){
     return '<div class="workflow-route-panel"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="workflow-pane-title">預設路線</div><div class="workflow-pane-sub">所有未命中條件的單據都會走這條路線。</div></div><span class="workflow-route-badge">永遠適用</span></div></div>';
   }
   return '<div class="workflow-route-panel">'
-    +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="workflow-pane-title">條件路線設定</div><div class="workflow-pane-sub">'+escAttr(workflowConditionLabel(route))+'</div></div>'+(SETTINGS_EDIT?'<button type="button" class="btn-g" style="color:#8a1010" onclick="deleteWorkflowConditionalRoute(\''+attr(route.id)+'\')">刪除此路線</button>':'')+'</div>'
+    +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="workflow-pane-title">條件路線設定</div><div class="workflow-pane-sub">'+escAttr(workflowConditionLabel(route))+'</div></div>'+(SETTINGS_EDIT?'<button type="button" class="btn-g" style="color:#8a1010" onclick="deleteWorkflowConditionalRoute('+financeInlineJsString(route.id)+')">刪除此路線</button>':'')+'</div>'
     +'<div class="workflow-route-condition"><div class="fg"><label class="fl">路線名稱 *</label><input value="'+attr(route.label||'')+'" onchange="updateWorkflowRouteField(\'label\',this.value)"'+disabled+'></div><div class="fg"><label class="fl">條件欄位</label><select onchange="updateWorkflowRouteField(\'field\',this.value)"'+disabled+'>'+workflowConditionFieldOptionsHtml(route.field)+'</select></div><div class="fg"><label class="fl">判斷方式</label><select onchange="updateWorkflowRouteField(\'operator\',this.value)"'+disabled+'>'+workflowConditionOperatorOptionsHtml(route.field,route.operator)+'</select></div>'+workflowConditionValueInputsHtml(route,disabled)+'<label style="display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:800;color:#334155;padding-bottom:11px"><input type="checkbox" '+(route.enabled!==false?'checked':'')+' onchange="updateWorkflowRouteField(\'enabled\',this.checked)"'+disabled+'>啟用</label></div>'
     +'</div>';
 }
@@ -39040,7 +39058,7 @@ function workflowEditorHtml(template){
 function renderWorkflowLibrary(){
   var box=el('settings-workflow-library');if(!box)return;
   box.innerHTML=workflowStepCatalog().map(function(s){
-    return'<button type="button" class="workflow-library-item" '+(SETTINGS_EDIT?'draggable="true" ondragstart="workflowLibraryDragStart(event,\''+attr(s.key)+'\')" onclick="addWorkflowStepToSelected(\''+attr(s.key)+'\')"':'disabled')+'><strong>'+escAttr(s.label)+'</strong><span>'+escAttr(s.group+' · '+s.key)+'</span></button>';
+    return'<button type="button" class="workflow-library-item" '+(SETTINGS_EDIT?'draggable="true" ondragstart="workflowLibraryDragStart(event,'+financeInlineJsString(s.key)+')" onclick="addWorkflowStepToSelected('+financeInlineJsString(s.key)+')"':'disabled')+'><strong>'+escAttr(s.label)+'</strong><span>'+escAttr(s.group+' · '+s.key)+'</span></button>';
   }).join('');
 }
 function renderSettingWorkflows(){
@@ -39872,7 +39890,7 @@ function renderSettingCustomerProfiles(){
       +'<td><textarea class="set-profile-workflows" rows="5" style="min-width:190px;font-size:11px"'+settingsDisabled()+'>'+attr(customerProfileLineList(p.workflowTemplateIds))+'</textarea></td>'
       +'<td><textarea class="set-profile-forms" rows="5" style="min-width:190px;font-size:11px"'+settingsDisabled()+'>'+attr(customerProfileLineList(p.formConfigIds))+'</textarea></td>'
       +'<td><textarea class="set-profile-notes" rows="5" style="min-width:220px;font-size:11px"'+settingsDisabled()+'>'+attr(p.notes||'')+'</textarea></td>'
-      +'<td><div style="display:flex;gap:5px;flex-wrap:wrap"><button class="btn-g" style="font-size:10px;padding:4px 8px" onclick="previewCustomerProfile(\''+attr(p.id)+'\')">預覽</button>'+(SETTINGS_EDIT?'<button class="btn-g" style="font-size:10px;padding:4px 8px" onclick="previewCustomerProfileApplyPlan(\''+attr(p.id)+'\')">預覽整包</button><button class="btn-s" style="font-size:10px;padding:4px 8px" onclick="applyCustomerProfilePackToEditing(\''+attr(p.id)+'\')">套用整包</button><button class="btn-g" style="font-size:10px;padding:4px 8px;color:#8a1010" onclick="deleteCustomerProfile(\''+attr(p.id)+'\')">刪除</button>':'')+'</div><div style="font-size:10px;color:#94a3b8;margin-top:4px;line-height:1.4">整包套用只更新編輯中的模組、流程、欄位與科目模板；仍需儲存才生效。</div></td>'
+      +'<td><div style="display:flex;gap:5px;flex-wrap:wrap"><button class="btn-g" style="font-size:10px;padding:4px 8px" onclick="previewCustomerProfile('+financeInlineJsString(p.id)+')">預覽</button>'+(SETTINGS_EDIT?'<button class="btn-g" style="font-size:10px;padding:4px 8px" onclick="previewCustomerProfileApplyPlan('+financeInlineJsString(p.id)+')">預覽整包</button><button class="btn-s" style="font-size:10px;padding:4px 8px" onclick="applyCustomerProfilePackToEditing('+financeInlineJsString(p.id)+')">套用整包</button><button class="btn-g" style="font-size:10px;padding:4px 8px;color:#8a1010" onclick="deleteCustomerProfile('+financeInlineJsString(p.id)+')">刪除</button>':'')+'</div><div style="font-size:10px;color:#94a3b8;margin-top:4px;line-height:1.4">整包套用只更新編輯中的模組、流程、欄位與科目模板；仍需儲存才生效。</div></td>'
     +'</tr>';
   }).join('');
 }
@@ -40416,12 +40434,12 @@ function membershipRoleMatrixHtml(){
   var editing=!!MEMBERSHIP_ROLE_MATRIX_DRAFT.editing,governed=!!AUTHORIZATION_GOVERNANCE_RUNTIME.available,inactive=role.active===false;
   var roleOptions=roles.map(function(item){return'<option value="'+attr(item.id)+'" '+(String(item.id)===String(role.id)?'selected':'')+'>'+escAttr((item.name||item.code)+(item.active===false?'（已停用）':'')+' · '+num(item.assigned_user_count)+' 人')+'</option>';}).join('');
   var bulkDisabled=!editing||!governed||inactive;
-  var rolebar='<div class="permission-board-rolebar"><label class="permission-role-field"><span>設定職位</span><select id="permission-role-select" onchange="selectMembershipRoleBoard(this.value)">'+roleOptions+'</select></label><div class="permission-role-summary"><strong>'+escAttr(role.name||role.code)+'</strong><span>'+escAttr(role.code||'')+' · '+num(role.assigned_user_count)+' 人'+(inactive?' · 已停用':(role.system_protected?' · 系統職位':' · 客製職位'))+'</span></div><div class="permission-board-quick-actions"><button type="button" onclick="setMembershipRoleBoardAll(true)" '+(bulkDisabled?'disabled':'')+'>全選</button><span aria-hidden="true">／</span><button type="button" onclick="setMembershipRoleBoardAll(false)" '+(bulkDisabled?'disabled':'')+'>清除</button><button type="button" onclick="editMembershipRole(\''+attr(role.id)+'\')" '+(!governed||editing?'disabled':'')+'>編輯職位資料</button></div></div>';
+  var rolebar='<div class="permission-board-rolebar"><label class="permission-role-field"><span>設定職位</span><select id="permission-role-select" onchange="selectMembershipRoleBoard(this.value)">'+roleOptions+'</select></label><div class="permission-role-summary"><strong>'+escAttr(role.name||role.code)+'</strong><span>'+escAttr(role.code||'')+' · '+num(role.assigned_user_count)+' 人'+(inactive?' · 已停用':(role.system_protected?' · 系統職位':' · 客製職位'))+'</span></div><div class="permission-board-quick-actions"><button type="button" onclick="setMembershipRoleBoardAll(true)" '+(bulkDisabled?'disabled':'')+'>全選</button><span aria-hidden="true">／</span><button type="button" onclick="setMembershipRoleBoardAll(false)" '+(bulkDisabled?'disabled':'')+'>清除</button><button type="button" onclick="editMembershipRole('+financeInlineJsString(role.id)+')" '+(!governed||editing?'disabled':'')+'>編輯職位資料</button></div></div>';
   var board='<div class="permission-board-grid">'+groupCodes.map(function(moduleCode){
     var rows=groups[moduleCode].map(function(permission){
       var entries=membershipRoleMatrixPermissionEntries(role,permission.code),value=membershipRoleMatrixCellValue(entries),state=membershipRoleBoardRuleState(entries),mandatory=membershipRoleMatrixPermissionIsMandatory(role,permission.code),disabled=!editing||!governed||inactive||mandatory;
       var description=String(permission.description||'').trim();
-      return'<div class="permission-feature-row is-'+attr(state.kind)+(mandatory?' is-mandatory':'')+'" data-role-id="'+attr(role.id)+'" data-permission-code="'+attr(permission.code)+'"><label class="permission-feature-main"><input class="permission-feature-check" type="checkbox" data-role-id="'+attr(role.id)+'" data-permission-code="'+attr(permission.code)+'" '+(state.enabled?'checked':'')+' '+(disabled?'disabled':'')+' onchange="toggleMembershipRoleBoardPermission(\''+attr(role.id)+'\',\''+attr(permission.code)+'\',this.checked,this)"><span><b>'+escAttr(permission.name||permission.code)+'</b>'+(description?'<small>'+escAttr(description)+'</small>':'')+'</span></label><div class="permission-feature-rule"><select class="membership-permission-scope effect-'+attr(value.split('|')[0])+'" aria-label="'+attr((role.name||role.code)+'－'+(permission.name||permission.code)+'－資料範圍')+'" onchange="changeMembershipRoleMatrixPermission(\''+attr(role.id)+'\',\''+attr(permission.code)+'\',this.value,this)" '+(disabled||!entries.length?'disabled':'')+'>'+membershipRoleMatrixOptions(value)+'</select><span class="permission-feature-status">'+escAttr(mandatory?'系統必要 · '+state.label:state.label)+'</span></div></div>';
+      return'<div class="permission-feature-row is-'+attr(state.kind)+(mandatory?' is-mandatory':'')+'" data-role-id="'+attr(role.id)+'" data-permission-code="'+attr(permission.code)+'"><label class="permission-feature-main"><input class="permission-feature-check" type="checkbox" data-role-id="'+attr(role.id)+'" data-permission-code="'+attr(permission.code)+'" '+(state.enabled?'checked':'')+' '+(disabled?'disabled':'')+' onchange="toggleMembershipRoleBoardPermission('+financeInlineJsString(role.id)+','+financeInlineJsString(permission.code)+',this.checked,this)"><span><b>'+escAttr(permission.name||permission.code)+'</b>'+(description?'<small>'+escAttr(description)+'</small>':'')+'</span></label><div class="permission-feature-rule"><select class="membership-permission-scope effect-'+attr(value.split('|')[0])+'" aria-label="'+attr((role.name||role.code)+'－'+(permission.name||permission.code)+'－資料範圍')+'" onchange="changeMembershipRoleMatrixPermission('+financeInlineJsString(role.id)+','+financeInlineJsString(permission.code)+',this.value,this)" '+(disabled||!entries.length?'disabled':'')+'>'+membershipRoleMatrixOptions(value)+'</select><span class="permission-feature-status">'+escAttr(mandatory?'系統必要 · '+state.label:state.label)+'</span></div></div>';
     }).join('');
     return'<section class="permission-feature-group" data-permission-group="'+attr(moduleCode)+'"><header><strong>'+escAttr(membershipRoleMatrixModuleLabel(moduleCode))+'</strong><span>'+groups[moduleCode].length+' 項</span></header><div>'+rows+'</div></section>';
   }).join('')+'</div>';
@@ -40509,7 +40527,7 @@ function membershipAssignmentPanelHtml(){
   var roleOptions=roles.map(function(r){return'<option value="'+attr(r.id)+'">'+escAttr(r.name+' ('+r.code+')')+'</option>';}).join('');
   var orgOptions='<option value="">全域／依權限資料範圍</option>'+(catalog.org_units||[]).map(function(o){return'<option value="'+attr(o.id)+'">'+escAttr(o.code+' '+o.name)+'</option>';}).join('');
   var permissionOptions=(MEMBERSHIP_PERMISSION_CATALOG||[]).map(function(p){return'<option value="'+attr(p.code)+'">'+escAttr((p.name||p.code)+' · '+p.code)+'</option>';}).join('');
-  var activeAssignments=(catalog.assignments||[]).filter(function(a){return a.active!==false;}).slice(0,12).map(function(a){var u=(catalog.users||[]).find(function(x){return String(x.id)===String(a.membership_user_id);})||{},r=membershipRoleById(a.role_id)||{},o=(catalog.org_units||[]).find(function(x){return String(x.id)===String(a.scope_org_unit_id);})||{};return'<div style="display:flex;align-items:center;gap:7px;font-size:10px;color:#64748b;padding:4px 0;border-bottom:1px solid #f3eadf"><span style="flex:1">'+escAttr((u.name||'未知人員')+' → '+(r.name||'未知角色')+(o.code?' · '+o.code:''))+'</span><span style="color:#94a3b8">'+escAttr(String(a.effective_from||'').slice(0,10))+(a.effective_to?'～'+escAttr(String(a.effective_to).slice(0,10)):'')+'</span><button class="btn-g" style="font-size:9px;padding:2px 6px" onclick="createUnassignMembershipRoleChange(\''+attr(a.id)+'\')">建立撤銷單</button></div>';}).join('');
+  var activeAssignments=(catalog.assignments||[]).filter(function(a){return a.active!==false;}).slice(0,12).map(function(a){var u=(catalog.users||[]).find(function(x){return String(x.id)===String(a.membership_user_id);})||{},r=membershipRoleById(a.role_id)||{},o=(catalog.org_units||[]).find(function(x){return String(x.id)===String(a.scope_org_unit_id);})||{};return'<div style="display:flex;align-items:center;gap:7px;font-size:10px;color:#64748b;padding:4px 0;border-bottom:1px solid #f3eadf"><span style="flex:1">'+escAttr((u.name||'未知人員')+' → '+(r.name||'未知角色')+(o.code?' · '+o.code:''))+'</span><span style="color:#94a3b8">'+escAttr(String(a.effective_from||'').slice(0,10))+(a.effective_to?'～'+escAttr(String(a.effective_to).slice(0,10)):'')+'</span><button class="btn-g" style="font-size:9px;padding:2px 6px" onclick="createUnassignMembershipRoleChange('+financeInlineJsString(a.id)+')">建立撤銷單</button></div>';}).join('');
   return'<details style="margin-top:10px;border:1px solid #eadbc7;border-radius:8px;background:#fff"><summary style="padding:9px 11px;cursor:pointer;font-size:12px;font-weight:800;color:#334155">多角色指派與生效期間</summary><div style="padding:0 11px 11px"><div style="display:grid;grid-template-columns:1.2fr 1.2fr 1.2fr 120px 120px;gap:7px"><div><label class="fl">人員</label><select id="membership-assign-user">'+userOptions+'</select></div><div><label class="fl">角色</label><select id="membership-assign-role">'+roleOptions+'</select></div><div><label class="fl">組織範圍</label><select id="membership-assign-org">'+orgOptions+'</select></div><div><label class="fl">生效日</label><input id="membership-assign-from" type="date" value="'+todayIso()+'"></div><div><label class="fl">失效日</label><input id="membership-assign-to" type="date"></div></div><div style="display:flex;gap:7px;margin-top:7px"><input id="membership-assign-reason" style="flex:1" placeholder="指派原因 *"><button class="btn-p" onclick="assignMembershipRole()">指派角色</button></div><div style="margin-top:8px">'+(activeAssignments||'<div style="font-size:10px;color:#94a3b8">尚無有效角色指派</div>')+'</div></div></details><details style="margin-top:8px;border:1px solid #eadbc7;border-radius:8px;background:#fff"><summary style="padding:9px 11px;cursor:pointer;font-size:12px;font-weight:800;color:#334155">權限模擬器</summary><div style="padding:0 11px 11px"><div style="display:grid;grid-template-columns:1fr 1.5fr 2fr auto;gap:7px;align-items:end"><div><label class="fl">測試人員</label><select id="membership-sim-user">'+userOptions+'</select></div><div><label class="fl">權限</label><select id="membership-sim-permission">'+permissionOptions+'</select></div><div><label class="fl">資源情境 JSON</label><input id="membership-sim-context" value="{}" placeholder="{&quot;company_id&quot;:&quot;E1&quot;}"></div><button class="btn-p" onclick="simulateMembershipPermission()">模擬</button></div><div id="membership-sim-result" style="margin-top:8px;font-size:11px;color:#64748b">輸入法人、部門、擁有者或簽核人等情境後，可查看 allow／deny 與命中來源。</div></div></details>';
 }
 function authorizationGovernancePanelHtml(){
@@ -40519,10 +40537,10 @@ function authorizationGovernancePanelHtml(){
   var currentMemberId=String((CURRENT_PERMISSION_SNAPSHOT||{}).membership_user_id||'');
   var rows=(AUTHORIZATION_CHANGE_SETS||[]).slice(0,12).map(function(c){
     var actions='';
-    if(c.status==='draft'&&String(c.created_by)===currentMemberId)actions='<button class="btn-g" onclick="submitAuthorizationChangeSet(\''+attr(c.id)+'\')">送審</button>';
-    if(c.status==='pending_review'&&String(c.created_by)!==currentMemberId)actions='<button class="btn-g" onclick="reviewAuthorizationChangeSet(\''+attr(c.id)+'\',\'reject\')">退回</button><button class="btn-p" onclick="reviewAuthorizationChangeSet(\''+attr(c.id)+'\',\'approve\')">核准</button>';
-    if(c.status==='approved'&&String(c.created_by)!==currentMemberId)actions='<button class="btn-p" onclick="publishAuthorizationChangeSet(\''+attr(c.id)+'\')">發布</button>';
-    if(c.status==='published')actions='<button class="btn-g" onclick="rollbackAuthorizationChangeSet(\''+attr(c.id)+'\')">建立回復單</button>';
+    if(c.status==='draft'&&String(c.created_by)===currentMemberId)actions='<button class="btn-g" onclick="submitAuthorizationChangeSet('+financeInlineJsString(c.id)+')">送審</button>';
+    if(c.status==='pending_review'&&String(c.created_by)!==currentMemberId)actions='<button class="btn-g" onclick="reviewAuthorizationChangeSet('+financeInlineJsString(c.id)+',\'reject\')">退回</button><button class="btn-p" onclick="reviewAuthorizationChangeSet('+financeInlineJsString(c.id)+',\'approve\')">核准</button>';
+    if(c.status==='approved'&&String(c.created_by)!==currentMemberId)actions='<button class="btn-p" onclick="publishAuthorizationChangeSet('+financeInlineJsString(c.id)+')">發布</button>';
+    if(c.status==='published')actions='<button class="btn-g" onclick="rollbackAuthorizationChangeSet('+financeInlineJsString(c.id)+')">建立回復單</button>';
     return'<div style="display:grid;grid-template-columns:minmax(220px,1.6fr) 110px 130px auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #f0e6d6"><div><div style="font-size:11px;font-weight:800;color:#334155">'+escAttr(c.change_no+' · '+c.title)+'</div><div style="font-size:10px;color:#94a3b8">'+escAttr(c.creator_name||'')+' · '+escAttr(c.reason||'')+' · '+num(c.item_count)+' 項</div></div><span class="badge '+(statusBadge[c.status]||'b-gray')+'">'+escAttr(statusLabel[c.status]||c.status)+'</span><div style="font-size:10px;color:#64748b">風險 '+escAttr(c.risk_level||'')+'<br>'+escAttr(String(c.created_at||'').slice(0,16).replace('T',' '))+'</div><div style="display:flex;gap:5px;justify-content:flex-end">'+actions+'</div></div>';
   }).join('');
   return'<details style="margin-top:9px;border:1px solid #e8c99a;border-radius:8px;background:#fffaf3"><summary style="padding:9px 11px;cursor:pointer;font-size:12px;font-weight:850;color:#334155">權限異動覆核佇列</summary><div style="padding:0 11px 10px"><div style="font-size:10px;color:#64748b;line-height:1.6;margin-bottom:5px">高風險角色與指派異動採「草稿 → 送審 → 不同人覆核 → 發布」；已發布版本只能透過回復單處理。</div>'+(rows||'<div style="padding:10px;color:#94a3b8;font-size:11px">尚無權限變更單</div>')+'</div></details>';
@@ -40691,7 +40709,7 @@ function renderSettingPermissions(){
     var action=ACTION_PERMISSION_ROWS.find(function(item){return item.key===key;}),type=action?'action':'page',label=action?action.label:(PAGE_LABELS[key]||key),desc=action?action.desc:(pageDesc[key]||'可看見並使用此功能'),fixed=type==='page'&&!!fixedRoles[key];
     var enabled=fixed?fixedRoles[key].indexOf(role)>-1:permissionLevelOf(role,key)!=='none',locked=!SETTINGS_EDIT||fixed;
     var hint=fixed?'此項為系統必要權限':(!SETTINGS_EDIT?'請先按「啟動編輯」':(enabled?'取消勾選後關閉':'勾選後開放'));
-    return'<div class="permission-feature-row '+(enabled?'is-allow':'is-off')+(fixed?' is-mandatory':'')+'" data-role-id="'+attr(role)+'" data-permission-code="'+attr(key)+'"><label class="permission-feature-main" title="'+attr(hint)+'"><input class="permission-feature-check" type="checkbox" data-role-id="'+attr(role)+'" data-permission-code="'+attr(key)+'" '+(enabled?'checked':'')+' '+(locked?'disabled':'')+' onchange="toggleRolePermission(\''+attr(role)+'\',\''+attr(key)+'\',this.checked)"><span><b>'+escAttr(label)+'</b><small>'+escAttr(desc)+'</small></span></label><span class="permission-feature-status">'+(fixed?'系統必要':(enabled?'已開放':'未開放'))+'</span></div>';
+    return'<div class="permission-feature-row '+(enabled?'is-allow':'is-off')+(fixed?' is-mandatory':'')+'" data-role-id="'+attr(role)+'" data-permission-code="'+attr(key)+'"><label class="permission-feature-main" title="'+attr(hint)+'"><input class="permission-feature-check" type="checkbox" data-role-id="'+attr(role)+'" data-permission-code="'+attr(key)+'" '+(enabled?'checked':'')+' '+(locked?'disabled':'')+' onchange="toggleRolePermission('+financeInlineJsString(role)+','+financeInlineJsString(key)+',this.checked)"><span><b>'+escAttr(label)+'</b><small>'+escAttr(desc)+'</small></span></label><span class="permission-feature-status">'+(fixed?'系統必要':(enabled?'已開放':'未開放'))+'</span></div>';
   }
   var roleOptions=roles.map(function(item){return'<option value="'+attr(item)+'" '+(item===role?'selected':'')+'>'+escAttr(RL[item]||item)+'</option>';}).join('');
   head.innerHTML='<div class="permission-board-rolebar"><label class="permission-role-field"><span>設定職位</span><select id="permission-role-select" onchange="selectLegacyPermissionBoardRole(this.value)">'+roleOptions+'</select></label><div class="permission-role-summary"><strong>'+escAttr(RL[role]||role)+'</strong><span>目前 '+allPermissionKeys().filter(function(key){return permissionLevelOf(role,key)!=='none';}).length+' 項功能已開放</span></div><div class="permission-board-quick-actions"><button type="button" onclick="setLegacyPermissionBoardAll(true)" '+(SETTINGS_EDIT?'':'disabled')+'>全選</button><span aria-hidden="true">／</span><button type="button" onclick="setLegacyPermissionBoardAll(false)" '+(SETTINGS_EDIT?'':'disabled')+'>清除</button></div></div>';
@@ -42700,12 +42718,12 @@ function membershipOrgAssignmentRowsHtml(unit,graph,editable){
     var name=membershipOrgWorkspacePersonName(row,graph);
     var head=row.headKind==='acting'?'代理主管':row.headKind==='permanent'?'正主管':'一般任職';
     var editor=editable?'<div class="membership-org-assignment-row org-member-editor-fields">'
-      +'<label>職位<select data-no-search="1" aria-label="職位" onchange="membershipOrgPatchAssignment(\''+attr(row.id)+'\',\'position_code\',this.value)">'+membershipOrgPositionOptions(row.positionCode)+'</select></label>'
-      +'<label>主兼任<select data-no-search="1" aria-label="主兼任" onchange="membershipOrgPatchAssignment(\''+attr(row.id)+'\',\'assignment_kind\',this.value)"><option value="primary" '+(row.assignmentKind==='primary'?'selected':'')+'>主要任職</option><option value="secondary" '+(row.assignmentKind==='secondary'?'selected':'')+'>兼任</option></select></label>'
-      +'<label class="membership-org-assignment-check"><input type="checkbox" '+(row.canApprove?'checked':'')+' onchange="membershipOrgPatchAssignment(\''+attr(row.id)+'\',\'can_approve\',this.checked)">可簽核</label>'
-      +'<label>生效<input type="datetime-local" value="'+attr(membershipOrgDateTimeValue(row.effectiveFrom))+'" onchange="membershipOrgPatchAssignmentDate(\''+attr(row.id)+'\',\'effective_from\',this.value)"></label>'
-      +'<label>到期<input type="datetime-local" value="'+attr(membershipOrgDateTimeValue(row.effectiveTo))+'" onchange="membershipOrgPatchAssignmentDate(\''+attr(row.id)+'\',\'effective_to\',this.value)"></label>'
-      +'<button class="btn-g" style="color:#8a1010" onclick="membershipOrgDeactivateAssignment(\''+attr(row.id)+'\')">結束任職</button>'
+      +'<label>職位<select data-no-search="1" aria-label="職位" onchange="membershipOrgPatchAssignment('+financeInlineJsString(row.id)+',\'position_code\',this.value)">'+membershipOrgPositionOptions(row.positionCode)+'</select></label>'
+      +'<label>主兼任<select data-no-search="1" aria-label="主兼任" onchange="membershipOrgPatchAssignment('+financeInlineJsString(row.id)+',\'assignment_kind\',this.value)"><option value="primary" '+(row.assignmentKind==='primary'?'selected':'')+'>主要任職</option><option value="secondary" '+(row.assignmentKind==='secondary'?'selected':'')+'>兼任</option></select></label>'
+      +'<label class="membership-org-assignment-check"><input type="checkbox" '+(row.canApprove?'checked':'')+' onchange="membershipOrgPatchAssignment('+financeInlineJsString(row.id)+',\'can_approve\',this.checked)">可簽核</label>'
+      +'<label>生效<input type="datetime-local" value="'+attr(membershipOrgDateTimeValue(row.effectiveFrom))+'" onchange="membershipOrgPatchAssignmentDate('+financeInlineJsString(row.id)+',\'effective_from\',this.value)"></label>'
+      +'<label>到期<input type="datetime-local" value="'+attr(membershipOrgDateTimeValue(row.effectiveTo))+'" onchange="membershipOrgPatchAssignmentDate('+financeInlineJsString(row.id)+',\'effective_to\',this.value)"></label>'
+      +'<button class="btn-g" style="color:#8a1010" onclick="membershipOrgDeactivateAssignment('+financeInlineJsString(row.id)+')">結束任職</button>'
       +'</div>':'';
     return'<div class="org-member-row" data-org-assignment-id="'+attr(row.id)+'" data-assignment-id="'+attr(row.id)+'">'
       +'<div class="org-member-identity"><strong>'+escAttr(name)+'</strong><span>'+escAttr(row.positionCode?membershipOrgPositionLabel(row.positionCode):row.positionName||'組員')+' · '+escAttr(head)+'</span></div>'
@@ -42722,18 +42740,18 @@ function membershipOrgNodeHtml(branch,graph,editable,options){
   var nodeClass='membership-org-node-row '+(unit.active?'':'is-disabled ')+(unit.unitType==='shareholders'?'is-root':'');
   var selected=(MEMBERSHIP_ORG_DRAFT.batchUnitIds||[]).indexOf(unit.id)>-1;
   var main=editable
-    ?'<div class="membership-org-node-main">'+(unit.unitType!=='shareholders'?'<input class="membership-org-batch-check" type="checkbox" '+(selected?'checked':'')+' aria-label="選取批次搬移" onchange="membershipOrgToggleBatchUnit(\''+attr(unit.id)+'\',this.checked)">':'')+'<span class="membership-org-drag" title="拖拉搬移">⋮⋮</span><div style="min-width:0;flex:1"><input value="'+attr(unit.name)+'" oninput="membershipOrgPatchUnit(\''+attr(unit.id)+'\',\'name\',this.value)" aria-label="單位名稱"><div class="membership-org-node-code">'+escAttr(unit.code)+'</div></div></div>'
+    ?'<div class="membership-org-node-main">'+(unit.unitType!=='shareholders'?'<input class="membership-org-batch-check" type="checkbox" '+(selected?'checked':'')+' aria-label="選取批次搬移" onchange="membershipOrgToggleBatchUnit('+financeInlineJsString(unit.id)+',this.checked)">':'')+'<span class="membership-org-drag" title="拖拉搬移">⋮⋮</span><div style="min-width:0;flex:1"><input value="'+attr(unit.name)+'" oninput="membershipOrgPatchUnit('+financeInlineJsString(unit.id)+',\'name\',this.value)" aria-label="單位名稱"><div class="membership-org-node-code">'+escAttr(unit.code)+'</div></div></div>'
     :'<div class="membership-org-node-main"><div><div class="membership-org-node-name">'+escAttr(unit.name)+'</div><div class="membership-org-node-code">'+escAttr(unit.code)+'</div></div></div>';
   var type='<span class="membership-org-badge">'+membershipOrgUnitTypeLabel(unit.unitType)+'</span>';
-  var parent=editable?'<select aria-label="上層單位" onchange="membershipOrgMoveUnit(\''+attr(unit.id)+'\',this.value)">'+membershipOrgUnitOptions(graph,unit.parentId,unit.id)+'</select>':'<span class="membership-org-badge">'+escAttr(unit.parentId?(membershipOrgEngine().graphMaps(graph).byId[unit.parentId]||{}).name||'—':'根節點')+'</span>';
-  var order=editable?'<input type="number" min="0" value="'+unit.sortOrder+'" onchange="membershipOrgPatchUnit(\''+attr(unit.id)+'\',\'sort_order\',this.value)" aria-label="排序">':'<span class="membership-org-badge">#'+unit.sortOrder+'</span>';
-  var posting=editable?'<label style="font-size:10px"><input type="checkbox" '+(unit.isPostingUnit?'checked':'')+' onchange="membershipOrgPatchUnit(\''+attr(unit.id)+'\',\'is_posting_unit\',this.checked)"> 可歸屬</label>':'<span class="membership-org-badge '+(unit.isPostingUnit?'ok':'off')+'">'+(unit.isPostingUnit?'可歸屬':'不可歸屬')+'</span>';
-  var scopeHtml=editable?'<div class="membership-org-scope"><select onchange="membershipOrgPatchUnit(\''+attr(unit.id)+'\',\'entity_scope_mode\',this.value)"><option value="inherit" '+(unit.entityScopeMode==='inherit'?'selected':'')+'>繼承上層</option><option value="all" '+(unit.entityScopeMode==='all'?'selected':'')+'>全集團</option><option value="explicit" '+(unit.entityScopeMode==='explicit'?'selected':'')+'>明確指定</option></select>'+(unit.entityScopeMode==='explicit'?'<select multiple size="2" onchange="membershipOrgSetEntities(\''+attr(unit.id)+'\',this)">'+graph.legalEntities.filter(function(e){return e.active;}).map(function(e){return'<option value="'+attr(e.code)+'" '+(unit.entityCodes.indexOf(e.code)>-1?'selected':'')+'>'+escAttr(e.code+' '+e.shortName)+'</option>';}).join('')+'</select>':'<div style="font-size:9px;color:#8b7358;margin-top:3px">'+escAttr(entityText)+'</div>')+'</div>':'<div class="membership-org-scope"><span class="membership-org-badge">'+escAttr(entityText)+'</span></div>';
+  var parent=editable?'<select aria-label="上層單位" onchange="membershipOrgMoveUnit('+financeInlineJsString(unit.id)+',this.value)">'+membershipOrgUnitOptions(graph,unit.parentId,unit.id)+'</select>':'<span class="membership-org-badge">'+escAttr(unit.parentId?(membershipOrgEngine().graphMaps(graph).byId[unit.parentId]||{}).name||'—':'根節點')+'</span>';
+  var order=editable?'<input type="number" min="0" value="'+unit.sortOrder+'" onchange="membershipOrgPatchUnit('+financeInlineJsString(unit.id)+',\'sort_order\',this.value)" aria-label="排序">':'<span class="membership-org-badge">#'+unit.sortOrder+'</span>';
+  var posting=editable?'<label style="font-size:10px"><input type="checkbox" '+(unit.isPostingUnit?'checked':'')+' onchange="membershipOrgPatchUnit('+financeInlineJsString(unit.id)+',\'is_posting_unit\',this.checked)"> 可歸屬</label>':'<span class="membership-org-badge '+(unit.isPostingUnit?'ok':'off')+'">'+(unit.isPostingUnit?'可歸屬':'不可歸屬')+'</span>';
+  var scopeHtml=editable?'<div class="membership-org-scope"><select onchange="membershipOrgPatchUnit('+financeInlineJsString(unit.id)+',\'entity_scope_mode\',this.value)"><option value="inherit" '+(unit.entityScopeMode==='inherit'?'selected':'')+'>繼承上層</option><option value="all" '+(unit.entityScopeMode==='all'?'selected':'')+'>全集團</option><option value="explicit" '+(unit.entityScopeMode==='explicit'?'selected':'')+'>明確指定</option></select>'+(unit.entityScopeMode==='explicit'?'<select multiple size="2" onchange="membershipOrgSetEntities('+financeInlineJsString(unit.id)+',this)">'+graph.legalEntities.filter(function(e){return e.active;}).map(function(e){return'<option value="'+attr(e.code)+'" '+(unit.entityCodes.indexOf(e.code)>-1?'selected':'')+'>'+escAttr(e.code+' '+e.shortName)+'</option>';}).join('')+'</select>':'<div style="font-size:9px;color:#8b7358;margin-top:3px">'+escAttr(entityText)+'</div>')+'</div>':'<div class="membership-org-scope"><span class="membership-org-badge">'+escAttr(entityText)+'</span></div>';
   var headHidden=!!(unit.head&&unit.head.head_kind&&!unit.head.name&&!unit.head.vacant);
   var headLabel=unit.head&&unit.head.name?((unit.head.head_kind==='acting'?'代理 ':'')+unit.head.name):(headHidden?'主管姓名依權限隱藏':'主管空缺');
-  var headHtml=editable?'<div class="membership-org-head"><select onchange="membershipOrgSetHead(\''+attr(unit.id)+'\',\'permanent\',this.value)">'+membershipOrgPeopleOptions(permanent&&permanent.financeUserId,'正主管空缺')+'</select><select onchange="membershipOrgSetHead(\''+attr(unit.id)+'\',\'acting\',this.value)">'+membershipOrgPeopleOptions(acting&&acting.financeUserId,'無代理主管')+'</select></div>':'<div class="membership-org-head"><span class="membership-org-badge '+(headHidden?'off':unit.head&&unit.head.vacant?'warn':'ok')+'">'+escAttr(headLabel)+'</span></div>';
-  var actions=editable?'<div class="membership-org-row-actions"><button class="btn-g" onclick="openMembershipOrgUnitEditor(\''+attr(unit.parentId||'')+'\',\''+attr(unit.id)+'\')">編輯單位</button>'+(membershipOrgAllowedChildTypes(unit.unitType).length?'<button class="btn-g" onclick="membershipOrgAddChild(\''+attr(unit.id)+'\')">+ 下一階單位</button>':'')+'<button class="btn-g" onclick="membershipOrgAddAssignment(\''+attr(unit.id)+'\')">+ 任職</button><button class="btn-g" onclick="membershipOrgToggleUnit(\''+attr(unit.id)+'\')">'+(unit.active?'停用':'啟用')+'</button></div>':'<div class="membership-org-row-actions"><span class="membership-org-badge">'+graph.assignments.filter(function(a){return a.active&&a.orgUnitId===unit.id;}).length+' 人任職</span></div>';
-  return'<div class="membership-org-node" data-org-unit-id="'+attr(unit.id)+'"><div class="'+nodeClass+'" draggable="'+(editable?'true':'false')+'" ondragstart="membershipOrgDragStart(event,\''+attr(unit.id)+'\')" ondragend="membershipOrgDragEnd(event)" ondragover="membershipOrgDragOver(event,\''+attr(unit.id)+'\')" ondragleave="membershipOrgDragLeave(event)" ondrop="membershipOrgDrop(event,\''+attr(unit.id)+'\')">'+main+type+'<div class="membership-org-parent">'+parent+'</div>'+order+posting+scopeHtml+headHtml+actions+'</div>'+(options.hideAssignments?'':membershipOrgAssignmentRowsHtml(unit,graph,editable))+(branch.children.length?'<div class="membership-org-node-children">'+branch.children.map(function(child){return membershipOrgNodeHtml(child,graph,editable);}).join('')+'</div>':'')+'</div>';
+  var headHtml=editable?'<div class="membership-org-head"><select onchange="membershipOrgSetHead('+financeInlineJsString(unit.id)+',\'permanent\',this.value)">'+membershipOrgPeopleOptions(permanent&&permanent.financeUserId,'正主管空缺')+'</select><select onchange="membershipOrgSetHead('+financeInlineJsString(unit.id)+',\'acting\',this.value)">'+membershipOrgPeopleOptions(acting&&acting.financeUserId,'無代理主管')+'</select></div>':'<div class="membership-org-head"><span class="membership-org-badge '+(headHidden?'off':unit.head&&unit.head.vacant?'warn':'ok')+'">'+escAttr(headLabel)+'</span></div>';
+  var actions=editable?'<div class="membership-org-row-actions"><button class="btn-g" onclick="openMembershipOrgUnitEditor('+financeInlineJsString(unit.parentId||'')+','+financeInlineJsString(unit.id)+')">編輯單位</button>'+(membershipOrgAllowedChildTypes(unit.unitType).length?'<button class="btn-g" onclick="membershipOrgAddChild('+financeInlineJsString(unit.id)+')">+ 下一階單位</button>':'')+'<button class="btn-g" onclick="membershipOrgAddAssignment('+financeInlineJsString(unit.id)+')">+ 任職</button><button class="btn-g" onclick="membershipOrgToggleUnit('+financeInlineJsString(unit.id)+')">'+(unit.active?'停用':'啟用')+'</button></div>':'<div class="membership-org-row-actions"><span class="membership-org-badge">'+graph.assignments.filter(function(a){return a.active&&a.orgUnitId===unit.id;}).length+' 人任職</span></div>';
+  return'<div class="membership-org-node" data-org-unit-id="'+attr(unit.id)+'"><div class="'+nodeClass+'" draggable="'+(editable?'true':'false')+'" ondragstart="membershipOrgDragStart(event,'+financeInlineJsString(unit.id)+')" ondragend="membershipOrgDragEnd(event)" ondragover="membershipOrgDragOver(event,'+financeInlineJsString(unit.id)+')" ondragleave="membershipOrgDragLeave(event)" ondrop="membershipOrgDrop(event,'+financeInlineJsString(unit.id)+')">'+main+type+'<div class="membership-org-parent">'+parent+'</div>'+order+posting+scopeHtml+headHtml+actions+'</div>'+(options.hideAssignments?'':membershipOrgAssignmentRowsHtml(unit,graph,editable))+(branch.children.length?'<div class="membership-org-node-children">'+branch.children.map(function(child){return membershipOrgNodeHtml(child,graph,editable);}).join('')+'</div>':'')+'</div>';
 }
 // Presentation state stays separate from the versioned draft and its RPC payload.
 var MEMBERSHIP_ORG_WORKSPACE_UI={selectedUnitId:'',query:'',collapsed:{},details:{},navOpen:false,batchParent:''};
@@ -42842,11 +42860,11 @@ function membershipOrgWorkspaceTreeHtml(graph,editable){
     var expanded=!!query||!state.collapsed[unit.id],selected=unit.id===state.selectedUnitId;
     var count=graph.assignments.filter(function(row){return row.active&&row.orgUnitId===unit.id;}).length;
     var subtitle=membershipOrgUnitTypeLabel(unit.unitType)+' · '+membershipOrgWorkspaceHeadLabel(unit,graph,'permanent')+' · '+count+' 筆任職'+(unit.active?'':' · 已停用');
-    var drag=editable?' ondragover="membershipOrgDragOver(event,\''+attr(unit.id)+'\')" ondragleave="membershipOrgDragLeave(event)" ondrop="membershipOrgDrop(event,\''+attr(unit.id)+'\')"':'';
+    var drag=editable?' ondragover="membershipOrgDragOver(event,'+financeInlineJsString(unit.id)+')" ondragleave="membershipOrgDragLeave(event)" ondrop="membershipOrgDrop(event,'+financeInlineJsString(unit.id)+')"':'';
     return'<li class="org-tree-item'+(selected?' is-selected':'')+(unit.active?'':' is-disabled')+'" data-org-nav-unit="'+attr(unit.id)+'" style="--org-depth:'+depth+'">'
       +'<div class="org-tree-row"'+drag+'>'
-      +(branch.children.length?'<button type="button" class="org-tree-toggle" data-org-focus="toggle:'+attr(unit.id)+'" aria-label="'+attr((expanded?'收合':'展開')+' '+unit.name)+'" aria-expanded="'+expanded+'" aria-controls="org-tree-children-'+attr(unit.id)+'" onclick="membershipOrgWorkspaceToggleBranch(\''+attr(unit.id)+'\')"><span aria-hidden="true">'+(expanded?'▾':'▸')+'</span></button>':'<span class="org-tree-toggle-spacer" aria-hidden="true"></span>')
-      +'<button type="button" class="org-tree-select" data-org-focus="select:'+attr(unit.id)+'" data-org-unit-id="'+attr(unit.id)+'"'+(selected?' aria-current="true"':'')+' onclick="membershipOrgWorkspaceSelect(\''+attr(unit.id)+'\')"><span class="org-tree-name">'+escAttr(unit.name)+'</span><span class="org-tree-meta">'+escAttr(subtitle)+'</span></button></div>'
+      +(branch.children.length?'<button type="button" class="org-tree-toggle" data-org-focus="toggle:'+attr(unit.id)+'" aria-label="'+attr((expanded?'收合':'展開')+' '+unit.name)+'" aria-expanded="'+expanded+'" aria-controls="org-tree-children-'+attr(unit.id)+'" onclick="membershipOrgWorkspaceToggleBranch('+financeInlineJsString(unit.id)+')"><span aria-hidden="true">'+(expanded?'▾':'▸')+'</span></button>':'<span class="org-tree-toggle-spacer" aria-hidden="true"></span>')
+      +'<button type="button" class="org-tree-select" data-org-focus="select:'+attr(unit.id)+'" data-org-unit-id="'+attr(unit.id)+'"'+(selected?' aria-current="true"':'')+' onclick="membershipOrgWorkspaceSelect('+financeInlineJsString(unit.id)+')"><span class="org-tree-name">'+escAttr(unit.name)+'</span><span class="org-tree-meta">'+escAttr(subtitle)+'</span></button></div>'
       +(children.length?'<ul class="org-tree-children" id="org-tree-children-'+attr(unit.id)+'"'+(expanded?'':' hidden')+'>'+children.join('')+'</ul>':'')+'</li>';
   }
   return membershipOrgEngine().graphTree(graph,true).map(function(branch){return branchHtml(branch,0);}).join('');
@@ -42855,7 +42873,7 @@ function membershipOrgWorkspaceAdvancedHtml(graph,editable){
   if(!editable)return'';
   var selected=MEMBERSHIP_ORG_DRAFT.batchUnitIds||[];
   var batch='<section class="org-batch-controls"><h4>批次搬移單位</h4><div class="org-batch-unit-list">'+graph.units.filter(function(unit){return unit.unitType!=='shareholders';}).map(function(unit){
-    return'<label><input type="checkbox" data-org-focus="batch:'+attr(unit.id)+'" '+(selected.indexOf(unit.id)>-1?'checked':'')+' onchange="membershipOrgToggleBatchUnit(\''+attr(unit.id)+'\',this.checked)">'+escAttr(unit.name)+(unit.active?'':'（已停用）')+'</label>';
+    return'<label><input type="checkbox" data-org-focus="batch:'+attr(unit.id)+'" '+(selected.indexOf(unit.id)>-1?'checked':'')+' onchange="membershipOrgToggleBatchUnit('+financeInlineJsString(unit.id)+',this.checked)">'+escAttr(unit.name)+(unit.active?'':'（已停用）')+'</label>';
   }).join('')+'</div>'+(selected.length?'<div class="org-batch-actions"><select id="membership-org-batch-parent" aria-label="批次搬移目標" onchange="membershipOrgWorkspaceSetBatchParent(this.value)">'+membershipOrgUnitOptions(graph,MEMBERSHIP_ORG_WORKSPACE_UI.batchParent,'')+'</select><button class="btn-g" onclick="membershipOrgBatchMove()">搬移已選 '+selected.length+' 個單位</button><button class="btn-g" onclick="membershipOrgClearBatchSelection()">清除選取</button></div>':'<p>先選擇要搬移的單位。</p>')+'</section>';
   return membershipOrgWorkspaceDetails('management','進階管理','org-workspace-advanced',batch+'<button class="btn-g" onclick="membershipOrgAddReportingOverride()">新增直屬主管例外</button>'+membershipOrgReportingOverridesHtml(editable));
 }
@@ -42866,13 +42884,13 @@ function membershipOrgWorkspaceHtml(graph,editable){
   var path=membershipOrgWorkspacePath(graph,unit.id),scope=membershipOrgEngine().effectiveEntityScope(graph,unit.id);
   var companies=(scope.entityCodes||[]).map(function(code){var entity=graph.legalEntities.find(function(row){return row.code===code;});return entity?entity.shortName||entity.legalName||code:code;});
   var scopeLabel=scope.mode==='all'?'全集團'+(companies.length?' · '+companies.join('、'):''):companies.join('、')||'尚未指定';
-  var actions=editable?'<div class="org-detail-actions"><button class="btn-g" data-org-focus="edit-unit" onclick="openMembershipOrgUnitEditor(\''+attr(unit.parentId||'')+'\',\''+attr(unit.id)+'\')">編輯單位</button>'+(membershipOrgAllowedChildTypes(unit.unitType).length?'<button class="btn-g" data-org-focus="add-child" onclick="membershipOrgAddChild(\''+attr(unit.id)+'\')">新增下層單位</button>':'')+'<button class="btn-g" data-org-focus="add-member" onclick="membershipOrgAddAssignment(\''+attr(unit.id)+'\')">新增成員</button></div>':'';
+  var actions=editable?'<div class="org-detail-actions"><button class="btn-g" data-org-focus="edit-unit" onclick="openMembershipOrgUnitEditor('+financeInlineJsString(unit.parentId||'')+','+financeInlineJsString(unit.id)+')">編輯單位</button>'+(membershipOrgAllowedChildTypes(unit.unitType).length?'<button class="btn-g" data-org-focus="add-child" onclick="membershipOrgAddChild('+financeInlineJsString(unit.id)+')">新增下層單位</button>':'')+'<button class="btn-g" data-org-focus="add-member" onclick="membershipOrgAddAssignment('+financeInlineJsString(unit.id)+')">新增成員</button></div>':'';
   var treeHtml=membershipOrgWorkspaceTreeHtml(graph,editable);
   return'<div class="org-workspace'+(state.navOpen?' is-nav-open':'')+'" onkeydown="membershipOrgWorkspaceKeydown(event)">'
     +'<button type="button" class="org-mobile-nav-toggle" id="org-workspace-mobile-toggle" aria-controls="org-workspace-navigation" aria-expanded="'+state.navOpen+'" onclick="membershipOrgWorkspaceToggleNav()">選擇部門：'+escAttr(unit.name)+'</button>'
     +'<aside class="org-workspace-nav" id="org-workspace-navigation" aria-label="部門導覽"><div class="org-nav-header"><h3>部門導覽</h3><label class="org-search" for="org-workspace-search">搜尋部門<input id="org-workspace-search" type="search" placeholder="名稱或代碼" value="'+attr(state.query)+'" oninput="membershipOrgWorkspaceSearch(this.value,event)" oncompositionend="membershipOrgWorkspaceSearch(this.value,event)"></label></div><ul class="org-tree-list">'+treeHtml+'</ul>'+(!treeHtml?'<p class="org-search-empty" role="status">找不到符合的部門，請調整搜尋文字。</p>':'')+'</aside>'
     +'<section class="org-workspace-detail" aria-labelledby="org-workspace-detail-title" data-org-selected-unit-id="'+attr(unit.id)+'">'
-    +'<div class="org-breadcrumb" role="navigation" aria-label="目前單位位置">'+path.map(function(parent,index){return index===path.length-1?'<span aria-current="location">'+escAttr(parent.name)+'</span>':'<button type="button" data-org-focus="breadcrumb:'+attr(parent.id)+'" onclick="membershipOrgWorkspaceSelect(\''+attr(parent.id)+'\')">'+escAttr(parent.name)+'</button><span aria-hidden="true">›</span>';}).join('')+'</div>'
+    +'<div class="org-breadcrumb" role="navigation" aria-label="目前單位位置">'+path.map(function(parent,index){return index===path.length-1?'<span aria-current="location">'+escAttr(parent.name)+'</span>':'<button type="button" data-org-focus="breadcrumb:'+attr(parent.id)+'" onclick="membershipOrgWorkspaceSelect('+financeInlineJsString(parent.id)+')">'+escAttr(parent.name)+'</button><span aria-hidden="true">›</span>';}).join('')+'</div>'
     +'<header class="org-detail-header"><div class="org-detail-title"><span class="membership-org-badge">'+escAttr(membershipOrgUnitTypeLabel(unit.unitType))+'</span>'+(unit.active?'':'<span class="membership-org-badge off">已停用</span>')+'<h3 id="org-workspace-detail-title" tabindex="-1">'+escAttr(unit.name)+'</h3><p>'+escAttr(unit.code)+(editable?' · 草稿內容，發布後才生效':'')+'</p></div>'+actions+'</header>'
     +'<dl class="org-detail-facts"><div><dt>主管</dt><dd>'+escAttr(membershipOrgWorkspaceHeadLabel(unit,graph,'permanent'))+'</dd></div><div><dt>代理主管</dt><dd>'+escAttr(membershipOrgWorkspaceHeadLabel(unit,graph,'acting'))+'</dd></div><div><dt>公司範圍</dt><dd>'+escAttr(scopeLabel)+'</dd></div><div><dt>表單歸屬</dt><dd>'+(unit.isPostingUnit?'可作為費用與表單歸屬':'不作為費用與表單歸屬')+'</dd></div></dl>'
     +'<section class="org-members"><h4>成員與任職</h4>'+membershipOrgAssignmentRowsHtml(unit,graph,editable)+'</section>'
@@ -42901,10 +42919,10 @@ function membershipOrgReportingOverridesHtml(editable){
   return'<div class="membership-org-overrides"><div class="membership-org-overrides-head"><strong>直屬主管例外</strong><span>例外優先於組織主管鏈；請設定生效期間，避免永久殘留。</span></div>'
     +(rows.length?rows.map(function(row){
       return'<div class="membership-org-override-row"><div><strong>'+escAttr(membershipOrgPersonName(row.finance_user_id))+'</strong><span>的直屬主管</span></div>'
-        +'<select onchange="membershipOrgPatchReportingOverride(\''+attr(row.id)+'\',\'supervisor_finance_user_id\',this.value)">'+membershipOrgPeopleOptions(row.supervisor_finance_user_id,'請選擇主管')+'</select>'
-        +'<label>生效<input type="datetime-local" value="'+attr(membershipOrgDateTimeValue(row.effective_from))+'" onchange="membershipOrgPatchReportingOverrideDate(\''+attr(row.id)+'\',\'effective_from\',this.value)"></label>'
-        +'<label>到期<input type="datetime-local" value="'+attr(membershipOrgDateTimeValue(row.effective_to))+'" onchange="membershipOrgPatchReportingOverrideDate(\''+attr(row.id)+'\',\'effective_to\',this.value)"></label>'
-        +'<button class="btn-g" style="color:#8a1010" onclick="membershipOrgDeactivateReportingOverride(\''+attr(row.id)+'\')">結束例外</button></div>';
+        +'<select onchange="membershipOrgPatchReportingOverride('+financeInlineJsString(row.id)+',\'supervisor_finance_user_id\',this.value)">'+membershipOrgPeopleOptions(row.supervisor_finance_user_id,'請選擇主管')+'</select>'
+        +'<label>生效<input type="datetime-local" value="'+attr(membershipOrgDateTimeValue(row.effective_from))+'" onchange="membershipOrgPatchReportingOverrideDate('+financeInlineJsString(row.id)+',\'effective_from\',this.value)"></label>'
+        +'<label>到期<input type="datetime-local" value="'+attr(membershipOrgDateTimeValue(row.effective_to))+'" onchange="membershipOrgPatchReportingOverrideDate('+financeInlineJsString(row.id)+',\'effective_to\',this.value)"></label>'
+        +'<button class="btn-g" style="color:#8a1010" onclick="membershipOrgDeactivateReportingOverride('+financeInlineJsString(row.id)+')">結束例外</button></div>';
     }).join(''):'<div class="membership-org-assignment-empty">目前沒有直屬主管例外</div>')
     +'</div>';
 }
@@ -43115,6 +43133,7 @@ async function refreshMembershipOrgUnitEditorCode(){
   if(response.error){codeBox.value='';throw response.error;}
   codeBox.value=(response.data&&response.data.code)||'';
 }
+window.refreshMembershipOrgUnitEditorCode=refreshMembershipOrgUnitEditorCode;
 window.refreshMembershipOrgUnitEditorRules=async function(){
   var graph=membershipOrgEditableGraph(),editId=(el('org-unit-edit-id')||{}).value||'',unit=editId?membershipOrgDraftUnit(editId):null;
   var type=(el('org-unit-edit-type')||{}).value||(unit&&unit.unit_type)||'department',parentBox=el('org-unit-edit-parent'),posting=el('org-unit-edit-posting');
@@ -43313,7 +43332,7 @@ window.openMembershipOrgVersions=async function(){
   if(!membershipOrgAsyncScopeCurrent(scope))return;
   if(response.error)return alert('讀取版本歷史失敗：'+friendlyErrorMessage(response.error,{action:'讀取組織版本'}));
   var rows=membershipRuntimeArray(response.data&&response.data.items||response.data);
-  box.style.display='block';box.innerHTML='<div class="chd"><span class="cht">版本歷史</span><button class="btn-g" onclick="openMembershipOrgVersions()">關閉</button></div><div style="overflow:auto"><table class="membership-org-versions-table"><thead><tr><th>版本</th><th>狀態</th><th>原因／影響</th><th>生效／發布</th><th>操作</th></tr></thead><tbody>'+rows.map(function(v){var canLoad=['draft','validated','rejected','pending_review','scheduled'].indexOf(v.status)>-1&&membershipOrgCanManage(),canRollback=['published','archived'].indexOf(v.status)>-1&&membershipOrgCanManage();return'<tr><td><strong>'+escAttr(v.title||v.version_no)+'</strong><br>'+escAttr(v.version_no||v.id)+'</td><td>'+membershipOrgVersionStatusLabel(v.status)+'</td><td>'+escAttr(v.reason||'')+'<br><small>'+escAttr(JSON.stringify(v.impact_summary||{}))+'</small></td><td>'+escAttr(v.effective_at?new Date(v.effective_at).toLocaleString('zh-TW'):'—')+'<br>'+escAttr(v.published_at?new Date(v.published_at).toLocaleString('zh-TW'):'')+'</td><td>'+(canLoad?'<button class="btn-g" onclick="loadMembershipOrgDraft(\''+attr(v.id)+'\')">開啟</button>':'')+(canRollback?'<button class="btn-g" onclick="createMembershipOrgRollback(\''+attr(v.id)+'\')">建立回復草稿</button>':'')+'</td></tr>';}).join('')+'</tbody></table></div>';
+  box.style.display='block';box.innerHTML='<div class="chd"><span class="cht">版本歷史</span><button class="btn-g" onclick="openMembershipOrgVersions()">關閉</button></div><div style="overflow:auto"><table class="membership-org-versions-table"><thead><tr><th>版本</th><th>狀態</th><th>原因／影響</th><th>生效／發布</th><th>操作</th></tr></thead><tbody>'+rows.map(function(v){var canLoad=['draft','validated','rejected','pending_review','scheduled'].indexOf(v.status)>-1&&membershipOrgCanManage(),canRollback=['published','archived'].indexOf(v.status)>-1&&membershipOrgCanManage();return'<tr><td><strong>'+escAttr(v.title||v.version_no)+'</strong><br>'+escAttr(v.version_no||v.id)+'</td><td>'+membershipOrgVersionStatusLabel(v.status)+'</td><td>'+escAttr(v.reason||'')+'<br><small>'+escAttr(JSON.stringify(v.impact_summary||{}))+'</small></td><td>'+escAttr(v.effective_at?new Date(v.effective_at).toLocaleString('zh-TW'):'—')+'<br>'+escAttr(v.published_at?new Date(v.published_at).toLocaleString('zh-TW'):'')+'</td><td>'+(canLoad?'<button class="btn-g" onclick="loadMembershipOrgDraft('+financeInlineJsString(v.id)+')">開啟</button>':'')+(canRollback?'<button class="btn-g" onclick="createMembershipOrgRollback('+financeInlineJsString(v.id)+')">建立回復草稿</button>':'')+'</td></tr>';}).join('')+'</tbody></table></div>';
 };
 window.createMembershipOrgRollback=async function(id){
   var reason=prompt('請填回復原因（會建立新草稿，不會覆蓋歷史）','回復至指定組織版本');if(!reason||reason.trim().length<3)return;
@@ -43859,7 +43878,8 @@ function orgBulkRowsFromCsv(text){
 function orgBulkClientIssues(rows){var issues=[],seen={},parent={};if((rows||[]).length>1000)issues.push('單批最多 1000 列');(ORG_CHART||[]).forEach(function(r){if(r.userId)parent[r.userId]=r.supervisorId||'';});(rows||[]).forEach(function(r,i){var no=i+2;if(!r.finance_user_id)issues.push('第 '+no+' 列缺 finance_user_id');if(seen[r.finance_user_id])issues.push('第 '+no+' 列人員重複');seen[r.finance_user_id]=true;['can_approve','is_department_manager','is_department_director'].forEach(function(key){if(typeof r[key]==='undefined')issues.push('第 '+no+' 列 '+key+' 必須是 true/false、是/否或留空');});if(r.finance_user_id&&r.finance_user_id===r.supervisor_finance_user_id)issues.push('第 '+no+' 列不可把自己設為主管');if(r.finance_user_id&&r.finance_user_id===r.delegate_finance_user_id)issues.push('第 '+no+' 列不可把自己設為代理人');if(r.finance_user_id&&!userById(r.finance_user_id))issues.push('第 '+no+' 列找不到人員 '+r.finance_user_id);if(r.supervisor_finance_user_id&&!userById(r.supervisor_finance_user_id))issues.push('第 '+no+' 列找不到主管 '+r.supervisor_finance_user_id);if(r.delegate_finance_user_id&&!userById(r.delegate_finance_user_id))issues.push('第 '+no+' 列找不到代理人 '+r.delegate_finance_user_id);if(r.finance_user_id)parent[r.finance_user_id]=r.supervisor_finance_user_id||'';});Object.keys(parent).forEach(function(start){var cur=start,path={};while(cur){if(path[cur]){issues.push('主管鏈形成循環：'+start+' → '+cur);break;}path[cur]=true;cur=parent[cur]||'';}});return Array.from(new Set(issues));}
 window.importOrgBulkCsv=function(inp){var file=inp&&inp.files&&inp.files[0];if(!file)return;if(file.size>2*1024*1024){alert('組織批次 CSV 不可超過 2MB');inp.value='';return;}var reader=new FileReader();reader.onload=async function(){try{var rows=orgBulkRowsFromCsv(String(reader.result||'')),issues=orgBulkClientIssues(rows);if(!rows.length)throw new Error('CSV 沒有資料列');if(issues.length){alert('批次預檢未通過：\n\n'+issues.slice(0,20).join('\n'));return;}var reason=prompt('請填批次異動原因（至少 3 字）','');if(!reason||reason.trim().length<3)return;var effective=prompt('生效時間（YYYY-MM-DD；留空為立即）',todayIso())||todayIso(),effectiveDate=new Date(effective+'T00:00:00');if(!/^\d{4}-\d{2}-\d{2}$/.test(effective)||Number.isNaN(effectiveDate.getTime()))throw new Error('生效時間必須是有效的 YYYY-MM-DD');var client=getSb();if(!client)throw new Error('未連上正式 Supabase');setTopSyncStatus('匯入組織批次');var created=await client.rpc('membership_org_bulk_import',{p_title:'組織批次 '+file.name,p_reason:reason.trim(),p_effective_at:effectiveDate.toISOString(),p_file_name:file.name,p_rows:rows});if(created.error)throw created.error;var id=created.data&&created.data.batch&&created.data.batch.id,validated=await client.rpc('membership_org_bulk_validate',{p_batch_id:id});if(validated.error)throw validated.error;if(!validated.data.ok){alert('後端預檢未通過，請在批次佇列查看錯誤。');}else if(confirm('後端預檢通過 '+rows.length+' 列。確定送交不同管理者覆核？')){var submitted=await client.rpc('membership_org_bulk_submit',{p_batch_id:id});if(submitted.error)throw submitted.error;}await refreshOrgBulkBatches();setTopSyncStatus('組織批次已建立');}catch(err){alert('組織批次匯入失敗：'+friendlyErrorMessage(err,{action:'匯入組織批次'}));}finally{if(inp)inp.value='';}};reader.readAsText(file,'utf-8');};
 async function refreshOrgBulkBatches(){if(ORG_BULK_RUNTIME.loading)return;var box=el('org-bulk-operations');if(!box)return;var client=getSb();if(!client||S.demoLogin){ORG_BULK_RUNTIME={loading:false,available:false,error:'批次組織維運僅供正式 Supabase'};renderOrgBulkBatches();return;}ORG_BULK_RUNTIME.loading=true;renderOrgBulkBatches();var r=await client.rpc('membership_org_bulk_list',{});ORG_BULK_RUNTIME.loading=false;if(r.error){ORG_BULK_RUNTIME={loading:false,available:false,error:isRpcMissing(r.error)?'P2 組織批次 migration 尚未安裝':r.error.message};ORG_BULK_BATCHES=[];}else{ORG_BULK_RUNTIME={loading:false,available:true,error:''};ORG_BULK_BATCHES=membershipRuntimeArray(r.data);}renderOrgBulkBatches();}
-function renderOrgBulkBatches(){var box=el('org-bulk-operations');if(!box)return;if(ORG_BULK_RUNTIME.loading){box.innerHTML='<div class="card" style="padding:10px;margin-bottom:10px;font-size:11px;color:#64748b">讀取組織批次…</div>';return;}if(!ORG_BULK_RUNTIME.available){box.innerHTML='<div class="ux-health-card warn" style="margin-bottom:10px"><div class="ux-health-title">P2 組織批次維運尚未啟用</div><div style="font-size:11px">'+escAttr(ORG_BULK_RUNTIME.error||'尚未讀取')+'</div></div>';return;}var currentMemberId=String((CURRENT_PERMISSION_SNAPSHOT||{}).membership_user_id||'');var rows=(ORG_BULK_BATCHES||[]).slice(0,10).map(function(b){var actions='',isCreator=String(b.created_by)===currentMemberId;if(b.status==='pending_review'&&!isCreator)actions='<button class="btn-g" onclick="reviewOrgBulk(\''+attr(b.id)+'\',\'reject\')">退回</button><button class="btn-p" onclick="reviewOrgBulk(\''+attr(b.id)+'\',\'approve\')">核准</button>';if((b.status==='approved'||b.status==='scheduled')&&!isCreator)actions='<button class="btn-p" onclick="publishOrgBulk(\''+attr(b.id)+'\')">發布／排程</button>';if(b.status==='published')actions='<button class="btn-g" onclick="createOrgBulkRollback(\''+attr(b.id)+'\')">建立回復批次</button>';return'<div style="display:grid;grid-template-columns:1.6fr 100px 150px auto;gap:8px;padding:7px 0;border-bottom:1px solid #f0e6d6;align-items:center"><div><strong style="font-size:11px">'+escAttr(b.batch_no+' · '+b.title)+'</strong><div style="font-size:10px;color:#94a3b8">'+escAttr(b.creator_name||'')+' · '+num(b.row_count)+' 列</div></div><span class="badge b-blue">'+escAttr(b.status)+'</span><span style="font-size:10px;color:#64748b">生效 '+escAttr(String(b.effective_at||'').slice(0,16).replace('T',' '))+'</span><div style="display:flex;gap:5px">'+actions+'</div></div>';}).join('');box.innerHTML='<div class="card" style="margin-bottom:10px"><div class="chd"><span class="cht">P2 組織批次佇列</span><button class="btn-g" onclick="refreshOrgBulkBatches()">重新讀取</button></div><div style="padding:0 11px 9px">'+(rows||'<div style="padding:10px;color:#94a3b8;font-size:11px">尚無批次</div>')+'</div></div>';}
+window.refreshOrgBulkBatches=refreshOrgBulkBatches;
+function renderOrgBulkBatches(){var box=el('org-bulk-operations');if(!box)return;if(ORG_BULK_RUNTIME.loading){box.innerHTML='<div class="card" style="padding:10px;margin-bottom:10px;font-size:11px;color:#64748b">讀取組織批次…</div>';return;}if(!ORG_BULK_RUNTIME.available){box.innerHTML='<div class="ux-health-card warn" style="margin-bottom:10px"><div class="ux-health-title">P2 組織批次維運尚未啟用</div><div style="font-size:11px">'+escAttr(ORG_BULK_RUNTIME.error||'尚未讀取')+'</div></div>';return;}var currentMemberId=String((CURRENT_PERMISSION_SNAPSHOT||{}).membership_user_id||'');var rows=(ORG_BULK_BATCHES||[]).slice(0,10).map(function(b){var actions='',isCreator=String(b.created_by)===currentMemberId;if(b.status==='pending_review'&&!isCreator)actions='<button class="btn-g" onclick="reviewOrgBulk('+financeInlineJsString(b.id)+',\'reject\')">退回</button><button class="btn-p" onclick="reviewOrgBulk('+financeInlineJsString(b.id)+',\'approve\')">核准</button>';if((b.status==='approved'||b.status==='scheduled')&&!isCreator)actions='<button class="btn-p" onclick="publishOrgBulk('+financeInlineJsString(b.id)+')">發布／排程</button>';if(b.status==='published')actions='<button class="btn-g" onclick="createOrgBulkRollback('+financeInlineJsString(b.id)+')">建立回復批次</button>';return'<div style="display:grid;grid-template-columns:1.6fr 100px 150px auto;gap:8px;padding:7px 0;border-bottom:1px solid #f0e6d6;align-items:center"><div><strong style="font-size:11px">'+escAttr(b.batch_no+' · '+b.title)+'</strong><div style="font-size:10px;color:#94a3b8">'+escAttr(b.creator_name||'')+' · '+num(b.row_count)+' 列</div></div><span class="badge b-blue">'+escAttr(b.status)+'</span><span style="font-size:10px;color:#64748b">生效 '+escAttr(String(b.effective_at||'').slice(0,16).replace('T',' '))+'</span><div style="display:flex;gap:5px">'+actions+'</div></div>';}).join('');box.innerHTML='<div class="card" style="margin-bottom:10px"><div class="chd"><span class="cht">P2 組織批次佇列</span><button class="btn-g" onclick="refreshOrgBulkBatches()">重新讀取</button></div><div style="padding:0 11px 9px">'+(rows||'<div style="padding:10px;color:#94a3b8;font-size:11px">尚無批次</div>')+'</div></div>';}
 window.reviewOrgBulk=async function(id,decision){var comment=prompt(decision==='approve'?'核准意見':'退回原因','');if(!comment||comment.trim().length<3)return;var r=await getSb().rpc('membership_org_bulk_review',{p_batch_id:id,p_decision:decision,p_comment:comment.trim()});if(r.error){alert('批次覆核失敗：'+r.error.message);return;}await refreshOrgBulkBatches();};
 window.publishOrgBulk=async function(id){if(!confirm('確定發布此組織批次？未到生效時間時會轉為 scheduled。'))return;var r=await getSb().rpc('membership_org_bulk_publish',{p_batch_id:id});if(r.error){alert('批次發布失敗：'+r.error.message);return;}await refreshOrgBulkBatches();await refreshOrgChartRowsFromRuntime(getSb(),'org_bulk_publish');buildOrgChart();};
 window.createOrgBulkRollback=async function(id){var reason=prompt('請填建立組織回復批次的原因（至少 3 字）','');if(!reason||reason.trim().length<3)return;var client=getSb(),created=await client.rpc('membership_org_bulk_create_rollback',{p_published_batch_id:id,p_reason:reason.trim()});if(created.error){alert('建立回復批次失敗：'+created.error.message);return;}var rollbackId=created.data&&created.data.batch&&created.data.batch.id,validated=await client.rpc('membership_org_bulk_validate',{p_batch_id:rollbackId});if(validated.error||!validated.data.ok){alert('回復批次預檢未通過：'+(validated.error?validated.error.message:'請檢查組織資料是否已再次異動'));await refreshOrgBulkBatches();return;}if(confirm('回復批次預檢通過。確定送交不同管理者覆核？')){var submitted=await client.rpc('membership_org_bulk_submit',{p_batch_id:rollbackId});if(submitted.error){alert('回復批次送審失敗：'+submitted.error.message);return;}}await refreshOrgBulkBatches();};
@@ -44406,14 +44426,14 @@ function renderOrgPersonnelRows(items){
     var d=gD(u.dc),e=gE(u.eid||entityOfDept(u.dc)||'E1');
     var loginReady=orgGoogleLoginReady(u),canApprove=loginReady&&(Object.keys(row).length?row.canApprove===true:orgRoleCanApproveByDefault(u)),isManager=!!(row.isDepartmentManager||row.is_department_manager||u.role==='dept_manager'),isDirector=!!(row.isDepartmentDirector||row.is_department_director);
     var approveDisabled=canEdit&&loginReady?'':' disabled';
-    return'<div class="org-editor-row '+(state.status==='warn'?'warn':'')+'" data-supervisor-id="'+escAttr(u.id)+'" draggable="'+(canEdit?'true':'false')+'" title="'+(canEdit?'拖曳此列到另一位人員，可快速設定直屬主管':'')+'" ondragstart="orgDragStart(event,\''+escAttr(u.id)+'\')" ondragend="orgDragEnd(event)" ondragover="orgDragOver(event)" ondragleave="orgDragLeave(event)" ondrop="orgDropOnSupervisor(event,\''+escAttr(u.id)+'\')">'
+    return'<div class="org-editor-row '+(state.status==='warn'?'warn':'')+'" data-supervisor-id="'+escAttr(u.id)+'" draggable="'+(canEdit?'true':'false')+'" title="'+(canEdit?'拖曳此列到另一位人員，可快速設定直屬主管':'')+'" ondragstart="orgDragStart(event,'+financeInlineJsString(u.id)+')" ondragend="orgDragEnd(event)" ondragover="orgDragOver(event)" ondragleave="orgDragLeave(event)" ondrop="orgDropOnSupervisor(event,'+financeInlineJsString(u.id)+')">'
       +'<div><div class="org-cell-label">人員 / 職稱</div><div class="org-person-name">'+escAttr(u.n||'未命名')+(u.extension?'<span class="org-extension-chip">分機 '+escAttr(u.extension)+'</span>':'')+'</div><div class="org-person-title">'+escAttr(u.jobTitle||u.rL||RL[u.role]||'未填職稱')+'</div>'+orgContactInfoHtml(u,canEdit)+'</div>'
       +'<div><div class="org-cell-label">公司 / 部門</div><div class="org-cell-main"><span class="ep" style="font-size:10px">'+escAttr(e.s||'未指定')+'</span><span class="dt" style="font-size:10px">'+escAttr(d.c||u.dc||'未填')+'</span><span class="org-dept-name">'+escAttr(d.n||'')+'</span></div></div>'
       +'<div><div class="org-cell-label">層級</div><div class="org-cell-main"><span class="badge b-blue">'+escAttr(u.rL||RL[u.role]||u.role)+'</span></div></div>'
-      +'<div class="org-supervisor-wrap"><div class="org-cell-label">直屬主管</div><select class="org-supervisor" data-user-id="'+escAttr(u.id)+'" onchange="orgSupervisorCardChange(\''+escAttr(u.id)+'\',this)"'+disabled+'>'+orgSupervisorOptions(u.id,(supervisor&&supervisor.id)||row.supervisorId||'')+'</select></div>'
-      +'<div><div class="org-cell-label">可簽核</div><label class="org-list-check"><input class="org-can-approve" type="checkbox" '+(canApprove?'checked':'')+approveDisabled+' onchange="orgFlagCardChange(\''+escAttr(u.id)+'\',\'canApprove\',this.checked)">可簽核</label>'+(!loginReady?'<div class="org-row-status-detail">主管關係可先設定；本人首次 Google 登入後才可啟用簽核</div>':'')+'</div>'
-      +'<div><div class="org-cell-label">部門角色</div><label class="org-list-check"><input class="org-is-manager" type="checkbox" '+(isManager?'checked':'')+disabled+' onchange="orgFlagCardChange(\''+escAttr(u.id)+'\',\'manager\',this.checked)">主管</label><label class="org-list-check"><input class="org-is-director" type="checkbox" '+(isDirector?'checked':'')+disabled+' onchange="orgFlagCardChange(\''+escAttr(u.id)+'\',\'director\',this.checked)">主任</label></div>'
-      +'<div class="org-supervisor-wrap"><div class="org-cell-label">代理人</div><select class="org-delegate" onchange="orgDelegateCardChange(\''+escAttr(u.id)+'\',this)"'+disabled+'>'+orgDelegateOptions(u.id,(delegate&&delegate.id)||orgDelegateIdFromRow(row))+'</select></div>'
+      +'<div class="org-supervisor-wrap"><div class="org-cell-label">直屬主管</div><select class="org-supervisor" data-user-id="'+escAttr(u.id)+'" onchange="orgSupervisorCardChange('+financeInlineJsString(u.id)+',this)"'+disabled+'>'+orgSupervisorOptions(u.id,(supervisor&&supervisor.id)||row.supervisorId||'')+'</select></div>'
+      +'<div><div class="org-cell-label">可簽核</div><label class="org-list-check"><input class="org-can-approve" type="checkbox" '+(canApprove?'checked':'')+approveDisabled+' onchange="orgFlagCardChange('+financeInlineJsString(u.id)+',\'canApprove\',this.checked)">可簽核</label>'+(!loginReady?'<div class="org-row-status-detail">主管關係可先設定；本人首次 Google 登入後才可啟用簽核</div>':'')+'</div>'
+      +'<div><div class="org-cell-label">部門角色</div><label class="org-list-check"><input class="org-is-manager" type="checkbox" '+(isManager?'checked':'')+disabled+' onchange="orgFlagCardChange('+financeInlineJsString(u.id)+',\'manager\',this.checked)">主管</label><label class="org-list-check"><input class="org-is-director" type="checkbox" '+(isDirector?'checked':'')+disabled+' onchange="orgFlagCardChange('+financeInlineJsString(u.id)+',\'director\',this.checked)">主任</label></div>'
+      +'<div class="org-supervisor-wrap"><div class="org-cell-label">代理人</div><select class="org-delegate" onchange="orgDelegateCardChange('+financeInlineJsString(u.id)+',this)"'+disabled+'>'+orgDelegateOptions(u.id,(delegate&&delegate.id)||orgDelegateIdFromRow(row))+'</select></div>'
       +'<div><div class="org-cell-label">狀態</div><span class="badge '+(state.status==='warn'?'b-rej':'b-ok')+'">'+escAttr(state.label)+'</span><div class="org-row-status-detail">'+escAttr(state.detail||'')+'</div></div>'
       +'</div>';
   }).join('')||'<div class="org-supervisor-empty">沒有符合條件的人員</div>';
@@ -45286,9 +45306,9 @@ function ledgerRenderSourceSummary(stats){
 }
 function ledgerSourceActionHtml(r,src,voucher){
   var actions=[];
-  if(src&&src.type==='request'&&src.id)actions.push('<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openDetail(\''+escAttr(src.id)+'\')">來源單</button>');
+  if(src&&src.type==='request'&&src.id)actions.push('<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="openDetail('+financeInlineJsString(src.id)+')">來源單</button>');
   if(src&&src.type==='invoice')actions.push('<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="closeAppr();nav(\'invoices\',null)">發票</button>');
-  if(voucher)actions.push('<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById(\''+escAttr(voucher.id)+'\')">傳票</button>');
+  if(voucher)actions.push('<button class="btn-g" style="font-size:10px;padding:2px 7px" onclick="showVoucherById('+financeInlineJsString(voucher.id)+')">傳票</button>');
   return actions.join('')||'<span style="font-size:10px;color:#94a3b8">無可開啟來源</span>';
 }
 window.openLedgerEntryModal=function(idx){

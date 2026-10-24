@@ -650,3 +650,11 @@ supabase/.temp
 !scripts/fixtures/finance_apm_adoption_fixture_20261022.cjs
 !scripts/fixtures/finance_apm_adoption_catalog_20261022.json
 !scripts/check_apm_adoption_postflight_20261022.cjs
+
+# 2026-10-24 security hardening release and regression verification
+!scripts/check_security_hardening_20261024.cjs
+!scripts/test_security_hardening_release_batch.mjs
+!scripts/finance_security_hardening_preflight.sql
+!scripts/finance_security_hardening_postflight.sql
+!scripts/finance_security_hardening_fingerprint.sql
+!scripts/finance_security_hardening_canary.sql
